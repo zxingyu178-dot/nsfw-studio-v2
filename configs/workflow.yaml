@@ -1,10 +1,17 @@
-# 工作流配置占位（Phase 0 规范 §十二）
+# 工作流配置（Phase 2）
 #
-# Phase 0 不绑定任何生成引擎：此处不出现引擎地址、节点 ID、模型名或 Workflow JSON。
-# 未来 WorkflowModule / EngineAdapter 的参数在此扩展，例如：
-#   workflow:
-#     engine:
-#       provider: "comfyui"   # Phase 1+ 再接入
+# engine.provider 决定执行引擎（不修改核心代码，经工厂选择）：
+#   unbound  — 未接入（Phase 0/1 默认）
+#   mock     — MockEngineAdapter（仅测试/演练，不产生真实图片）
+#   comfyui  — ComfyUIAdapter（Phase 2B 起真实接入本机 ComfyUI）
+#
+# 真实 ComfyUI 的地址等机器信息只写在 configs/config.local.yaml（gitignore）：
+#   comfyui:
+#     url: "http://<本机地址>:<端口>"
 workflow:
   engine:
-    provider: "unbound"
+    provider: "mock"
+    module_id: "basic_generate"
+    module_version: "v1"
+    binding_version: "v1"
+    options: {}   # mock: {mode: success|fail|offline|oom|workflow_error, delay_per_item_ms, fail_after_items}

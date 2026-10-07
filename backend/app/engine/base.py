@@ -38,6 +38,25 @@ class EngineJobStatus:
     state: str  # queued | running | succeeded | failed | canceled | unknown
     progress: float | None = None  # 0.0 ~ 1.0
     message: str = ""
+    stage: str = ""
+
+
+@dataclass(frozen=True)
+class EngineOutputFile:
+    """引擎产出的单个输出文件（数据在内存中，由 Worker 负责导入 DataRoot）。"""
+
+    filename: str
+    data: bytes
+
+
+class EngineError(Exception):
+    """引擎侧错误（带分类，Phase 2 规范 §三十五）。"""
+
+    def __init__(self, error_type: str, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.error_type = error_type
+        self.message = message
+        self.transient = transient  # 仅瞬态网络错误允许自动重试（规范 §三十六）
 
 
 class EngineAdapter(ABC):
@@ -59,5 +78,9 @@ class EngineAdapter(ABC):
         """查询引擎侧任务状态与进度。"""
 
     @abstractmethod
+    async def get_job_outputs(self, engine_job_id: str) -> list[EngineOutputFile]:
+        """任务成功后取回输出文件（规范 §三十三：导入 DataRoot，不直接引用引擎目录）。"""
+
+    @abstractmethod
     async def cancel_job(self, engine_job_id: str) -> bool:
-        """取消引擎侧任务，返回是否成功。"""
+        """取消引擎侧任务（仅在安全支持时实现；返回是否已请求）。"""

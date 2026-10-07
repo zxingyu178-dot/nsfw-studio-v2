@@ -19,6 +19,9 @@ ASSET = "ast"
 ASSET_VERSION = "astv"
 RECIPE = "rcp"
 RECIPE_VERSION = "rcpv"
+JOB = "job"
+JOB_ITEM = "item"
+IMAGE = "img"
 
 
 def new_id(prefix: str) -> str:

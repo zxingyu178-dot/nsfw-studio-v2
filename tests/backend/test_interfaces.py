@@ -86,9 +86,12 @@ def test_queue_worker_does_not_create_jobs():
 
 
 def test_no_engine_binding_in_configs():
-    """workflow.yaml 不得绑定具体引擎（规范 §一）。"""
-    from app.core.config import load_settings
+    """公共配置不得绑定真实引擎（Phase 2 允许 mock 演练；comfyui 需本机 local 配置）。"""
+    from app.core.config import CONFIG_DIR, load_settings
 
     raw = load_settings().workflow.raw
     provider = (raw.get("engine") or {}).get("provider", "unbound")
-    assert provider == "unbound"
+    assert provider in ("unbound", "mock"), "公共配置不得直接绑定真实引擎"
+    public_text = (CONFIG_DIR / "workflow.yaml").read_text(encoding="utf-8")
+    assert "127.0.0.1" not in public_text and "localhost" not in public_text, \
+        "公共配置不得出现真实引擎地址"

@@ -1,12 +1,13 @@
 """NSFW Studio 后端入口。
 
 - ``create_app(settings)`` 工厂：测试可注入临时配置；
-- lifespan 中执行启动引导（数据目录 / 日志 / 数据库）并建立请求级 session 工厂；
+- lifespan：启动引导 → 引擎适配器工厂 → 崩溃恢复 → 单队列 Worker；
 - 统一错误格式（Phase 1 规范 §三十六）：``{"error": {"code", "message"}}``；
-- 本文件不包含任何生成引擎相关配置（不绑定 ComfyUI）。
+- 生成引擎经 configs 选择（mock/comfyui），本文件不绑定具体引擎实现。
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,14 +15,17 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import sessionmaker
 
 from app.api.v1.router import api_v1_router
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
+from app.core.events import EventBroker
 from app.database.base import make_engine, make_session_factory
+from app.engine.factory import create_engine_adapter
+from app.services import job_service
 from app.services.system_service import bootstrap
 from app.storage.manager import StorageManager
+from app.workers.queue_worker import SingleQueueWorker
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +40,38 @@ async def lifespan(application: FastAPI):
     report = bootstrap(settings)
 
     engine = make_engine(report.database_path)
+    session_factory = make_session_factory(engine)
+    storage = StorageManager(settings)
+    broker = EventBroker()
+    broker.attach_loop(asyncio.get_running_loop())
+    job_service.set_event_broker(broker)
+
+    adapter = create_engine_adapter(settings)
+    worker = SingleQueueWorker(
+        session_factory,
+        adapter,
+        output_importer=getattr(application.state, "output_importer", None),
+        poll_interval_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("worker_poll_interval_ms", 300)),
+        engine_poll_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("engine_poll_ms", 200)),
+    )
+
     application.state.engine = engine
-    application.state.session_factory = make_session_factory(engine)
-    application.state.storage = StorageManager(settings)
+    application.state.session_factory = session_factory
+    application.state.storage = storage
+    application.state.events = broker
+    application.state.adapter = adapter
+    application.state.worker = worker
+
+    # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
+    recovered = await worker.recover_interrupted()
+    worker.start()
 
     logging.getLogger(__name__).info(
-        "后端启动完成 version=%s data_root=%s", settings.app.version, report.data_root
+        "后端启动完成 version=%s data_root=%s engine=%s recovered_items=%s",
+        settings.app.version, report.data_root, adapter.name, len(recovered),
     )
     yield
+    await worker.stop()
     engine.dispose()
     logging.getLogger(__name__).info("后端停止")
 
@@ -58,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=[
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
         ],
         allow_methods=["*"],
         allow_headers=["*"],

@@ -69,6 +69,9 @@ class StorageConfig:
     data_root: Path
     layout: tuple[str, ...] = DEFAULT_LAYOUT
     database_filename: str = "studio.db"
+    # 磁盘空间告警阈值（Phase 2 规范 §五十七）
+    min_free_bytes_warning: int = 5 * 1024**3   # 5 GB：低空间警告
+    min_free_bytes_severe: int = 1 * 1024**3    # 1 GB：严重不足，拒绝新任务
 
     @property
     def database_path(self) -> Path:
@@ -88,6 +91,7 @@ class Settings:
     storage: StorageConfig
     workflow: WorkflowConfig
     config_dir: Path
+    comfyui: dict[str, Any] = field(default_factory=dict)  # 本机 ComfyUI 配置（config.local.yaml）
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -132,6 +136,8 @@ def load_settings(config_dir: Path | None = None) -> Settings:
         data_root=Path(str(data_root)),
         layout=tuple(str(item) for item in layout_raw),
         database_filename=str(storage_cfg.get("database_filename", "studio.db")),
+        min_free_bytes_warning=int(storage_cfg.get("min_free_bytes_warning", 5 * 1024**3)),
+        min_free_bytes_severe=int(storage_cfg.get("min_free_bytes_severe", 1 * 1024**3)),
     )
 
     return Settings(
@@ -139,4 +145,5 @@ def load_settings(config_dir: Path | None = None) -> Settings:
         storage=storage,
         workflow=WorkflowConfig(raw=workflow_cfg),
         config_dir=cfg_dir,
+        comfyui=merged_cfg.get("comfyui", {}) or {},
     )

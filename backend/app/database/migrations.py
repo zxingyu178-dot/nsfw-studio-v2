@@ -165,6 +165,85 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_recipes_archived ON recipes(archived)",
         ),
     ),
+    Migration(
+        migration_id="0005_job",
+        version="0.3.0",
+        description="Phase 2A：jobs / job_items / job_events（单队列执行核心）",
+        statements=(
+            """
+            CREATE TABLE jobs (
+                id                         TEXT PRIMARY KEY,
+                source                     TEXT NOT NULL CHECK (source IN ('web', 'resume', 'agent', 'doubao')),
+                client_request_id          TEXT,
+                status                     TEXT NOT NULL CHECK (status IN
+                    ('QUEUED', 'RUNNING', 'PAUSED', 'INTERRUPTED', 'COMPLETED', 'FAILED', 'CANCELLED')),
+                prompt_mode                TEXT NOT NULL CHECK (prompt_mode IN ('structured', 'full')),
+                positive_prompt_snapshot   TEXT NOT NULL DEFAULT '',
+                negative_prompt_snapshot   TEXT NOT NULL DEFAULT '',
+                structured_prompt_snapshot TEXT NOT NULL DEFAULT '{}',
+                workbench_snapshot_json    TEXT NOT NULL,
+                generation_settings_json   TEXT NOT NULL,
+                workflow_snapshot_json     TEXT NOT NULL DEFAULT '{"modules":[]}',
+                module_id                  TEXT,
+                module_version             TEXT,
+                provider                   TEXT,
+                binding_version            TEXT,
+                workflow_hash              TEXT,
+                requested_count            INTEGER NOT NULL CHECK (requested_count >= 1),
+                completed_count            INTEGER NOT NULL DEFAULT 0,
+                queue_position             INTEGER,
+                priority                   INTEGER NOT NULL DEFAULT 0 CHECK (priority IN (0, 1)),
+                resume_of_job_id           TEXT REFERENCES jobs(id),
+                pause_requested            INTEGER NOT NULL DEFAULT 0 CHECK (pause_requested IN (0, 1)),
+                cancel_requested           INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)),
+                error_type                 TEXT,
+                error_message              TEXT,
+                created_at                 TEXT NOT NULL,
+                started_at                 TEXT,
+                finished_at                TEXT,
+                updated_at                 TEXT NOT NULL
+            )
+            """,
+            "CREATE UNIQUE INDEX uq_jobs_client_request ON jobs(source, client_request_id) "
+            "WHERE client_request_id IS NOT NULL",
+            "CREATE INDEX idx_jobs_status ON jobs(status)",
+            """
+            CREATE TABLE job_items (
+                id            TEXT PRIMARY KEY,
+                job_id        TEXT NOT NULL REFERENCES jobs(id),
+                item_index    INTEGER NOT NULL,
+                status        TEXT NOT NULL CHECK (status IN
+                    ('QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'INTERRUPTED')),
+                seed          INTEGER,
+                engine_job_id TEXT,
+                current_stage TEXT,
+                progress      REAL,
+                image_id      TEXT,
+                error_type    TEXT,
+                error_message TEXT,
+                retry_count   INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT NOT NULL,
+                started_at    TEXT,
+                finished_at   TEXT,
+                updated_at    TEXT NOT NULL,
+                UNIQUE (job_id, item_index)
+            )
+            """,
+            "CREATE INDEX idx_job_items_job ON job_items(job_id)",
+            "CREATE INDEX idx_job_items_status ON job_items(status)",
+            """
+            CREATE TABLE job_events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id       TEXT NOT NULL REFERENCES jobs(id),
+                job_item_id  TEXT,
+                event_type   TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                created_at   TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_job_events_job ON job_events(job_id)",
+        ),
+    ),
 )
 
 
