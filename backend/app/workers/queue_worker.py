@@ -143,45 +143,60 @@ class SingleQueueWorker:
             session.commit()
             self._current_job_id = job.id
 
-        outcome = "COMPLETED"
         try:
-            items = self._load_items(job_id)
-            for item_id in items:
-                # 边界检查（规范 §十七/§十九）；已完成 Item 绝不重跑（规范 §十八）
+            outcome = await self._execute_job(job_id)
+        except asyncio.CancelledError:
+            # 任务被取消（进程退出 / 停机超时）：绝不写 Job 终态——
+            # 现场保持 RUNNING，交由下次启动恢复（§三十七）；
+            # 否则会把"仍有未完成 Item 的 Job"误标为 COMPLETED（Phase 2.2 §2 修复）
+            logger.info("Job %s 执行被取消（不写终态，交由启动恢复）", job_id)
+            raise
+        except BaseException:
+            # 意外异常同样不写终态：保持 RUNNING 现场，恢复流程可以核对引擎补账
+            logger.exception("Job %s 执行异常（不写终态，交由启动恢复）", job_id)
+            raise
+        else:
+            self._finish_job(job_id, outcome)
+        finally:
+            self._current_job_id = None
+
+    async def _execute_job(self, job_id: str) -> str:
+        """执行 Job 的全部 Item，返回终态 outcome（不负责写 Job 终态）。
+
+        边界语义（§十七/§十八/§十九）全部保留；任何异常向上抛，
+        由 process_job 决定"不写终态、等待恢复"。
+        """
+        outcome = "COMPLETED"
+        for item_id in self._load_items(job_id):
+            # 边界检查（规范 §十七/§十九）；已完成 Item 绝不重跑（规范 §十八）
+            with self._session_factory() as session:
+                job = session.get(Job, job_id)
+                item = session.get(JobItem, item_id)
+                if job is None or item is None:
+                    return outcome
+                if item.status != "QUEUED":
+                    continue  # 已完成/已取消/已失败的 Item 不再执行
+                if job.cancel_requested:
+                    self._cancel_remaining(session, job)
+                    return "CANCELLED"
+                if job.pause_requested:
+                    job.status = "PAUSED"
+                    job_service.record_event(session, job.id, "JOB_PAUSED")
+                    session.commit()
+                    return "PAUSED"
+
+            result = await self._run_item(job_id, item_id)
+            if result == "SYSTEMIC":
+                return "FAILED"
+            if result == "CANCELLED":
                 with self._session_factory() as session:
                     job = session.get(Job, job_id)
-                    item = session.get(JobItem, item_id)
-                    if job is None or item is None:
-                        return
-                    if item.status != "QUEUED":
-                        continue  # 已完成/已取消/已失败的 Item 不再执行
-                    if job.cancel_requested:
-                        self._cancel_remaining(session, job)
-                        outcome = "CANCELLED"
-                        return
-                    if job.pause_requested:
-                        job.status = "PAUSED"
-                        job_service.record_event(session, job.id, "JOB_PAUSED")
-                        session.commit()
-                        outcome = "PAUSED"
-                        return
-
-                result = await self._run_item(job_id, item_id)
-                if result == "SYSTEMIC":
-                    outcome = "FAILED"
-                    return
-                if result == "CANCELLED":
-                    with self._session_factory() as session:
-                        job = session.get(Job, job_id)
-                        self._cancel_remaining(session, job)
-                    outcome = "CANCELLED"
-                    return
-                if result == "PAUSED":
-                    outcome = "PAUSED"
-                    return
-        finally:
-            self._finish_job(job_id, outcome)
-            self._current_job_id = None
+                    self._cancel_remaining(session, job)
+                return "CANCELLED"
+            if result == "PAUSED":
+                return "PAUSED"
+            # 普通 FAILED：继续执行剩余 Item，Job 终态由 _finish_job 按统计决定（§六）
+        return outcome
 
     def _load_items(self, job_id: str) -> list[str]:
         with self._session_factory() as session:
@@ -438,6 +453,7 @@ class SingleQueueWorker:
                     JobItem.job_id == job_id, JobItem.status == "INTERRUPTED"
                 )).scalars().all()
                 targets = [(item.id, item.engine_job_id) for item in items]
+            recovered_in_job: list[str] = []
             for item_id, engine_job_id in targets:
                 if not engine_job_id:
                     continue
@@ -473,6 +489,31 @@ class SingleQueueWorker:
                                              payload={"image_ids": image_ids})
                     session.commit()
                 recovered.append(item_id)
+                recovered_in_job.append(item_id)
+            # §2（Phase 2.2）：核对完成后必须重新归并 Job 终态——
+            # 不允许出现"全部 Item COMPLETED 但 Job 仍 INTERRUPTED"
+            self._finalize_recovery(job_id, bool(recovered_in_job))
         if recovered:
             logger.info("崩溃恢复：核对完成 %s 个 Item", len(recovered))
         return recovered
+
+    def _finalize_recovery(self, job_id: str, recovered_any: bool) -> None:
+        """恢复核对后的 Job 终态归并（Phase 2.2 §2，P0）。"""
+        with self._session_factory() as session:
+            job = session.get(Job, job_id)
+            if job is None:
+                return
+            items = job.items
+            completed = sum(1 for item in items if item.status == "COMPLETED")
+            job.completed_count = completed
+            if items and all(item.status == "COMPLETED" for item in items):
+                # 全部 Item 已恢复成功 → Job COMPLETED（写入 finished_at + 恢复事件）
+                job.status = "COMPLETED"
+                job.finished_at = utc_now_iso()
+                job_service.record_event(session, job_id, "JOB_RECOVERED_COMPLETED",
+                                         payload={"completed_count": completed})
+            elif recovered_any:
+                # 仍有 INTERRUPTED / QUEUED / FAILED → 保持可恢复状态，只更新计数
+                job_service.record_event(session, job_id, "JOB_UPDATED",
+                                         payload={"status": job.status, "completed_count": completed})
+            session.commit()

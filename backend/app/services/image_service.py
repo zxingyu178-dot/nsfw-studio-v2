@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
@@ -33,6 +35,114 @@ def get_image(session: Session, image_id: str) -> Image:
     return image
 
 
+@dataclass(frozen=True)
+class PreparedImageOutput:
+    """已校验、已分配身份的待导入输出（尚未落盘/入库）。"""
+
+    image_id: str
+    data: bytes
+    suffix: str
+    relative_path: str
+    width: int
+    height: int
+
+
+def prepare_image_output(data: bytes) -> PreparedImageOutput:
+    """校验输出字节并生成 Image 身份与元数据（不落盘、不入库）。
+
+    Phase 2.2 §1：整批导入必须先对全部输出做本步骤，任一不合法即整批失败，
+    绝不允许"先落了一张、后一张校验失败"的半成功状态。
+    """
+    if not data:
+        raise ValidationError("输出文件为空", code="OUTPUT_MISSING")
+    fmt = sniff_image_format(data)
+    if fmt is None:
+        raise ValidationError("引擎输出不是可识别的图片", code="OUTPUT_MISSING")
+    dimensions = image_dimensions(data)
+    if dimensions is None:
+        raise ValidationError("无法解析图片尺寸", code="OUTPUT_MISSING")
+    width, height = dimensions
+    suffix = ".png" if fmt == "png" else (".jpg" if fmt == "jpeg" else ".webp")
+    image_id = new_id(IMAGE)
+    return PreparedImageOutput(
+        image_id=image_id,
+        data=data,
+        suffix=suffix,
+        relative_path=f"images/originals/{image_id}/original{suffix}",
+        width=width,
+        height=height,
+    )
+
+
+def import_outputs_transaction(
+    session: Session,
+    storage: StorageManager,
+    prepared: list[PreparedImageOutput],
+    *,
+    job: Job | None = None,
+    item: JobItem | None = None,
+    seed: int | None = None,
+    source: str = "comfyui",
+    kind: str = "original",
+    metadata: dict[str, Any] | None = None,
+) -> list[Image]:
+    """一个输出批次"整体成功或整体失败"导入（Phase 2.2 §1，P0）。
+
+    顺序：全部写 temp → 全部移动到正式目录 → 单事务写入全部 Image → commit。
+    任一步失败：回滚 DB + 删除本批次已创建的全部正式文件 + 清理 temp。
+    禁止在批次循环里调用任何内部 commit 的单图函数。
+    """
+    if source not in IMAGE_SOURCES:
+        raise ValidationError(f"非法图片来源: {source}", code="IMAGE_SOURCE_INVALID")
+    if not prepared:
+        return []
+
+    temp_paths: list[Path] = []
+    created_dirs: list[Path] = []
+    try:
+        storage.temp_dir.mkdir(parents=True, exist_ok=True)
+        # 1. 全部写 temp（尚未接触正式目录）
+        for entry in prepared:
+            temp_path = storage.temp_dir / f"import_{uuid.uuid4().hex}{entry.suffix}"
+            temp_path.write_bytes(entry.data)
+            temp_paths.append(temp_path)
+        # 2. 全部移动到正式目录
+        for entry, temp_path in zip(prepared, temp_paths):
+            final_dir = storage.resolve_under("images/originals", entry.image_id)
+            final_dir.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(final_dir)
+            storage.atomic_move_into(temp_path, final_dir, f"original{entry.suffix}")
+        # 3. 单事务写入全部 Image
+        images = [
+            Image(
+                id=entry.image_id,
+                job_id=job.id if job is not None else None,
+                job_item_id=item.id if item is not None else None,
+                kind=kind,
+                file_path=entry.relative_path,
+                width=entry.width,
+                height=entry.height,
+                seed=seed,
+                review_status="UNREVIEWED",
+                favorite=False,
+                source=source,
+                metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+            )
+            for entry in prepared
+        ]
+        for image in images:
+            session.add(image)
+        session.commit()
+        return images
+    except Exception:
+        session.rollback()
+        for path in temp_paths:
+            storage.safe_delete(path)
+        for directory in created_dirs:
+            storage.safe_delete(directory)
+        raise
+
+
 def import_engine_output(
     session: Session,
     storage: StorageManager,
@@ -46,61 +156,25 @@ def import_engine_output(
     kind: str = "original",
     metadata: dict[str, Any] | None = None,
 ) -> Image:
-    """把单个引擎输出导入为正式 Studio Image（规范 §四十，失败任一步全回滚）。"""
-    if source not in IMAGE_SOURCES:
-        raise ValidationError(f"非法图片来源: {source}", code="IMAGE_SOURCE_INVALID")
-    if not data:
-        raise ValidationError("输出文件为空", code="OUTPUT_MISSING")
-    fmt = sniff_image_format(data)
-    if fmt is None:
-        raise ValidationError("引擎输出不是可识别的图片", code="OUTPUT_MISSING")
-    dimensions = image_dimensions(data)
-    if dimensions is None:
-        raise ValidationError("无法解析图片尺寸", code="OUTPUT_MISSING")
-    width, height = dimensions
+    """单图便捷入口（prepare + 单元素批次事务）。
 
-    suffix = ".png" if fmt == "png" else (".jpg" if fmt == "jpeg" else ".webp")
-    image_id = new_id(IMAGE)
-    final_dir = storage.resolve_under("images/originals", image_id)
-    relative_target = f"images/originals/{image_id}/original{suffix}"
-
-    temp_path = storage.temp_dir / f"import_{uuid.uuid4().hex}{suffix}"
-    storage.temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path.write_bytes(data)
-    try:
-        final_dir.mkdir(parents=True, exist_ok=True)
-        moved = storage.atomic_move_into(temp_path, final_dir, f"original{suffix}")
-    except Exception:
-        storage.safe_delete(temp_path)
-        storage.safe_delete(final_dir)
-        raise
-
-    image = Image(
-        id=image_id,
-        job_id=job.id if job is not None else None,
-        job_item_id=item.id if item is not None else None,
-        kind=kind,
-        file_path=relative_target,
-        width=width,
-        height=height,
-        seed=seed,
-        review_status="UNREVIEWED",
-        favorite=False,
-        source=source,
-        metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+    仅供单张场景；多图必须走 prepare_image_output() + import_outputs_transaction()
+    的整批路径（Phase 2.2 §1）。original_filename 仅作调用签名兼容，不参与落盘命名。
+    """
+    prepared = prepare_image_output(data)
+    images = import_outputs_transaction(
+        session, storage, [prepared],
+        job=job, item=item, seed=seed, source=source, kind=kind, metadata=metadata,
     )
-    try:
-        session.add(image)
-        session.commit()
-    except Exception:
-        session.rollback()
-        storage.safe_delete(storage.resolve_under("images/originals", image_id))
-        raise
-    return image
+    return images[0]
 
 
 def import_adapter_outputs(session: Session, storage: StorageManager, job: Job, item: JobItem, outputs: list[EngineOutputFile]) -> list[str]:
-    """Worker 的 output_importer 回调：把 Adapter 取回的输出文件登记为 Image。"""
+    """Worker 的 output_importer 回调：把 Adapter 取回的输出文件登记为 Image。
+
+    Phase 2.2 §1：先全部校验（prepare）→ 整批事务导入；任何一步失败都不会留下
+    半成功图库资产（不是逐张 commit 的循环）。
+    """
     source = "comfyui" if job.provider == "comfyui" else ("mock" if job.provider == "mock" else "import")
     metadata = {
         "module_id": job.module_id,
@@ -110,19 +184,12 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job, 
         "workflow_hash": job.workflow_hash,
         "actual_provider": job.provider,
     }
-    image_ids: list[str] = []
-    for output in outputs:
-        image = import_engine_output(
-            session, storage,
-            data=output.data,
-            original_filename=output.filename,
-            job=job, item=item,
-            seed=item.seed,
-            source=source,
-            metadata=metadata,
-        )
-        image_ids.append(image.id)
-    return image_ids
+    prepared = [prepare_image_output(output.data) for output in outputs]
+    images = import_outputs_transaction(
+        session, storage, prepared,
+        job=job, item=item, seed=item.seed, source=source, metadata=metadata,
+    )
+    return [image.id for image in images]
 
 
 def list_images(

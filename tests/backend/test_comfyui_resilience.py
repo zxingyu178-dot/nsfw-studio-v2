@@ -34,8 +34,9 @@ class StubResponse:
 
 
 class StubClient:
-    def __init__(self, handler):
+    def __init__(self, handler, calls: list):
         self._handler = handler
+        self._calls = calls
 
     async def __aenter__(self) -> "StubClient":
         return self
@@ -44,11 +45,21 @@ class StubClient:
         return False
 
     async def get(self, url: str, **kwargs) -> StubResponse:
-        return self._handler(url)
+        self._calls.append(("GET", url))
+        return self._handler(url, method="GET")
+
+    async def post(self, url: str, json=None, **kwargs) -> StubResponse:
+        self._calls.append(("POST", url, json))
+        return self._handler(url, method="POST", json=json)
 
 
-def install_stub(monkeypatch, handler) -> None:
-    monkeypatch.setattr(comfyui_module.httpx, "AsyncClient", lambda **kwargs: StubClient(handler))
+def install_stub(monkeypatch, handler, calls: list | None = None) -> list:
+    """安装 httpx AsyncClient 替身；calls 记录 ("GET"/"POST", url[, payload])。"""
+    recorded: list = calls if calls is not None else []
+    monkeypatch.setattr(
+        comfyui_module.httpx, "AsyncClient", lambda **kwargs: StubClient(handler, recorded)
+    )
+    return recorded
 
 
 def make_adapter() -> ComfyUIAdapter:
@@ -58,7 +69,7 @@ def make_adapter() -> ComfyUIAdapter:
 # ===== §二：history 请求失败不得伪装成“还在运行” =====
 
 def test_history_connect_error_raises_engine_offline(monkeypatch):
-    def handler(url: str):
+    def handler(url: str, **_kwargs):
         raise httpx.ConnectError("connection refused")
 
     install_stub(monkeypatch, handler)
@@ -71,7 +82,7 @@ def test_history_connect_error_raises_engine_offline(monkeypatch):
 
 
 def test_history_http_error_raises_transient_network(monkeypatch):
-    def handler(url: str):
+    def handler(url: str, **_kwargs):
         raise httpx.ReadTimeout("read timeout")
 
     install_stub(monkeypatch, handler)
@@ -86,7 +97,7 @@ def test_history_http_error_raises_transient_network(monkeypatch):
 
 def test_history_absent_but_queued_is_running_not_failed(monkeypatch):
     """history 尚无该 prompt（普通"还没跑完"）不得误判失败。"""
-    def handler(url: str):
+    def handler(url: str, **_kwargs):
         if "/history/" in url:
             return StubResponse({})  # 可达但任务未出现在 history
         return StubResponse({"queue_running": [[1, "prompt-1", {}, {}, []]], "queue_pending": []})
@@ -101,7 +112,7 @@ def test_history_absent_but_queued_is_running_not_failed(monkeypatch):
 
 def test_lost_task_becomes_unknown_after_bounded_polls(monkeypatch):
     """既不在 /queue 也不在 /history（引擎重启丢失任务）→ 有界轮询后 unknown，不得永久 RUNNING。"""
-    def handler(url: str):
+    def handler(url: str, **_kwargs):
         if "/history/" in url:
             return StubResponse({})
         return StubResponse({"queue_running": [], "queue_pending": []})
@@ -121,7 +132,7 @@ def test_lost_task_becomes_unknown_after_bounded_polls(monkeypatch):
 
 def test_fresh_live_state_keeps_waiting(monkeypatch):
     """实时层新鲜（WS 仍在推送）且不在队列/history → 继续 running（不误判丢失）。"""
-    def handler(url: str):
+    def handler(url: str, **_kwargs):
         if "/history/" in url:
             return StubResponse({})
         return StubResponse({"queue_running": [], "queue_pending": []})
@@ -164,3 +175,53 @@ def test_missing_binding_version_raises_binding_not_found(tmp_path, monkeypatch)
     with pytest.raises(EngineError) as excinfo:
         _ = adapter.workflow_hash
     assert excinfo.value.error_type == "BINDING_NOT_FOUND"
+
+
+# ===== §四（Phase 2.2）：取消不得误伤其他 ComfyUI 任务 =====
+
+def test_cancel_pending_target_only_deletes(monkeypatch):
+    """target 在 pending → 只 delete，绝不调用全局 /interrupt。"""
+    def handler(url: str, **_kwargs):
+        if url.endswith("/queue"):
+            return StubResponse({"queue_running": [[1, "other-prompt", {}, {}, []]],
+                                 "queue_pending": [[2, "target", {}, {}, []]]})
+        return StubResponse({})
+
+    calls = install_stub(monkeypatch, handler)
+    import asyncio
+
+    assert asyncio.run(make_adapter().cancel_job("target")) is True
+    posts = [call for call in calls if call[0] == "POST"]
+    assert [call[1] for call in posts] == ["http://stub/queue"], "pending 目标只允许 delete"
+    assert posts[0][2] == {"delete": ["target"]}
+    assert not any("interrupt" in call[1] for call in calls), "pending 目标不得触发 /interrupt"
+
+
+def test_cancel_running_target_allowed_to_interrupt(monkeypatch):
+    """target 正是当前 running → 才允许 /interrupt。"""
+    def handler(url: str, **_kwargs):
+        if url.endswith("/queue"):
+            return StubResponse({"queue_running": [[1, "target", {}, {}, []]], "queue_pending": []})
+        return StubResponse({})
+
+    calls = install_stub(monkeypatch, handler)
+    import asyncio
+
+    assert asyncio.run(make_adapter().cancel_job("target")) is True
+    assert any("interrupt" in call[1] for call in calls), "running 目标必须请求 /interrupt"
+
+
+def test_cancel_other_running_prompt_never_interrupted(monkeypatch):
+    """当前 running 是别的 prompt（用户手工任务）→ 禁止 /interrupt、禁止任何队列写操作。"""
+    def handler(url: str, **_kwargs):
+        if url.endswith("/queue"):
+            return StubResponse({"queue_running": [[1, "someone-elses", {}, {}, []]],
+                                 "queue_pending": []})
+        return StubResponse({})
+
+    calls = install_stub(monkeypatch, handler)
+    import asyncio
+
+    assert asyncio.run(make_adapter().cancel_job("target")) is False
+    assert not any("interrupt" in call[1] for call in calls), "不得打断其他任务"
+    assert not any(call[0] == "POST" for call in calls), "目标不在队列时不应写队列"

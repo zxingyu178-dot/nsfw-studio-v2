@@ -247,13 +247,7 @@ class ComfyUIAdapter(EngineAdapter):
         except httpx.HTTPError as error:
             raise EngineError("ENGINE_NETWORK", f"ComfyUI /queue 请求失败: {error}",
                               transient=True) from error
-        ids: set[str] = set()
-        for bucket in ("queue_running", "queue_pending"):
-            for entry in data.get(bucket) or []:
-                if isinstance(entry, (list, tuple)) and len(entry) > 1 and isinstance(entry[1], str):
-                    ids.add(entry[1])
-                elif isinstance(entry, dict) and entry.get("prompt_id"):
-                    ids.add(str(entry["prompt_id"]))
+        ids = self._queue_ids(data, "queue_running") | self._queue_ids(data, "queue_pending")
         return engine_job_id in ids
 
     # ===== 输出取回（规范 §三十九/§四十：字节级取回，Worker 导入 DataRoot） =====
@@ -282,14 +276,44 @@ class ComfyUIAdapter(EngineAdapter):
 
     # ===== 取消（规范 §十九：Adapter 安全支持时请求取消） =====
     async def cancel_job(self, engine_job_id: str) -> bool:
+        """安全取消（Phase 2.2 §4）：只处理自己的 target，绝不打断其他任务。
+
+        /interrupt 是 ComfyUI 的全局行为，必须先读 /queue 判断 target 位置：
+        - target 在 pending  → 只 POST /queue delete，**不调用 /interrupt**；
+        - target 正是当前 running → 才允许 /interrupt；
+        - target 不在队列（已完成/被删除），或当前 running 是别人的 prompt
+          → 什么都不做（Studio 不得代替用户打断手工运行的其他任务）。
+        """
         try:
             async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
-                await client.post(f"{self.base_url}/queue", json={"delete": [engine_job_id]})
-                await client.post(f"{self.base_url}/interrupt")
-            return True
+                response = await client.get(f"{self.base_url}/queue")
+                response.raise_for_status()
+                data = response.json()
+                running_ids = self._queue_ids(data, "queue_running")
+                pending_ids = self._queue_ids(data, "queue_pending")
+                if engine_job_id in pending_ids:
+                    await client.post(f"{self.base_url}/queue", json={"delete": [engine_job_id]})
+                    return True
+                if engine_job_id in running_ids:
+                    await client.post(f"{self.base_url}/queue", json={"delete": [engine_job_id]})
+                    await client.post(f"{self.base_url}/interrupt")
+                    return True
+                logger.info("取消目标不在 ComfyUI 队列中（不打断其他任务）: %s", engine_job_id)
+                return False
         except httpx.HTTPError as error:
             logger.warning("ComfyUI 取消请求失败: %s", error)
             return False
+
+    @staticmethod
+    def _queue_ids(data: dict, bucket: str) -> set[str]:
+        """解析 /queue 响应中的一个队列桶（running/pending）里的 prompt_id 集合。"""
+        ids: set[str] = set()
+        for entry in data.get(bucket) or []:
+            if isinstance(entry, (list, tuple)) and len(entry) > 1 and isinstance(entry[1], str):
+                ids.add(entry[1])
+            elif isinstance(entry, dict) and entry.get("prompt_id"):
+                ids.add(str(entry["prompt_id"]))
+        return ids
 
     # ===== WebSocket 进度监听（§三十四） =====
     def _ensure_ws(self) -> None:

@@ -51,6 +51,91 @@ def test_import_rejects_garbage(session, settings):
         )
 
 
+def _make_job_item(session):
+    from app.services import job_service
+
+    job, _ = job_service.create_job(session, source="web", snapshot={
+        "prompt_mode": "structured", "structured_prompt": {"style": "x"},
+        "width": 832, "height": 1216, "count": 1, "seed_mode": "random",
+    })
+    item = job_service.get_items(session, job.id)[0]
+    session.commit()
+    return job, item
+
+
+def _dir_entries(path) -> list:
+    return list(path.iterdir()) if path.exists() else []
+
+
+def test_import_batch_atomic_valid_plus_corrupt(session, settings, png_bytes):
+    """Phase 2.2 §1：合法 PNG + 损坏 PNG → 整批失败，images=0，无任何残留。"""
+    from app.engine.base import EngineOutputFile
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    job, item = _make_job_item(session)
+    outputs = [
+        EngineOutputFile(filename="good.png", data=png_bytes),
+        EngineOutputFile(filename="bad.png", data=b"this is not an image"),
+    ]
+    with pytest.raises(ValidationError):
+        image_service.import_adapter_outputs(session, storage, job, item, outputs)
+
+    assert image_service.list_images(session, job_id=job.id)[1] == 0, "整批失败不得留下半成功图片"
+    assert _dir_entries(storage.resolve_under("images/originals")) == [], "originals 不得有残留"
+    assert _dir_entries(storage.temp_dir) == [], "temp 不得有残留"
+
+
+def test_import_batch_two_valid_outputs_succeed_together(session, settings, png_bytes):
+    """Phase 2.2 §1：两个合法输出在同一批次同时成功。"""
+    from app.engine.base import EngineOutputFile
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    job, item = _make_job_item(session)
+    outputs = [
+        EngineOutputFile(filename="a.png", data=png_bytes),
+        EngineOutputFile(filename="b.png", data=png_bytes),
+    ]
+    image_ids = image_service.import_adapter_outputs(session, storage, job, item, outputs)
+
+    assert len(image_ids) == 2 and len(set(image_ids)) == 2
+    images, total = image_service.list_images(session, job_id=job.id)
+    assert total == 2
+    for image in images:
+        assert storage.absolutize(image.file_path).is_file()
+
+
+def test_import_batch_rolls_back_when_move_fails(session, settings, png_bytes, monkeypatch):
+    """Phase 2.2 §1：移动到正式目录阶段失败 → 回滚 DB 并删除本批次已建的全部文件。"""
+    from app.engine.base import EngineOutputFile
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    job, item = _make_job_item(session)
+    original_move = storage.atomic_move_into
+    calls = {"count": 0}
+
+    def failing_move(temp_path, final_dir, name):
+        calls["count"] += 1
+        if calls["count"] == 2:  # 第一张已移动成功，第二张失败
+            raise OSError("模拟磁盘错误")
+        return original_move(temp_path, final_dir, name)
+
+    monkeypatch.setattr(storage, "atomic_move_into", failing_move)
+    outputs = [
+        EngineOutputFile(filename="a.png", data=png_bytes),
+        EngineOutputFile(filename="b.png", data=png_bytes),
+    ]
+    with pytest.raises(OSError):
+        image_service.import_adapter_outputs(session, storage, job, item, outputs)
+
+    assert image_service.list_images(session, job_id=job.id)[1] == 0
+    assert _dir_entries(storage.resolve_under("images/originals")) == [], \
+        "第一张已移动成功的正式文件也必须随整批回滚删除"
+    assert _dir_entries(storage.temp_dir) == []
+
+
 def test_review_and_favorite(session, settings, png_bytes):
     from app.storage.manager import StorageManager
 

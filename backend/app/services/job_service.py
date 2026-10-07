@@ -298,7 +298,7 @@ def cancel_job(session: Session, job_id: str) -> Job:
     return job
 
 
-def resume_remaining(session: Session, original_job_id: str, *, module_identity: dict[str, str | None] | None = None) -> tuple[Job, bool]:
+def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]:
     """取消/失败/中断后继续剩余图片（规范 §二十）：创建子 Job，只含未完成数量。"""
     original = get_job(session, original_job_id)
     if original.status not in ("FAILED", "CANCELLED", "INTERRUPTED"):
@@ -324,12 +324,9 @@ def resume_remaining(session: Session, original_job_id: str, *, module_identity:
     settings_snapshot = json.loads(original.generation_settings_json or "{}")
     settings_snapshot.update({"seed_mode": "random", "seed": None})
 
-    identity = module_identity or {}
-    workflow_snapshot_json = (
-        json.dumps(_workflow_snapshot_from_identity(identity), ensure_ascii=False)
-        if identity
-        else original.workflow_snapshot_json
-    )
+    # §3（Phase 2.2）：Resume 必须完整继承 Parent 的 Workflow 身份（快照 + 全部列），
+    # 不得读取当前 module_identity 静默升级到新 Workflow 版本；
+    # 若原 binding 已不存在，执行时由 Adapter 明确报 BINDING_NOT_FOUND。
     job = Job(
         id=new_id(JOB),
         source="resume",
@@ -340,7 +337,7 @@ def resume_remaining(session: Session, original_job_id: str, *, module_identity:
         structured_prompt_snapshot=original.structured_prompt_snapshot,
         workbench_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
         generation_settings_json=json.dumps(settings_snapshot, ensure_ascii=False),
-        workflow_snapshot_json=workflow_snapshot_json,
+        workflow_snapshot_json=original.workflow_snapshot_json,
         module_id=original.module_id,
         module_version=original.module_version,
         provider=original.provider,

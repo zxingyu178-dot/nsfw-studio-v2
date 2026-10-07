@@ -106,9 +106,9 @@ def cancel_job(job_id: str, session: Session = Depends(get_session)) -> JobRespo
 
 @router.post("/jobs/{job_id}/resume-remaining", response_model=JobResponse, status_code=201,
              summary="继续剩余图片（创建子 Job，只含未完成数量）")
-def resume_remaining(job_id: str, request: Request, session: Session = Depends(get_session)) -> JobResponse:
-    settings: Settings = request.app.state.settings
-    job, _ = job_service.resume_remaining(session, job_id, module_identity=_module_identity(settings))
+def resume_remaining(job_id: str, session: Session = Depends(get_session)) -> JobResponse:
+    # §3（Phase 2.2）：续跑完整继承原 Job 的 Workflow 身份，不读取当前 settings（禁止静默升级）
+    job, _ = job_service.resume_remaining(session, job_id)
     return job_response(job)
 
 
