@@ -10,8 +10,8 @@
 #     url: "http://<本机地址>:<端口>"
 workflow:
   engine:
-    provider: "mock"
+    provider: "comfyui"   # comfyui（默认，地址只进 config.local.yaml）| mock（测试）| unbound
     module_id: "basic_generate"
     module_version: "v1"
     binding_version: "v1"
-    options: {}   # mock: {mode: success|fail|offline|oom|workflow_error, delay_per_item_ms, fail_after_items}
+    options: {}   # 机器差异（URL 等）只进 configs/config.local.yaml 的 comfyui 段

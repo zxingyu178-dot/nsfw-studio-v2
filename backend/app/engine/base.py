@@ -39,6 +39,7 @@ class EngineJobStatus:
     progress: float | None = None  # 0.0 ~ 1.0
     message: str = ""
     stage: str = ""
+    error_type: str = ""  # 失败时的分类（规范 §三十五）；空则由 Worker 按消息归类
 
 
 @dataclass(frozen=True)

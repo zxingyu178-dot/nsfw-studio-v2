@@ -1,0 +1,33 @@
+# basic_generate v1 — ComfyUI Provider Binding
+#
+# 规范 §二十九：ComfyUI 节点 ID / Workflow JSON / 注入位置只存在于 provider binding 层，
+# 不进入 WorkflowModule / EngineAdapter 核心语义。
+# 来源：本机已验证可跑的 Qwen-Image 2.1 UC 文生图链（nightbatch 同款，见 docs/WORKFLOW_INVENTORY.md）。
+
+binding_version: v1
+module: basic_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot，ComfyUI output 仅作输出来源
+save_image_node: "8"
+save_image_prefix: "NSFWStudio/{date}"   # {date} 提交时替换为 YYYYMMDD
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "4", field: "prompt"}
+  negative_prompt: {node: "4", field: "negative_prompt"}
+  width:           {node: "5", field: "width"}
+  height:          {node: "5", field: "height"}
+  seed:            {node: "6", field: "seed"}
+
+# 固定默认（nightbatch 实测值；Module 标准输入不暴露）
+defaults:
+  "4": {resolution: 1024}
+  "6": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例，与 nightbatch 一致）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
