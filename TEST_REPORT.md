@@ -61,7 +61,7 @@
 
 ## 五、未执行 / 部分验证项（如实声明）
 
-- ~~GitHub clone 验证：未执行~~ **已补充验证（2026-10-07）**：使用本机凭据管理器已存凭据创建私有仓库
-  `https://github.com/zxingyu178-dot/nsfw-studio-v2`，推送 main / develop / tag v0.1.0 成功，
-  `git ls-remote origin` 确认远端引用完整（clone 需账户权限）。
+- ~~GitHub clone 验证：未执行~~ **已补充验证（2026-10-07）**：使用本机凭据管理器已存凭据创建仓库
+  `https://github.com/zxingyu178-dot/nsfw-studio-v2`（创建时私有，同日应用户要求转为公开，供三方 AI 审核代码），
+  推送 main / develop / tag v0.1.0 成功，`git ls-remote origin` 确认远端引用完整，可匿名 clone。
 - 前端自动化测试（Vitest）：按规范属 Phase 1 范围，未包含。

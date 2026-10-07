@@ -28,7 +28,7 @@ WorkflowModule 与 EngineAdapter 接口预留、Git 规范、基础 UI 壳。
 
 | 标准 | 结果 |
 | --- | --- |
-| GitHub 可以正常 clone | ✅ 私有仓库 `zxingyu178-dot/nsfw-studio-v2` 已创建并推送（main + develop + tag v0.1.0），`git ls-remote` 验证通过；clone 需账户权限 |
+| GitHub 可以正常 clone | ✅ 公开仓库 `zxingyu178-dot/nsfw-studio-v2` 已创建并推送（main + develop + tag v0.1.0），`git ls-remote` 验证通过；2026-10-07 应用户要求由私有转为公开，供三方 AI 审核代码，可匿名 clone |
 | 前后端可以启动 | ✅ uvicorn 启动成功；vite dev server 启动成功（HTTP 200） |
 
 ### 后端

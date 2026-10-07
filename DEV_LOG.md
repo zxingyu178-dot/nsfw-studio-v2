@@ -39,3 +39,5 @@
 - ~~GitHub 推送未执行~~ → **当日已解决**：检测到本机 Git Credential Manager 存有 GitHub 凭据
   （zxingyu178-dot），经 GitHub API 创建私有仓库 `nsfw-studio-v2` 后推送 main / develop / v0.1.0 成功，
   `git ls-remote` 验证通过。`gh` CLI 仍未安装（AIHome tool-registry 登记 not_found）。
+- 同日应用户要求将仓库由私有**转为公开**（https://github.com/zxingyu178-dot/nsfw-studio-v2），用途：三方 AI 审核代码。
+  已确认仓库内无凭据/密钥（.gitignore 排除 .env，代码零硬编码秘密）。
