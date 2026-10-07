@@ -69,6 +69,7 @@ def main() -> int:
     out_path = out_dir / f"NSFW_Studio_{args.phase}_Handoff.zip"
 
     count = 0
+    added: set[str] = set()
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("GIT_COMMITS.txt", git_log())
 
@@ -76,6 +77,7 @@ def main() -> int:
             file_path = PROJECT_ROOT / name
             if file_path.is_file():
                 add_file(zf, file_path, name)
+                added.add(name)
                 count += 1
 
         for dir_name in INCLUDE_DIRS:
@@ -83,9 +85,14 @@ def main() -> int:
             if not base.is_dir():
                 continue
             for path in sorted(base.rglob("*")):
-                if path.is_file() and not is_excluded(path.relative_to(PROJECT_ROOT).parent / path.name) and not is_excluded(path):
-                    add_file(zf, path, path.relative_to(PROJECT_ROOT).as_posix())
-                    count += 1
+                if not path.is_file():
+                    continue
+                arcname = path.relative_to(PROJECT_ROOT).as_posix()
+                if arcname in added or is_excluded(path):
+                    continue
+                add_file(zf, path, arcname)
+                added.add(arcname)
+                count += 1
 
     print(f"交接包已生成: {out_path}（{count} 个文件）")
     return 0
