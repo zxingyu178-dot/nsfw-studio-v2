@@ -23,11 +23,11 @@
 ```
 快速套件（CI 同口径，无 ComfyUI）：120 passed
   其中 Phase 2.1 新增：test_phase21_stability.py 22 例 + test_comfyui_resilience.py 7 例
-真实 ComfyUI smoke（1 张，ComfyUI 在线时运行）：PASSED（见下）
+真实 ComfyUI smoke（1 张，ComfyUI 在线时运行）：1 passed（NSFWStudio/20261007_00013_.png）
 前端 npm run build：通过（tsc + vite）
 交接 ZIP 解压独立运行快速套件：通过（无 .git 环境）
-develop CI：见 GitHub Actions（推送后记录）
-main CI：见 GitHub Actions（推送后记录）
+develop CI：success（head 8448553）
+main CI：success（head 8448553）
 ```
 
 真实 smoke 链路：Workbench → POST /jobs → BasicGenerateModule（PipelineExecutor 解析）

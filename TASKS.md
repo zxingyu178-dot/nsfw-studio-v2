@@ -14,7 +14,7 @@
 - [x] Handoff ZIP 无 .git 可测（.gitignore 文本断言；ZIP 解压实测通过）
 - [x] 回归测试 29 例新增（stability 22 + resilience 7）；快速套件 120 passed；前端 build 通过
 - [x] 真实 ComfyUI 1 张 smoke 通过（新链路：模块 → Adapter → 导入 → Gallery）
-- [ ] fix/phase2-stable-execution → develop → CI → main → CI → tag v0.3.1
+- [x] fix/phase2-stable-execution → develop → CI 绿（8448553）→ main → CI 绿（8448553）→ tag v0.3.1
 
 ## Phase 1：Prompt / Asset / Recipe Core ✅（2026-10-07，v0.2.0）
 

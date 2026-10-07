@@ -32,8 +32,10 @@ ComfyUI 0.37.0 / RTX 3060）。
 ### 未验证 / 限制（如实标注）
 
 - 真实集成只跑 1 张 smoke（合同 §十二 明确不重跑 1/3/8 整套）；
-- Mock 的 fixture PNG 为 1×1（source=mock 标识），不代表真实画质；真实链路由 smoke 证据支撑；
-- CI 结果见下方 GitHub CI 记录。
+- Mock 的 fixture PNG 为 1×1（source=mock 标识），不代表真实画质；真实链路由 smoke 证据支撑。
+
+**GitHub CI**（fix/phase2-stable-execution → develop → main）：
+develop 与 main 推送后 GitHub Actions 均 **success**（head 8448553，pytest + 前端构建两个 job 全绿）。
 
 ## Phase 2 测试（v0.3.0，Job Execution Core + ComfyUIAdapter + Gallery）
 
