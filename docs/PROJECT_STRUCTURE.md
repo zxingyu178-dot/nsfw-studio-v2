@@ -1,6 +1,6 @@
 # PROJECT_STRUCTURE — 项目结构与模块职责
 
-> 更新：2026-10-07（Phase 0.1 架构收口）
+> 更新：2026-10-07（Phase 0.1 收口 + 0.1.1 契约修正）
 
 ## 仓库结构
 
@@ -33,7 +33,7 @@ nsfw-studio-v2/
 │       ├── api/                # 后端 HTTP 封装（client.ts）
 │       ├── stores/             # themeStore（localStorage 持久化）
 │       └── utils/              # format.ts
-├── configs/                    # config.yaml（data_root，本机明确声明）/ app.yaml / storage.yaml / workflow.yaml
+├── configs/                    # config.yaml（公共模板，机器无关）/ config.local.yaml（本机私有，gitignore）/ app / storage / workflow
 ├── database/                   # 数据库设计文档（运行库在 DataRoot/database/studio.db）
 ├── workflows/                  # 未来工作流定义文件（Phase 0.1 仍为空）
 ├── scripts/                    # dev_backend / dev_frontend / init_dataroot / backup_db / build_handoff
@@ -45,10 +45,10 @@ nsfw-studio-v2/
 
 ## 运行数据 DataRoot（不在仓库内）
 
-代码默认值**可移植**：`%USERPROFILE%/NSFW-Studio-Data`（`core/config.py`）；
-本机由 `configs/config.yaml` 明确声明为 `D:/NSFW-Studio-Data`；环境变量
-`NSFW_STUDIO_DATA_ROOT` 优先级最高。首次启动自动创建，清单由
-`configs/storage.yaml` 的 `storage.layout` 定义：
+配置优先级（固定）：`NSFW_STUDIO_DATA_ROOT`（环境变量）> `configs/config.local.yaml`
+（本机私有，gitignore，不提交）> `configs/config.yaml`（公共模板，机器无关，不设置 data_root）
+> 代码默认 `%USERPROFILE%/NSFW-Studio-Data`（`core/config.py`）。
+首次启动自动创建，清单由 `configs/storage.yaml` 的 `storage.layout` 定义：
 
 ```text
 NSFW-Studio-Data/
@@ -69,5 +69,5 @@ NSFW-Studio-Data/
 | 契约强类型 | 模块间一律 WorkflowInput/Output/Validation/ModuleCapabilities，禁止无约束 dict 契约 |
 | 职责分离 | Job 创建=API/JobService；Job 消费=QueueWorker；引擎调用=EngineAdapter |
 | 单机优先 | SQLite + 本地文件系统，无云依赖 |
-| 跨机器可移植 | DataRoot 默认基于用户目录；启动脚本带回退与报错；CI 验证非本机环境可跑 |
+| 跨机器可移植 | DataRoot 配置分层（env > local > 公共模板 > 用户目录默认）；启动脚本带回退与报错；CI 验证非本机环境可跑 |
 | api 不写业务 | api 只做 HTTP 编排，业务在 services |

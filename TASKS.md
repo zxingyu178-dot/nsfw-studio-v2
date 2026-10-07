@@ -1,5 +1,15 @@
 # TASKS — NSFW Studio V2
 
+## Phase 0.1.1：审查遗留契约修正 ✅（2026-10-07，v0.1.2）
+
+- [x] `WorkflowModule.execute` 改为 async（与 EngineAdapter 异步契约统一；纯计算接口保持 sync）
+- [x] 异步链路原则写入 docstring 与开发指南（Pipeline/WorkflowModule/EngineAdapter 全 await）
+- [x] 公共 `configs/config.yaml` 机器无关化（不再设置 data_root，含防回归哨兵测试）
+- [x] 新增本机配置层 `configs/config.local.yaml`（gitignore，不提交；本机 D 盘只在此声明）
+- [x] 优先级链固定并测试：env > local > config.yaml > %USERPROFILE% 默认
+- [x] `dev_frontend.bat` 支持 `AIHOME_ROOT` 环境变量（兼容探测默认根目录 → PATH 回退）
+- [x] 测试 27 → 33 例全绿；npm run build 通过；develop/main CI 全绿；两分支同步；tag v0.1.2
+
 ## Phase 0.1：架构收口 ✅（2026-10-07，v0.1.1）
 
 - [x] Migration 漏洞修复：仅 status=applied 视为完成；failed 下次启动重试；重试无主键冲突

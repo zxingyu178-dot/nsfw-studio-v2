@@ -1,6 +1,17 @@
 # NSFW Studio V2 — Phase 0 / 0.1 验收报告
 
-> 日期：2026-10-07 ｜ 版本：0.1.0（Phase 0）/ 0.1.1（Phase 0.1 收口）｜ 执行：ZCode Agent
+> 日期：2026-10-07 ｜ 版本：0.1.0（Phase 0）/ 0.1.1（Phase 0.1 收口）/ 0.1.2（Phase 0.1.1 契约修正）｜ 执行：ZCode Agent
+
+## 〇-b、Phase 0.1.1 审查遗留契约修正（v0.1.2，2026-10-07）
+
+| 项 | 结果 |
+| --- | --- |
+| 异步契约统一 | ✅ `WorkflowModule.execute` 改为 async（Pipeline→WorkflowModule→EngineAdapter 全 await）；纯计算接口保持 sync；iscoroutinefunction 测试守护 |
+| DataRoot 跨机器 | ✅ 公共 config.yaml 机器无关（不设置 data_root，哨兵测试）；新增 config.local.yaml 本机层（gitignore）；优先级链 env > local > 模板 > %USERPROFILE% 默认（逐层测试）；换电脑 clone 零修改启动 |
+| Node 探测 | ✅ dev_frontend.bat 优先 AIHOME_ROOT 环境变量 → 规范默认根目录兼容探测 → 系统 PATH |
+| 验证 | ✅ pytest 33 passed；npm run build 通过；develop/main CI 全绿；tag v0.1.2；两分支同步 |
+
+---
 
 ## 〇、Phase 0.1 架构收口（v0.1.1，2026-10-07）
 

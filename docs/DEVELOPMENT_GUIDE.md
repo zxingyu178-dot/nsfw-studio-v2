@@ -1,18 +1,18 @@
 # DEVELOPMENT_GUIDE — 开发指南
 
-> 更新：2026-10-07（Phase 0.1 收口）
+> 更新：2026-10-07（Phase 0.1 收口 + 0.1.1 契约修正）
 
 ## 1. 环境要求
 
 | 工具 | 版本 | 来源 |
 | --- | --- | --- |
 | Python | 3.11 | 本机已装（`python --version`） |
-| Node.js | ≥ 18 | 解析顺序：AIHome 统一环境（存在时）→ 系统 PATH；都没有则脚本报错退出 |
+| Node.js | ≥ 18 | 解析顺序：`AIHOME_ROOT` 环境变量指向的 AIHome 环境 → AIHome 规范默认根目录（存在时）→ 系统 PATH；都没有则脚本报错退出 |
 
-> 跨机器开发（公司/家里）：Node 解析已内建于 `scripts/dev_frontend.bat`
-> （自动探测 AIHome 环境目录，不存在则回落系统 PATH），Python 只依赖系统 PATH，
-> 无任何单一固定机器路径依赖。CI（GitHub Actions）会在 push/PR 时自动验证
-> 非本机环境下 pytest 与前端构建可跑通。
+> 跨机器开发（公司/家里）：`scripts/dev_frontend.bat` 优先读取 `AIHOME_ROOT`
+> 环境变量定位 Node（未设置时兼容探测 AIHome 规范默认根目录，再回落系统 PATH）；
+> Python 只依赖系统 PATH；DataRoot 配置分层（见 §4）保证 clone 即可启动。
+> CI（GitHub Actions）在 push/PR 时自动验证非本机环境下 pytest 与前端构建可跑通。
 
 ## 2. 首次初始化
 
@@ -53,15 +53,16 @@ python scripts\init_dataroot.py
 
 | 文件 | 内容 |
 | --- | --- |
-| `configs/config.yaml` | `data_root`（DataRoot 根目录；**本机明确声明**，如 D 盘） |
+| `configs/config.yaml` | 公共模板，**机器无关**，不设置 data_root（随仓库分发） |
+| `configs/config.local.yaml` | 本机私有配置（data_root 等），**已 gitignore，不提交** |
 | `configs/app.yaml` | 应用名 / 版本 / host / port / 日志级别 |
 | `configs/storage.yaml` | DataRoot 子目录清单（含 backups/）+ 数据库文件名 |
 | `configs/workflow.yaml` | 工作流配置占位（provider=unbound） |
 
-覆盖优先级：环境变量 > config.yaml > 代码默认值。
-代码默认 DataRoot 是可移植的 `%USERPROFILE%/NSFW-Studio-Data`（`core/config.py` 的
-`DEFAULT_DATA_ROOT`），某台机器想用其他盘必须在 config.yaml 明确声明。
-环境变量：`NSFW_STUDIO_DATA_ROOT`、`NSFW_STUDIO_HOST`、`NSFW_STUDIO_PORT`。
+覆盖优先级（固定）：`NSFW_STUDIO_DATA_ROOT`（环境变量）> `config.local.yaml` >
+`config.yaml` > 代码默认 `%USERPROFILE%/NSFW-Studio-Data`（`core/config.py` 的 `DEFAULT_DATA_ROOT`）。
+换电脑 clone 后无需修改任何文件即可启动；本机差异（如用 D 盘）只写进 config.local.yaml。
+环境变量：`NSFW_STUDIO_DATA_ROOT`、`NSFW_STUDIO_HOST`、`NSFW_STUDIO_PORT`、`AIHOME_ROOT`（可选，供脚本定位 AIHome 环境）。
 前端：`VITE_API_BASE_URL`（直连后端地址，缺省走 Vite 代理）、`NSFW_STUDIO_API_URL`（代理目标）。
 
 ## 5. CI
@@ -83,6 +84,10 @@ python scripts\init_dataroot.py
 - 禁止提交：`.venv`、`node_modules`、`*.db`、日志、`handoff/`。
 
 ## 7. 扩展方式（Phase 1+）
+
+**异步原则（固定）**：所有实际执行链路均为 async——Pipeline await WorkflowModule、
+WorkflowModule await EngineAdapter、EngineAdapter await 具体引擎；
+`validate_input()` / `capabilities()` 等纯数据校验/声明接口保持同步。
 
 - **新增业务表**：`backend/app/database/migrations.py` 追加 Migration；模型放 `app/models/`。
 - **新增 API**：schema 放 `app/schemas/`，逻辑放 `app/services/`，路由挂 `app/api/v1/router.py`。

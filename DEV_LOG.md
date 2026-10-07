@@ -1,5 +1,29 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 0.1.1：审查遗留契约修正（v0.1.2）
+
+**执行**：ZCode Agent（develop → CI 绿 → 合并 main → tag v0.1.2；不新增任何产品功能）
+
+1. **异步契约统一**：`WorkflowModule.execute` 改为 async abstractmethod（此前与 EngineAdapter
+   全 async 方法不一致，未来 Pipeline 无法 await）。异步原则固定写入 docstring + 开发指南：
+   执行链路全 await，纯数据校验 sync。测试：`iscoroutinefunction` 守护 execute 与 EngineAdapter
+   全部方法，同时守护 capabilities/validate_input 保持同步。
+2. **DataRoot 真正跨机器**：审查指出 Phase 0.1 的方案仍有漏洞——公共 config.yaml 携带
+   `data_root: "D:/NSFW-Studio-Data"`，clone 到他机仍会优先用 D 盘，可移植默认形同虚设。
+   修正：公共 config.yaml 机器无关（不设置 data_root，含哨兵测试）；新增
+   `configs/config.local.yaml` 本机私有层（`*.local.yaml` 本就在 .gitignore，双重显式登记）；
+   优先级链固定为 env > local > 公共模板 > `Path.home()/NSFW-Studio-Data`。
+   本机 D 盘只存在于 local 文件，真实加载已验证。
+3. **Node 探测**：`dev_frontend.bat` 优先 `AIHOME_ROOT` 环境变量 → AIHome 规范默认根目录
+   兼容探测（全局规范两台机器同根，仅作非阻断兼容）→ 系统 PATH → 报错。
+4. 版本 0.1.2（app.yaml / __init__ / package.json + lock 同步）。
+5. 验证：pytest **33 passed**；`npm run build` 通过；develop 与 main CI 全绿。
+
+### 教训
+
+- 配置"允许本机覆盖"必须区分**文件本身是否随仓库分发**——随仓库分发的公共配置写机器路径，
+  等于把一台机器变成所有人的默认值（Phase 0.1 自评通过、审查未过的根因）。
+
 ## 2026-10-07 — Phase 0.1：架构收口（v0.1.1）
 
 **执行**：ZCode Agent（在 develop 完成 → CI 全绿 → 合并 main → tag v0.1.1）

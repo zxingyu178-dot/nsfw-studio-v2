@@ -4,9 +4,10 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 0.1 — 架构收口（已完成，v0.1.1）。**
+**当前阶段：Phase 0.1 系列契约收口完成（v0.1.2）。**
 本阶段只建立长期可扩展的架构骨架，不接入 ComfyUI / 实际模型 / 生图工作流 / 豆包 / 手机端。
 生成能力全部通过 `backend/app/engine/`（EngineAdapter）与 `backend/app/workflows/`（WorkflowModule）接口预留，未来扩展不改核心。
+执行链路统一异步：Pipeline → WorkflowModule → EngineAdapter → 具体引擎（纯数据校验保持同步）。
 
 ## 技术栈
 
@@ -32,7 +33,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.1.1"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.1.2"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
@@ -54,9 +55,17 @@ nsfw-studio-v2/
 
 ## 运行数据（DataRoot）
 
-程序首次启动会自动创建。代码默认值为**可移植的** `%USERPROFILE%/NSFW-Studio-Data`；
-本仓库的 `configs/config.yaml` 明确声明本机使用 `D:/NSFW-Studio-Data`（允许按机器自选，
-换电脑没有该配置文件时自动回落到用户目录）。也可用环境变量 `NSFW_STUDIO_DATA_ROOT` 覆盖：
+程序首次启动会自动创建。配置优先级（固定）：
+
+```text
+NSFW_STUDIO_DATA_ROOT（环境变量）
+  > configs/config.local.yaml（本机私有，已 gitignore，不提交）
+    > configs/config.yaml（公共模板，机器无关，不设置 data_root）
+      > 代码默认 %USERPROFILE%/NSFW-Studio-Data（可移植）
+```
+
+本机想把数据放其他盘：新建 `configs/config.local.yaml`（如 `data_root: "D:/NSFW-Studio-Data"`），
+不要提交。换电脑 clone 后无需任何修改即可启动。
 
 ```text
 NSFW-Studio-Data/
@@ -68,7 +77,7 @@ NSFW-Studio-Data/
 └── logs/{app,jobs,errors}/
 ```
 
-代码与启动脚本不得依赖任何单一固定机器路径；路径一律由 `configs/storage.yaml` + `backend/app/core/config.py` 提供。
+代码与启动脚本不得依赖任何单一固定机器路径；路径一律由 `configs/` + `backend/app/core/config.py` 提供。
 
 ## 文档索引
 

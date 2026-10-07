@@ -4,7 +4,8 @@
 
 ## 1. 现状
 
-- 引擎：SQLite，运行库位于 `{data_root}/database/studio.db`（代码默认 `%USERPROFILE%/NSFW-Studio-Data`，本机 config.yaml 明确选 D 盘）。
+- 引擎：SQLite，运行库位于 `{data_root}/database/studio.db`（DataRoot 由配置分层决定：
+  env > config.local.yaml（本机，gitignore）> config.yaml（公共模板）> `%USERPROFILE%/NSFW-Studio-Data`）。
 - ORM：SQLAlchemy 2.x（`app/database/base.py` 提供 `Base` 与引擎工厂）。
 - 连接规范（`make_engine()` 对每个连接生效）：`journal_mode=WAL`、`busy_timeout=5000`、`foreign_keys=ON`。
 - 迁移：自研极简框架（`app/database/migrations.py`），迁移在代码中声明（单一事实源）。

@@ -16,7 +16,7 @@
 健康检查（Phase 0 规范 §十五）。
 
 ```json
-{ "status": "ok", "version": "0.1.0" }
+{ "status": "ok", "version": "0.1.2" }
 ```
 
 ### GET /

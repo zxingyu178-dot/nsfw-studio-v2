@@ -2,6 +2,25 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.1.2] — 2026-10-07
+
+### Changed（Phase 0.1.1：审查合同遗留契约修正）
+
+- **统一异步契约**：`WorkflowModule.execute()` 改为 async（执行链路固定为
+  Pipeline → WorkflowModule → EngineAdapter → 具体引擎，全部 await）；
+  `validate_input()` / `capabilities()` 纯计算接口保持同步；异步原则写入模块 docstring 与开发指南。
+- **DataRoot 配置分层**：公共 `configs/config.yaml` 不再携带任何机器路径（不设置 data_root）；
+  新增本机私有层 `configs/config.local.yaml`（已 gitignore，不提交）。
+  优先级固定：`NSFW_STUDIO_DATA_ROOT` > `config.local.yaml` > `config.yaml` > `%USERPROFILE%/NSFW-Studio-Data`。
+  换电脑 clone 后零修改即可启动；本机 D 盘只存在于 local 文件。
+- **Node 探测**：`dev_frontend.bat` 优先读取 `AIHOME_ROOT` 环境变量定位 AIHome Node，
+  兼容探测规范默认根目录，最后回落系统 PATH。
+
+### Added
+
+- 新增 6 个测试（execute 为 async / EngineAdapter 全方法 async / 纯计算接口保持 sync /
+  公共配置机器无关哨兵 / local 覆盖 / env 最高优先级 / config.local.yaml 被 gitignore），共 33 例。
+
 ## [0.1.1] — 2026-10-07
 
 ### Fixed（Phase 0.1：架构收口）

@@ -1,4 +1,27 @@
-# TEST_REPORT — Phase 0 / 0.1（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 0.1.1（2026-10-07）
+
+## 零-b、Phase 0.1.1 测试（v0.1.2，审查遗留契约修正）
+
+命令：`.venv\Scripts\python -m pytest`（项目根目录）
+
+**结果：33 passed, 1 warning（5.70s）**——0.1 的 27 例 + 新增 6 例。
+
+| 新增用例 | 覆盖点 |
+| --- | --- |
+| test_workflow_execute_is_async | `WorkflowModule.execute` 为 async（与 EngineAdapter 契约统一） |
+| test_engine_adapter_methods_are_async | EngineAdapter 四个方法全部 async |
+| test_pure_computation_interfaces_stay_sync | capabilities / validate_input 保持同步 |
+| test_repo_public_config_is_machine_independent | 公共 config.yaml 无盘符、不设置 data_root（哨兵） |
+| test_no_config_falls_back_to_portable_default / test_base_config_overrides_default | 三层缺失 → 用户目录默认；模板覆盖默认 |
+| test_local_config_overrides_base_config | config.local.yaml 覆盖公共模板 |
+| test_env_var_beats_all_config_layers | 环境变量最高优先级（同时存在 base+local） |
+| test_local_config_is_gitignored | config.local.yaml 被 .gitignore 覆盖（防误提交） |
+
+真实加载验证：本机 `load_settings()` 实际 DataRoot = `D:\NSFW-Studio-Data`（来自 config.local.yaml）；
+仓库内 config.yaml 已无任何机器路径。
+前端：`npm run build` 通过；develop / main CI 全绿。
+
+---
 
 ## 零、Phase 0.1 测试（v0.1.1，架构收口）
 

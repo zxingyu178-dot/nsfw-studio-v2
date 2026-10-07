@@ -30,9 +30,10 @@
 ## 4. 架构红线
 
 - `api/` 只做 HTTP 编排，业务逻辑一律放 `services/`。
-- 路径可移植性（Phase 0.1）：代码默认 DataRoot 为 `%USERPROFILE%/NSFW-Studio-Data`；
-  禁止把某台机器的盘符写成代码默认值（config.yaml 里**明确声明**本机盘符是允许的）；
-  启动脚本必须自带回退与清晰报错，不得依赖单一固定路径。
+- 路径可移植性（Phase 0.1 / 0.1.1）：配置优先级固定为
+  `NSFW_STUDIO_DATA_ROOT` > `configs/config.local.yaml`（本机私有，已 gitignore，禁止提交）
+  > `configs/config.yaml`（公共模板，**机器无关，不得设置 data_root**）> 代码默认 `%USERPROFILE%/NSFW-Studio-Data`；
+  禁止把某台机器的盘符写进公共配置或代码默认值；启动脚本必须自带回退与清晰报错。
 - 流水线契约：`Pipeline → WorkflowModule → EngineAdapter → 具体引擎`。
   WorkflowModule 只做能力定义（标准契约类型 WorkflowInput / WorkflowOutput /
   WorkflowValidation / ModuleCapabilities），真正的引擎调用只发生在 EngineAdapter 实现；
