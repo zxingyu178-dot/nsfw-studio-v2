@@ -1,0 +1,20 @@
+# 存储布局：相对 data_root 的子目录结构（Phase 0 规范 §九）
+# 程序首次启动按此清单自动创建目录（幂等）
+storage:
+  database_filename: "studio.db"
+  layout:
+    - database
+    - images/originals
+    - images/upscaled
+    - images/processed
+    - images/temp
+    - assets/face
+    - assets/clothing
+    - assets/pose
+    - assets/scene
+    - imports
+    - exports
+    - cache
+    - logs/app
+    - logs/jobs
+    - logs/errors

@@ -1,0 +1,11 @@
+# 应用基础配置
+app:
+  name: "NSFW Studio"
+  version: "0.1.0"
+  host: "127.0.0.1"
+  port: 8000
+  debug: false
+
+logging:
+  # 控制台日志级别；文件日志固定 INFO 起（error.log 只收 ERROR+）
+  level: "INFO"

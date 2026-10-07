@@ -1,0 +1,37 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ===== Node / 前端构建 =====
+node_modules/
+frontend/dist/
+
+# ===== 数据库与运行时数据 =====
+# 运行数据统一存放在 DataRoot（默认 D:/NSFW-Studio-Data），禁止入库
+*.db
+*.db-journal
+*.sqlite3
+/data/
+backend/app/logs/*.log*
+
+# ===== 日志 =====
+*.log
+
+# ===== 交接包 =====
+handoff/
+
+# ===== 环境变量 / 秘密 =====
+.env
+.env.*
+*.local.yaml
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

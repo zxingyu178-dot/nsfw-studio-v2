@@ -1,0 +1,10 @@
+# 工作流配置占位（Phase 0 规范 §十二）
+#
+# Phase 0 不绑定任何生成引擎：此处不出现引擎地址、节点 ID、模型名或 Workflow JSON。
+# 未来 WorkflowModule / EngineAdapter 的参数在此扩展，例如：
+#   workflow:
+#     engine:
+#       provider: "comfyui"   # Phase 1+ 再接入
+workflow:
+  engine:
+    provider: "unbound"
