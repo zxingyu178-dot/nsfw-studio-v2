@@ -1,4 +1,34 @@
-# TEST_REPORT — Phase 0（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1（2026-10-07）
+
+## 零、Phase 0.1 测试（v0.1.1，架构收口）
+
+命令：`.venv\Scripts\python -m pytest`（项目根目录）
+
+**结果：27 passed, 1 warning（1.89s）**——原 15 例 + 新增 12 例，一次全绿。
+
+新增覆盖（对应 Phase 0.1 验收）：
+
+| 测试文件 | 用例数 | 覆盖点 |
+| --- | --- | --- |
+| test_migrations_recovery.py | 2 | failed 迁移不被视为 applied；下次启动仍重试；修复后重试成功且无主键冲突残留；仅 applied 计数 |
+| test_sqlite_pragmas.py | 1 | WAL / busy_timeout=5000 / foreign_keys=ON，且每个新连接生效 |
+| test_backup.py | 2 | 备份快照可打开且数据一致（SQLite backup API）；源库缺失报错 |
+| test_config_portability.py | 4 | 默认 DataRoot 基于 Path.home()；env 覆盖；config 文件覆盖；env > 文件 |
+| test_system_info.py | 2 | 版本升级后 system_info 同步更新且单行；同版本 unchanged |
+| test_interfaces.py | 5 | Workflow 标准契约存在且 execute 注入 EngineAdapter；EngineJobStatus 含 progress；QueueWorker 无 submit（只消费）；provider=unbound |
+| 既有测试更新 | - | health/system_info 版本断言改为动态（settings.app.version）；EXPECTED_DIRS 增加 backups |
+
+前端：`npm run build`（tsc + vite）通过。
+
+**真实运行验证（本机 DataRoot 升级路径）**：
+- 现有 DataRoot 幂等升级成功：自动新建 `backups/`（日志：`新建目录=['backups']`）；
+- `system_info` 版本自动更新 `0.1.0 → 0.1.1`（BootstrapReport.system_info_action=updated）；
+- `PRAGMA journal_mode` 实测返回 `wal`；
+- `scripts/backup_db.py` 实测成功产出 `backups/studio-20261007-143618.db`。
+
+**GitHub CI**：`.github/workflows/ci.yml` 于 develop/main push 与 PR 触发（后端 pytest + 前端 npm ci/build）；本轮推送后 CI 运行结果见下方"实时记录"。
+
+---
 
 ## 环境信息
 

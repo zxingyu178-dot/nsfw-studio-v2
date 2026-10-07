@@ -1,20 +1,18 @@
 # DEVELOPMENT_GUIDE — 开发指南
 
-> 更新：2026-10-07（Phase 0）
+> 更新：2026-10-07（Phase 0.1 收口）
 
 ## 1. 环境要求
 
 | 工具 | 版本 | 来源 |
 | --- | --- | --- |
 | Python | 3.11 | 本机已装（`python --version`） |
-| Node.js | ≥ 18（AIHome 统一环境为 v24.18.1） | `D:\AIHome_2.0_L1_L2\environment\managed-tools\node\` |
-| npm | 随 Node | 同上（registry 为 npmmirror） |
+| Node.js | ≥ 18 | 解析顺序：AIHome 统一环境（存在时）→ 系统 PATH；都没有则脚本报错退出 |
 
-Node 未进系统 PATH 时，Git Bash 中先执行：
-
-```bash
-export PATH="/d/AIHome_2.0_L1_L2/environment/managed-tools/node/node-v24.18.1-win-x64:$PATH"
-```
+> 跨机器开发（公司/家里）：Node 解析已内建于 `scripts/dev_frontend.bat`
+> （自动探测 AIHome 环境目录，不存在则回落系统 PATH），Python 只依赖系统 PATH，
+> 无任何单一固定机器路径依赖。CI（GitHub Actions）会在 push/PR 时自动验证
+> 非本机环境下 pytest 与前端构建可跑通。
 
 ## 2. 首次初始化
 
@@ -46,19 +44,31 @@ cd frontend && npm run build
 
 # 仅初始化 DataRoot（不启动服务）
 python scripts\init_dataroot.py
+
+# 数据库安全备份（SQLite backup API -> DataRoot/backups/）
+.venv\Scripts\python scripts\backup_db.py
 ```
 
 ## 4. 配置系统
 
 | 文件 | 内容 |
 | --- | --- |
-| `configs/config.yaml` | `data_root`（DataRoot 根目录） |
+| `configs/config.yaml` | `data_root`（DataRoot 根目录；**本机明确声明**，如 D 盘） |
 | `configs/app.yaml` | 应用名 / 版本 / host / port / 日志级别 |
-| `configs/storage.yaml` | DataRoot 子目录清单 + 数据库文件名 |
-| `configs/workflow.yaml` | 工作流配置占位（Phase 0 provider=unbound） |
+| `configs/storage.yaml` | DataRoot 子目录清单（含 backups/）+ 数据库文件名 |
+| `configs/workflow.yaml` | 工作流配置占位（provider=unbound） |
 
-环境变量覆盖（优先级最高）：`NSFW_STUDIO_DATA_ROOT`、`NSFW_STUDIO_HOST`、`NSFW_STUDIO_PORT`。
+覆盖优先级：环境变量 > config.yaml > 代码默认值。
+代码默认 DataRoot 是可移植的 `%USERPROFILE%/NSFW-Studio-Data`（`core/config.py` 的
+`DEFAULT_DATA_ROOT`），某台机器想用其他盘必须在 config.yaml 明确声明。
+环境变量：`NSFW_STUDIO_DATA_ROOT`、`NSFW_STUDIO_HOST`、`NSFW_STUDIO_PORT`。
 前端：`VITE_API_BASE_URL`（直连后端地址，缺省走 Vite 代理）、`NSFW_STUDIO_API_URL`（代理目标）。
+
+## 5. CI
+
+`.github/workflows/ci.yml`：push（main/develop）与 PR 时自动运行——
+后端：`pip install -r backend/requirements-dev.txt` + `pytest`；
+前端：`npm ci` + `npm run build`。main / develop 上的提交必须 CI 全绿。
 
 ## 5. 日志
 

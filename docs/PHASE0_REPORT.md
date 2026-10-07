@@ -1,8 +1,29 @@
-# NSFW Studio V2 — Phase 0 验收报告
+# NSFW Studio V2 — Phase 0 / 0.1 验收报告
 
-> 日期：2026-10-07 ｜ 版本：0.1.0 ｜ 执行：ZCode Agent
+> 日期：2026-10-07 ｜ 版本：0.1.0（Phase 0）/ 0.1.1（Phase 0.1 收口）｜ 执行：ZCode Agent
 
-## 一、阶段目标
+## 〇、Phase 0.1 架构收口（v0.1.1，2026-10-07）
+
+在三方审查通过 Phase 0 主体后，按收口合同完成以下整改（develop → CI 全绿 → 合并 main → tag v0.1.1）：
+
+| 项 | 结果 |
+| --- | --- |
+| Migration 失败恢复 | ✅ 仅 `status='applied'` 视为完成；failed 下次启动仍重试；重试前清除同 ID failed 记录；失败恢复测试通过 |
+| SQLite 工程化 | ✅ WAL / busy_timeout=5000 / foreign_keys=ON（每连接生效，测试守护）；安全备份入口（SQLite backup API，`scripts/backup_db.py`）；DataRoot 增加 `backups/` |
+| Workflow/Engine 契约 | ✅ 标准契约类型 WorkflowInput/Output/Validation/ModuleCapabilities（+ParameterSpec）；execute 注入 EngineAdapter；EngineJobRequest/EngineJobStatus（含 progress）；无 ComfyUIAdapter |
+| QueueWorker 职责 | ✅ 移除 submit()；Worker 只消费已存在 Job（process_job）；测试守护 |
+| 可移植路径 | ✅ 代码默认 DataRoot=%USERPROFILE%/NSFW-Studio-Data（本机盘符仅 config.yaml 声明）；dev_frontend.bat AIHome 探测→PATH 回退→报错；dev_backend.bat 补 Python 检查 |
+| 状态语义 | ✅ 前端显示 "Studio 在线/离线"（后端健康），不再声称 Engine 状态 |
+| system_info 语义 | ✅ 定为"当前应用版本"，启动时自动对齐（实测 0.1.0→0.1.1） |
+| GitHub CI | ✅ `.github/workflows/ci.yml`：push/PR 跑 pytest + npm ci/build |
+| 测试 | ✅ 27 例全绿（15→27）；npm run build 通过 |
+| 分支 | ✅ develop 完成 → 合并 main → 两分支一致 → tag v0.1.1 |
+
+本阶段未开发任何 Phase 1 功能（无 Prompt / 素材 / 配方 / Job 数据模型）。
+
+---
+
+## 一、阶段目标（Phase 0）
 
 建立长期可扩展的本地 AI 图像生产平台基础。**不接入** ComfyUI / 实际模型 / 生图工作流 / 豆包 / 手机端；
 只完成项目初始化、前后端框架、数据目录体系、数据库基础、API 框架、日志系统、配置系统、

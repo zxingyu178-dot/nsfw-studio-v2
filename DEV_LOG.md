@@ -1,5 +1,32 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 0.1：架构收口（v0.1.1）
+
+**执行**：ZCode Agent（在 develop 完成 → CI 全绿 → 合并 main → tag v0.1.1）
+
+### 收口内容（三方审查合同落实）
+
+1. **Migration 漏洞**：`applied_migration_ids()` 只认 `status='applied'`；重试前 DELETE 同 ID 的 failed 记录解决主键冲突。补失败恢复测试（失败→failed→仍视为未完成→修复→重试成功→状态正确）。
+2. **SQLite 工程化**：`make_engine()` 每连接执行 `journal_mode=WAL`、`busy_timeout=5000`、`foreign_keys=ON`；新增 `app/database/backup.py`（SQLite backup API，禁直接复制写入中的 DB）+ `scripts/backup_db.py`；DataRoot 增加 `backups/`。
+3. **契约收口**：新增 `WorkflowInput/WorkflowOutput/WorkflowValidation/ModuleCapabilities/ParameterSpec`；`WorkflowModule.execute(payload, engine)` 显式接收 EngineAdapter（引擎调用只发生在 Adapter）；EngineAdapter 增加 `EngineJobRequest/EngineJobStatus`（含 progress 进度能力）；`QueueWorker` 删除 `submit()`（Job 创建属于 API/JobService，Worker 只消费）。
+4. **可移植性**：代码默认 DataRoot 改为 `Path.home()/"NSFW-Studio-Data"`；本机 D 盘由 config.yaml 明确声明（允许）；`dev_frontend.bat` 改为 AIHome 探测→PATH 回退→清晰报错；`dev_backend.bat` 补 Python 存在性检查。
+5. **语义修正**：前端顶部指示 "Studio 在线/离线"（后端健康），Phase 1 接 EngineAdapter.health 后才显示 Engine；`system_info.version` 语义定为**当前应用版本**，启动时自动对齐（实测 0.1.0→0.1.1 更新成功）。
+6. **CI**：`.github/workflows/ci.yml`（ubuntu：pytest；node 20：npm ci + build），push/PR 触发。
+7. **测试**：15 → **27 例**全绿；`npm run build` 通过。
+
+### 决策
+
+| 决策 | 理由 |
+| --- | --- |
+| system_info 语义选"当前应用版本" | 为 Phase 1 的升级可观测性服务；字段名不变、语义写进文档与 BootstrapReport.system_info_action |
+| WorkflowModule.execute 注入 EngineAdapter | 保证"引擎调用只在 Adapter"由类型系统约束，而不只是口头约定 |
+| Worker 移除 submit 而非新增 submit | 合同要求 Worker 不成为 Job 创建入口；消费入口定为 process_job(job_id) |
+| CI 后端跑 ubuntu | 兼验证可移植性（DataRoot 默认值与配置加载均跨平台） |
+
+### 实测发现并修复
+
+- （本轮无新增缺陷；27 例测试一次全绿后做真实启动升级验证）
+
 ## 2026-10-07 — Phase 0：工程初始化与架构搭建（v0.1.0）
 
 **执行**：ZCode Agent（遵循 AIHome 全局规则 + 本项目 AGENTS.md）

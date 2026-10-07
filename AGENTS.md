@@ -30,23 +30,36 @@
 ## 4. 架构红线
 
 - `api/` 只做 HTTP 编排，业务逻辑一律放 `services/`。
-- 禁止在代码中写死路径：一切路径来自 `configs/*.yaml` + `core/config.py`（DataRoot 可用 `NSFW_STUDIO_DATA_ROOT` 覆盖）。
-- 运行数据（数据库 / 图片 / 日志）只放 DataRoot，禁止提交进仓库。
+- 路径可移植性（Phase 0.1）：代码默认 DataRoot 为 `%USERPROFILE%/NSFW-Studio-Data`；
+  禁止把某台机器的盘符写成代码默认值（config.yaml 里**明确声明**本机盘符是允许的）；
+  启动脚本必须自带回退与清晰报错，不得依赖单一固定路径。
+- 流水线契约：`Pipeline → WorkflowModule → EngineAdapter → 具体引擎`。
+  WorkflowModule 只做能力定义（标准契约类型 WorkflowInput / WorkflowOutput /
+  WorkflowValidation / ModuleCapabilities），真正的引擎调用只发生在 EngineAdapter 实现；
+  Worker 只消费已存在的 Job，Job 的创建与持久化属于 API / JobService。
+- 顶部状态指示只显示 **Studio 在线/离线**（后端健康）；在接入 EngineAdapter.health()
+  之前不得显示 "Engine" 连接状态。
+- 运行数据（数据库 / 图片 / 日志 / 备份）只放 DataRoot，禁止提交进仓库。
+  数据库备份必须走 SQLite backup API（`app/database/backup.py`），禁止直接复制写入中的 DB 文件。
 - 前端 `api/` 只封装后端 HTTP 调用；新增扩展不改核心。
 
 ## 5. 脚本与登记
 
-- `scripts/` 下的长期脚本（dev_backend / dev_frontend / init_dataroot / build_handoff）已登记至 AIHome Registry；修改前先确认调用方。
-- 本项目 Phase 0 不新增任何长期运行服务；dev server 均为手动临时启动，不接入 ControlHub。
+- `scripts/` 下的长期脚本（dev_backend / dev_frontend / init_dataroot / backup_db / build_handoff）
+  已登记至 AIHome Registry；修改前先确认调用方。
+- 本项目不新增任何长期运行服务；dev server 均为手动临时启动，不接入 ControlHub。
 
 ## 6. 验证要求
 
 - 改后端：必须在项目根目录跑 `.venv\Scripts\python -m pytest`，全绿才算完成。
 - 改前端：必须 `npm run build` 通过。
+- GitHub CI（.github/workflows/ci.yml）在 push / PR 时自动运行 pytest 与前端构建；
+  **main / develop 上的提交必须 CI 全绿**，不允许只依赖某台电脑"本地说能跑"。
 - 汇报遵循全局规则第 10 条：未执行 / 部分验证必须如实标注。
 
 ## 7. Git
 
 - 分支：`main`、`develop`；功能 `feature/xxx`；修复 `fix/xxx`。
+- 每个阶段在 `develop` 完成、测试通过后合并回 `main` 并保持两分支一致。
 - Commit 用 conventional 前缀（feat / fix / docs / chore / test）。
 - 禁止把 DataRoot 数据、`node_modules`、`.venv`、交接包提交进仓库。

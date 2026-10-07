@@ -1,13 +1,22 @@
 # DATABASE_PLAN — 数据库现状与规划
 
-> 更新：2026-10-07（Phase 0）
+> 更新：2026-10-07（Phase 0.1 收口）
 
 ## 1. 现状
 
-- 引擎：SQLite，运行库位于 `{data_root}/database/studio.db`（默认 `D:/NSFW-Studio-Data/database/studio.db`）。
+- 引擎：SQLite，运行库位于 `{data_root}/database/studio.db`（代码默认 `%USERPROFILE%/NSFW-Studio-Data`，本机 config.yaml 明确选 D 盘）。
 - ORM：SQLAlchemy 2.x（`app/database/base.py` 提供 `Base` 与引擎工厂）。
-- 迁移：自研极简框架（`app/database/migrations.py`），迁移在代码中声明（单一事实源），
-  执行记录写入 `migration` 表，失败记 `failed` 并中断启动。
+- 连接规范（`make_engine()` 对每个连接生效）：`journal_mode=WAL`、`busy_timeout=5000`、`foreign_keys=ON`。
+- 迁移：自研极简框架（`app/database/migrations.py`），迁移在代码中声明（单一事实源）。
+- 备份：`app/database/backup.py` 使用 **SQLite backup API** 生成一致性快照（WAL 下安全），
+  禁止直接复制写入中的 DB 文件；命令行入口 `scripts/backup_db.py`，输出到 `{data_root}/backups/`。
+
+### migration 状态机（Phase 0.1 修正）
+
+- `applied_migration_ids()` **只把 status='applied' 视为已完成**；
+- status='failed' 的迁移下次启动仍按未完成处理（重新尝试，不静默跳过）；
+- 重试前先删除同一 migration_id 的 failed 记录，避免主键冲突；
+- 执行失败 → 记录 failed → 抛出阻止带伤启动。
 
 ### 当前表
 
@@ -18,16 +27,16 @@
 | migration_id | TEXT PK | 如 `0001_initial_schema` |
 | version | TEXT | 迁移后 schema 版本 |
 | time | TEXT (ISO) | 执行时间 |
-| status | TEXT | applied / failed |
+| status | TEXT | applied / failed（仅 applied 视为完成） |
 
-**system_info**（Phase 0 规范 §十）
+**system_info**（Phase 0 规范 §十；Phase 0.1 明确语义）
 
 | 列 | 类型 | 说明 |
 | --- | --- | --- |
 | id | INTEGER PK | 自增 |
-| version | TEXT | 应用版本（首启写入 0.1.0） |
-| created_time | TEXT (ISO) | |
-| updated_time | TEXT (ISO) | onupdate 自动刷新 |
+| version | TEXT | **当前应用版本**（不是首次创建版本）：每次启动与 configs/app.yaml 的 version 对齐，不一致则更新（updated_time 自动刷新） |
+| created_time | TEXT (ISO) | 首次写入时间 |
+| updated_time | TEXT (ISO) | 最近一次版本更新时间 |
 
 ## 2. Phase 1 规划（数据模型设计阶段细化）
 

@@ -1,6 +1,23 @@
 # TASKS — NSFW Studio V2
 
-## Phase 0：工程初始化与架构搭建 ✅（2026-10-07）
+## Phase 0.1：架构收口 ✅（2026-10-07，v0.1.1）
+
+- [x] Migration 漏洞修复：仅 status=applied 视为完成；failed 下次启动重试；重试无主键冲突
+- [x] 迁移失败恢复测试（失败→failed→重试→修复→applied）
+- [x] SQLite 收口：WAL / busy_timeout=5000 / foreign_keys=ON（每个连接生效）
+- [x] 安全备份入口：SQLite backup API（`app/database/backup.py` + `scripts/backup_db.py`）+ DataRoot/backups/
+- [x] Workflow 标准契约：WorkflowInput / WorkflowOutput / WorkflowValidation / ModuleCapabilities / ParameterSpec
+- [x] EngineAdapter 类型化：EngineJobRequest / EngineJobStatus（含 progress）
+- [x] QueueWorker 职责收口：移除 submit()，只消费已存在 Job（process_job）
+- [x] DataRoot 默认值可移植（%USERPROFILE%/NSFW-Studio-Data；config.yaml 明确声明本机盘符）
+- [x] dev_frontend.bat 去硬编码（AIHome 探测 → PATH 回退 → 报错）；dev_backend.bat 补 Python 检查
+- [x] 前端状态语义：Studio 在线/离线（不再显示虚假 Engine 状态）
+- [x] system_info.version 语义：当前应用版本，启动时自动对齐
+- [x] GitHub CI：push/PR 跑 pytest + npm ci/build
+- [x] 测试 15 → 27 例全绿；npm run build 通过；CI 全绿
+- [x] 文档同步 10 个文件；develop 合并回 main；tag v0.1.1
+
+## Phase 0：工程初始化与架构搭建 ✅（2026-10-07，v0.1.0）
 
 - [x] 项目立项与目录骨架（projects/nsfw-studio-v2，git main）
 - [x] .gitignore / README / 项目级 AGENTS.md / pytest.ini
