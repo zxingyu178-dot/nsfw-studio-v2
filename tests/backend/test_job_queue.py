@@ -207,6 +207,35 @@ def test_oom_failure_no_retry(mock_client):
         mock_client.post("/api/v1/queue/resume")
 
 
+def test_workflow_error_no_retry_pauses_queue(mock_client):
+    """Workflow / 节点错误：Item FAILED（保留分类），不自动重试，Job FAILED + 队列暂停。"""
+    adapter = mock_client.app.state.adapter
+    adapter.mode = "workflow_error"  # 提交前注入（避免竞态）
+    try:
+        job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+        final = wait_for(mock_client, job["id"], lambda j: j["status"] == "FAILED", timeout=30)
+        failed_items = [i for i in final["items"] if i["status"] == "FAILED"]
+        assert failed_items, "workflow 错误必须让 Item FAILED"
+        assert failed_items[0]["error_type"] in ("WORKFLOW_ERROR", "NODE_MISSING")
+        assert failed_items[0]["retry_count"] == 0, "Workflow 错误不自动重试"
+        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is True
+    finally:
+        adapter.mode = "success"
+        mock_client.post("/api/v1/queue/resume")
+
+
+def test_transient_network_retry_then_success(mock_client):
+    """网络断开恢复：前 2 次提交瞬态失败 → 自动重试 ≤2 后成功，任务正常完成（§三十六）。"""
+    adapter = mock_client.app.state.adapter
+    adapter.transient_fail_times = 2
+    try:
+        job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+        final = wait_for(mock_client, job["id"], lambda j: j["status"] in ("COMPLETED", "FAILED"), timeout=30)
+        assert final["status"] == "COMPLETED", "瞬态网络错误必须自动重试并恢复"
+    finally:
+        adapter.transient_fail_times = 0
+
+
 def test_client_request_id_idempotency(mock_client):
     """client_request_id 重复请求不重复创建（规范 §十二）。"""
     body = {"snapshot": make_snapshot(count=2), "client_request_id": "req-001"}

@@ -1,4 +1,40 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2（2026-10-07）
+
+## Phase 2 测试（v0.3.0，Job Execution Core + ComfyUIAdapter + Gallery）
+
+### 快速套件（不依赖 ComfyUI，CI 同口径）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py -q`
+
+**结果：91 passed**（0.2.0 的 68 例 + Phase 2 新增 23 例）。
+
+| 测试文件 | 用例数 | 覆盖点 |
+| --- | --- | --- |
+| test_job_queue.py | 14 | §五十八 全清单：8 张串行 / Item 边界暂停 / 取消保留图 / 取消后 Resume 子 Job / 优先插队 / 拖拽排序 / 引擎离线（队列暂停）/ 瞬态网络重试 ≤2 恢复 / OOM 不重试 / Workflow 错误不重试 / 启动发现 INTERRUPTED / 崩溃恢复核对导入 / SSE 流 / client_request_id 幂等 / 固定 Seed |
+| test_image_service.py | 5 | 输出导入（相对路径/尺寸/元数据/失败全回滚）/ 垃圾字节拒绝 / review+favorite / 列表过滤 + by-job 统计（含收藏）/ Gallery API 全链路（content/review/favorite/workbench+Seed） |
+| test_comfyui_binding.py | 4 | provider binding 注入（节点 ID 只在 binding 层）/ seed 范围钳制 / 模板不被污染 / workflow_hash 与 binding_version 溯源（无需 ComfyUI） |
+| test_migration_upgrade.py | 1 | v0.1.2 库 → 0002–0006 升级（含 jobs/job_items/job_events/images 约束） |
+| test_interfaces.py | 8 | 契约守护更新：公共配置允许选择 comfyui（不得携带机器地址）/ Worker 只消费 Job / EngineAdapter 异步契约 |
+
+### 真实 ComfyUI 集成（本机，离线自动 skip）
+
+命令：`.venv\Scripts\python -m pytest tests/backend/test_comfyui_integration.py -q`
+
+**结果：3 passed**（`test_real_generation[1]/[3]/[8]`，合计 12 张真实图片）。
+
+- 完整生产链：POST /jobs → 单队列 → ComfyUIAdapter → Qwen-Image 2.1 UC 生成 →
+  导入 DataRoot/images/originals → Gallery 查询 + content 可读；
+- 断言：顺序执行（engine_job_id 各不相同）、Seed = base + item_index、completed_count 递增、
+  图片元数据（尺寸 640×960 / source=comfyui / 相对路径）、Workbench Snapshot 完整；
+- 实测速度：640×960 约 102–118 秒/张（模型驻留显存）；当天首张 832×1216 含模型加载约 300 秒。
+
+前端：`npm run build`（tsc --noEmit + vite build）通过。
+
+### 未验证 / 限制（如实标注）
+
+- 未做浏览器 E2E 自动化（IAB 沙箱限制）；前端以 API 测试 + 构建 + dev 手动运行验证为准；
+- CI 结果需在 feature → develop → main 推送后由 GitHub Actions 确认（见 GIT_COMMITS/CI 记录）；
+- 队列内存态暂停、进程崩溃窗口等边界依赖 Mock 测试覆盖（真实 ComfyUI 场景不模拟崩溃）。
 
 ## 零-c、Phase 1 测试（v0.2.0，Prompt/Asset/Recipe Core）
 

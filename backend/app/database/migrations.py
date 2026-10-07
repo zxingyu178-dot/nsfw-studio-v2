@@ -244,6 +244,36 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_job_events_job ON job_events(job_id)",
         ),
     ),
+    Migration(
+        migration_id="0006_image",
+        version="0.3.0",
+        description="Phase 2C：images（图库正式资产；文件在 DataRoot/images/originals）",
+        statements=(
+            """
+            CREATE TABLE images (
+                id               TEXT PRIMARY KEY,
+                job_id           TEXT REFERENCES jobs(id),
+                job_item_id      TEXT REFERENCES job_items(id),
+                parent_image_id  TEXT REFERENCES images(id),
+                kind             TEXT NOT NULL CHECK (kind IN ('original', 'upscaled', 'processed')),
+                file_path        TEXT NOT NULL,
+                width            INTEGER NOT NULL CHECK (width > 0),
+                height           INTEGER NOT NULL CHECK (height > 0),
+                seed             INTEGER,
+                review_status    TEXT NOT NULL DEFAULT 'UNREVIEWED'
+                                 CHECK (review_status IN ('UNREVIEWED', 'KEPT', 'REJECTED')),
+                favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                source           TEXT NOT NULL,
+                metadata_json    TEXT NOT NULL DEFAULT '{}',
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_images_job ON images(job_id)",
+            "CREATE INDEX idx_images_review ON images(review_status)",
+            "CREATE INDEX idx_images_created ON images(created_at)",
+        ),
+    ),
 )
 
 

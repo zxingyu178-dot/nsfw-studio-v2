@@ -20,7 +20,8 @@ export interface WorkbenchState {
   width: number
   height: number
   count: number
-  seedMode: 'random'
+  seedMode: 'random' | 'fixed'
+  seed: number | null
   workflowModules: Record<string, unknown>[]
   sourcePromptId: string | null
   sourcePromptVersionId: string | null
@@ -38,6 +39,7 @@ function initialState(): WorkbenchState {
     height: 1024,
     count: 1,
     seedMode: 'random',
+    seed: null,
     workflowModules: [],
     sourcePromptId: null,
     sourcePromptVersionId: null,
@@ -78,6 +80,7 @@ export function snapshotFromState(): WorkbenchSnapshot {
     height: state.height,
     count: state.count,
     seed_mode: state.seedMode,
+    seed: state.seedMode === 'fixed' ? state.seed : null,
     workflow_modules: [...state.workflowModules],
     source_prompt_id: state.sourcePromptId,
     source_prompt_version_id: state.sourcePromptVersionId,
@@ -95,7 +98,9 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     width: snapshot.width,
     height: snapshot.height,
     count: snapshot.count,
-    seedMode: 'random',
+    // Seed 默认 random；仅"使用此图 Seed"等显式固定时才恢复固定值（规范 §四十七）
+    seedMode: typeof snapshot.seed === 'number' ? 'fixed' : 'random',
+    seed: typeof snapshot.seed === 'number' ? snapshot.seed : null,
     workflowModules: [...(snapshot.workflow_modules ?? [])],
     sourcePromptId: snapshot.source_prompt_id ?? null,
     sourcePromptVersionId: snapshot.source_prompt_version_id ?? null,
@@ -132,6 +137,11 @@ export function setSize(width: number, height: number): void {
 
 export function setCount(count: number): void {
   setState({ count })
+}
+
+/** 固定 Seed（"使用此图 Seed"）或恢复随机（seed = null） */
+export function setSeed(seed: number | null): void {
+  setState({ seedMode: seed === null ? 'random' : 'fixed', seed })
 }
 
 /**

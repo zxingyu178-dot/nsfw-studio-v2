@@ -2,6 +2,50 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.3.0] — 2026-10-07
+
+### Added（Phase 2：Job Execution Core + ComfyUIAdapter + Gallery）
+
+- **数据模型**：jobs / job_items / job_events（migration 0005）、images（migration 0006）；
+  `UNIQUE(source, client_request_id)` 外部幂等；Job 固化 WorkbenchSnapshot + Prompt + 素材/尺寸/数量 +
+  Workflow 快照（后续修改 Prompt/Recipe/Asset 不影响已创建 Job）。
+- **Job 执行核心（2A）**：JobService（创建 / 幂等 / 状态操作 / 续跑剩余）；单队列 SingleQueueWorker
+  串行执行（唯一逻辑队列）；安全暂停（当前图完成后）、取消（终态、已完成图片保留）、
+  继续（已完成 Item 绝不重跑）；每张图独立随机 Seed（执行时分配）；
+  系统性失败（离线/OOM/工作流/模型/节点缺失）→ Job FAILED + 队列自动暂停；
+  崩溃恢复（启动 RUNNING → INTERRUPTED，engine history 核对后导入或保持可恢复）；
+  磁盘空间检查（严重不足拒绝新任务）。
+- **Engine 层**：输出获取接口 + 错误分类（ENGINE_OFFLINE/NETWORK/WORKFLOW_ERROR/MODEL_MISSING/
+  NODE_MISSING/OUT_OF_MEMORY/OUTPUT_MISSING/STORAGE_ERROR/UNKNOWN）+ 瞬态重试 ≤2 +
+  MockEngineAdapter（success/delay/fail/offline/oom/workflow_error，仅测试用）+ 引擎工厂。
+- **SSE 与 Job API**：`GET /api/v1/events/jobs`（只通知，DB 才是事实源）；
+  POST/GET /jobs、pause/resume/cancel、resume-remaining、/queue、/queue/reorder、/queue/resume、
+  /engine/status；`queue_mode: normal|next`。
+- **真实 ComfyUI 接入（2B）**：本机环境调查（docs/COMFY_ENV_INVENTORY.md、WORKFLOW_INVENTORY.md，
+  未破坏现有环境）；ComfyUIAdapter（POST /prompt + WebSocket 进度 + /history 核对 + /view 取回字节 +
+  错误分类 + 安全取消）；provider binding（workflows/providers/comfyui/basic_generate/v1：
+  Qwen-Image 2.1 UC 文生图链，支持 Negative，steps=25/cfg=1.0）；
+  Job 记录 module/provider/binding_version/workflow_hash 溯源；机器地址只进 config.local.yaml。
+- **Image / 图库（2C）**：引擎输出 → Studio temp → 校验（magic bytes + 尺寸）→ 原子移动
+  DataRoot/images/originals → DB 登记；Gallery API（列表过滤/详情/content/review/favorite/
+  workbench/by-job summary）；图库页（筛选 全部/未审核/保留/收藏/淘汰 + 图片 Grid + 详情 Drawer +
+  按任务查看 + 保留/淘汰/收藏 + Image → 工作台 + 使用此图 Seed + 从图库创建素材 source_image_id）。
+- **前端**：顶部双状态 Studio ● / Engine ●；右栏真实 Engine 状态 + 生成按钮（POST /jobs，
+  normal/优先插队）+ 当前任务进度（第 N 张 / %）+ 队列（暂停/继续/取消/优先/拖拽排序）；
+  中栏当前图 + 本 Job 已完成缩略图逐张显示（续跑父子合并）；SSE 实时刷新（断线回源 + 兜底轮询）；
+  WorkbenchStore 支持固定 Seed。
+- **测试**：新增 Job 队列与 Mock 故障套件（§五十八 全清单）、Image 服务/API 套件、
+  binding 单测（无需 ComfyUI）、真实 ComfyUI 集成测试（1/3/8 张，离线自动跳过）。
+- **文档**：JOB_STATE_MACHINE / QUEUE_SPEC / RECOVERY_SPEC / COMFY_ADAPTER / IMAGE_MODEL /
+  COMFY_ENV_INVENTORY / WORKFLOW_INVENTORY 新增；DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN /
+  WORKBENCH_STATE / README / AGENTS 同步。
+
+### Changed
+
+- 公共默认引擎：`workflow.engine.provider = comfyui`（产品默认；测试/CI 用 mock；
+  公共配置仍不得携带机器地址）。
+- 版本：0.2.0 → 0.3.0（后端 / 前端 / configs/app.yaml 同步）。
+
 ## [0.2.0] — 2026-10-07
 
 ### Added（Phase 1：Prompt / Asset / Recipe Core）

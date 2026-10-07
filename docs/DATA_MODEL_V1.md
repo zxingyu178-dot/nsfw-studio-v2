@@ -1,6 +1,7 @@
-# DATA_MODEL_V1 — 数据模型设计（Phase 1，v0.2.0）
+# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2，v0.3.0）
 
-> 更新：2026-10-07。本文档是 Prompt / Asset / Recipe 数据模型的权威说明。
+> 更新：2026-10-07。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
+> Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md。
 
 ## 1. ER 图
 
@@ -32,7 +33,9 @@ recipes 1 ──── * recipe_versions * ──── 2..4 recipe_asset_snapsh
 | Asset / AssetVersion | ast_ / astv_ | `ast_9c2a...` |
 | Recipe / RecipeVersion | rcp_ / rcpv_ | `rcp_55d1...` |
 | RecipeAssetSnapshot | rcpas_ | |
-| （预留）Job/JobItem/Image | job_ / item_ / img_ | |
+| Job / JobItem | job_ / item_ | `job_7a31...`（Phase 2） |
+| JobEvent | 自增 INTEGER PK（仅审计，不作外部 ID） | |
+| Image | img_ | `img_b204...`（Phase 2C） |
 
 数据库一律 `TEXT PRIMARY KEY`，不使用自增整数作为外部业务 ID。
 
@@ -82,13 +85,42 @@ DataRoot/assets/<type>/<asset_id>/v<0001>/preview.<ext>
   提交失败删除正式文件，文件失败绝不先提交数据库；
 - 旧版本文件永不覆盖、永不删除。
 
-## 8. 未来 Job / Image 接入点（本阶段不实现）
+## 8. Job / Image（Phase 2 已实现）
 
-| 接入点 | 说明 |
+### 8.1 Job / JobItem / JobEvent（0005_job）
+
+```text
+jobs 1 ──── * job_items
+  │               │ image_id ──→ images.id（导入完成回填）
+  │               └ engine_job_id（引擎任务 id，崩溃恢复核对用）
+  ├── workbench_snapshot_json     提交时固化的 WorkbenchSnapshot
+  ├── positive/negative_prompt_snapshot + structured_prompt_snapshot
+  ├── generation_settings_json    尺寸 / 数量 / seed_mode / seed
+  ├── module_id / module_version / provider / binding_version / workflow_hash（§五十五）
+  ├── requested_count / completed_count / queue_position / priority
+  ├── resume_of_job_id   → 续跑父子关系（§二十）
+  ├── pause_requested / cancel_requested / error_type / error_message
+  └── UNIQUE(source, client_request_id)  外部幂等（§十二）
+
+job_events 1 ──── * 追加型审计（event_type / payload_json / created_at）
+images 1 ──── * parent_image_id 自引用（派生图溯源）
+```
+
+- **快照纪律（§十）**：Job 提交后，Prompt / Recipe / Asset 的后续修改都不影响该 Job；
+- **Seed（§九）**：Item 执行时分配；成功 Item 的 Seed 永远保留；
+- 状态机与事件清单见 docs/JOB_STATE_MACHINE.md / docs/QUEUE_SPEC.md。
+
+### 8.2 Image（0006_image）
+
+`img_<uuid>`，挂 `job_id / job_item_id`，文件入
+`images/originals/<img_id>/original.<ext>`（DataRoot 相对路径入库）；
+审核 `UNREVIEWED / KEPT / REJECTED` + 独立 `favorite`；详见 docs/IMAGE_MODEL.md。
+
+### 8.3 预留列现状
+
+| 接入点 | 状态 |
 | --- | --- |
-| `job_<uuid>` / `item_<uuid>` | Job 引用 `recipe_version_id`（完整快照即生成参数），执行结果产出 Image |
-| `img_<uuid>` | Image 表挂 `job_item_id`，文件入 `images/originals/<img_id>/` |
-| `assets.source_image_id` | 已预留列：图库上线后"从图库创建素材"回填 |
-| `recipes.cover_image_id` | 已预留列：Recipe 封面图 |
-| `asset_versions.reference_images_json` | 已预留：多参考图 |
-| EngineAdapter / WorkflowModule | Job 执行链路走已收口的异步契约 |
+| `assets.source_image_id` | ✅ Phase 2C 启用：从图库创建素材时回填 |
+| `recipes.cover_image_id` | 预留：Recipe 封面图（未启用） |
+| `asset_versions.reference_images_json` | 预留：多参考图（未启用） |
+| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding） |

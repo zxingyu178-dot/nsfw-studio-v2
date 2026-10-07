@@ -56,3 +56,40 @@ def validate_image_upload(filename: str | None, content_type: str | None, data: 
 
 def mime_for_suffix(suffix: str) -> str:
     return _MIME_BY_FORMAT.get(suffix.lstrip(".").lower(), "application/octet-stream")
+
+
+def image_dimensions(data: bytes) -> tuple[int, int] | None:
+    """解析 PNG / JPEG 像素尺寸（不依赖第三方图像库）；无法解析返回 None。"""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+        import struct
+
+        width, height = struct.unpack(">II", data[16:24])
+        return int(width), int(height)
+    if data[:3] == b"\xff\xd8\xff":
+        return _jpeg_dimensions(data)
+    return None
+
+
+def _jpeg_dimensions(data: bytes) -> tuple[int, int] | None:
+    import struct
+
+    index = 2
+    size = len(data)
+    while index + 9 < size:
+        if data[index] != 0xFF:
+            index += 1
+            continue
+        marker = data[index + 1]
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:  # 无长度段
+            index += 2
+            continue
+        if index + 4 > size:
+            return None
+        segment_length = struct.unpack(">H", data[index + 2:index + 4])[0]
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):  # SOF0-15
+            if index + 9 <= size:
+                height, width = struct.unpack(">HH", data[index + 5:index + 9])
+                return int(width), int(height)
+            return None
+        index += 2 + segment_length
+    return None

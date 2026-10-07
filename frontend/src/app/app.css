@@ -919,3 +919,325 @@ body {
   background: rgba(224, 164, 55, 0.12);
   color: var(--warn);
 }
+
+/* ===== Phase 2：双状态指示 / 任务状态 / 队列 / 进度 / 缩略图 / 图库 ===== */
+.engine-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.status-chip--running {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+.status-chip--paused,
+.status-chip--interrupted,
+.status-chip--favorite {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.status-chip--completed,
+.status-chip--kept {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.status-chip--failed,
+.status-chip--rejected {
+  color: #e05a5a;
+  border-color: #e05a5a;
+}
+
+.generate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 6px;
+}
+
+.generate-actions__main {
+  width: 100%;
+}
+
+.job-card {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.job-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.job-card__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-card__meta {
+  margin: 8px 0 10px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.job-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.queue {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.queue__title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.queue-item--dragging {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.queue-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.queue-item__handle {
+  cursor: grab;
+  color: var(--fg-muted);
+  letter-spacing: -2px;
+  user-select: none;
+}
+
+.queue-item__meta {
+  font-size: 11px;
+}
+
+.queue-item__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.result-pane__jobline {
+  margin: 0 0 10px;
+}
+
+.result-pane__stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  min-height: 260px;
+  max-height: 520px;
+}
+
+.result-pane__stage img {
+  max-width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.result-placeholder--inner {
+  border: none;
+  width: 100%;
+}
+
+.thumb-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.thumb-strip__item {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+  width: 64px;
+  height: 64px;
+}
+
+.thumb-strip__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb-strip__item--active {
+  border-color: var(--accent);
+}
+
+.result-pane__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* ===== 图库 ===== */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.gallery-card {
+  position: relative;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-soft);
+  cursor: pointer;
+}
+
+.gallery-card:hover {
+  border-color: var(--accent);
+}
+
+.gallery-card__img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.gallery-card__badges {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+.job-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.job-group {
+  width: 100%;
+  text-align: left;
+}
+
+.job-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.job-group__id {
+  font-weight: 600;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.job-group__title {
+  margin: 6px 0 4px;
+  font-size: 13px;
+}
+
+.job-group__counts {
+  font-size: 12px;
+  margin: 0;
+}
+
+.gallery-detail__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  max-height: 460px;
+  overflow: hidden;
+}
+
+.gallery-detail__preview img {
+  max-width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+}

@@ -14,20 +14,28 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 1 完成）
+## 3. 阶段纪律（当前 Phase 2 完成，v0.3.0）
 
-已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）。
+已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
+2（Job Execution Core + ComfyUIAdapter + Gallery）。
 
-仍然禁止在本项目中接入或实现：
+本阶段仍禁止扩大范围实现：
 
-- ComfyUI 或任何实际生成引擎（不写引擎地址 / 节点 ID / 模型名 / Workflow JSON）；
-- 实际生图执行（工作台"生成"按钮只显示"生成引擎尚未接入"）、Job Worker / 生成队列；
-- 豆包 / 手机端 / 云服务 / 多用户 / 分布式。
+- 高清放大 / 图生图 / 参考图 / ControlNet / FaceID / 视频；
+- 手机端 / 豆包正式接入 / Agent 正式接入 / 全局搜索；
+- 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 
-生成相关能力只能通过两个预留接口扩展，且不得修改核心：
+生成链路约束：
 
-- `backend/app/engine/` — EngineAdapter（未来 ComfyUIAdapter 放 `engine/adapters/`）；
-- `backend/app/workflows/` — WorkflowModule（执行链路统一 async）。
+- 执行链路：Workbench → `POST /api/v1/jobs`（JobService 固化快照）→ 单队列 Worker →
+  WorkflowModule → EngineAdapter → ComfyUI → Image（导入 DataRoot）→ Gallery；
+- 前端绝不直连 ComfyUI；Job 创建只发生在 `JobService`，Worker 只消费已持久化 Job；
+- ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/` binding 层，
+  禁止污染引擎无关层；
+- 机器信息（ComfyUI URL / 安装路径 / 输出路径）只进 `configs/config.local.yaml`（gitignore）
+  或环境变量；公共配置不得出现 `127.0.0.1` / `localhost`（守卫测试会失败）；
+- 错误分类 / 重试 / 恢复语义见 `docs/JOB_STATE_MACHINE.md`、`QUEUE_SPEC.md`、`RECOVERY_SPEC.md`，
+  修改状态机前必须先同步文档。
 
 数据纪律（Phase 1 起生效）：
 
@@ -47,8 +55,9 @@
   WorkflowModule 只做能力定义（标准契约类型 WorkflowInput / WorkflowOutput /
   WorkflowValidation / ModuleCapabilities），真正的引擎调用只发生在 EngineAdapter 实现；
   Worker 只消费已存在的 Job，Job 的创建与持久化属于 API / JobService。
-- 顶部状态指示只显示 **Studio 在线/离线**（后端健康）；在接入 EngineAdapter.health()
-  之前不得显示 "Engine" 连接状态。
+- 顶部状态指示是两个独立状态（Phase 2 起）：**Studio ●**（后端 `/health`）与
+  **Engine ●**（`/api/v1/engine/status` → EngineAdapter.health()，如本机 ComfyUI）；
+  禁止用一个圆点混淆两者。
 - 运行数据（数据库 / 图片 / 日志 / 备份）只放 DataRoot，禁止提交进仓库。
   数据库备份必须走 SQLite backup API（`app/database/backup.py`），禁止直接复制写入中的 DB 文件。
 - 前端 `api/` 只封装后端 HTTP 调用；新增扩展不改核心。

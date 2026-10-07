@@ -1,6 +1,7 @@
-# WORKBENCH_STATE — 工作台状态契约（Phase 1，v0.2.0）
+# WORKBENCH_STATE — 工作台状态契约（Phase 1 + Phase 2，v0.3.0）
 
-> 更新：2026-10-07。统一工作台快照是 Phase 1 的核心设计点。
+> 更新：2026-10-07。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
+> 快照同时是 Job 的固化输入（§十）与 Image → Workbench 的恢复载体（§四十七）。
 
 ## 1. WorkbenchSnapshot
 
@@ -21,7 +22,8 @@
   },
   "width": 1024, "height": 1024,
   "count": 1,
-  "seed_mode": "random",                 // Phase 1 固定 random
+  "seed_mode": "random",                 // random | fixed（"使用此图 Seed" 时为 fixed）
+  "seed": null,                          // Phase 2：fixed 时的基础 Seed（多张 = seed + 序号）
   "workflow_modules": [],                // 预留 [{module_id, module_version, config}]
   "source_prompt_id": null,              // 来源追溯（可选）
   "source_prompt_version_id": null
@@ -38,8 +40,12 @@
 | Prompt → Workbench | 提示词页"在生成工作台打开"：以当前版本构造快照，经路由 state 注入 | prompt_mode / 结构化字段 / 完整 Prompt / Negative；尺寸数量回默认 |
 | Asset → Workbench | 素材页"用于生成"：`GET /api/v1/assets/{id}/workbench` 返回快照（structured[slot]=prompt_text，selected_assets 记录引用） | 素材 Prompt 填入对应 slot（素材在前），用户可继续编辑；**绝不回写 AssetVersion** |
 | Recipe → Workbench | 配方页"在生成工作台打开"：由 RecipeVersion + asset_snapshots 构造快照注入 | **100% 恢复**：Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量 / Workflow 快照（空也走同一结构） |
-| （未来）Image → Workbench | Image 关联 Job → RecipeVersion 快照，复用同一结构 | — |
-| （未来）Agent → Workbench | Agent 生成/修改快照后注入 | — |
+| Image → Workbench（§四十七） | 图库详情"在生成工作台中打开"：`GET /api/v1/images/{id}/workbench` 返回 **Job 当时的工作台快照**；"使用此图 Seed" 额外把 `seed_mode=fixed, seed=该图 Seed` 写入快照 | Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量；Seed 默认 random |
+| （预留）Agent → Workbench | Agent 生成/修改快照后注入 | — |
+
+**Job 固化（§十）**：提交生成时 `snapshotFromState()` 的快照按原样存入
+`jobs.workbench_snapshot_json`，同时派生 positive/negative/structured 快照列；
+之后 Prompt / Recipe / Asset 的任何修改都不影响已创建的 Job。
 
 前端实现：`src/stores/workbenchStore.ts`（统一 WorkbenchStore，规范 §五十一），
 `hydrateWorkbench(snapshot)` 全量注入；路由 state 契约见
@@ -49,10 +55,13 @@
 
 - WorkbenchStore 管理：promptMode / structuredPrompt / fullPrompt / negativePrompt /
   selectedAssets / width / height / count / seedMode / workflowModules；
-- 组件不各自持有工作台状态；生成按钮不产生假结果（Phase 1 显示"生成引擎尚未接入"）；
+- 组件不各自持有工作台状态；Phase 2 起生成按钮 = `snapshotFromState()` → `POST /api/v1/jobs`
+  （JobService 固化快照），前端绝不直连引擎；
 - 保存为 Prompt（POST /prompts）与保存为配方（POST /recipes）都从
   `snapshotFromState()` 取当前快照。
 
 ## 4. 版本历史
 
 - 2026-10-07（v0.2.0）：初版，定义 WorkbenchSnapshot 与三条注入路径。
+- 2026-10-07（v0.3.0）：新增 `seed / seed_mode=fixed`；Image → Workbench 正式接通；
+  生成按钮改为 `POST /api/v1/jobs`（前端不直连引擎）。

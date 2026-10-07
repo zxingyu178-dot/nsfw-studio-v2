@@ -1,6 +1,6 @@
 # API_PLAN — API 现状与规划
 
-> 更新：2026-10-07（Phase 1，v0.2.0）。错误格式统一为 `{"error": {"code", "message"}}`（§三十六）。
+> 更新：2026-10-07（Phase 2，v0.3.0）。错误格式统一为 `{"error": {"code", "message"}}`。
 
 ## 1. 约定
 
@@ -14,7 +14,7 @@
 
 ### 健康与服务信息
 
-- `GET /api/v1/health` → `{"status":"ok","version":"0.2.0"}`
+- `GET /api/v1/health` → `{"status":"ok","version":"0.3.0"}`
 - `GET /` → 服务基本信息
 
 ### Prompt（`app/api/v1/prompts.py`）
@@ -45,6 +45,8 @@ GET    /api/v1/assets/{id}/workbench         素材 → 工作台快照（prompt
 POST   /api/v1/assets/{id}/archive | /restore
 ```
 
+创建素材额外支持可选表单字段 `source_image_id`（图库 → 素材溯源，§四十八）。
+
 ### Recipe（`app/api/v1/recipes.py`）
 
 ```
@@ -58,12 +60,43 @@ POST   /api/v1/recipes/{id}/versions/{vid}/restore   恢复（快照原样复制
 POST   /api/v1/recipes/{id}/archive | /restore
 ```
 
-## 3. 规划（Phase 2+，按需实现）
+### Job / Queue / SSE（`app/api/v1/jobs.py`）
+
+```
+POST   /api/v1/jobs                        创建生成任务（body: {snapshot, client_request_id?,
+                                           queue_mode: normal|next, source}；幂等返回原 Job）
+GET    /api/v1/jobs                        列表（status/limit/offset）
+GET    /api/v1/jobs/{id}                   详情（含 items 子项）
+POST   /api/v1/jobs/{id}/pause             安全暂停（当前图完成后暂停）
+POST   /api/v1/jobs/{id}/resume            继续暂停任务（已完成 Item 不重跑）
+POST   /api/v1/jobs/{id}/cancel            取消（终态；已完成图片保留）
+POST   /api/v1/jobs/{id}/resume-remaining  继续剩余图片（创建子 Job）
+GET    /api/v1/queue                       当前队列（worker/running/queued/paused）
+POST   /api/v1/queue/reorder               拖拽排序（仅等待任务，全量一一对应）
+POST   /api/v1/queue/resume                恢复队列（系统性失败自动暂停后）
+GET    /api/v1/engine/status               引擎健康（Adapter.health()，独立于 Studio 状态）
+GET    /api/v1/events/jobs                 SSE 任务事件（只通知；事实源永远是数据库）
+```
+
+### Image / Gallery（`app/api/v1/images.py`）
+
+```
+GET    /api/v1/images                      列表（job_id/review_status/favorite/source/kind/
+                                           date_from/date_to/limit/offset）
+GET    /api/v1/images/{id}                 详情
+GET    /api/v1/images/{id}/content         图片文件流
+PATCH  /api/v1/images/{id}/review          审核：KEPT / REJECTED / UNREVIEWED
+PATCH  /api/v1/images/{id}/favorite        收藏切换
+GET    /api/v1/images/{id}/workbench       Image → 工作台快照 + 该图 Seed（§四十七）
+GET    /api/v1/images/by-job/{id}/summary  按 Job 统计（§四十九）
+```
+
+约定：状态机与暂停/取消/续跑语义见 docs/JOB_STATE_MACHINE.md；队列行为见 docs/QUEUE_SPEC.md；
+崩溃恢复见 docs/RECOVERY_SPEC.md。
+
+## 3. 规划（Phase 3+，按需实现）
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| POST /api/v1/jobs | 创建生成任务（依赖 EngineAdapter 接入） |
-| GET /api/v1/jobs/{id} | 任务详情（含子项状态） |
-| GET /api/v1/images | 图片列表 |
-| GET /api/v1/images/{id}/file | 图片文件流 |
-| GET /api/v1/engine/status | 引擎状态（转发 EngineAdapter.health()） |
+| 高清放大 / 图生图 / 参考图 | Phase 2 明确禁止，未规划接口 |
+| Agent / 豆包 / 手机端接入 | 复用同一 Job API（source=agent/doubao 已预留） |

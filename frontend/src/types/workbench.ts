@@ -155,6 +155,7 @@ export interface WorkbenchSnapshot {
   height: number
   count: number
   seed_mode: string
+  seed?: number | null
   workflow_modules: Record<string, unknown>[]
   source_prompt_id?: string | null
   source_prompt_version_id?: string | null
@@ -174,4 +175,157 @@ export interface ComposeResult {
 
 export function assetPreviewUrl(assetId: string, version?: number): string {
   return `/api/v1/assets/${assetId}/preview${version ? `?version=${version}` : ''}`
+}
+
+export function imageContentUrl(imageId: string): string {
+  return `/api/v1/images/${imageId}/content`
+}
+
+// ===== Phase 2：Job / Queue / Image =====
+export type JobStatus =
+  | 'QUEUED' | 'RUNNING' | 'PAUSED' | 'INTERRUPTED' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type ReviewStatus = 'UNREVIEWED' | 'KEPT' | 'REJECTED'
+
+export interface JobItemDTO {
+  id: string
+  job_id: string
+  item_index: number
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
+  seed: number | null
+  engine_job_id: string | null
+  current_stage: string | null
+  progress: number | null
+  image_id: string | null
+  error_type: string | null
+  error_message: string | null
+  retry_count: number
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface JobDTO {
+  id: string
+  source: string
+  client_request_id: string | null
+  status: JobStatus
+  prompt_mode: PromptMode
+  positive_prompt_snapshot: string
+  negative_prompt_snapshot: string
+  structured_prompt: StructuredPrompt
+  workbench_snapshot: WorkbenchSnapshot
+  generation_settings: Record<string, unknown>
+  workflow_snapshot: Record<string, unknown>
+  module_id: string | null
+  module_version: string | null
+  provider: string | null
+  binding_version: string | null
+  workflow_hash: string | null
+  requested_count: number
+  completed_count: number
+  queue_position: number | null
+  priority: number
+  resume_of_job_id: string | null
+  pause_requested: boolean
+  cancel_requested: boolean
+  error_type: string | null
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  updated_at: string
+  items: JobItemDTO[]
+  idempotent_replay?: boolean | null
+  disk_space?: string | null
+}
+
+export interface QueueDTO {
+  worker: { running: boolean; queue_paused?: boolean; queue_paused_reason?: string | null; current_job_id?: string | null; adapter?: string }
+  running: JobDTO | null
+  queued: JobDTO[]
+  paused: JobDTO[]
+}
+
+export interface ImageDTO {
+  id: string
+  job_id: string | null
+  job_item_id: string | null
+  parent_image_id: string | null
+  kind: string
+  file_path: string
+  width: number
+  height: number
+  seed: number | null
+  review_status: ReviewStatus
+  favorite: boolean
+  source: string
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface EngineStatusDTO {
+  online: boolean
+  detail: string
+  engine_name: string
+  engine_version: string
+}
+
+export interface JobEventDTO {
+  type: string
+  job_id: string
+  item_id?: string | null
+  payload?: Record<string, unknown>
+  time: string
+}
+
+// ===== Phase 2 展示标签 =====
+export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  QUEUED: '排队中',
+  RUNNING: '生成中',
+  PAUSED: '已暂停',
+  INTERRUPTED: '已中断',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+}
+
+export const JOB_ITEM_STATUS_LABEL: Record<JobItemDTO['status'], string> = {
+  QUEUED: '排队中',
+  RUNNING: '生成中',
+  COMPLETED: '完成',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+  INTERRUPTED: '已中断',
+}
+
+export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
+  UNREVIEWED: '未审核',
+  KEPT: '保留',
+  REJECTED: '淘汰',
+}
+
+export const IMAGE_SOURCE_LABEL: Record<string, string> = {
+  comfyui: '本机 ComfyUI',
+  mock: '测试引擎',
+  import: '导入',
+}
+
+export const MODULE_LABEL: Record<string, string> = {
+  basic_generate: '基础生成',
+}
+
+export const STAGE_LABEL: Record<string, string> = {
+  submit: '提交',
+  queued: '排队',
+  execution: '执行',
+  sampling: '采样',
+  save_image: '保存',
+  done: '完成',
+  error: '错误',
+}
+
+/** job_<uuid> → JOB-<短 ID>（规范 §四十九） */
+export function shortJobId(id: string): string {
+  return `JOB-${id.replace(/^job_/, '').slice(0, 8)}`
 }

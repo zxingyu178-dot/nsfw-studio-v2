@@ -30,6 +30,9 @@ class MockEngineAdapter(EngineAdapter):
         self.delay_per_item_ms: int = int(options.get("delay_per_item_ms", 50))
         self.fail_after_items: int = int(options.get("fail_after_items", 0))  # 成功 N 个 item 后开始失败
         self.offline_after_submit: bool = bool(options.get("offline_after_submit", False))
+        # 瞬态网络错误模拟（规范 §三十六）：前 N 次提交抛 ENGINE_NETWORK(transient)，用于重试测试
+        self.transient_fail_times: int = int(options.get("transient_fail_times", 0))
+        self._transient_failures = 0
         self.supports_cancel = True
         self._canceled: set[str] = set()
         self._completed: dict[str, int] = {}
@@ -45,6 +48,9 @@ class MockEngineAdapter(EngineAdapter):
         await asyncio.sleep(0)
         if self.mode == "offline":
             raise EngineError("ENGINE_OFFLINE", "mock engine is offline")
+        if self._transient_failures < self.transient_fail_times:
+            self._transient_failures += 1
+            raise EngineError("ENGINE_NETWORK", "mock transient network failure", transient=True)
         self._submitted += 1
         engine_job_id = f"mock_{uuid.uuid4().hex[:12]}"
         if self.mode in ("fail", "oom", "workflow_error") or (

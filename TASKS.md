@@ -19,13 +19,41 @@
 - [x] 文档：DATA_MODEL_V1 + WORKBENCH_STATE + 全部同步
 - [x] feature/phase1 → develop → CI 绿 → main → CI 绿 → tag v0.2.0
 
-## Phase 2（预告）：EngineAdapter 首个实现（ComfyUIAdapter）与 Job/Queue
+## Phase 2：Job Execution Core + ComfyUIAdapter + Gallery ✅（2026-10-07，v0.3.0）
 
-- [ ] Job / JobItem / Image 数据模型与迁移
-- [ ] QueueWorker 首个实现（消费已持久化 Job）
-- [ ] ComfyUIAdapter（实现 EngineAdapter 异步契约）
-- [ ] 图库页（Image 浏览）
-- [ ] assets.source_image_id / recipes.cover_image_id 回填
+### 2A Job / 队列 / Mock / SSE
+
+- [x] Migration 0005_job + Job / JobItem / JobEvent 模型（幂等 UNIQUE(source, client_request_id)）
+- [x] Engine 层：输出获取接口 + 错误分类（9 类）+ 瞬态重试 ≤2 + MockEngineAdapter + 工厂
+- [x] 事件总线（SSE 基础）+ JobService（创建/幂等/暂停/取消/继续/续跑剩余/队列排序）
+- [x] 单队列 QueueWorker（串行、Item 边界暂停、安全取消、Seed 执行时分配、崩溃恢复）
+- [x] Job API + SSE + main.py 装配 + 磁盘空间检查
+- [x] Mock 故障测试套件（§五十八 全清单 14 场景，含瞬态网络重试 / Workflow 错误）
+
+### 2B 本机 ComfyUI 调查 + ComfyUIAdapter + 第一套真实生图
+
+- [x] docs/COMFY_ENV_INVENTORY.md + docs/WORKFLOW_INVENTORY.md（只读调查，未破坏环境）
+- [x] 用 ControlHub 已批准的计划任务入口启动 ComfyUI（0.37.0，任务 `\AIHome\ComfyUI`）
+- [x] basic_generate provider binding（workflows/providers/comfyui/basic_generate/v1：Qwen-Image 2.1 UC 链）
+- [x] ComfyUIAdapter（/prompt + WebSocket 进度 + /history 核对 + /view 取回 + 错误分类 + 安全取消）
+- [x] 第一张真实生图成功（NSFWStudio/20261007_00001_.png，832×1216，含模型加载约 300s）
+- [x] binding 单测（无需 ComfyUI，CI 可跑）+ Job 记录 workflow_hash/binding_version 溯源
+
+### 2C Image / Gallery / Review
+
+- [x] Migration 0006_image + Image 模型（kind / review_status / favorite / source / metadata）
+- [x] 引擎输出 → Studio temp → 校验 → 原子移动 DataRoot/images/originals → DB 登记（失败全回滚）
+- [x] Gallery API（列表过滤 / 详情 / content / review / favorite / workbench / by-job summary 含收藏数）
+- [x] WorkbenchSnapshot 支持 seed（"使用此图 Seed"；默认 random）
+- [x] 从图库创建素材（POST /assets 支持 source_image_id，独立资产文件）
+- [x] 前端：SSE 订阅 + jobStore（事件只通知，一律回源 GET；兜底轮询）
+- [x] 前端：顶部双状态 Studio ● / Engine ●（§五十二）
+- [x] 前端：右栏真实 Engine 状态 + 生成按钮（normal / 优先插队）+ 当前任务进度 + 队列（暂停/继续/取消/优先/拖拽）
+- [x] 前端：中栏当前图 + 本 Job 已完成缩略图逐张显示（续跑父子合并）
+- [x] 前端：图库页（筛选 / Grid / 详情 Drawer / 审核 / 收藏 / 按任务查看 / 打开工作台 / 创建素材）
+- [ ] 真实 ComfyUI 集成测试 1 / 3 / 8 张（ComfyUI 离线自动 skip；顺序执行 / Seed=base+index / 逐张入 Gallery / 元数据 / Snapshot）
+- [x] 文档：JOB_STATE_MACHINE / QUEUE_SPEC / RECOVERY_SPEC / COMFY_ADAPTER / IMAGE_MODEL 新增；DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN / WORKBENCH_STATE / README / AGENTS 同步
+- [ ] 全量 pytest / 前端 build 验证；三段提交（2A/2B/2C）→ develop → CI → main → tag v0.3.0
 
 ## Phase 0.1.1：审查遗留契约修正 ✅（2026-10-07，v0.1.2）
 

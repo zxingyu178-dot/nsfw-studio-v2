@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react'
 import { getHealth } from '../api/client'
+import { useJobStore } from '../stores/jobStore'
 
 type Status = 'checking' | 'online' | 'offline'
 
-const STATUS_LABEL: Record<Status, string> = {
+const STUDIO_LABEL: Record<Status, string> = {
   checking: 'Studio 检测中',
   online: 'Studio 在线',
   offline: 'Studio 离线',
 }
 
 /**
- * 顶部状态指示（Phase 0.1 语义修正）。
- * 当前检测的是 NSFW Studio 后端 API 健康，因此显示 "Studio 在线/离线"，
- * 不声称引擎连接状态。Phase 1+ 接入 EngineAdapter.health() 后，
- * 本组件将切换为真实引擎状态（显示 "Engine 在线"）。
+ * 顶部状态指示（Phase 2 规范 §五十二）：
+ * Studio ● 与 Engine ● 是两个独立状态，不用一个圆点混淆。
+ * - Studio：NSFW Studio 后端 API 健康（/health）；
+ * - Engine：真实生成引擎健康（/engine/status → Adapter.health()，如本机 ComfyUI）。
  */
 export function EngineStatus() {
-  const [status, setStatus] = useState<Status>('checking')
+  const [studio, setStudio] = useState<Status>('checking')
+  const { engine, engineLoaded } = useJobStore()
 
   useEffect(() => {
     let cancelled = false
@@ -24,9 +26,9 @@ export function EngineStatus() {
     const check = async () => {
       try {
         const info = await getHealth()
-        if (!cancelled) setStatus(info.status === 'ok' ? 'online' : 'offline')
+        if (!cancelled) setStudio(info.status === 'ok' ? 'online' : 'offline')
       } catch {
-        if (!cancelled) setStatus('offline')
+        if (!cancelled) setStudio('offline')
       }
     }
 
@@ -38,10 +40,24 @@ export function EngineStatus() {
     }
   }, [])
 
+  const engineStatus: Status = engineLoaded ? (engine?.online ? 'online' : 'offline') : 'checking'
+  const engineLabel =
+    engineStatus === 'checking'
+      ? 'Engine 检测中'
+      : engineStatus === 'online'
+        ? `Engine 在线（${engine?.engine_name ?? ''} ${engine?.engine_version ?? ''}）`
+        : `Engine 离线${engine?.detail ? `：${engine.detail}` : ''}`
+
   return (
-    <span className={`engine-status engine-status--${status}`} aria-label={STATUS_LABEL[status]}>
-      <span className="engine-status__dot" aria-hidden="true" />
-      Studio
+    <span className="engine-indicators">
+      <span className={`engine-status engine-status--${studio}`} aria-label={STUDIO_LABEL[studio]}>
+        <span className="engine-status__dot" aria-hidden="true" />
+        Studio
+      </span>
+      <span className={`engine-status engine-status--${engineStatus}`} aria-label={engineLabel} title={engine?.detail}>
+        <span className="engine-status__dot" aria-hidden="true" />
+        Engine
+      </span>
     </span>
   )
 }

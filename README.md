@@ -4,12 +4,15 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 1 — Prompt / Asset / Recipe Core（已完成，v0.2.0）。**
-已完成：Prompt（结构化八栏/完整双模式 + 版本历史 + 软删除）、素材（四分类 + 预览图上传 + 版本）、
+**当前阶段：Phase 2 — Job Execution Core + ComfyUIAdapter + Gallery（已完成，v0.3.0）。**
+Phase 1 已完成：Prompt（结构化八栏/完整双模式 + 版本历史 + 软删除）、素材（四分类 + 预览图上传 + 版本）、
 配方（工作台快照 + 素材版本快照）、生成工作台三栏（保存/100% 恢复）。
-**生成引擎仍未接入**（ComfyUI / 实际模型 / 生图工作流 / 豆包 / 手机端均不允许），
-生成能力全部通过 `backend/app/engine/` 与 `backend/app/workflows/` 接口预留。
-执行链路统一异步：Pipeline → WorkflowModule → EngineAdapter → 具体引擎（纯数据校验保持同步）。
+Phase 2 已完成：Job / JobItem / 单队列 Worker（暂停 / 取消 / 续跑 / 幂等 / 崩溃恢复）、
+SSE 任务事件、ComfyUIAdapter（真实对接本机 ComfyUI + provider binding）、
+Image 导入 DataRoot + 图库（审核 / 收藏 / 按任务查看 / Image → 工作台 / 从图库创建素材）。
+执行链路：Workbench → POST /jobs → 单队列 → WorkflowModule → EngineAdapter → ComfyUI → Image → Gallery。
+本机 ComfyUI 环境事实见 `docs/COMFY_ENV_INVENTORY.md` / `docs/WORKFLOW_INVENTORY.md`；
+仍禁止：高清放大 / 图生图 / 参考图 / ControlNet / 视频 / 手机端 / Agent 正式接入。
 
 ## 技术栈
 
@@ -35,7 +38,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.2.0"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.0"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
@@ -89,8 +92,15 @@ NSFW-Studio-Data/
 - [docs/API_PLAN.md](docs/API_PLAN.md) — API 现状与规划
 - [docs/PHASE0_REPORT.md](docs/PHASE0_REPORT.md) — Phase 0 / 0.1 验收报告
 - [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md) — Phase 1 验收报告
-- [docs/DATA_MODEL_V1.md](docs/DATA_MODEL_V1.md) — 数据模型（ER / 版本 / 快照 / 软删除）
+- [docs/DATA_MODEL_V1.md](docs/DATA_MODEL_V1.md) — 数据模型（ER / 版本 / 快照 / 软删除 / Job / Image）
 - [docs/WORKBENCH_STATE.md](docs/WORKBENCH_STATE.md) — 工作台状态契约
+- [docs/JOB_STATE_MACHINE.md](docs/JOB_STATE_MACHINE.md) — Job / JobItem 状态机
+- [docs/QUEUE_SPEC.md](docs/QUEUE_SPEC.md) — 单队列规范（排序 / 暂停 / 系统性失败）
+- [docs/RECOVERY_SPEC.md](docs/RECOVERY_SPEC.md) — 崩溃恢复规范
+- [docs/COMFY_ENV_INVENTORY.md](docs/COMFY_ENV_INVENTORY.md) — 本机 ComfyUI 环境调查
+- [docs/WORKFLOW_INVENTORY.md](docs/WORKFLOW_INVENTORY.md) — 本机工作流调查与 basic_generate 选型
+- [docs/COMFY_ADAPTER.md](docs/COMFY_ADAPTER.md) — ComfyUIAdapter 设计与契约
+- [docs/IMAGE_MODEL.md](docs/IMAGE_MODEL.md) — Image / Gallery 模型与流程
 - [DEV_LOG.md](DEV_LOG.md) / [TASKS.md](TASKS.md) / [CHANGELOG.md](CHANGELOG.md) / [TEST_REPORT.md](TEST_REPORT.md)
 
 ## Git 规范

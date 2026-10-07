@@ -22,6 +22,7 @@ from app.core.errors import AppError
 from app.core.events import EventBroker
 from app.database.base import make_engine, make_session_factory
 from app.engine.factory import create_engine_adapter
+from app.models import Job, JobItem
 from app.services import job_service
 from app.services.system_service import bootstrap
 from app.storage.manager import StorageManager
@@ -32,6 +33,19 @@ logger = logging.getLogger(__name__)
 
 def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}})
+
+
+def _make_output_importer(session_factory, storage: StorageManager):
+    """Worker 的输出导入回调（Phase 2C）：引擎输出 → DataRoot 正式 Image。"""
+    from app.services.image_service import import_adapter_outputs
+
+    def importer(job, item, outputs):
+        with session_factory() as session:
+            job_ref = session.get(Job, job.id)
+            item_ref = session.get(JobItem, item.id)
+            return import_adapter_outputs(session, storage, job_ref, item_ref, outputs)
+
+    return importer
 
 
 @asynccontextmanager
@@ -50,7 +64,7 @@ async def lifespan(application: FastAPI):
     worker = SingleQueueWorker(
         session_factory,
         adapter,
-        output_importer=getattr(application.state, "output_importer", None),
+        output_importer=_make_output_importer(session_factory, storage),
         poll_interval_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("worker_poll_interval_ms", 300)),
         engine_poll_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("engine_poll_ms", 200)),
     )

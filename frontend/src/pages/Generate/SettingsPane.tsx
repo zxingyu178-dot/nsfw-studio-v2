@@ -1,11 +1,39 @@
-import { useState } from 'react'
-import { setCount, setSize, useWorkbench } from '../../stores/workbenchStore'
+import { useState, type DragEvent, type ReactNode } from 'react'
+import { setCount, setSeed, setSize, snapshotFromState, useWorkbench } from '../../stores/workbenchStore'
+import {
+  activeJob,
+  cancelJob,
+  pauseJob,
+  reorderQueue,
+  resumeJob,
+  resumeQueue,
+  resumeRemaining,
+  submitGeneration,
+  useJobStore,
+} from '../../stores/jobStore'
+import {
+  JOB_STATUS_LABEL,
+  MODULE_LABEL,
+  STAGE_LABEL,
+  shortJobId,
+  type JobDTO,
+} from '../../types/workbench'
 
-/** 右栏：基础配置（规范 §四十四）。模型/队列仅显示占位文案，不制造虚假状态。 */
+/** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。 */
 export function SettingsPane() {
   const state = useWorkbench()
+  const store = useJobStore()
   const [widthText, setWidthText] = useState(String(state.width))
   const [heightText, setHeightText] = useState(String(state.height))
+  const [notice, setNotice] = useState<string | null>(null)
+  const [dragJobId, setDragJobId] = useState<string | null>(null)
+
+  const job = activeJob(store)
+  const engineOffline = store.engineLoaded && store.engine !== null && !store.engine.online
+  const hasPrompt =
+    state.promptMode === 'full'
+      ? state.fullPrompt.trim().length > 0
+      : Object.values(state.structured).some((value) => value.trim().length > 0)
 
   function commitSize(): void {
     const width = clampDimension(widthText)
@@ -15,11 +43,65 @@ export function SettingsPane() {
     setSize(width, height)
   }
 
+  async function handleGenerate(queueMode: 'normal' | 'next'): Promise<void> {
+    setNotice(null)
+    const created = await submitGeneration(snapshotFromState(), queueMode)
+    if (!created) return
+    if (created.idempotent_replay) {
+      setNotice(`相同请求已提交过，已定位到原任务 ${shortJobId(created.id)}`)
+    } else {
+      setNotice(
+        created.disk_space === 'warning'
+          ? `已加入队列 ${shortJobId(created.id)}（磁盘空间偏低，建议清理）`
+          : `已加入队列 ${shortJobId(created.id)}`,
+      )
+    }
+  }
+
+  function moveBefore(sourceId: string, targetId: string): void {
+    const ids = (store.queue?.queued ?? []).map((item) => item.id)
+    const from = ids.indexOf(sourceId)
+    const to = ids.indexOf(targetId)
+    if (from < 0 || to < 0 || from === to) return
+    const [moved] = ids.splice(from, 1)
+    ids.splice(to, 0, moved)
+    void reorderQueue(ids)
+  }
+
+  function moveToFront(jobId: string): void {
+    const ids = (store.queue?.queued ?? []).map((item) => item.id)
+    if (ids.indexOf(jobId) <= 0) return
+    void reorderQueue([jobId, ...ids.filter((id) => id !== jobId)])
+  }
+
+  const queued = store.queue?.queued ?? []
+  const paused = store.queue?.paused ?? []
+
   return (
     <div className="pane">
       <header className="pane__header">
-        <h2 className="pane__title">基础配置</h2>
+        <h2 className="pane__title">生成配置</h2>
       </header>
+
+      {/* ===== 真实 Engine 状态 ===== */}
+      <div className="field">
+        <span className="field__label">引擎</span>
+        <p className="field__static">
+          <span
+            className={`engine-status engine-status--${
+              store.engineLoaded ? (store.engine?.online ? 'online' : 'offline') : 'checking'
+            }`}
+            title={store.engine?.detail}
+          >
+            <span className="engine-status__dot" aria-hidden="true" />
+            {store.engine?.online
+              ? `${store.engine.engine_name} ${store.engine.engine_version}`
+              : store.engineLoaded
+                ? '离线'
+                : '检测中'}
+          </span>
+        </p>
+      </div>
 
       <div className="field">
         <label className="field__label" htmlFor="size-width">宽度 (px)</label>
@@ -65,20 +147,231 @@ export function SettingsPane() {
       </div>
 
       <div className="field">
-        <span className="field__label">Seed</span>
-        <p className="field__static">随机</p>
+        <div className="field__label-row">
+          <span className="field__label">Seed</span>
+          {state.seedMode === 'fixed' && (
+            <button type="button" className="btn btn--ghost btn--xs" onClick={() => setSeed(null)}>
+              恢复随机
+            </button>
+          )}
+        </div>
+        {state.seedMode === 'fixed' && state.seed !== null ? (
+          <p className="field__static">固定 {state.seed}<span className="muted">（多张时 = Seed + 序号）</span></p>
+        ) : (
+          <p className="field__static">随机（每张独立）</p>
+        )}
       </div>
 
-      <div className="field">
-        <span className="field__label">模型</span>
-        <p className="field__static field__static--muted">未接入生成引擎</p>
+      {/* ===== 生成按钮（§五十三：只提交 Job，不直连引擎） ===== */}
+      <div className="generate-actions">
+        <button
+          type="button"
+          className="btn btn--primary btn--lg generate-actions__main"
+          disabled={store.submitting || engineOffline || !hasPrompt}
+          title={engineOffline ? 'Engine 离线，无法提交' : !hasPrompt ? '请先填写 Prompt' : undefined}
+          onClick={() => void handleGenerate('normal')}
+        >
+          {store.submitting ? '提交中…' : '生成'}
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm"
+          disabled={store.submitting || engineOffline || !hasPrompt}
+          onClick={() => void handleGenerate('next')}
+        >
+          优先生成（插队）
+        </button>
       </div>
+      {store.lastError && <p className="notice notice--error" role="alert">{store.lastError}</p>}
+      {notice && <p className="notice notice--ok" role="status">{notice}</p>}
 
-      <div className="field">
-        <span className="field__label">队列</span>
-        <p className="field__static field__static--muted">任务系统将在后续阶段接入</p>
-      </div>
+      {/* ===== 当前任务（§五十一） ===== */}
+      {job && <CurrentJobCard job={job} busy={store.busyJobId === job.id} />}
+
+      {/* ===== 队列（§五十四） ===== */}
+      <section className="queue">
+        <h3 className="queue__title">队列</h3>
+        {store.queue?.worker.queue_paused && (
+          <div className="notice notice--warn" role="alert">
+            <p style={{ margin: '0 0 6px' }}>
+              队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}
+            </p>
+            <button type="button" className="btn btn--sm" onClick={() => void resumeQueue()}>
+              恢复队列
+            </button>
+          </div>
+        )}
+        {queued.length === 0 && paused.length === 0 && <p className="muted">暂无等待任务</p>}
+        <ul className="queue-list">
+          {queued.map((item, index) => (
+            <QueueRow
+              key={item.id}
+              job={item}
+              draggable
+              dragging={dragJobId === item.id}
+              onDragStart={() => setDragJobId(item.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragJobId) moveBefore(dragJobId, item.id)
+                setDragJobId(null)
+              }}
+              onDragEnd={() => setDragJobId(null)}
+              actions={
+                <>
+                  {index > 0 && (
+                    <button type="button" className="btn btn--ghost btn--xs" onClick={() => moveToFront(item.id)}>
+                      优先
+                    </button>
+                  )}
+                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void pauseJob(item.id)}>
+                    暂停
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void cancelJob(item.id)}>
+                    取消
+                  </button>
+                </>
+              }
+            />
+          ))}
+          {paused.map((item) => (
+            <QueueRow
+              key={item.id}
+              job={item}
+              actions={
+                <>
+                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void resumeJob(item.id)}>
+                    继续
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void cancelJob(item.id)}>
+                    取消
+                  </button>
+                </>
+              }
+            />
+          ))}
+        </ul>
+      </section>
     </div>
+  )
+}
+
+// ===== 当前任务卡片 =====
+
+function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
+  const runningItem = job.items.find((item) => item.status === 'RUNNING')
+  const progress =
+    runningItem?.progress != null
+      ? Math.round(runningItem.progress * 100)
+      : job.requested_count > 0
+        ? Math.round((job.completed_count / job.requested_count) * 100)
+        : 0
+  const progressText =
+    job.status === 'RUNNING' && runningItem
+      ? `第 ${runningItem.item_index + 1} 张 · ${progress}%`
+      : `已完成 ${job.completed_count} / ${job.requested_count}`
+  const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
+  const canResumeRemaining =
+    ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(job.status) &&
+    job.completed_count < job.requested_count
+
+  return (
+    <section className="job-card">
+      <div className="job-card__head">
+        <span className={`status-chip status-chip--${job.status.toLowerCase()}`}>
+          {JOB_STATUS_LABEL[job.status]}
+        </span>
+        <span className="muted">{shortJobId(job.id)}</span>
+      </div>
+      <p className="job-card__title" title={excerpt}>
+        {excerpt.length > 28 ? `${excerpt.slice(0, 28)}…` : excerpt}
+      </p>
+      <div className="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+        <span className="progress-bar__fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+      </div>
+      <p className="job-card__meta">
+        {progressText}
+        {runningItem?.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''}
+        {' · '}
+        {MODULE_LABEL[job.module_id ?? ''] ?? job.module_id ?? '基础生成'}
+      </p>
+      {job.resume_of_job_id && (
+        <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>
+      )}
+      {job.error_message && <p className="notice notice--error">{job.error_type}：{job.error_message}</p>}
+
+      <div className="job-card__actions">
+        {job.status === 'RUNNING' && !job.pause_requested && (
+          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void pauseJob(job.id)}>
+            暂停
+          </button>
+        )}
+        {job.status === 'RUNNING' && job.pause_requested && (
+          <span className="muted">将在当前图完成后暂停…</span>
+        )}
+        {job.status === 'QUEUED' && (
+          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void pauseJob(job.id)}>
+            暂停
+          </button>
+        )}
+        {job.status === 'PAUSED' && (
+          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void resumeJob(job.id)}>
+            继续
+          </button>
+        )}
+        {job.status === 'RUNNING' && job.cancel_requested && (
+          <span className="muted">正在取消…</span>
+        )}
+        {['QUEUED', 'RUNNING', 'PAUSED'].includes(job.status) && !job.cancel_requested && (
+          <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void cancelJob(job.id)}>
+            取消
+          </button>
+        )}
+        {canResumeRemaining && (
+          <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void resumeRemaining(job.id)}>
+            继续剩余图片
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ===== 队列行 =====
+
+interface QueueRowProps {
+  job: JobDTO
+  actions: ReactNode
+  draggable?: boolean
+  dragging?: boolean
+  onDragStart?: () => void
+  onDragOver?: (event: DragEvent) => void
+  onDrop?: () => void
+  onDragEnd?: () => void
+}
+
+function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, onDrop, onDragEnd }: QueueRowProps) {
+  const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
+  return (
+    <li
+      className={`queue-item${dragging ? ' queue-item--dragging' : ''}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <div className="queue-item__body">
+        <div className="queue-item__title">
+          {draggable && <span className="queue-item__handle" title="拖拽排序" aria-hidden="true">⋮⋮</span>}
+          {job.status === 'PAUSED' && <span className="status-chip status-chip--paused">已暂停</span>}
+          <span title={excerpt}>{excerpt.length > 18 ? `${excerpt.slice(0, 18)}…` : excerpt}</span>
+        </div>
+        <div className="queue-item__meta muted">
+          {shortJobId(job.id)} · {job.requested_count} 张· {MODULE_LABEL[job.module_id ?? ''] ?? '基础生成'}
+        </div>
+      </div>
+      <div className="queue-item__actions">{actions}</div>
+    </li>
   )
 }
 

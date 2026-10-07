@@ -72,7 +72,7 @@ def list_assets(
     )
 
 
-@router.post("", response_model=AssetResponse, status_code=201, summary="创建素材（+v1，支持预览图上传）")
+@router.post("", response_model=AssetResponse, status_code=201, summary="创建素材（+v1，支持预览图上传 / 图库溯源）")
 async def create_asset(
     name: str = Form(...),
     type: str = Form(...),
@@ -80,6 +80,7 @@ async def create_asset(
     notes: str = Form(""),
     tags: str = Form("[]"),
     favorite: bool = Form(False),
+    source_image_id: str | None = Form(default=None),
     preview: UploadFile | None = File(default=None),
     session: Session = Depends(get_session),
     storage: StorageManager = Depends(get_storage),
@@ -96,6 +97,7 @@ async def create_asset(
         tags=tag_list,
         favorite=favorite,
         preview=upload,
+        source_image_id=source_image_id,
     )
     return asset_response(asset, asset_service.get_current_version(session, asset))
 

@@ -1,6 +1,6 @@
 # DATABASE_PLAN — 数据库现状与规划
 
-> 更新：2026-10-07（Phase 1，v0.2.0）。Phase 1 完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
+> 更新：2026-10-07（Phase 2，v0.3.0）。完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
 
 ## 1. 现状
 
@@ -20,9 +20,13 @@
 | 0002_prompt | 0.2.0 | prompts / prompt_versions |
 | 0003_asset | 0.2.0 | assets / asset_versions |
 | 0004_recipe | 0.2.0 | recipes / recipe_versions / recipe_asset_snapshots |
+| 0005_job | 0.3.0 | jobs / job_items / job_events（Phase 2A） |
+| 0006_image | 0.3.0 | images（Phase 2C；文件在 DataRoot/images/originals） |
 
 约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
-`type / mode / slot / favorite / default_count` 均有 CHECK。升级路径测试覆盖 v0.1.2 库 → 0.2.0。
+`type / mode / slot / favorite / default_count` 均有 CHECK；
+`jobs` 有 `UNIQUE(source, client_request_id)`（幂等）与 status CHECK；
+`images` 有 `kind / review_status` CHECK。升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0。
 
 ### migration 状态机（Phase 0.1 修正）
 
@@ -51,19 +55,18 @@
 | created_time | TEXT (ISO) | 首次写入时间 |
 | updated_time | TEXT (ISO) | 最近一次版本更新时间 |
 
-## 2. Phase 1 规划（数据模型设计阶段细化）
+## 2. Phase 2 新增表（已实现）
 
-| 表 | 用途 | 关键字段（草案） |
+| 表 | 用途 | 关键字段 |
 | --- | --- | --- |
-| job | 生成任务 | id, type, status, recipe_id, params_json, created_at … |
-| job_item | 任务子项（批量） | id, job_id, status, image_id, error … |
-| prompt | 提示词 | id, name, positive, negative, tags_json … |
-| recipe | 配方（提示词组合模板） | id, name, prompt_ids_json, workflow_name, default_params_json … |
-| asset | 素材（face/clothing/pose/scene） | id, category, file_path, thumb_path, tags_json … |
-| image | 生成图片资产 | id, job_item_id, path, width, height, hash, meta_json … |
+| jobs | 生成任务 | id, source, client_request_id, status, prompt 快照, workbench_snapshot_json, module/provider/binding/workflow_hash, requested/completed_count, queue_position, priority, resume_of_job_id, pause/cancel_requested |
+| job_items | 每张输出 | id, job_id, item_index, status, seed, engine_job_id, current_stage, progress, image_id, error_type/message, retry_count |
+| job_events | 追加型审计 | id, job_id, job_item_id, event_type, payload_json, created_at |
+| images | 图库正式资产 | id, job_id, job_item_id, parent_image_id, kind, file_path, width/height, seed, review_status, favorite, source, metadata_json |
 
-设计原则：所有表带 `created_time`；图片/素材表存**相对 DataRoot 的路径**，不存绝对路径；
+设计原则：所有表带 `created_at`；图片/素材表存**相对 DataRoot 的路径**，不存绝对路径；
 JSON 字段存结构化扩展参数，为 WorkflowModule 留自由度。
+Job 状态机 / 队列 / 恢复语义见 docs/JOB_STATE_MACHINE.md、QUEUE_SPEC.md、RECOVERY_SPEC.md。
 
 ## 3. 迁移策略
 

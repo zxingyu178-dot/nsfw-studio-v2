@@ -1,5 +1,56 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 2：Job Execution Core + ComfyUIAdapter + Gallery（v0.3.0）
+
+**执行**：TRAE Code Agent（接替开发；2A 段由前序会话完成并已提交 2c63137；
+本段完成 2B / 2C 并按 feature/phase2-execution-gallery 三段提交 → develop → CI → main → CI → tag v0.3.0）
+
+### 交付
+
+- **2A（已提交 2c63137）**：Migration 0005_job（jobs/job_items/job_events + 幂等 UNIQUE）；
+  Engine 层输出接口 + 错误分类 + Mock + 工厂；事件总线 + JobService + 单队列 QueueWorker；
+  Job API + SSE + 磁盘检查 + 崩溃恢复；Mock 故障套件。
+- **2B**：只读调查本机 ComfyUI（0.37.0，Qwen-Image 2.1 UC 三件套，nightbatch 同款链）→
+  provider binding（节点 ID 只在 binding 层）+ ComfyUIAdapter（/prompt + WS 进度 + /history + /view +
+  错误分类 + 安全取消）+ 首张真实生图验证。
+- **2C**：Migration 0006_image + ImageService（temp → 校验 → 原子移动 → DB 登记，失败全回滚）+
+  Gallery API（含 by-job summary "收藏"计数）+ 前端（SSE jobStore、双状态、右栏队列、中栏逐张、
+  图库页、Image→工作台/使用此图 Seed/创建素材 source_image_id）。
+- 文档：JOB_STATE_MACHINE / QUEUE_SPEC / RECOVERY_SPEC / COMFY_ADAPTER / IMAGE_MODEL /
+  COMFY_ENV_INVENTORY / WORKFLOW_INVENTORY / PHASE2_REPORT 新增；既有文档与 README/AGENTS 同步。
+- 验证：快速套件 **91 passed**；真实 ComfyUI 集成 **3 passed（1/3/8 张，12 图）**；
+  前端 `npm run build` 通过；版本 0.2.0 → 0.3.0（后端/前端/app.yaml 同步）。
+
+### 实测发现并修复
+
+1. workflow.yaml 注释混入 `127.0.0.1:8188` → 公共配置守卫断言失败 → 注释改占位（公共配置只留 provider 选择）。
+2. 集成测试夹具作用域错误（module 夹具依赖 function 级 settings）→ 改函数级夹具（每个用例独立 tmp DataRoot）。
+3. `workflow_hash=None`（§五十五 要求记录）→ `module_identity()` 在 comfyui provider 下从 binding 读取
+   binding_version + workflow_hash（老 Job 可追溯工作流版本）。
+4. §五十八 缺口：无"瞬态网络重试"与"Workflow 错误"用例 → Mock 增加 transient_fail_times 模拟 +
+   两条新用例（重试 ≤2 恢复成功；workflow 错误不重试且队列暂停）。
+5. `by-job summary` 缺收藏计数（§四十九 示例为"未审核 a 保留 b 收藏 c 淘汰 d"）→ 补 favorites。
+6. build_handoff.py 会把本机私有 `config*.local.yaml` 打包进交接 ZIP → 增加私有配置排除
+   （规范 §三十二/§六十五：私有配置永不进交付物）。
+7. Engine 组件生命周期细节：StrictMode 下 jobStore 的 SSE 订阅需可注销（stopJobStore 关闭句柄）。
+
+### 决策
+
+| 决策 | 理由 |
+| --- | --- |
+| 公共默认引擎 = comfyui（产品默认），测试/CI 用 mock | 真实产品必须默认走真实链路；CI 无 GPU，集成测试离线自动 skip；公共配置仍不得携带机器地址 |
+| workflow_hash 在 Job 创建时由 binding 计算 | §五十五 要求"以后 Workflow 被修改仍知道老 Job 用的版本"，写入时机必须早于执行 |
+| "使用此图 Seed" 由前端写快照后提交 | 与 §四十七 一致（默认 random，显式才固定）；后端 workbench 接口只返回该图 seed 供选择 |
+| 续跑父子 Job 在中栏合并展示 | §二十"UI 将父子 Job 归组显示"；父 Job 已完成图片 + 子 Job 新图同一视图 |
+| 队列"优先"按钮 = reorder 到队首 | 复用同一排序接口，避免平行机制（§十六 只有一个 queue_position 语义） |
+
+### 环境说明
+
+- ComfyUI 由 ControlHub 已批准的计划任务 `\AIHome\ComfyUI` 启动（Studio 不自管其生命周期）；
+- 调查与测试期间未升级 ComfyUI、未安装/更新节点、未移动模型、未清空 output、未修改原工作流；
+- 测试产生的图片落在 ComfyUI output（NSFWStudio/20261007）与测试 tmp DataRoot；
+  正式 Studio 图库路径为 DataRoot/images/originals（由测试断言验证）。
+
 ## 2026-10-07 — Phase 1：Prompt / Asset / Recipe Core（v0.2.0）
 
 **执行**：ZCode Agent（feature/phase1-prompt-asset-recipe → develop → CI → main → tag v0.2.0）

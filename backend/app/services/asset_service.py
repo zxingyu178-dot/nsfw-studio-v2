@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.filetypes import validate_image_upload
 from app.core.ids import ASSET, ASSET_VERSION, new_id
-from app.models import ASSET_TYPES, Asset, AssetVersion
+from app.models import ASSET_TYPES, Asset, AssetVersion, Image
 from app.storage.manager import StorageManager
 
 
@@ -121,13 +121,23 @@ def create_asset(
     tags: list[str] | None = None,
     favorite: bool = False,
     preview: PreviewUpload | None = None,
+    source_image_id: str | None = None,
 ) -> Asset:
-    """创建素材 + v1（单事务；文件先落位，提交失败则清理文件）。"""
+    """创建素材 + v1（单事务；文件先落位，提交失败则清理文件）。
+
+    source_image_id：图库图片创建素材时记录溯源（规范 §四十八）；
+    素材使用独立资产文件，来源图片被清理不影响素材。
+    """
     _validate_type(asset_type)
     if not name or not name.strip():
         raise ValidationError("素材名称不能为空")
+    if source_image_id is not None and session.get(Image, source_image_id) is None:
+        raise NotFoundError("来源图片不存在", code="IMAGE_NOT_FOUND")
 
-    asset = Asset(id=new_id(ASSET), type=asset_type, name=name.strip(), favorite=favorite, archived=False)
+    asset = Asset(
+        id=new_id(ASSET), type=asset_type, name=name.strip(), favorite=favorite,
+        archived=False, source_image_id=source_image_id,
+    )
     version = AssetVersion(
         id=new_id(ASSET_VERSION),
         asset_id=asset.id,

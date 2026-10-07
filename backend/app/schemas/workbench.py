@@ -61,6 +61,7 @@ class WorkbenchSnapshotModel(BaseModel):
     height: int = 1024
     count: int = 1
     seed_mode: str = "random"
+    seed: int | None = None  # "使用此图 Seed"（规范 §四十七）；None=随机
     workflow_modules: list[dict[str, Any]] = Field(default_factory=list)
     source_prompt_id: str | None = None
     source_prompt_version_id: str | None = None

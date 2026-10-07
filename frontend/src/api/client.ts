@@ -47,12 +47,18 @@ import type {
   AssetType,
   AssetVersionDTO,
   ComposeResult,
+  EngineStatusDTO,
+  ImageDTO,
+  JobDTO,
+  JobEventDTO,
   ListResponse,
   PromptDTO,
   PromptMode,
   PromptVersionDTO,
+  QueueDTO,
   RecipeDTO,
   RecipeVersionDTO,
+  ReviewStatus,
   WorkbenchSnapshot,
 } from '../types/workbench'
 import type { HealthInfo } from './health'
@@ -183,6 +189,112 @@ export const recipeApi = {
   restore(id: string): Promise<RecipeDTO> {
     return request(`/api/v1/recipes/${id}/restore`, jsonInit('POST', {}))
   },
+}
+
+// ===== Job / Queue（Phase 2） =====
+export interface JobListParams {
+  status?: string | null
+  limit?: number
+  offset?: number
+}
+
+export const jobApi = {
+  create(body: {
+    snapshot: WorkbenchSnapshot
+    client_request_id?: string
+    queue_mode?: 'normal' | 'next'
+    source?: 'web' | 'resume' | 'agent' | 'doubao'
+  }): Promise<JobDTO> {
+    return request('/api/v1/jobs', jsonInit('POST', body))
+  },
+  list(params: JobListParams = {}): Promise<ListResponse<JobDTO>> {
+    return request(`/api/v1/jobs${buildQuery(params)}`)
+  },
+  get(id: string): Promise<JobDTO> {
+    return request(`/api/v1/jobs/${id}`)
+  },
+  pause(id: string): Promise<JobDTO> {
+    return request(`/api/v1/jobs/${id}/pause`, jsonInit('POST', {}))
+  },
+  resume(id: string): Promise<JobDTO> {
+    return request(`/api/v1/jobs/${id}/resume`, jsonInit('POST', {}))
+  },
+  cancel(id: string): Promise<JobDTO> {
+    return request(`/api/v1/jobs/${id}/cancel`, jsonInit('POST', {}))
+  },
+  resumeRemaining(id: string): Promise<JobDTO> {
+    return request(`/api/v1/jobs/${id}/resume-remaining`, jsonInit('POST', {}))
+  },
+  queue(): Promise<QueueDTO> {
+    return request('/api/v1/queue')
+  },
+  reorder(orderedJobIds: string[]): Promise<QueueDTO> {
+    return request('/api/v1/queue/reorder', jsonInit('POST', { ordered_job_ids: orderedJobIds }))
+  },
+  resumeQueue(): Promise<{ queue_paused: boolean }> {
+    return request('/api/v1/queue/resume', jsonInit('POST', {}))
+  },
+  engineStatus(): Promise<EngineStatusDTO> {
+    return request('/api/v1/engine/status')
+  },
+}
+
+// ===== Image / Gallery（Phase 2C） =====
+export interface ImageListParams {
+  job_id?: string | null
+  review_status?: ReviewStatus | null
+  favorite?: boolean | null
+  source?: string | null
+  date_from?: string | null
+  date_to?: string | null
+  limit?: number
+  offset?: number
+}
+
+export const imageApi = {
+  list(params: ImageListParams = {}): Promise<ListResponse<ImageDTO>> {
+    return request(`/api/v1/images${buildQuery(params)}`)
+  },
+  get(id: string): Promise<ImageDTO> {
+    return request(`/api/v1/images/${id}`)
+  },
+  review(id: string, reviewStatus: ReviewStatus): Promise<ImageDTO> {
+    return request(`/api/v1/images/${id}/review`, jsonInit('PATCH', { review_status: reviewStatus }))
+  },
+  favorite(id: string, favorite: boolean): Promise<ImageDTO> {
+    return request(`/api/v1/images/${id}/favorite`, jsonInit('PATCH', { favorite }))
+  },
+  workbench(id: string): Promise<{ image_id: string; seed: number | null; snapshot: WorkbenchSnapshot }> {
+    return request(`/api/v1/images/${id}/workbench`)
+  },
+  jobSummary(jobId: string): Promise<{
+    job_id: string
+    total: number
+    unreviewed: number
+    kept: number
+    rejected: number
+    favorites: number
+  }> {
+    return request(`/api/v1/images/by-job/${jobId}/summary`)
+  },
+}
+
+// ===== 任务事件 SSE（§二十三：SSE 只通知；数据库状态才是唯一事实源） =====
+export function subscribeJobEvents(
+  onEvent: (event: JobEventDTO) => void,
+  onConnection?: (state: 'open' | 'error') => void,
+): () => void {
+  const source = new EventSource(`${API_BASE}/api/v1/events/jobs`)
+  source.onopen = () => onConnection?.('open')
+  source.onerror = () => onConnection?.('error')
+  source.onmessage = (message) => {
+    try {
+      onEvent(JSON.parse(message.data as string) as JobEventDTO)
+    } catch {
+      // 忽略无法解析的事件（keepalive 等）
+    }
+  }
+  return () => source.close()
 }
 
 // ===== 健康检查 =====

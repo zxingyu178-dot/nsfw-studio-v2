@@ -36,6 +36,11 @@ EXCLUDE_PARTS = {
 EXCLUDE_SUFFIXES = {".db", ".sqlite3", ".log", ".pyc"}
 
 
+def is_private_config(path: Path) -> bool:
+    """本机私有配置（*.local.yaml / *.local.json）禁止进交接包（规范 §三十二/§六十五）。"""
+    return path.name.endswith((".local.yaml", ".local.yml", ".local.json"))
+
+
 def git_log() -> str:
     try:
         return subprocess.run(
@@ -51,6 +56,8 @@ def is_excluded(path: Path) -> bool:
     if parts & EXCLUDE_PARTS:
         return True
     if path.suffix.lower() in EXCLUDE_SUFFIXES:
+        return True
+    if is_private_config(path):
         return True
     return False
 

@@ -2,10 +2,10 @@
 
 Phase 0：SystemInfo；
 Phase 1：Prompt / PromptVersion、Asset / AssetVersion、Recipe / RecipeVersion / RecipeAssetSnapshot；
-Phase 2：Job / JobItem / JobEvent。Image 为 0006 迁移（Phase 2C）。
-详见 docs/DATA_MODEL_V1.md。
+Phase 2：Job / JobItem / JobEvent、Image。详见 docs/DATA_MODEL_V1.md。
 """
 from app.models.asset import ASSET_TYPES, Asset, AssetVersion
+from app.models.image import IMAGE_KINDS, REVIEW_STATUSES, Image
 from app.models.job import JOB_ITEM_STATUSES, JOB_SOURCES, JOB_STATUSES, Job, JobEvent, JobItem
 from app.models.prompt import Prompt, PromptVersion
 from app.models.recipe import Recipe, RecipeAssetSnapshot, RecipeVersion
@@ -15,6 +15,9 @@ __all__ = [
     "ASSET_TYPES",
     "Asset",
     "AssetVersion",
+    "IMAGE_KINDS",
+    "REVIEW_STATUSES",
+    "Image",
     "JOB_ITEM_STATUSES",
     "JOB_SOURCES",
     "JOB_STATUSES",
