@@ -24,7 +24,7 @@ def test_database_initialized(settings):
         engine.dispose()
 
     assert ("0001_initial_schema", "applied") in migrations
-    assert info and info[0][0] == "0.1.0"
+    assert info and info[0][0] == settings.app.version
 
 
 def test_system_info_not_duplicated(settings):

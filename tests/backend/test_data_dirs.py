@@ -14,6 +14,7 @@ EXPECTED_DIRS = [
     "imports",
     "exports",
     "cache",
+    "backups",
     "logs/app",
     "logs/jobs",
     "logs/errors",

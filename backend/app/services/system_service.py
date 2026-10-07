@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.core.config import Settings
 from app.core.logging import setup_logging
@@ -22,7 +22,8 @@ class BootstrapReport:
     database_path: Path
     created_dirs: set[str] = field(default_factory=set)
     applied_migrations: list[str] = field(default_factory=list)
-    system_info_created: bool = False
+    # system_info 动作：created（首建）/ updated（应用版本变化）/ unchanged
+    system_info_action: str = "unchanged"
 
 
 def bootstrap(settings: Settings) -> BootstrapReport:
@@ -37,7 +38,7 @@ def bootstrap(settings: Settings) -> BootstrapReport:
         applied = init_database(engine)
         for migration in applied:
             logger.info("数据库迁移完成 %s -> %s", migration.migration_id, migration.version)
-        system_info_created = _ensure_system_info(engine, settings.app.version)
+        system_info_action = _ensure_system_info(engine, settings.app.version)
     finally:
         engine.dispose()
 
@@ -49,19 +50,27 @@ def bootstrap(settings: Settings) -> BootstrapReport:
         database_path=database_path,
         created_dirs=created,
         applied_migrations=[m.migration_id for m in applied],
-        system_info_created=system_info_created,
+        system_info_action=system_info_action,
     )
 
 
-def _ensure_system_info(engine, version: str) -> bool:
-    """system_info 无记录时写入一条；有则不动（幂等）。"""
+def _ensure_system_info(engine, version: str) -> str:
+    """system_info.version 语义：**当前应用版本**（非首次创建版本）。
+
+    无记录 → 写入（created）；记录版本与当前应用版本不一致 → 更新（updated，
+    updated_time 自动刷新）；一致 → 不动（unchanged）。
+    """
     factory = make_session_factory(engine)
     with factory() as session:
         existing = session.execute(select(SystemInfo).order_by(SystemInfo.id)).scalars().first()
-        if existing is not None:
-            return False
-        session.add(SystemInfo(version=version))
-        session.commit()
-        total = session.execute(select(func.count()).select_from(SystemInfo)).scalar_one()
-        logger.info("system_info 初始化记录 version=%s（当前共 %s 条）", version, total)
-        return True
+        if existing is None:
+            session.add(SystemInfo(version=version))
+            session.commit()
+            logger.info("system_info 初始化 version=%s", version)
+            return "created"
+        if existing.version != version:
+            logger.info("system_info 版本更新 %s -> %s", existing.version, version)
+            existing.version = version  # onupdate 自动刷新 updated_time
+            session.commit()
+            return "updated"
+        return "unchanged"
