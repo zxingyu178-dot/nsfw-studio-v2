@@ -4,14 +4,16 @@ import { getHealth } from '../api/client'
 type Status = 'checking' | 'online' | 'offline'
 
 const STATUS_LABEL: Record<Status, string> = {
-  checking: 'Engine 检测中',
-  online: 'Engine 在线',
-  offline: 'Engine 离线',
+  checking: 'Studio 检测中',
+  online: 'Studio 在线',
+  offline: 'Studio 离线',
 }
 
 /**
- * Engine 健康状态指示（Phase 0）。
- * 当前检测的是后端 API 健康；Phase 1+ 将切换为 EngineAdapter.health() 的结果。
+ * 顶部状态指示（Phase 0.1 语义修正）。
+ * 当前检测的是 NSFW Studio 后端 API 健康，因此显示 "Studio 在线/离线"，
+ * 不声称引擎连接状态。Phase 1+ 接入 EngineAdapter.health() 后，
+ * 本组件将切换为真实引擎状态（显示 "Engine 在线"）。
  */
 export function EngineStatus() {
   const [status, setStatus] = useState<Status>('checking')
@@ -39,7 +41,7 @@ export function EngineStatus() {
   return (
     <span className={`engine-status engine-status--${status}`} aria-label={STATUS_LABEL[status]}>
       <span className="engine-status__dot" aria-hidden="true" />
-      Engine
+      Studio
     </span>
   )
 }

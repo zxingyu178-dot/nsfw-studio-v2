@@ -32,5 +32,5 @@ npm run dev
 ## 说明
 
 - 主题：默认深色，可切换浅色；选择持久化在 `localStorage`（键 `nsfw-studio-theme`）。
-- Engine 指示：轮询 `/api/v1/health`（15s）；开发期由 Vite 代理到 `http://127.0.0.1:8000`，可用环境变量 `NSFW_STUDIO_API_URL` 覆盖（仅后端地址，不涉及生成引擎）。
+- Studio 状态指示：轮询 `/api/v1/health`（15s），显示 **Studio 在线/离线**（该检测仅代表后端服务，不代表生成引擎；Phase 1 接入 `EngineAdapter.health()` 后切换为 Engine 状态）。开发期由 Vite 代理到 `http://127.0.0.1:8000`，可用环境变量 `NSFW_STUDIO_API_URL` 覆盖（仅后端地址，不涉及生成引擎）。
 - 构建：`npm run build`（tsc 类型检查 + vite 构建）。
