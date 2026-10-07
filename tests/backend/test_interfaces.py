@@ -39,6 +39,29 @@ def test_workflow_module_rejects_unconstrained_result():
     assert "WorkflowOutput" in str(annotations)
 
 
+def test_workflow_execute_is_async():
+    """执行链路统一异步：WorkflowModule.execute 必须是 async（Phase 0.1.1）。"""
+    from app.workflows import WorkflowModule
+
+    assert inspect.iscoroutinefunction(WorkflowModule.execute)
+
+
+def test_engine_adapter_methods_are_async():
+    """EngineAdapter 全部方法必须为 async，WorkflowModule 才能 await。"""
+    from app.engine import EngineAdapter
+
+    for method in ("health", "submit_job", "get_job_status", "cancel_job"):
+        assert inspect.iscoroutinefunction(getattr(EngineAdapter, method)), method
+
+
+def test_pure_computation_interfaces_stay_sync():
+    """纯数据校验/声明接口保持同步（异步原则的另一面）。"""
+    from app.workflows import WorkflowModule
+
+    for method in ("capabilities", "validate_input"):
+        assert not inspect.iscoroutinefunction(getattr(WorkflowModule, method)), method
+
+
 def test_engine_adapter_contract_exists():
     from app.engine import EngineAdapter, EngineJobRequest, EngineJobStatus, EngineStatus
 

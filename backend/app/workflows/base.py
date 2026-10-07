@@ -1,8 +1,12 @@
-"""WorkflowModule 接口规范与标准契约（Phase 0.1 收口）。
+"""WorkflowModule 接口规范与标准契约（Phase 0.1 收口；0.1.1 统一异步契约）。
 
 流水线（最终架构）::
 
     Pipeline → WorkflowModule → EngineAdapter → 具体引擎
+
+**异步原则（固定）**：所有实际执行链路均为 async——Pipeline await WorkflowModule、
+WorkflowModule await EngineAdapter、EngineAdapter await 具体引擎；
+``validate_input()`` / ``capabilities()`` 等纯数据校验/声明接口保持同步。
 
 - WorkflowModule 只做"能力定义"：模块身份、版本、能力声明、参数定义、
   输入校验、标准输入输出契约；
@@ -87,9 +91,10 @@ class WorkflowModule(ABC):
         """校验输入；不合法时返回 ok=False 与错误列表。"""
 
     @abstractmethod
-    def execute(self, payload: WorkflowInput, engine: EngineAdapter) -> WorkflowOutput:
+    async def execute(self, payload: WorkflowInput, engine: EngineAdapter) -> WorkflowOutput:
         """执行工作流（Phase 1+ 由具体模块实现）。
 
-        只允许通过 ``engine``（EngineAdapter 接口）发起引擎调用，
-        不得在模块内实现任何具体引擎的执行逻辑。
+        **必须为 async**（执行链路统一异步：Pipeline → WorkflowModule →
+        EngineAdapter → 具体引擎）。只允许通过 ``engine``（EngineAdapter 接口）
+        await 引擎调用，不得在模块内实现任何具体引擎的执行逻辑。
         """
