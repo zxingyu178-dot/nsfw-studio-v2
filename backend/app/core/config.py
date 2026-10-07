@@ -1,8 +1,10 @@
-"""配置加载（Phase 0 规范 §八、§十二）。
+"""配置加载（Phase 0 规范 §八、§十二；Phase 0.1 可移植性收口）。
 
 原则：
-- 一切路径来自 ``configs/*.yaml``，代码中禁止写死路径；
-- DataRoot 可用环境变量 ``NSFW_STUDIO_DATA_ROOT`` 覆盖（测试用临时目录即依赖此机制）；
+- 一切路径来自 ``configs/*.yaml``；代码默认值必须可移植（基于用户目录），
+  不得把某台机器的盘符作为不可移植硬默认；
+- 覆盖优先级：环境变量 > config.yaml > 代码默认值；
+- DataRoot 环境变量 ``NSFW_STUDIO_DATA_ROOT``（测试即依赖此机制）；
 - 配置文件缺失时回落到内置默认值，保证最小可启动。
 """
 from __future__ import annotations
@@ -18,8 +20,9 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_DIR = PROJECT_ROOT / "configs"
 
-# 规范 §八：默认 DataRoot（可被 config.yaml / 环境变量覆盖）
-DEFAULT_DATA_ROOT = Path("D:/NSFW-Studio-Data")
+# 代码默认 DataRoot：基于当前用户目录（可移植，Phase 0.1）。
+# 某台机器想用其他盘（如 D:/NSFW-Studio-Data），在 configs/config.yaml 明确声明即可。
+DEFAULT_DATA_ROOT = Path.home() / "NSFW-Studio-Data"
 
 ENV_DATA_ROOT = "NSFW_STUDIO_DATA_ROOT"
 ENV_HOST = "NSFW_STUDIO_HOST"
@@ -39,6 +42,7 @@ DEFAULT_LAYOUT: tuple[str, ...] = (
     "imports",
     "exports",
     "cache",
+    "backups",
     "logs/app",
     "logs/jobs",
     "logs/errors",

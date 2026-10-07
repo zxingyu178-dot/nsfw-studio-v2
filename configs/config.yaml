@@ -1,5 +1,9 @@
 # NSFW Studio V2 全局配置
 #
-# DataRoot：所有运行数据（数据库 / 图片 / 素材 / 日志）的根目录。
-# 可用环境变量 NSFW_STUDIO_DATA_ROOT 覆盖（测试即通过该变量使用临时目录）。
+# DataRoot：所有运行数据（数据库 / 图片 / 素材 / 日志 / 备份）的根目录。
+#
+# 覆盖优先级：环境变量 NSFW_STUDIO_DATA_ROOT > 本文件 > 代码默认值。
+# 代码默认值是可移植的（%USERPROFILE%/NSFW-Studio-Data）。
+# 下面这行是**本机（当前这台电脑）的明确选择**：使用 D 盘。换电脑时如无此文件，
+# 程序会回落到用户目录下的 NSFW-Studio-Data，不影响启动。
 data_root: "D:/NSFW-Studio-Data"

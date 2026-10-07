@@ -1,7 +1,14 @@
 @echo off
 rem NSFW Studio V2 - 启动后端开发服务器（首次运行自动创建虚拟环境）
+rem 本脚本不依赖任何固定机器路径；Python 从系统 PATH 解析。
 setlocal
 cd /d "%~dp0..\backend"
+
+where python >nul 2>nul
+if errorlevel 1 (
+  echo [NSFW Studio] 未找到 Python。请安装 Python 3.11+ 并加入 PATH。
+  pause & exit /b 1
+)
 
 if not exist "..\.venv\Scripts\python.exe" (
   echo [NSFW Studio] 首次运行：创建虚拟环境并安装依赖...
