@@ -25,10 +25,11 @@ backend/app/logs/*.log*
 # ===== 交接包 =====
 handoff/
 
-# ===== 环境变量 / 秘密 =====
+# ===== 环境变量 / 秘密 / 本机配置 =====
 .env
 .env.*
 *.local.yaml
+configs/config.local.yaml
 
 # ===== IDE / 系统 =====
 .idea/

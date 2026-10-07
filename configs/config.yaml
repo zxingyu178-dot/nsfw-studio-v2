@@ -1,9 +1,14 @@
-# NSFW Studio V2 全局配置
+# NSFW Studio V2 公共配置（机器无关，随仓库分发）
 #
-# DataRoot：所有运行数据（数据库 / 图片 / 素材 / 日志 / 备份）的根目录。
+# 本文件**不设置 DataRoot 路径**：不配置时使用可移植默认值
+# %USERPROFILE%/NSFW-Studio-Data。
 #
-# 覆盖优先级：环境变量 NSFW_STUDIO_DATA_ROOT > 本文件 > 代码默认值。
-# 代码默认值是可移植的（%USERPROFILE%/NSFW-Studio-Data）。
-# 下面这行是**本机（当前这台电脑）的明确选择**：使用 D 盘。换电脑时如无此文件，
-# 程序会回落到用户目录下的 NSFW-Studio-Data，不影响启动。
-data_root: "D:/NSFW-Studio-Data"
+# 覆盖优先级（固定）：
+#   1. 环境变量 NSFW_STUDIO_DATA_ROOT（最高）
+#   2. configs/config.local.yaml —— 本机私有配置，已被 .gitignore，不提交 GitHub
+#   3. 本文件（公共模板）
+#   4. 代码默认值（用户目录）
+#
+# 本机想把数据放到其他盘：新建 configs/config.local.yaml 写入：
+#   data_root: "<盘符>:/NSFW-Studio-Data"
+# 并保持其不被提交——换电脑 clone 后无需任何修改即可启动。

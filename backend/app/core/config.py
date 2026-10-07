@@ -1,11 +1,16 @@
-"""配置加载（Phase 0 规范 §八、§十二；Phase 0.1 可移植性收口）。
+"""配置加载（Phase 0 规范 §八、§十二；0.1 可移植性；0.1.1 本机配置分层）。
 
 原则：
 - 一切路径来自 ``configs/*.yaml``；代码默认值必须可移植（基于用户目录），
   不得把某台机器的盘符作为不可移植硬默认；
-- 覆盖优先级：环境变量 > config.yaml > 代码默认值；
-- DataRoot 环境变量 ``NSFW_STUDIO_DATA_ROOT``（测试即依赖此机制）；
-- 配置文件缺失时回落到内置默认值，保证最小可启动。
+- 覆盖优先级（固定）::
+
+    NSFW_STUDIO_DATA_ROOT（环境变量）
+      > configs/config.local.yaml（本机私有配置，已 gitignore，不提交）
+        > configs/config.yaml（公共模板，机器无关）
+          > 代码默认 Path.home()/NSFW-Studio-Data
+
+- 配置文件缺失时回落到下一层，保证最小可启动。
 """
 from __future__ import annotations
 
@@ -20,8 +25,8 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_DIR = PROJECT_ROOT / "configs"
 
-# 代码默认 DataRoot：基于当前用户目录（可移植，Phase 0.1）。
-# 某台机器想用其他盘（如 D:/NSFW-Studio-Data），在 configs/config.yaml 明确声明即可。
+# 代码默认 DataRoot：基于当前用户目录（可移植）。
+# 机器差异（如使用 D 盘）只写在 config.local.yaml（gitignore）或环境变量中。
 DEFAULT_DATA_ROOT = Path.home() / "NSFW-Studio-Data"
 
 ENV_DATA_ROOT = "NSFW_STUDIO_DATA_ROOT"
@@ -96,10 +101,14 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 
 
 def load_settings(config_dir: Path | None = None) -> Settings:
-    """读取 configs/ 下全部配置并合并环境变量覆盖。"""
+    """读取 configs/ 下全部配置并合并（local 覆盖公共，环境变量最高）。"""
     cfg_dir = Path(config_dir) if config_dir is not None else CONFIG_DIR
 
     global_cfg = _read_yaml(cfg_dir / "config.yaml")
+    # 本机私有配置（config.local.yaml，gitignore）：按键覆盖公共模板
+    local_cfg = _read_yaml(cfg_dir / "config.local.yaml")
+    merged_cfg: dict[str, Any] = {**global_cfg, **local_cfg}
+
     app_file = _read_yaml(cfg_dir / "app.yaml")
     storage_cfg = _read_yaml(cfg_dir / "storage.yaml").get("storage", {})
     workflow_cfg = _read_yaml(cfg_dir / "workflow.yaml").get("workflow", {})
@@ -107,7 +116,7 @@ def load_settings(config_dir: Path | None = None) -> Settings:
     app_cfg = app_file.get("app", {})
     logging_cfg = app_file.get("logging", {})
 
-    data_root = os.environ.get(ENV_DATA_ROOT) or global_cfg.get("data_root") or str(DEFAULT_DATA_ROOT)
+    data_root = os.environ.get(ENV_DATA_ROOT) or merged_cfg.get("data_root") or str(DEFAULT_DATA_ROOT)
 
     app = AppConfig(
         name=str(app_cfg.get("name", "NSFW Studio")),
