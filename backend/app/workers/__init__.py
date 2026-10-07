@@ -1,4 +1,4 @@
-"""Worker 层。Phase 0 仅有接口占位，不启动任何线程 / 进程。"""
-from app.workers.base import QueueWorker
+"""Worker 层：消费者接口规范（Job 创建属于 API/JobService，见模块 docstring）。"""
+from app.workers.base import QueueWorker, WorkerStatus
 
-__all__ = ["QueueWorker"]
+__all__ = ["QueueWorker", "WorkerStatus"]

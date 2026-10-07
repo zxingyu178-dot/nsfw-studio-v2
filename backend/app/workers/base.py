@@ -1,17 +1,31 @@
-"""Worker 框架占位（Phase 0 规范 §四 workers 模块）。
+"""Worker 接口规范（Phase 0.1 职责收口）。
 
-Phase 0 只定义接口，不启动任何线程 / 进程；
-Phase 1 将实现单个 ``QueueWorker``，消费生成任务队列并把工作流
-执行委托给 WorkflowModule / EngineAdapter。
+职责边界（最终原则）::
+
+    API / JobService → 创建并持久化 Job
+    Queue / Worker   → 只消费已经存在的 Job
+
+因此 Worker **不提供** ``submit(job)`` 之类的创建入口——Job 的创建与持久化
+属于 API / JobService（Phase 1 实现）；Worker 的消费入口是
+``process_job(job_id)``，只处理已存在的 Job。
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class WorkerStatus:
+    """Worker 运行状态快照。"""
+
+    running: bool
+    pending_jobs: int | None = None  # 队列不可观测时为 None
+    detail: str = ""
 
 
 class QueueWorker(ABC):
-    """队列 Worker 基类。"""
+    """队列 Worker 基类（消费者，不是 Job 的创建者）。"""
 
     name: str = "queue-worker"
 
@@ -24,9 +38,12 @@ class QueueWorker(ABC):
         """优雅停止 Worker（Phase 1 实现）。"""
 
     @abstractmethod
-    def submit(self, job: dict[str, Any]) -> str:
-        """提交任务，返回 job_id（Phase 1 实现）。"""
+    def status(self) -> WorkerStatus:
+        """返回运行状态快照（Phase 1 实现）。"""
 
     @abstractmethod
-    def status(self) -> dict[str, Any]:
-        """返回运行状态快照（Phase 1 实现）。"""
+    def process_job(self, job_id: str) -> None:
+        """处理一个**已存在**（已由 JobService 创建并持久化）的 Job。
+
+        具体实现 Phase 1 提供；本接口禁止衍生出 Job 创建/持久化职责。
+        """
