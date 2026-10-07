@@ -41,6 +41,130 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        migration_id="0002_prompt",
+        version="0.2.0",
+        description="Phase 1：prompts / prompt_versions（版本不可变，软删除）",
+        statements=(
+            """
+            CREATE TABLE prompts (
+                id                 TEXT PRIMARY KEY,
+                name               TEXT    NOT NULL,
+                current_version_id TEXT,
+                favorite           INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                archived           INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                created_at         TEXT    NOT NULL,
+                updated_at         TEXT    NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE prompt_versions (
+                id               TEXT PRIMARY KEY,
+                prompt_id        TEXT NOT NULL REFERENCES prompts(id),
+                version_no       INTEGER NOT NULL,
+                mode             TEXT NOT NULL CHECK (mode IN ('structured', 'full')),
+                positive_prompt  TEXT NOT NULL DEFAULT '',
+                negative_prompt  TEXT NOT NULL DEFAULT '',
+                structured_json  TEXT NOT NULL DEFAULT '{}',
+                created_at       TEXT NOT NULL,
+                UNIQUE (prompt_id, version_no)
+            )
+            """,
+            "CREATE INDEX idx_prompt_versions_prompt ON prompt_versions(prompt_id)",
+            "CREATE INDEX idx_prompts_archived ON prompts(archived)",
+        ),
+    ),
+    Migration(
+        migration_id="0003_asset",
+        version="0.2.0",
+        description="Phase 1：assets / asset_versions（四类素材，版本不可变，软删除）",
+        statements=(
+            """
+            CREATE TABLE assets (
+                id                 TEXT PRIMARY KEY,
+                type               TEXT NOT NULL CHECK (type IN ('face', 'clothing', 'pose', 'scene')),
+                name               TEXT NOT NULL,
+                current_version_id TEXT,
+                favorite           INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                archived           INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                source_image_id    TEXT,
+                created_at         TEXT NOT NULL,
+                updated_at         TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE asset_versions (
+                id                    TEXT PRIMARY KEY,
+                asset_id              TEXT NOT NULL REFERENCES assets(id),
+                version_no            INTEGER NOT NULL,
+                prompt_text           TEXT NOT NULL DEFAULT '',
+                notes                 TEXT NOT NULL DEFAULT '',
+                preview_path          TEXT,
+                reference_images_json TEXT NOT NULL DEFAULT '[]',
+                tags_json             TEXT NOT NULL DEFAULT '[]',
+                created_at            TEXT NOT NULL,
+                UNIQUE (asset_id, version_no)
+            )
+            """,
+            "CREATE INDEX idx_asset_versions_asset ON asset_versions(asset_id)",
+            "CREATE INDEX idx_assets_type ON assets(type)",
+            "CREATE INDEX idx_assets_archived ON assets(archived)",
+        ),
+    ),
+    Migration(
+        migration_id="0004_recipe",
+        version="0.2.0",
+        description="Phase 1：recipes / recipe_versions / recipe_asset_snapshots（工作台快照）",
+        statements=(
+            """
+            CREATE TABLE recipes (
+                id                 TEXT PRIMARY KEY,
+                name               TEXT NOT NULL,
+                current_version_id TEXT,
+                favorite           INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                archived           INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+                cover_image_id     TEXT,
+                created_at         TEXT NOT NULL,
+                updated_at         TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE recipe_versions (
+                id                        TEXT PRIMARY KEY,
+                recipe_id                 TEXT NOT NULL REFERENCES recipes(id),
+                version_no                INTEGER NOT NULL,
+                prompt_mode               TEXT NOT NULL CHECK (prompt_mode IN ('structured', 'full')),
+                positive_prompt_snapshot  TEXT NOT NULL DEFAULT '',
+                negative_prompt_snapshot  TEXT NOT NULL DEFAULT '',
+                structured_prompt_snapshot TEXT NOT NULL DEFAULT '{}',
+                source_prompt_id          TEXT REFERENCES prompts(id),
+                source_prompt_version_id  TEXT REFERENCES prompt_versions(id),
+                generation_settings_json  TEXT NOT NULL,
+                workflow_snapshot_json    TEXT NOT NULL DEFAULT '{"modules":[]}',
+                default_count             INTEGER NOT NULL DEFAULT 1 CHECK (default_count >= 1),
+                created_at                TEXT NOT NULL,
+                UNIQUE (recipe_id, version_no)
+            )
+            """,
+            """
+            CREATE TABLE recipe_asset_snapshots (
+                id                    TEXT PRIMARY KEY,
+                recipe_version_id     TEXT NOT NULL REFERENCES recipe_versions(id),
+                slot                  TEXT NOT NULL CHECK (slot IN ('face', 'clothing', 'pose', 'scene')),
+                asset_id              TEXT NOT NULL REFERENCES assets(id),
+                asset_version_id      TEXT NOT NULL REFERENCES asset_versions(id),
+                asset_name_snapshot   TEXT NOT NULL,
+                prompt_snapshot       TEXT NOT NULL DEFAULT '',
+                preview_path_snapshot TEXT,
+                created_at            TEXT NOT NULL,
+                UNIQUE (recipe_version_id, slot)
+            )
+            """,
+            "CREATE INDEX idx_recipe_versions_recipe ON recipe_versions(recipe_id)",
+            "CREATE INDEX idx_recipe_asset_snapshots_version ON recipe_asset_snapshots(recipe_version_id)",
+            "CREATE INDEX idx_recipes_archived ON recipes(archived)",
+        ),
+    ),
 )
 
 
