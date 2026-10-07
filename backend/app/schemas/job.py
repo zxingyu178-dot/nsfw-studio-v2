@@ -4,13 +4,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.models import Job, JobItem
-from app.schemas.workbench import StructuredPromptModel, structured_model_from_json
+from app.schemas.workbench import (
+    StructuredPromptModel,
+    WorkbenchSnapshotModel,
+    structured_model_from_json,
+)
 import json
 
 
 class JobCreateRequest(BaseModel):
-    snapshot: dict[str, Any]  # WorkbenchSnapshot（宽松校验：由 JobService 验证语义）
-    client_request_id: str | None = None
+    # Phase 2.1 §八：直接复用严格 WorkbenchSnapshotModel（宽高/数量/Seed 范围、
+    # prompt_mode / selected_assets / workflow_modules 结构均由 schema 校验）
+    snapshot: WorkbenchSnapshotModel
+    client_request_id: str | None = Field(default=None, max_length=128)
     queue_mode: Literal["normal", "next"] = "normal"
     source: Literal["web", "resume", "agent", "doubao"] = "web"
 

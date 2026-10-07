@@ -20,6 +20,16 @@ from app.engine.base import (
 )
 
 
+# 测试 fixture：最小合法 PNG（1×1 透明像素）。
+# Mock 的"生成结果"只能是固定 fixture（规范 §二十二），Image.source 会标记为 mock，
+# 绝不冒充真实引擎产物。
+PNG_FIXTURE = bytes.fromhex(
+    "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+    "01f15c4890000000d49444154789c6260000000060005"
+    "27de3bbb0000000049454e44ae426082"
+)
+
+
 class MockEngineAdapter(EngineAdapter):
     name = "mock"
     version = "0.1.0"
@@ -33,6 +43,10 @@ class MockEngineAdapter(EngineAdapter):
         # 瞬态网络错误模拟（规范 §三十六）：前 N 次提交抛 ENGINE_NETWORK(transient)，用于重试测试
         self.transient_fail_times: int = int(options.get("transient_fail_times", 0))
         self._transient_failures = 0
+        # 输出故障模拟（Phase 2.1 §一）：no_outputs=成功但无输出；
+        # outputs_error=取输出时抛指定错误类型
+        self.no_outputs: bool = bool(options.get("no_outputs", False))
+        self.outputs_error: str | None = options.get("outputs_error")
         self.supports_cancel = True
         self._canceled: set[str] = set()
         self._completed: dict[str, int] = {}
@@ -63,6 +77,9 @@ class MockEngineAdapter(EngineAdapter):
 
     async def get_job_status(self, engine_job_id: str) -> EngineJobStatus:
         await asyncio.sleep(self.delay_per_item_ms / 1000)
+        if self.mode == "offline" or not self.online:
+            # 掉线必须显式失败，不得静默返回 running（Phase 2.1 §二）
+            raise EngineError("ENGINE_OFFLINE", "mock engine is offline")
         if engine_job_id in self._canceled:
             return EngineJobStatus(state="canceled", progress=None, stage="canceled")
         marker = self._completed.get(engine_job_id)
@@ -84,8 +101,12 @@ class MockEngineAdapter(EngineAdapter):
         return EngineJobStatus(state="succeeded", progress=1.0, stage="save_image")
 
     async def get_job_outputs(self, engine_job_id: str) -> list[EngineOutputFile]:
-        """Mock 不产出图片文件（规范 §二十二：禁止把 Mock 结果伪装成真实生成图片）。"""
-        return []
+        """返回测试 fixture PNG（§一 起 COMPLETED 必须有可导入输出；source=mock 标识来源）。"""
+        if self.outputs_error:
+            raise EngineError(self.outputs_error, f"mock 输出故障: {self.outputs_error}")
+        if self.no_outputs:
+            return []
+        return [EngineOutputFile(filename=f"{engine_job_id}.png", data=PNG_FIXTURE)]
 
     async def cancel_job(self, engine_job_id: str) -> bool:
         self._canceled.add(engine_job_id)

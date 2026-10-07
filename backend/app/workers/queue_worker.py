@@ -21,10 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.timeutil import utc_now_iso
-from app.engine.base import EngineAdapter, EngineError, EngineJobRequest
+from app.engine.base import EngineAdapter, EngineError
 from app.engine.errors import classify_engine_message, is_systemic
 from app.models import Job, JobItem
 from app.services import job_service
+from app.workflows.pipeline import PipelineExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +48,15 @@ class SingleQueueWorker:
         adapter: EngineAdapter,
         *,
         output_importer=None,
+        pipeline: PipelineExecutor | None = None,
         poll_interval_ms: int = 300,
         engine_poll_ms: int = 200,
         seed_upper: int = 2**31 - 1,
     ) -> None:
         self._session_factory = session_factory
         self._adapter = adapter
+        # §三：模块解析与引擎请求构造的唯一入口（Worker 不知道 basic_generate 的参数结构）
+        self._pipeline = pipeline or PipelineExecutor()
         self._output_importer = output_importer  # (job, item, outputs) -> list[image_id]，Phase 2C 注入
         self._poll_interval = poll_interval_ms / 1000
         self._engine_poll = engine_poll_ms / 1000
@@ -112,10 +116,11 @@ class SingleQueueWorker:
         self._queue_paused_reason = None
 
     def _pick_next_job(self) -> str | None:
+        # §六：queue_position 是唯一执行顺序事实源（priority 不参与排序）
         with self._session_factory() as session:
             job = session.execute(
                 select(Job).where(Job.status == "QUEUED")
-                .order_by(Job.priority.desc(), Job.queue_position, Job.created_at)
+                .order_by(Job.queue_position, Job.created_at)
             ).scalars().first()
             if job is None:
                 return None
@@ -201,14 +206,17 @@ class SingleQueueWorker:
             if job is None or job.status in ("CANCELLED", "PAUSED", "INTERRUPTED"):
                 return
             completed = sum(1 for item in job.items if item.status == "COMPLETED")
-            failed = sum(1 for item in job.items if item.status == "FAILED")
+            failed_items = [item for item in job.items if item.status == "FAILED"]
             job.completed_count = completed
             if outcome == "CANCELLED":
                 job.status = "CANCELLED"
             elif outcome == "PAUSED":
                 job.status = "PAUSED"
-            elif failed > 0:
+            elif failed_items:
                 job.status = "FAILED"  # 部分成功由 Item 统计表达（规范 §六）
+                if not job.error_type:
+                    job.error_type = failed_items[0].error_type or "UNKNOWN_ENGINE_ERROR"
+                    job.error_message = failed_items[0].error_message or ""
             else:
                 job.status = "COMPLETED"
             if job.status in ("COMPLETED", "FAILED", "CANCELLED"):
@@ -237,17 +245,13 @@ class SingleQueueWorker:
             item.progress = 0.0
             job_service.record_event(session, job_id, "ITEM_STARTED", item_id=item.id, payload={"seed": seed})
             session.commit()
-            request = EngineJobRequest(
-                job_type="basic_generate",
-                parameters={
-                    "positive_prompt": job.positive_prompt_snapshot,
-                    "negative_prompt": job.negative_prompt_snapshot,
-                    "width": json.loads(job.generation_settings_json).get("width", 1024),
-                    "height": json.loads(job.generation_settings_json).get("height", 1024),
-                    "seed": seed,
-                },
-                metadata={"job_id": job.id, "item_id": item.id},
-            )
+            # §三：参数结构与 job_type 由 WorkflowModule 决定，Worker 不含模块知识
+            try:
+                request = self._pipeline.build_engine_request(job, item, seed)
+            except EngineError as error:
+                return self._item_failed(job_id, item_id, error.error_type, error.message)
+            except Exception as error:  # 模块解析/构造异常按未知工作流错误处理
+                return self._item_failed(job_id, item_id, "WORKFLOW_ERROR", str(error))
 
         # 提交（瞬态网络错误重试 ≤2，规范 §三十六）
         engine_job_id: str | None = None
@@ -279,8 +283,13 @@ class SingleQueueWorker:
             with self._session_factory() as session:
                 job = session.get(Job, job_id)
                 if job is not None and job.cancel_requested and not cancel_sent:
-                    await self._adapter.cancel_job(engine_job_id)
+                    # §九：取消请求必须异常隔离——失败不改变 Job 终态语义，
+                    # 当前 Item 可继续完成，完成后由边界检查落 CANCELLED
                     cancel_sent = True
+                    try:
+                        await self._adapter.cancel_job(engine_job_id)
+                    except Exception:
+                        logger.warning("引擎取消请求失败（当前 Item 完成后停止领取）", exc_info=True)
             try:
                 status = await self._adapter.get_job_status(engine_job_id)
             except EngineError as error:
@@ -301,12 +310,25 @@ class SingleQueueWorker:
             self._update_progress(item_id, status)
 
             if status.state == "succeeded":
-                outputs = []
+                # §一（P0）：Engine succeeded 只是必要条件——必须成功取回输出并导入 Studio Image
+                # 才允许 Item COMPLETED；禁止出现 COMPLETED + image_id=null。
                 try:
                     outputs = await self._adapter.get_job_outputs(engine_job_id)
+                except EngineError as error:
+                    return self._item_failed(job_id, item_id, error.error_type, error.message)
                 except Exception as error:
-                    logger.warning("取回引擎输出失败: %s", error)
-                image_ids = self._import_outputs(job_id, item_id, outputs)
+                    return self._item_failed(job_id, item_id, "UNKNOWN_ENGINE_ERROR", str(error))
+                if not outputs:
+                    return self._item_failed(job_id, item_id, "OUTPUT_MISSING",
+                                             "引擎报告成功但没有输出文件")
+                try:
+                    image_ids = self._import_outputs(job_id, item_id, outputs)
+                except Exception as error:
+                    logger.exception("导入引擎输出失败")
+                    return self._item_failed(job_id, item_id, "STORAGE_ERROR", f"导入引擎输出失败: {error}")
+                if not image_ids:
+                    return self._item_failed(job_id, item_id, "STORAGE_ERROR",
+                                             "输出未导入为 Studio Image（image_ids 为空）")
                 with self._session_factory() as session:
                     item = session.get(JobItem, item_id)
                     job = session.get(Job, job_id)
@@ -314,8 +336,7 @@ class SingleQueueWorker:
                     item.progress = 1.0
                     item.current_stage = "done"
                     item.finished_at = utc_now_iso()
-                    if image_ids:
-                        item.image_id = image_ids[0]
+                    item.image_id = image_ids[0]
                     if job is not None:
                         job.completed_count = sum(1 for it in job.items if it.status == "COMPLETED")
                     job_service.record_event(session, job_id, "ITEM_COMPLETED", item_id=item.id,
@@ -356,17 +377,13 @@ class SingleQueueWorker:
             session.commit()
 
     def _import_outputs(self, job_id: str, item_id: str, outputs) -> list[str]:
-        if not outputs or self._output_importer is None:
-            return []
-        try:
-            with self._session_factory() as session:
-                job = session.get(Job, job_id)
-                item = session.get(JobItem, item_id)
-                return list(self._output_importer(job, item, outputs) or [])
-        except Exception:
-            logger.exception("导入引擎输出失败（Item 标记 STORAGE_ERROR）")
-            self._item_failed(job_id, item_id, "STORAGE_ERROR", "导入引擎输出失败")
-            return []
+        """导入引擎输出为 Studio Image；异常向上抛（调用方落 STORAGE_ERROR，§一）。"""
+        if self._output_importer is None:
+            raise RuntimeError("未配置 output_importer，无法导入引擎输出")
+        with self._session_factory() as session:
+            job = session.get(Job, job_id)
+            item = session.get(JobItem, item_id)
+            return list(self._output_importer(job, item, outputs) or [])
 
     def _item_failed(self, job_id: str, item_id: str, error_type: str, message: str) -> str:
         with self._session_factory() as session:
@@ -430,20 +447,26 @@ class SingleQueueWorker:
                     continue
                 if status.state != "succeeded":
                     continue  # 无法确认成功 → 保持可恢复（用户续跑时用新随机 Seed）
-                outputs = []
                 try:
                     outputs = await self._adapter.get_job_outputs(engine_job_id)
                 except Exception:
                     continue
+                if not outputs:
+                    continue  # §一：无输出不得恢复为 COMPLETED，保持 INTERRUPTED 可再核对
+                try:
+                    image_ids = self._import_outputs(job_id, item_id, outputs)
+                except Exception:
+                    logger.warning("崩溃恢复导入输出失败（保持 INTERRUPTED）", exc_info=True)
+                    continue
+                if not image_ids:
+                    continue  # §一：未导入 Studio Image 不得 COMPLETED
                 with self._session_factory() as session:
                     item = session.get(JobItem, item_id)
                     job = session.get(Job, job_id)
-                    image_ids = self._import_outputs(job_id, item_id, outputs)
                     item.status = "COMPLETED"
                     item.progress = 1.0
                     item.finished_at = utc_now_iso()
-                    if image_ids:
-                        item.image_id = image_ids[0]
+                    item.image_id = image_ids[0]
                     if job is not None:
                         job.completed_count = sum(1 for it in job.items if it.status == "COMPLETED")
                     job_service.record_event(session, job_id, "ITEM_RECOVERED", item_id=item_id,

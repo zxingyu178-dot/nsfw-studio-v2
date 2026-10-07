@@ -26,6 +26,10 @@ from app.services.prompt_composer import compose_structured, dumps_structured
 TERMINAL_JOB_STATUSES = ("COMPLETED", "FAILED", "CANCELLED")
 ACTIVE_JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED")
 MAX_JOB_COUNT = 64
+# §八：Prompt 长度上限（防止超大文本经 API/Agent 无限提交）
+MAX_STRUCTURED_FIELD_CHARS = 2000
+MAX_POSITIVE_PROMPT_CHARS = 10000
+MAX_NEGATIVE_PROMPT_CHARS = 8000
 
 _EVENT_BROKER = None  # 由 main.py 注入（进程内单例），避免循环依赖
 
@@ -44,6 +48,18 @@ def _publish(event_type: str, job_id: str, *, item_id: str | None = None, payloa
             "payload": payload or {},
             "time": utc_now_iso(),
         })
+
+
+def _workflow_snapshot_from_identity(identity: dict[str, Any]) -> dict:
+    """§四：由实际模块身份构造 workflow_snapshot（禁止"执行了模块但 modules=[]"）。"""
+    module = {
+        "module_id": identity.get("module_id"),
+        "module_version": identity.get("module_version"),
+        "provider": identity.get("provider"),
+        "binding_version": identity.get("binding_version"),
+        "workflow_hash": identity.get("workflow_hash"),
+    }
+    return {"modules": [module] if module["module_id"] else []}
 
 
 def record_event(session: Session, job_id: str, event_type: str, *, item_id: str | None = None, payload: dict | None = None) -> None:
@@ -81,9 +97,10 @@ def list_jobs(session: Session, *, status: str | None = None, limit: int = 50, o
 
 
 def get_queue(session: Session) -> dict:
+    """执行顺序的唯一事实源是 queue_position（§六：priority 不参与排序，仅保留作历史/显示）。"""
     running = session.execute(select(Job).where(Job.status == "RUNNING").order_by(Job.started_at)).scalars().first()
     queued = list(session.execute(
-        select(Job).where(Job.status == "QUEUED").order_by(Job.priority.desc(), Job.queue_position)
+        select(Job).where(Job.status == "QUEUED").order_by(Job.queue_position, Job.created_at)
     ).scalars())
     paused = list(session.execute(select(Job).where(Job.status == "PAUSED")).scalars())
     return {"running": running, "queued": queued, "paused": paused}
@@ -131,6 +148,18 @@ def create_job(
     negative = snapshot.get("negative_prompt") or ""
     positive = compose_structured(structured) if prompt_mode == "structured" else (snapshot.get("full_prompt") or "")
 
+    # §八：Prompt 长度上限（结构化逐字段 + 最终正向/负向）
+    for field_name, field_value in structured.items():
+        if isinstance(field_value, str) and len(field_value) > MAX_STRUCTURED_FIELD_CHARS:
+            raise ValidationError(
+                f"结构化 Prompt 字段 {field_name} 超长（≤{MAX_STRUCTURED_FIELD_CHARS} 字符）",
+                code="PROMPT_TOO_LONG",
+            )
+    if len(positive) > MAX_POSITIVE_PROMPT_CHARS:
+        raise ValidationError(f"正向 Prompt 超长（≤{MAX_POSITIVE_PROMPT_CHARS} 字符）", code="PROMPT_TOO_LONG")
+    if len(negative) > MAX_NEGATIVE_PROMPT_CHARS:
+        raise ValidationError(f"负向 Prompt 超长（≤{MAX_NEGATIVE_PROMPT_CHARS} 字符）", code="PROMPT_TOO_LONG")
+
     settings_snapshot = snapshot.get("generation_settings") or {}
     try:
         width = int(snapshot.get("width", 1024))
@@ -150,6 +179,7 @@ def create_job(
         raise ValidationError("固定 Seed 模式必须提供 seed", code="SEED_MODE_INVALID")
 
     identity = module_identity or {}
+    workflow_snapshot = _workflow_snapshot_from_identity(identity)
     generation_settings = {
         "model_ref": None,
         "width": width,
@@ -170,7 +200,8 @@ def create_job(
         structured_prompt_snapshot=dumps_structured(structured),
         workbench_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
         generation_settings_json=json.dumps(generation_settings, ensure_ascii=False),
-        workflow_snapshot_json=json.dumps({"modules": snapshot.get("workflow_modules", [])}, ensure_ascii=False),
+        # §四：workflow_snapshot 必须同步"实际执行"的模块身份，不能出现 modules=[] 却执行了 basic_generate
+        workflow_snapshot_json=json.dumps(workflow_snapshot, ensure_ascii=False),
         module_id=identity.get("module_id"),
         module_version=identity.get("module_version"),
         provider=identity.get("provider"),
@@ -281,7 +312,24 @@ def resume_remaining(session: Session, original_job_id: str, *, module_identity:
     if remaining < 1:
         raise ValidationError("没有剩余图片可继续", code="NOTHING_TO_RESUME")
 
-    snapshot = json.loads(original.workbench_snapshot_json)
+    # §五：续跑未完成图片必须使用新随机 Seed——不得复用父 Job 的 fixed seed；
+    # 原 Job 的快照永不修改（只读原样取用后构造新的子 Job 快照）。
+    original_snapshot = json.loads(original.workbench_snapshot_json)
+    snapshot = {
+        **original_snapshot,
+        "count": remaining,
+        "seed_mode": "random",
+        "seed": None,
+    }
+    settings_snapshot = json.loads(original.generation_settings_json or "{}")
+    settings_snapshot.update({"seed_mode": "random", "seed": None})
+
+    identity = module_identity or {}
+    workflow_snapshot_json = (
+        json.dumps(_workflow_snapshot_from_identity(identity), ensure_ascii=False)
+        if identity
+        else original.workflow_snapshot_json
+    )
     job = Job(
         id=new_id(JOB),
         source="resume",
@@ -290,9 +338,9 @@ def resume_remaining(session: Session, original_job_id: str, *, module_identity:
         positive_prompt_snapshot=original.positive_prompt_snapshot,
         negative_prompt_snapshot=original.negative_prompt_snapshot,
         structured_prompt_snapshot=original.structured_prompt_snapshot,
-        workbench_snapshot_json=original.workbench_snapshot_json,
-        generation_settings_json=original.generation_settings_json,
-        workflow_snapshot_json=original.workflow_snapshot_json,
+        workbench_snapshot_json=json.dumps(snapshot, ensure_ascii=False),
+        generation_settings_json=json.dumps(settings_snapshot, ensure_ascii=False),
+        workflow_snapshot_json=workflow_snapshot_json,
         module_id=original.module_id,
         module_version=original.module_version,
         provider=original.provider,
@@ -320,9 +368,12 @@ def resume_remaining(session: Session, original_job_id: str, *, module_identity:
 
 
 def reorder_queue(session: Session, ordered_job_ids: list[str]) -> list[Job]:
-    """拖拽排序（规范 §十六）：仅 QUEUED Job 可排序；payload 必须覆盖全部等待任务。"""
+    """拖拽排序（§十六）：仅 QUEUED Job 可排序；payload 必须覆盖全部等待任务。
+
+    §六：拖拽结果直接写入 queue_position（唯一执行顺序事实源），priority 不参与排序。
+    """
     queued = list(session.execute(
-        select(Job).where(Job.status == "QUEUED").order_by(Job.priority.desc(), Job.queue_position)
+        select(Job).where(Job.status == "QUEUED").order_by(Job.queue_position, Job.created_at)
     ).scalars())
     queued_ids = [job.id for job in queued]
     if set(ordered_job_ids) != set(queued_ids) or len(ordered_job_ids) != len(queued_ids):
@@ -334,7 +385,7 @@ def reorder_queue(session: Session, ordered_job_ids: list[str]) -> list[Job]:
     for job in queued:
         _publish("JOB_UPDATED", job.id, payload={"status": job.status, "queue_position": job.queue_position})
     return list(session.execute(
-        select(Job).where(Job.status == "QUEUED").order_by(Job.priority.desc(), Job.queue_position)
+        select(Job).where(Job.status == "QUEUED").order_by(Job.queue_position, Job.created_at)
     ).scalars())
 
 

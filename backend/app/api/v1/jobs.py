@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_session
 from app.core.config import Settings
 from app.core.errors import ValidationError
-from app.engine.factory import create_engine_adapter, module_identity
+from app.engine.base import EngineError
+from app.engine.factory import module_identity
 from app.schemas.job import (
     JobCreateRequest,
     JobListResponse,
@@ -24,6 +25,14 @@ from app.schemas.job import (
 from app.services import job_service
 
 router = APIRouter(tags=["jobs"])
+
+
+def _module_identity(settings: Settings) -> dict:
+    """模块身份（含 provider binding hash）；binding 缺失等引擎层错误转为可读 4xx。"""
+    try:
+        return module_identity(settings)
+    except EngineError as error:
+        raise ValidationError(error.message, code=error.error_type) from error
 
 
 def _check_disk_space(request: Request) -> str:
@@ -51,9 +60,9 @@ def create_job(
         session,
         source=body.source,
         client_request_id=body.client_request_id,
-        snapshot=body.snapshot,
+        snapshot=body.snapshot.model_dump(),
         queue_mode=body.queue_mode,
-        module_identity=module_identity(settings),
+        module_identity=_module_identity(settings),
     )
     response = job_response(job)
     response.idempotent_replay = not created
@@ -99,7 +108,7 @@ def cancel_job(job_id: str, session: Session = Depends(get_session)) -> JobRespo
              summary="继续剩余图片（创建子 Job，只含未完成数量）")
 def resume_remaining(job_id: str, request: Request, session: Session = Depends(get_session)) -> JobResponse:
     settings: Settings = request.app.state.settings
-    job, _ = job_service.resume_remaining(session, job_id, module_identity=module_identity(settings))
+    job, _ = job_service.resume_remaining(session, job_id, module_identity=_module_identity(settings))
     return job_response(job)
 
 

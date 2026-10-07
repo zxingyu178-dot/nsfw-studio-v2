@@ -17,7 +17,12 @@ def create_engine_adapter(settings: Settings) -> EngineAdapter:
     if provider == "comfyui":
         from app.engine.comfyui import ComfyUIAdapter
 
-        return ComfyUIAdapter(options, comfyui_config=settings.comfyui)
+        return ComfyUIAdapter(
+            options,
+            comfyui_config=settings.comfyui,
+            module_id=str(engine_cfg.get("module_id", "basic_generate")),
+            binding_version=str(engine_cfg.get("binding_version", "v1")),
+        )
     from app.engine.unbound import UnboundEngineAdapter
 
     return UnboundEngineAdapter()
@@ -41,7 +46,12 @@ def module_identity(settings: Settings) -> dict[str, str | None]:
     if provider == "comfyui":
         from app.engine.comfyui import ComfyUIAdapter
 
-        adapter = ComfyUIAdapter(engine_cfg.get("options") or {}, comfyui_config=settings.comfyui)
+        adapter = ComfyUIAdapter(
+            engine_cfg.get("options") or {},
+            comfyui_config=settings.comfyui,
+            module_id=str(engine_cfg.get("module_id", "basic_generate")),
+            binding_version=str(engine_cfg.get("binding_version", "v1")),
+        )
         identity["binding_version"] = adapter.binding_version
         identity["workflow_hash"] = adapter.workflow_hash
     return identity

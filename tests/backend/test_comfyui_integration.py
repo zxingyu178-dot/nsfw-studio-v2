@@ -108,6 +108,14 @@ def test_real_generation(real_client, count):
     assert seeds == [410100 + i for i in range(count)], "Seed = base + item_index"
     engine_ids = [item["engine_job_id"] for item in final["items"]]
     assert len(set(engine_ids)) == count, "每张图独立引擎任务"
+    # Phase 2.1 §一：COMPLETED 必须伴随导入的 Studio Image
+    for item in final["items"]:
+        assert item["image_id"], "COMPLETED + image_id=null 是禁止状态"
+    # Phase 2.1 §四：workflow_snapshot 必须记录真实执行模块
+    modules = final["workflow_snapshot"]["modules"]
+    assert modules and modules[0]["module_id"] == "basic_generate"
+    assert modules[0]["provider"] == "comfyui"
+    assert modules[0]["binding_version"] and modules[0]["workflow_hash"]
 
     # 图片正式进入 Studio（DataRoot + 数据库）
     images = real_client.get("/api/v1/images", params={"job_id": job["id"], "limit": 200}).json()

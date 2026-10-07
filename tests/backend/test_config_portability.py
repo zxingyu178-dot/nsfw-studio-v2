@@ -54,11 +54,27 @@ def test_env_var_beats_all_config_layers(tmp_path, monkeypatch):
 
 
 def test_local_config_is_gitignored():
-    """config.local.yaml 必须被 gitignore（防误提交机器路径）。"""
-    import subprocess
+    """config.local.yaml 必须被 .gitignore 覆盖（防误提交机器路径）。
 
-    result = subprocess.run(
-        ["git", "check-ignore", "-v", "configs/config.local.yaml"],
-        capture_output=True, text=True, cwd=CONFIG_DIR.parents[0],
-    )
-    assert result.returncode == 0, "configs/config.local.yaml 应被 .gitignore 覆盖"
+    Phase 2.1 §十：断言基于 .gitignore 文本本身，不依赖 Git 元数据——
+    Handoff ZIP 解压后（无 .git）也必须能独立跑通快速测试。
+    """
+    project_root = CONFIG_DIR.parents[0]
+    gitignore_text = (project_root / ".gitignore").read_text(encoding="utf-8")
+    patterns = [
+        line.strip() for line in gitignore_text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    required = {"*.local.yaml", "configs/config.local.yaml"}
+    assert required & set(patterns), \
+        f".gitignore 必须以文本规则覆盖本机私有配置（当前规则: {patterns}）"
+
+    # 仓库环境（存在 .git）下再做一次真实核对；ZIP 解压环境自动跳过 git 命令
+    if (project_root / ".git").exists():
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "check-ignore", "-v", "configs/config.local.yaml"],
+            capture_output=True, text=True, cwd=project_root,
+        )
+        assert result.returncode == 0, "configs/config.local.yaml 应被 .gitignore 覆盖"

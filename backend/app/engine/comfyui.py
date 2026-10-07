@@ -21,6 +21,7 @@ import datetime as _dt
 import hashlib
 import json
 import logging
+import time
 import uuid
 from pathlib import Path
 
@@ -42,31 +43,53 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROVIDERS_DIR = PROJECT_ROOT / "workflows" / "providers" / "comfyui"
 
+# 实时层新鲜度：超过该秒数未收到任何 WS 更新时，才允许“引擎丢失任务”判定（§二）
+LIVE_STALE_SECONDS = 30.0
+# 既不在 /queue 也不在 /history 的连续轮询次数容忍（避免提交竞态误判）
+MISSING_TOLERANCE = 10
+
 
 class ComfyUIAdapter(EngineAdapter):
     name = "comfyui"
     version = "0.1.0"
 
-    def __init__(self, options: dict | None = None, comfyui_config: dict | None = None) -> None:
+    def __init__(
+        self,
+        options: dict | None = None,
+        comfyui_config: dict | None = None,
+        *,
+        module_id: str = "basic_generate",
+        binding_version: str = "v1",
+    ) -> None:
         options = options or {}
         comfyui_config = comfyui_config or {}
         self.base_url = str(comfyui_config.get("url", "http://127.0.0.1:8188")).rstrip("/")
         self.client_id = uuid.uuid4().hex
         self.request_timeout = float(options.get("timeout_seconds", 600))
         self.ws_enabled = bool(options.get("websocket_progress", True))
-        self._binding_dir = PROVIDERS_DIR / str(options.get("binding", "basic_generate")) / "v1"
+        # provider binding 目录由 module_id + binding_version 解析（§七，禁止硬编码 v1）
+        self.module_id = module_id
+        self.configured_binding_version = binding_version
         self._workflow: dict | None = None
         self._binding: dict | None = None
         self._workflow_hash: str | None = None
-        # prompt_id → {"stage","progress","state","error"}（WebSocket 实时层）
+        # prompt_id → {"stage","progress","state","error","updated"}（WebSocket 实时层）
         self._live: dict[str, dict] = {}
+        self._missing_polls: dict[str, int] = {}
         self._ws_task: asyncio.Task | None = None
 
     # ===== Binding =====
+    def binding_dir(self) -> Path:
+        """实际 provider binding 目录：workflows/providers/comfyui/<module_id>/<binding_version>/"""
+        return PROVIDERS_DIR / self.module_id / self.configured_binding_version
+
     def _load_binding(self) -> tuple[dict, dict]:
         if self._workflow is None or self._binding is None:
-            workflow_path = self._binding_dir / "workflow.json"
-            binding_path = self._binding_dir / "binding.yaml"
+            directory = self.binding_dir()
+            workflow_path = directory / "workflow.json"
+            binding_path = directory / "binding.yaml"
+            if not workflow_path.is_file() or not binding_path.is_file():
+                raise EngineError("BINDING_NOT_FOUND", f"provider binding 不存在: {directory}")
             self._workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
             self._binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
             self._workflow_hash = hashlib.sha256(workflow_path.read_bytes()).hexdigest()[:16]
@@ -139,12 +162,21 @@ class ComfyUIAdapter(EngineAdapter):
         if not prompt_id:
             raise EngineError("UNKNOWN_ENGINE_ERROR", f"/prompt 未返回 prompt_id: {message}")
         self._live[prompt_id] = {"stage": "queued", "progress": 0.0, "state": "queued",
-                                 "error_type": "", "error_message": ""}
+                                 "error_type": "", "error_message": "",
+                                 "updated": time.monotonic()}
         self._ensure_ws()
         return prompt_id
 
     # ===== 进度（WebSocket 优先，HTTP history 兜底确认） =====
     async def get_job_status(self, engine_job_id: str) -> EngineJobStatus:
+        """查询引擎任务状态（规范 §二）。
+
+        语义边界（修复"掉线后永久 RUNNING"）：
+        - history 请求本身失败 → EngineError（ENGINE_OFFLINE / ENGINE_NETWORK transient），
+          由 Worker 按策略有限重试或系统性失败，**不得伪装成“还在运行”**；
+        - history 可达但尚无该任务 → 结合 /queue 与实时层判断：
+          在队列中 / WS 显示仍在执行 → running；两者都没有且超过容忍 → unknown（任务丢失）。
+        """
         live = self._live.get(engine_job_id)
         if live and live.get("state") == "failed":
             return EngineJobStatus(state="failed", progress=live.get("progress"),
@@ -152,20 +184,47 @@ class ComfyUIAdapter(EngineAdapter):
                                    stage=live.get("stage", ""), error_type=live.get("error_type", ""))
         history_state = await self._history_state(engine_job_id)
         if history_state is not None:
+            self._missing_polls.pop(engine_job_id, None)
+            if history_state.state == "succeeded" and live is not None:
+                self._mark_live(engine_job_id, state="succeeded", stage="save_image", progress=1.0)
             return history_state
-        if live:
-            return EngineJobStatus(state=live.get("state", "running"), progress=live.get("progress"),
+
+        if await self._in_engine_queue(engine_job_id):
+            self._missing_polls.pop(engine_job_id, None)
+            return self._running_status(live)
+
+        fresh = live is not None and (time.monotonic() - live.get("updated", 0.0)) < LIVE_STALE_SECONDS
+        if fresh and live.get("state") in ("queued", "running", "succeeded"):
+            return self._running_status(live)
+
+        missing = self._missing_polls.get(engine_job_id, 0) + 1
+        self._missing_polls[engine_job_id] = missing
+        if missing >= MISSING_TOLERANCE:
+            self._missing_polls.pop(engine_job_id, None)
+            return EngineJobStatus(state="unknown", progress=None, stage="unknown",
+                                   message="引擎队列与 history 均无该任务（任务丢失）")
+        return self._running_status(live)
+
+    @staticmethod
+    def _running_status(live: dict | None) -> EngineJobStatus:
+        if live is not None and live.get("state") in ("queued", "running"):
+            return EngineJobStatus(state="running", progress=live.get("progress"),
                                    stage=live.get("stage", ""))
         return EngineJobStatus(state="running", progress=None, stage="unknown")
 
     async def _history_state(self, engine_job_id: str) -> EngineJobStatus | None:
+        """history 权威结果；None 仅表示“请求成功但任务尚未出现在 history”。"""
         try:
             async with httpx.AsyncClient(trust_env=False, timeout=15) as client:
                 response = await client.get(f"{self.base_url}/history/{engine_job_id}")
                 response.raise_for_status()
                 history = response.json()
-        except httpx.HTTPError:
-            return None  # 网络抖动：交给上层瞬态重试逻辑，不直接判 FAILED（规范 §三十四）
+        except httpx.ConnectError as error:
+            raise EngineError("ENGINE_OFFLINE", f"ComfyUI 连接失败: {error}") from error
+        except httpx.HTTPError as error:
+            # 瞬时网络错误：标记 transient，交给 Worker 有限重试（§三十六），不直接判 FAILED
+            raise EngineError("ENGINE_NETWORK", f"ComfyUI /history 请求失败: {error}",
+                              transient=True) from error
         entry = history.get(engine_job_id)
         if not entry:
             return None  # 尚未完成（history 只存已结束任务）
@@ -175,6 +234,27 @@ class ComfyUIAdapter(EngineAdapter):
             return EngineJobStatus(state="failed", progress=None,
                                    message=messages[:500], stage="error")
         return EngineJobStatus(state="succeeded", progress=1.0, stage="save_image")
+
+    async def _in_engine_queue(self, engine_job_id: str) -> bool:
+        """该任务是否仍在 ComfyUI 队列（running/pending）中。"""
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
+                response = await client.get(f"{self.base_url}/queue")
+                response.raise_for_status()
+                data = response.json()
+        except httpx.ConnectError as error:
+            raise EngineError("ENGINE_OFFLINE", f"ComfyUI 连接失败: {error}") from error
+        except httpx.HTTPError as error:
+            raise EngineError("ENGINE_NETWORK", f"ComfyUI /queue 请求失败: {error}",
+                              transient=True) from error
+        ids: set[str] = set()
+        for bucket in ("queue_running", "queue_pending"):
+            for entry in data.get(bucket) or []:
+                if isinstance(entry, (list, tuple)) and len(entry) > 1 and isinstance(entry[1], str):
+                    ids.add(entry[1])
+                elif isinstance(entry, dict) and entry.get("prompt_id"):
+                    ids.add(str(entry["prompt_id"]))
+        return engine_job_id in ids
 
     # ===== 输出取回（规范 §三十九/§四十：字节级取回，Worker 导入 DataRoot） =====
     async def get_job_outputs(self, engine_job_id: str) -> list[EngineOutputFile]:
@@ -233,6 +313,16 @@ class ComfyUIAdapter(EngineAdapter):
                 logger.debug("ComfyUI WebSocket 断开（自动重连，不判 FAILED）: %s", error)
             await asyncio.sleep(3)  # 掉线 → 重连；进度由 HTTP history 兜底（规范 §三十四）
 
+    def _mark_live(self, prompt_id: str, **fields) -> None:
+        """更新实时层并刷新新鲜度时间戳（§二：stale 实时层不得掩盖掉线）。"""
+        live = self._live.get(prompt_id)
+        if live is None:
+            live = {"stage": "", "progress": None, "state": "running",
+                    "error_type": "", "error_message": ""}
+            self._live[prompt_id] = live
+        live.update(fields)
+        live["updated"] = time.monotonic()
+
     def _handle_ws_message(self, raw) -> None:
         try:
             message = json.loads(raw)
@@ -244,18 +334,19 @@ class ComfyUIAdapter(EngineAdapter):
         if prompt_id and prompt_id in self._live:
             live = self._live[prompt_id]
             if kind == "execution_start":
-                live.update(state="running", stage="execution", progress=live.get("progress") or 0.0)
+                self._mark_live(prompt_id, state="running", stage="execution",
+                                progress=live.get("progress") or 0.0)
             elif kind == "progress":
                 value, maximum = data.get("value", 0), data.get("max", 1) or 1
-                live.update(state="running", stage="sampling",
-                            progress=round(min(0.99, value / maximum), 3))
+                self._mark_live(prompt_id, state="running", stage="sampling",
+                                progress=round(min(0.99, value / maximum), 3))
             elif kind == "execution_success":
-                live.update(state="succeeded", stage="save_image", progress=1.0)
+                self._mark_live(prompt_id, state="succeeded", stage="save_image", progress=1.0)
             elif kind == "execution_error":
                 node_type = data.get("node_type") or ""
-                message = f"{node_type}: {data.get('exception_message', '')}".strip(": ")
-                live.update(state="failed", stage="error",
-                            error_type=classify_engine_message(message),
-                            error_message=message[:400])
+                error_message = f"{node_type}: {data.get('exception_message', '')}".strip(": ")
+                self._mark_live(prompt_id, state="failed", stage="error",
+                                error_type=classify_engine_message(error_message),
+                                error_message=error_message[:400])
 
 

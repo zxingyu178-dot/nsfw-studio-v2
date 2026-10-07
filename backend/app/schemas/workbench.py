@@ -50,18 +50,23 @@ class WorkflowSnapshotModel(BaseModel):
 
 
 class WorkbenchSnapshotModel(BaseModel):
-    """统一工作台快照：Prompt / Asset / Recipe（未来 Image / Agent）→ 生成工作台共用。"""
+    """统一工作台快照：Prompt / Asset / Recipe（未来 Image / Agent）→ 生成工作台共用。
+
+    数值范围是通用安全边界（Phase 2.1 §八：不能只依赖前端 clamp）；
+    更具体的模型能力限制由 WorkflowModule / provider binding 校验。
+    Prompt 长度上限在 JobService 侧统一校验（避免影响既有读路径）。
+    """
 
     prompt_mode: PromptMode = "structured"
     structured_prompt: StructuredPromptModel = Field(default_factory=StructuredPromptModel)
     full_prompt: str = ""
     negative_prompt: str = ""
     selected_assets: dict[str, SelectedAssetRef] = Field(default_factory=dict)
-    width: int = 1024
-    height: int = 1024
-    count: int = 1
+    width: int = Field(default=1024, ge=64, le=4096)
+    height: int = Field(default=1024, ge=64, le=4096)
+    count: int = Field(default=1, ge=1, le=64)
     seed_mode: str = "random"
-    seed: int | None = None  # "使用此图 Seed"（规范 §四十七）；None=随机
+    seed: int | None = Field(default=None, ge=0, le=2147483647)  # "使用此图 Seed"（§四十七）；None=随机
     workflow_modules: list[dict[str, Any]] = Field(default_factory=list)
     source_prompt_id: str | None = None
     source_prompt_version_id: str | None = None

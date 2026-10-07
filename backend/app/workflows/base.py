@@ -76,6 +76,21 @@ class WorkflowValidation:
     errors: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class JobRequestContext:
+    """模块构建引擎请求所需的通用 Job 上下文。
+
+    由 PipelineExecutor 从 Job 的通用快照字段构造（不含任何模块专属参数名），
+    由具体 WorkflowModule 解释并映射为自己的标准输入 / EngineJobRequest。
+    """
+
+    positive_prompt: str = ""
+    negative_prompt: str = ""
+    generation_settings: Mapping[str, Any] = field(default_factory=dict)
+    seed: int = 0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
 class WorkflowModule(ABC):
     """生成工作流模块接口（能力定义层）。"""
 

@@ -14,6 +14,7 @@ ERROR_TYPES = (
     "ENGINE_OFFLINE",
     "ENGINE_NETWORK",
     "WORKFLOW_ERROR",
+    "BINDING_NOT_FOUND",  # Phase 2.1 §七：provider binding 目录/文件缺失（系统性，不可重试）
     "MODEL_MISSING",
     "NODE_MISSING",
     "OUT_OF_MEMORY",
@@ -26,6 +27,7 @@ _SYSTEMIC_TYPES = {
     "ENGINE_OFFLINE",
     "OUT_OF_MEMORY",
     "WORKFLOW_ERROR",
+    "BINDING_NOT_FOUND",
     "MODEL_MISSING",
     "NODE_MISSING",
 }

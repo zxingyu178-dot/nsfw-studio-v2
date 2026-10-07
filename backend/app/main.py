@@ -27,6 +27,7 @@ from app.services import job_service
 from app.services.system_service import bootstrap
 from app.storage.manager import StorageManager
 from app.workers.queue_worker import SingleQueueWorker
+from app.workflows.pipeline import PipelineExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ async def lifespan(application: FastAPI):
     worker = SingleQueueWorker(
         session_factory,
         adapter,
+        pipeline=PipelineExecutor(),  # §三：Worker 经 Pipeline 解析 WorkflowModule
         output_importer=_make_output_importer(session_factory, storage),
         poll_interval_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("worker_poll_interval_ms", 300)),
         engine_poll_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("engine_poll_ms", 200)),
