@@ -94,6 +94,19 @@ GET    /api/v1/images/by-job/{id}/summary  按 Job 统计（§四十九）
 约定：状态机与暂停/取消/续跑语义见 docs/JOB_STATE_MACHINE.md；队列行为见 docs/QUEUE_SPEC.md；
 崩溃恢复见 docs/RECOVERY_SPEC.md。
 
+创建 Job 的输入校验（Phase 2.1 §八，固定）：
+
+```
+snapshot 直接复用严格 WorkbenchSnapshotModel：
+  width / height  64..4096
+  count           1..64
+  seed            0..2147483647（seed_mode=fixed 时必须提供）
+  prompt_mode     structured | full（Literal）
+  selected_assets 结构化类型；workflow_modules 为对象数组
+Prompt 长度上限：结构化单字段 ≤2000 / 正向 ≤10000 / 负向 ≤8000（400 PROMPT_TOO_LONG）
+workflow_snapshot.modules 由后端按实际模块身份写入（§四），客户端无需传递
+```
+
 ## 3. 规划（Phase 3+，按需实现）
 
 | 方法与路径 | 用途 |

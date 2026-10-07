@@ -21,12 +21,16 @@ lifespan 启动：
   2. worker.recover_interrupted()
        对每个有 engine_job_id 的 INTERRUPTED Item：
          adapter.get_job_status(engine_job_id)
-           ├─ succeeded → get_job_outputs → 导入 DataRoot → Item COMPLETED
-           │              （记录 ITEM_RECOVERED，job.completed_count 重算）
+           ├─ succeeded → get_job_outputs（必须非空）→ 导入 DataRoot（必须返回 image_id）
+           │              → 才落 Item COMPLETED（IMAGE_RECOVERED，job.completed_count 重算）
+           │              §一：无输出 / 导入失败 / image_ids 为空 → 保持 INTERRUPTED 可再核对
            └─ 其他（running/failed/unknown/查询异常）→ 保持 INTERRUPTED
        无 engine_job_id 的 Item → 保持 INTERRUPTED
   3. 启动日志输出 recovered_items=N
 ```
+
+恢复的 COMPLETED 与正常执行共享同一完成条件（Phase 2.1 §一）：拿到输出 **且** 成功导入
+Studio Image 才允许 COMPLETED，否则保持可恢复状态。
 
 注意：`get_job_status` 依赖 ComfyUI `/history`（只存已结束任务）——
 引擎重启后丢失的任务返回 `unknown`，按"无法确认成功"处理。

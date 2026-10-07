@@ -13,13 +13,13 @@
 - Worker 只消费**已持久化**的 Job；Job 创建只发生在 `JobService`（POST /jobs）；
 - Worker 循环：`_pick_next_job()` → `process_job(job_id)` → 空转 sleep(300ms)。
 
-## 2. 排序 = queue_position（§十五、§十六）
+## 2. 排序 = queue_position（§十五、§十六；Phase 2.1 §六 收紧）
 
 ```text
 普通提交（queue_mode=normal）：追加到等待队列尾部
   当前 A │ 等待 B C │ 新 X → B C X
 
-优先提交（queue_mode=next）：插到等待队列最前
+优先提交（queue_mode=next）：插到等待队列最前（只通过插入位置实现）
   当前 A │ 等待 B C │ 优先 X → X B C
 
 拖拽排序（POST /queue/reorder）：仅 QUEUED Job 可排序；
@@ -27,8 +27,11 @@
   RUNNING / PAUSED 不可移动。
 ```
 
-实现：`priority`（0/1，仅用于查询排序稳定）+ `queue_position`（手动重排写入 1..N）。
-`_pick_next_job` 按 `priority DESC, queue_position, created_at` 领取。
+**唯一执行顺序事实源 = `queue_position`**（Phase 2.1 起）：
+
+- Worker 领取、GET /queue、reorder 三处统一 `ORDER BY queue_position, created_at`；
+- `priority` 字段保留用于历史/显示，**任何排序逻辑禁止引用它**；
+- 用户把 next Job 拖到普通 Job 之后 → 队列显示与实际执行顺序都必须遵守拖拽结果。
 
 ## 3. 暂停 / 继续 / 取消的队列行为
 

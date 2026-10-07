@@ -1,4 +1,4 @@
-# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B，v0.3.0）
+# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1，v0.3.1）
 
 > 更新：2026-10-07。实现：`backend/app/engine/comfyui.py`。
 > 环境事实见 docs/COMFY_ENV_INVENTORY.md；工作流选型见 docs/WORKFLOW_INVENTORY.md。
@@ -16,10 +16,13 @@ provider binding（workflows/providers/comfyui/basic_generate/v1/）
 
 修改工作流 = 新增 `v2/` 目录 + 更新 `binding_version`，核心代码零改动。
 
-## 2. 执行流程（§三十三）
+## 2. 执行流程（§三十三；Phase 2.1 §三 起经 WorkflowModule）
 
 ```text
-EngineJobRequest
+QueueWorker → PipelineExecutor.resolve_module(job)（workflow_snapshot.modules）
+  → BasicGenerateModule.build_engine_request()（模块标准输入 → 参数映射）
+  → EngineJobRequest
+  ↓ ComfyUIAdapter
   → _load_binding()（缓存 workflow + binding，计算 workflow_hash）
   → _build_prompt()：标准输入按 binding.inputs 注入节点字段
                     + binding.defaults 覆盖固定参数
@@ -60,6 +63,7 @@ Worker 轮询 `get_job_status()`（engine_poll_ms）；`_live` 内存态由 WebS
 | ENGINE_OFFLINE | ConnectError / 队列暂停 | 系统性：Job FAILED + 队列暂停 |
 | ENGINE_NETWORK | 网络抖动、超时 | 瞬态：提交/轮询各自动重试 ≤2 |
 | WORKFLOW_ERROR | /prompt 400 非节点错误 | 不自动重试，Item FAILED |
+| BINDING_NOT_FOUND | provider binding 目录/文件缺失 | 不自动重试，系统性（Job 创建时 4xx） |
 | MODEL_MISSING / NODE_MISSING | node_errors 消息分类 | 不自动重试，系统性 |
 | OUT_OF_MEMORY | "out of memory"/"allocation" | 不自动重试，系统性 |
 | OUTPUT_MISSING | history 无输出文件 | Item FAILED |
@@ -68,7 +72,37 @@ Worker 轮询 `get_job_status()`（engine_poll_ms）；`_live` 内存态由 WebS
 
 OOM / Workflow / 模型 / 节点缺失 → **不自动重试**。
 
-## 6. 版本溯源（§五十五、§五十六）
+## 5.1 掉线语义（Phase 2.1 §二，修复"永久 RUNNING"）
+
+```text
+get_job_status 的三种来源（优先级）：
+  1. WS 实时层（_live，带 updated 新鲜度时间戳）
+  2. GET /history/<id>（权威：只存已结束任务）
+  3. GET /queue（任务是否仍在 running/pending）
+
+语义边界：
+  /history 请求 ConnectError        → 抛 ENGINE_OFFLINE（系统性：Job FAILED + 队列暂停）
+  /history 请求其他网络错误          → 抛 ENGINE_NETWORK(transient=true)（Worker 有限重试 ≤2）
+  /history 可达但无该任务            → 不是失败：
+      · 在 /queue 或 WS 新鲜（<30s）→ running（继续等待）
+      · 两者皆无且连续 10 次轮询      → unknown（引擎丢失任务）→ Item FAILED（不自动重试）
+```
+
+网络异常**禁止**降级为"还在运行"；"history 尚无该 prompt"**禁止**误判为失败。
+
+## 6. 版本溯源与 binding 解析（§五十五；Phase 2.1 §七）
+
+binding 目录由配置解析，不再硬编码：
+
+```text
+workflows/providers/comfyui/<module_id>/<binding_version>/
+  basic_generate/v1/  →  v2/ 仅新增目录 + 配置 binding_version=v2，核心 Adapter 零改动
+```
+
+目录/文件缺失 → `EngineError("BINDING_NOT_FOUND")`（系统性，不自动重试）；
+Job 创建时该错误转为 4xx（`BINDING_NOT_FOUND`）而不是 500。
+
+## 6.1 版本溯源（§五十五、§五十六）
 
 Job 创建时 `module_identity()` 从 binding 读取：
 `module_id=basic_generate / module_version=v1 / provider=comfyui /

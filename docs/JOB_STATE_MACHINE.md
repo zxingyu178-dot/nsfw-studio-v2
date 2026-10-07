@@ -1,4 +1,4 @@
-# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2，v0.3.0）
+# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2 + 2.1，v0.3.1）
 
 > 更新：2026-10-07。权威实现在 `backend/app/services/job_service.py` 与
 > `backend/app/workers/queue_worker.py`；数据库状态是唯一事实源（SSE 只是通知）。
@@ -88,3 +88,32 @@ POST /jobs/{id}/cancel
 
 创建 Job 前检查 DataRoot：`< 严重阈值` → 拒绝（`DISK_SPACE_CRITICAL`）；
 `< 警告阈值` → 允许但响应 `disk_space="warning"`（前端提示）。阈值在 storage 配置。
+
+## 9. Item 完成条件（Phase 2.1 §一，P0 修复后固定）
+
+```text
+Engine succeeded
+  ↓ 必须成功取得 outputs 且非空
+  ↓ 必须成功导入 ≥1 个 Studio Image（image_ids 非空）
+  → 才允许 Item = COMPLETED（image_id 必非空）
+```
+
+任一步失败一律：
+
+```text
+get_job_outputs 无结果 / 返回空     → OUTPUT_MISSING → Item FAILED
+get_job_outputs 抛异常              → 按异常自身的 error_type 分类
+output_importer 抛异常              → STORAGE_ERROR → Item FAILED
+导入返回空 image_ids                → STORAGE_ERROR → Item FAILED
+```
+
+统一后果：Item FAILED、Job 最终 FAILED、`completed_count` 不增加、`image_id = null`。
+**禁止状态：`COMPLETED` 且 `image_id = null`**（崩溃恢复的 `ITEM_RECOVERED` 路径同样遵守）。
+
+## 10. Seed 与续跑（Phase 2.1 §五，固定）
+
+- 每张图执行时分配 Seed（random：SystemRandom；fixed：base + item_index）；
+- **续跑（resume-remaining）一律使用新随机 Seed**：子 Job 快照
+  `count = remaining, seed_mode = random, seed = null`（workbench_snapshot 与
+  generation_settings_json 同步重建）；
+- 原 Job 的 workbench_snapshot 永不修改；已成功 Item 的 Seed 永远保留。

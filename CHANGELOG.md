@@ -2,6 +2,40 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.3.1] — 2026-10-07
+
+### Fixed（Phase 2.1：Stable Execution & Pipeline Contract Closure，无新功能）
+
+- **P0 无图片却 COMPLETED**：Item COMPLETED 收紧为"engine succeeded ∧ 输出非空 ∧ 成功导入
+  Studio Image（image_ids 非空）"；OUTPUT_MISSING / STORAGE_ERROR / 取输出异常一律
+  Item FAILED + Job FAILED + `completed_count` 不增加 + `image_id=null`；崩溃恢复路径同步收紧。
+- **ComfyUI 掉线后永久 RUNNING**：`/history` 请求失败不再伪装成"还在运行"——
+  ConnectError → ENGINE_OFFLINE（Job FAILED + 队列暂停），其他网络错误 → ENGINE_NETWORK(transient)
+  有限重试；history 可达但任务缺失时结合 `/queue` 与实时层新鲜度判定，超容忍才 unknown（任务丢失）。
+- **Worker 硬编码模块参数**：新增 BasicGenerateModule + ModuleRegistry + PipelineExecutor，
+  Worker 经 `PipelineExecutor.build_engine_request(job, item, seed)` 取请求，源码级守卫
+  （测试）禁止 Worker 出现模块参数名。
+- **Workflow Snapshot 与真实执行不一致**：Job 创建/续跑时由 module_identity 写入
+  `modules:[{module_id,module_version,provider,binding_version,workflow_hash}]`。
+- **Resume 复用 fixed seed**：resume-remaining 生成新快照（`count=remaining, seed_mode=random,
+  seed=null`，workbench + generation_settings 同步）；父 Job 快照只读不变。
+- **priority 越过拖拽顺序**：queue_position 成为唯一执行顺序事实源（Worker 领取 / GET /queue /
+  reorder 统一排序）；`queue_mode=next` 仅通过插入位置实现；priority 保留但不参与排序。
+- **Binding 版本硬编码**：Adapter 按 `module_id + binding_version` 解析
+  `workflows/providers/comfyui/<module>/<version>/`；缺失 → 新错误类型 `BINDING_NOT_FOUND`
+  （系统性；Job 创建时返回 4xx）。
+- **Job API 输入过宽**：snapshot 直接复用严格 WorkbenchSnapshotModel（宽高 64–4096、
+  count 1–64、seed 范围、prompt_mode/selected_assets/workflow_modules 结构 → 422）；
+  Prompt 长度上限（结构化 ≤2000 / 正向 ≤10000 / 负向 ≤8000 → 400 PROMPT_TOO_LONG）。
+- **Cancel 请求异常**：取消请求 try/except 隔离，失败时当前 Item 可完成、完成后 Job 安全落 CANCELLED。
+- **Handoff ZIP 无 .git 可测**：gitignore 断言改为 .gitignore 文本规则（存在 .git 时才附加
+  git check-ignore 核对），交接包解压后快速套件可独立运行。
+
+### Tests
+
+- 新增 `test_phase21_stability.py`（22 例）与 `test_comfyui_resilience.py`（7 例）；
+  快速套件 91 → **120 passed**；真实 ComfyUI smoke（1 张）见 docs/PHASE2_1_REPORT.md。
+
 ## [0.3.0] — 2026-10-07
 
 ### Added（Phase 2：Job Execution Core + ComfyUIAdapter + Gallery）

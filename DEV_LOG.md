@@ -1,5 +1,55 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 2.1：Stable Execution & Pipeline Contract Closure（v0.3.1）
+
+**执行**：TRAE Code Agent（fix/phase2-stable-execution → develop → CI → main → CI → tag v0.3.1）
+本阶段不新增产品功能，只修执行漏洞 + 把真实运行链接回 WorkflowModule 架构。
+
+### 交付
+
+- **P0 完成条件**：Item COMPLETED 收紧为 engine succeeded ∧ 输出非空 ∧ 成功导入 ≥1 个 Studio
+  Image；OUTPUT_MISSING / STORAGE_ERROR / 取输出异常一律 FAILED（completed_count 不增、
+  image_id=null）；崩溃恢复同规则。
+- **掉线语义**：`/history` 请求失败 → ENGINE_OFFLINE / ENGINE_NETWORK(transient)（不再伪装 running）；
+  history 可达但任务缺失 → /queue + WS 新鲜度判定，超容忍（10 次）→ unknown（任务丢失）。
+- **模块架构**：BasicGenerateModule + ModuleRegistry + PipelineExecutor；Worker 只调
+  `pipeline.build_engine_request(job,item,seed)`；源码 token 守卫禁止 Worker 出现模块参数名。
+- **快照同步**：Job 创建/续跑写入 workflow_snapshot.modules（真实模块身份）。
+- **Resume**：子 Job 新快照 count=remaining / seed_mode=random / seed=null；父快照只读。
+- **队列**：queue_position 唯一执行顺序（Worker/GET/reorder 三处统一）；priority 仅保留。
+- **binding 版本化**：目录由 module_id+binding_version 解析；新增 BINDING_NOT_FOUND（系统性，
+  创建 Job 时 4xx）。
+- **API 校验**：snapshot 复用严格 WorkbenchSnapshotModel（64..4096 / 1..64 / seed 范围 → 422）；
+  Prompt 长度上限（2000/10000/8000 → 400 PROMPT_TOO_LONG）。
+- **Cancel 隔离**：取消请求失败仅告警，当前 Item 完成后安全落 CANCELLED。
+- **Handoff 无 .git 可测**：gitignore 断言改为文本规则；ZIP 解压后快速套件独立通过。
+
+### 验证（如实）
+
+- 快速套件：**120 passed**（原 91 + 新增 29：stability 22 + resilience 7）；
+- 真实 ComfyUI smoke：**1 张 PASSED**（新链路：Job→模块→Adapter→导入→Gallery，
+  Item.image_id 非空、workflow_snapshot.modules 完整）；
+- 前端 `npm run build`：通过；交接 ZIP 解压（无 .git）快速套件：通过；
+- 首次 smoke 因 ComfyUI 未运行被 skip → 用计划任务 `\AIHome\ComfyUI` 重启后重跑通过
+  （冷启动模型加载约 7 分钟，属本机已知性能特征）。
+
+### 实测发现并修复
+
+1. Mock 适配器 `get_job_outputs()` 恒返回空 → 新完成条件下所有 Mock 用例会 FAILED；
+   改为返回 1×1 PNG fixture（source=mock 标识），顺带把"成功必须导入"变成全体用例的隐式回归。
+2. 源码守卫断言最初直接搜字符串会命中注释 → 改为 tokenize 去注释/字符串后再断言。
+3. `_finish_job` 顺带把首个 FAILED Item 的 error_type/message 落到 Job（UI 可显示失败原因）。
+
+### 决策
+
+| 决策 | 理由 |
+| --- | --- |
+| 完成条件包含"成功导入 Image"而不是仅"取得输出" | 图库是唯一事实源；COMPLETED+image_id=null 对 UI/图库都是不可解释状态（§一 P0） |
+| `unknown`（任务丢失）用"连续 10 次既不在 queue 也不在 history"判定 | 兼顾提交竞态（避免误判）与永久 RUNNING（有界失败） |
+| Worker 保留提交/轮询/取消编排，模块提供标准输入与引擎请求 | 暂停/取消语义留在 Worker（§十七/§十九），模块保持"能力定义"职责 |
+| BINDING_NOT_FOUND 新增为独立错误类型 | binding 缺失与工作流执行错误根因不同，创建 Job 时应立即 4xx 而不是排队后失败 |
+| ZIP 兼容断言基于 .gitignore 文本 | 交接包本就不含 .git；测试不能在"分发现场"无意义失败（§十） |
+
 ## 2026-10-07 — Phase 2：Job Execution Core + ComfyUIAdapter + Gallery（v0.3.0）
 
 **执行**：TRAE Code Agent（接替开发；2A 段由前序会话完成并已提交 2c63137；

@@ -4,7 +4,11 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 2 — Job Execution Core + ComfyUIAdapter + Gallery（已完成，v0.3.0）。**
+**当前阶段：Phase 2.1 — Stable Execution & Pipeline Contract Closure（已完成，v0.3.1）。**
+Phase 2.1 修复：无图片不得 COMPLETED（P0）、引擎掉线不得永久 RUNNING、Worker 去模块硬编码
+（BasicGenerateModule + ModuleRegistry + PipelineExecutor）、workflow_snapshot 同步真实执行、
+Resume 新随机 Seed、queue_position 唯一执行顺序、binding 版本化解析、Job API 严格校验、
+Cancel 异常隔离、交接包无 .git 可测。
 Phase 1 已完成：Prompt（结构化八栏/完整双模式 + 版本历史 + 软删除）、素材（四分类 + 预览图上传 + 版本）、
 配方（工作台快照 + 素材版本快照）、生成工作台三栏（保存/100% 恢复）。
 Phase 2 已完成：Job / JobItem / 单队列 Worker（暂停 / 取消 / 续跑 / 幂等 / 崩溃恢复）、
@@ -38,7 +42,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.0"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.1"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）

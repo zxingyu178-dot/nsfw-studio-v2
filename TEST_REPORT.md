@@ -1,4 +1,39 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1（2026-10-07）
+
+## Phase 2.1 测试（v0.3.1，Stable Execution & Pipeline Contract Closure）
+
+### 快速套件（CI 同口径）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py -q`
+
+**结果：120 passed**（0.3.0 的 91 例 + 新增 29 例）。
+
+| 新增测试文件 | 用例数 | 覆盖点 |
+| --- | --- | --- |
+| test_phase21_stability.py | 22 | 无输出/取输出异常/导入异常/导入空结果都不得 COMPLETED（4 类故障 + 成功对照）；掉线后有限时间 FAILED + 队列暂停；Worker 零模块知识（tokenize 源码断言）；真实模块被执行 + 快照同步；模块/注册表/Pipeline 单测；fixed Seed Resume → random（父快照不动）；next Job 拖拽后队列与实际执行顺序；API 范围校验 7 组 + Prompt 超长；Cancel 请求异常安全降级 |
+| test_comfyui_resilience.py | 7 | /history ConnectError → ENGINE_OFFLINE；其他网络错误 → ENGINE_NETWORK(transient)；history 缺失但在队列中 → running（不误判）；任务丢失 → 有界轮询后 unknown；WS 新鲜不误判丢失；binding v2 fixture 可切换；缺失版本 → BINDING_NOT_FOUND |
+
+### 真实 ComfyUI smoke（1 张，§十二）
+
+命令：`.venv\Scripts\python -m pytest "tests/backend/test_comfyui_integration.py::test_real_generation[1]" -q`
+
+**结果：1 passed**（图片 NSFWStudio/20261007_00013_.png，冷启动模型加载约 7 分钟 + 采样，
+ComfyUI 0.37.0 / RTX 3060）。
+
+- 断言：Item.image_id 非空（§一）、workflow_snapshot.modules 记录 basic_generate/comfyui/hash（§四）、
+  图片入 DataRoot 且 content 可读、Workbench Snapshot 完整；
+- 链路：Workbench → Job → BasicGenerateModule（PipelineExecutor）→ ComfyUIAdapter → Image → Gallery。
+
+### 交接包独立运行（§十）
+
+`build_handoff.py` 生成 ZIP → 解压到临时目录（无 .git）→ 快速套件全绿（120 例），
+证明 Handoff ZIP 解压后不依赖 Git 元数据。
+
+### 未验证 / 限制（如实标注）
+
+- 真实集成只跑 1 张 smoke（合同 §十二 明确不重跑 1/3/8 整套）；
+- Mock 的 fixture PNG 为 1×1（source=mock 标识），不代表真实画质；真实链路由 smoke 证据支撑；
+- CI 结果见下方 GitHub CI 记录。
 
 ## Phase 2 测试（v0.3.0，Job Execution Core + ComfyUIAdapter + Gallery）
 

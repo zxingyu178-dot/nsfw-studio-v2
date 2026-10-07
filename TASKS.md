@@ -1,5 +1,21 @@
 # TASKS — NSFW Studio V2
 
+## Phase 2.1：Stable Execution & Pipeline Contract Closure ✅（2026-10-07，v0.3.1）
+
+- [x] P0：无图片不得 COMPLETED（输出非空 ∧ 导入 ≥1 Image 才 COMPLETED；OUTPUT_MISSING/STORAGE_ERROR 一律 FAILED；恢复路径同规则）
+- [x] 掉线语义：/history 请求失败不再伪装 running（OFFLINE/NETWORK transient）；任务丢失有界判定 unknown；history 缺失不误判失败
+- [x] BasicGenerateModule + ModuleRegistry + PipelineExecutor；QueueWorker 零模块参数（源码 token 守卫测试）
+- [x] workflow_snapshot.modules 由实际模块身份写入（创建 + 续跑）
+- [x] Resume 子 Job 新随机 Seed（count=remaining / random / null）；父 Job 快照只读
+- [x] queue_position 唯一执行顺序事实源（Worker/GET/reorder）；next Job 拖拽后严格执行拖拽顺序
+- [x] binding 目录由 module_id/binding_version 解析；BINDING_NOT_FOUND（系统性，Job 创建 4xx）；v2 fixture 可切换
+- [x] Job API 严格校验（WorkbenchSnapshotModel：尺寸 64–4096 / count 1–64 / seed 范围 → 422；Prompt 长度上限 → 400）
+- [x] Cancel 请求异常隔离（失败 → 当前 Item 完成后安全 CANCELLED）
+- [x] Handoff ZIP 无 .git 可测（.gitignore 文本断言；ZIP 解压实测通过）
+- [x] 回归测试 29 例新增（stability 22 + resilience 7）；快速套件 120 passed；前端 build 通过
+- [x] 真实 ComfyUI 1 张 smoke 通过（新链路：模块 → Adapter → 导入 → Gallery）
+- [ ] fix/phase2-stable-execution → develop → CI → main → CI → tag v0.3.1
+
 ## Phase 1：Prompt / Asset / Recipe Core ✅（2026-10-07，v0.2.0）
 
 - [x] 数据模型 + Migration 0002_prompt / 0003_asset / 0004_recipe（未改动 0001）

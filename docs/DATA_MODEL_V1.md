@@ -108,6 +108,10 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
 
 - **快照纪律（§十）**：Job 提交后，Prompt / Recipe / Asset 的后续修改都不影响该 Job；
 - **Seed（§九）**：Item 执行时分配；成功 Item 的 Seed 永远保留；
+  **续跑子 Job 一律新随机 Seed**（`count=remaining, seed_mode=random, seed=null`，Phase 2.1 §五）；
+- **Workflow 快照（Phase 2.1 §四）**：`workflow_snapshot_json.modules` 由后端按实际执行的模块
+  身份写入（module_id / module_version / provider / binding_version / workflow_hash），
+  不允许"执行了模块但 modules=[]"；
 - 状态机与事件清单见 docs/JOB_STATE_MACHINE.md / docs/QUEUE_SPEC.md。
 
 ### 8.2 Image（0006_image）
