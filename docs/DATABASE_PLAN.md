@@ -1,6 +1,6 @@
 # DATABASE_PLAN — 数据库现状与规划
 
-> 更新：2026-10-07（Phase 0.1 收口）
+> 更新：2026-10-07（Phase 1，v0.2.0）。Phase 1 完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
 
 ## 1. 现状
 
@@ -11,6 +11,18 @@
 - 迁移：自研极简框架（`app/database/migrations.py`），迁移在代码中声明（单一事实源）。
 - 备份：`app/database/backup.py` 使用 **SQLite backup API** 生成一致性快照（WAL 下安全），
   禁止直接复制写入中的 DB 文件；命令行入口 `scripts/backup_db.py`，输出到 `{data_root}/backups/`。
+
+### 迁移清单
+
+| migration_id | 版本 | 内容 |
+| --- | --- | --- |
+| 0001_initial_schema | 0.1.0 | system_info |
+| 0002_prompt | 0.2.0 | prompts / prompt_versions |
+| 0003_asset | 0.2.0 | assets / asset_versions |
+| 0004_recipe | 0.2.0 | recipes / recipe_versions / recipe_asset_snapshots |
+
+约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
+`type / mode / slot / favorite / default_count` 均有 CHECK。升级路径测试覆盖 v0.1.2 库 → 0.2.0。
 
 ### migration 状态机（Phase 0.1 修正）
 

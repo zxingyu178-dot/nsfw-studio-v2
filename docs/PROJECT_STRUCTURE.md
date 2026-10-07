@@ -1,6 +1,6 @@
 # PROJECT_STRUCTURE — 项目结构与模块职责
 
-> 更新：2026-10-07（Phase 0.1 收口 + 0.1.1 契约修正）
+> 更新：2026-10-07（Phase 1，v0.2.0）
 
 ## 仓库结构
 
@@ -11,14 +11,14 @@ nsfw-studio-v2/
 │   │   ├── main.py             # 应用工厂 + lifespan 启动引导
 │   │   ├── api/                # 只做 HTTP 编排（v1: health）
 │   │   ├── core/               # 配置加载 / DataRoot 路径 / JSON 日志
-│   │   ├── models/             # SQLAlchemy 模型（SystemInfo）
-│   │   ├── schemas/            # Pydantic 出入参（HealthResponse）
-│   │   ├── services/           # 业务逻辑（system_service 启动引导）
-│   │   ├── database/           # 引擎工厂（WAL/busy_timeout/foreign_keys）+ 极简迁移 + 安全备份
+│   │   ├── models/             # SystemInfo + Prompt/Asset/Recipe 三族（版本+快照）
+│   │   ├── schemas/            # Pydantic 出入参 + WorkbenchSnapshot 统一契约
+│   │   ├── services/           # Prompt/Asset/RecipeService + PromptComposer（权威合成）
+│   │   ├── database/           # 引擎工厂（WAL/busy_timeout/foreign_keys）+ 迁移 0001-0004 + 安全备份
 │   │   ├── workers/            # QueueWorker 消费者接口（Job 创建属于 API/JobService）
-│   │   ├── workflows/          # WorkflowModule + 标准契约（WorkflowInput/Output/Validation/ModuleCapabilities）
-│   │   ├── engine/             # EngineAdapter 类型化契约（health/submit/status/cancel/progress）
-│   │   │   └── adapters/       # 未来 ComfyUIAdapter（Phase 0.1 仍为空）
+│   │   ├── workflows/          # WorkflowModule + 标准契约（execute 为 async）
+│   │   ├── engine/             # EngineAdapter 类型化异步契约（health/submit/status/cancel/progress）
+│   │   │   └── adapters/       # 未来 ComfyUIAdapter（仍未实现）
 │   │   ├── storage/            # StorageManager：DataRoot 文件系统
 │   │   └── logs/               # 兜底日志占位（运行日志在 DataRoot）
 │   ├── requirements.txt / requirements-dev.txt
@@ -26,18 +26,19 @@ nsfw-studio-v2/
 ├── frontend/                   # React 18 + TS + Vite 5
 │   └── src/
 │       ├── app/                # App 路由 + 全局样式
-│       ├── pages/              # Generate / Gallery / Prompt / Assets / Settings
-│       ├── components/         # TopNav / EngineStatus / ThemeToggle / EmptyState
+│       ├── pages/              # Generate（三栏工作台）/ Gallery / Prompt（我的/配方/历史）/ Assets / Settings
+│       ├── components/         # TopNav / EngineStatus(Studio) / ThemeToggle / EmptyState / ComposePreview
 │       ├── layouts/            # MainLayout
 │       ├── themes/             # ThemeProvider + tokens.css（深浅主题变量）
-│       ├── api/                # 后端 HTTP 封装（client.ts）
-│       ├── stores/             # themeStore（localStorage 持久化）
+│       ├── api/                # 后端 HTTP 封装（promptApi/assetApi/recipeApi，统一错误解析）
+│       ├── stores/             # themeStore + workbenchStore（统一工作台状态）
+│       ├── types/              # 前后端共享契约镜像（workbench.ts）
 │       └── utils/              # format.ts
 ├── configs/                    # config.yaml（公共模板，机器无关）/ config.local.yaml（本机私有，gitignore）/ app / storage / workflow
 ├── database/                   # 数据库设计文档（运行库在 DataRoot/database/studio.db）
 ├── workflows/                  # 未来工作流定义文件（Phase 0.1 仍为空）
 ├── scripts/                    # dev_backend / dev_frontend / init_dataroot / backup_db / build_handoff
-├── tests/                      # backend（pytest 27 例）/ frontend（Phase 1）/ integration（Phase 1）
+├── tests/                      # backend（pytest 68 例）/ frontend（后续）/ integration（后续）
 ├── .github/workflows/ci.yml    # GitHub CI：push/PR 时 pytest + 前端构建
 ├── docs/                       # 本文档目录
 └── handoff/                    # 阶段交接包输出（gitignore）

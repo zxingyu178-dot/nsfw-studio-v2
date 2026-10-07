@@ -4,9 +4,11 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 0.1 系列契约收口完成（v0.1.2）。**
-本阶段只建立长期可扩展的架构骨架，不接入 ComfyUI / 实际模型 / 生图工作流 / 豆包 / 手机端。
-生成能力全部通过 `backend/app/engine/`（EngineAdapter）与 `backend/app/workflows/`（WorkflowModule）接口预留，未来扩展不改核心。
+**当前阶段：Phase 1 — Prompt / Asset / Recipe Core（已完成，v0.2.0）。**
+已完成：Prompt（结构化八栏/完整双模式 + 版本历史 + 软删除）、素材（四分类 + 预览图上传 + 版本）、
+配方（工作台快照 + 素材版本快照）、生成工作台三栏（保存/100% 恢复）。
+**生成引擎仍未接入**（ComfyUI / 实际模型 / 生图工作流 / 豆包 / 手机端均不允许），
+生成能力全部通过 `backend/app/engine/` 与 `backend/app/workflows/` 接口预留。
 执行链路统一异步：Pipeline → WorkflowModule → EngineAdapter → 具体引擎（纯数据校验保持同步）。
 
 ## 技术栈
@@ -33,7 +35,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.1.2"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.2.0"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
@@ -86,6 +88,9 @@ NSFW-Studio-Data/
 - [docs/DATABASE_PLAN.md](docs/DATABASE_PLAN.md) — 数据库现状与规划
 - [docs/API_PLAN.md](docs/API_PLAN.md) — API 现状与规划
 - [docs/PHASE0_REPORT.md](docs/PHASE0_REPORT.md) — Phase 0 / 0.1 验收报告
+- [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md) — Phase 1 验收报告
+- [docs/DATA_MODEL_V1.md](docs/DATA_MODEL_V1.md) — 数据模型（ER / 版本 / 快照 / 软删除）
+- [docs/WORKBENCH_STATE.md](docs/WORKBENCH_STATE.md) — 工作台状态契约
 - [DEV_LOG.md](DEV_LOG.md) / [TASKS.md](TASKS.md) / [CHANGELOG.md](CHANGELOG.md) / [TEST_REPORT.md](TEST_REPORT.md)
 
 ## Git 规范

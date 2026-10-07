@@ -1,4 +1,36 @@
-# TEST_REPORT — Phase 0 / 0.1 / 0.1.1（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 1（2026-10-07）
+
+## 零-c、Phase 1 测试（v0.2.0，Prompt/Asset/Recipe Core）
+
+命令：`.venv\Scripts\python -m pytest`（项目根目录）
+
+**结果：68 passed, 1 warning（4.65s）**——0.1.1 的 33 例 + 新增 35 例。
+
+| 测试文件 | 用例数 | 覆盖点（对应规范 §五十八） |
+| --- | --- | --- |
+| test_prompt_composer.py | 5 | 八栏顺序固定 / 空字段跳过 / 未知字段丢弃 / JSON 往返 / 容错 |
+| test_prompt_service.py | 7 | CRUD / 版本机制 / 元数据不建版本 / 线性恢复 / 归档 / 404 / 并发冲突(VERSION_CONFLICT+回滚) / 列表过滤 |
+| test_asset_service.py | 8 | 四类型创建 / 相对路径入库 / 非法类型 / 版本不可变+旧文件保留 / 非法扩展名 / 内容不符 / 超限 / 提交失败无孤儿文件 / 路径穿越防护 |
+| test_recipe_service.py | 8 | 快照创建 / FK+快照双存 / 素材升级老配方不变 / 恢复制快照 / 内容不变不建版 / seed 固定 random / slot 校验 / 缺素材 404 / 列表归档 |
+| test_api_phase1.py | 4 | 统一错误格式（404/422） / Prompt 全链路 / Asset 上传+预览图+版本 / Recipe 保存+恢复往返 |
+| test_migration_upgrade.py | 1 | v0.1.2 库 → 0002-0004 升级 → 旧数据保留 / FK / CHECK / UNIQUE 全部生效 |
+
+前端：`npm run build`（tsc + vite）通过。
+
+**真实环境验证**：
+- 迁移前备份（SQLite backup API）→ `studio-20261007-152712.db`；
+- 真实库 0.1.2 → 0.2.0 迁移成功（0002/0003/0004 applied，system_info 自动更新，9 张表就位）；
+- 浏览器人工验证（规范 §五十九）：新建结构化 Prompt→保存→重开字段一致 ✓；完整 Prompt ✓；
+  选择素材→服饰字段填充（素材在前）✓；保存配方→重开 100% 恢复（Prompt/Negative/素材引用/尺寸）✓；
+  素材卡片/详情/版本 ✓；深浅主题 ✓。素材文件上传的 UI 自动化受浏览器沙箱限制（IAB 不支持
+  file chooser），上传/校验/版本逻辑由 API 测试全覆盖。
+
+**GitHub CI**：feature → develop → main 推送均触发，结果见运行记录（要求全绿）。
+
+环境事故记录：验证期间发现残留 vite 进程占用 5173 缓存旧 CSS（TaskStop 只杀 bash 包装进程），
+已清理；后续停服务需核对端口释放。
+
+---
 
 ## 零-b、Phase 0.1.1 测试（v0.1.2，审查遗留契约修正）
 

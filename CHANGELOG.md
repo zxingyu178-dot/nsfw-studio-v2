@@ -2,6 +2,29 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.2.0] — 2026-10-07
+
+### Added（Phase 1：Prompt / Asset / Recipe Core）
+
+- **数据模型**：prompts/prompt_versions、assets/asset_versions、recipes/recipe_versions/recipe_asset_snapshots
+  （migration 0002/0003/0004；TEXT 主键 + `<前缀>_<uuid4>`；FK/UNIQUE/CHECK 全量约束；业务时间统一 UTC ISO 8601）。
+- **Prompt**：结构化（固定八栏）/完整双模式；Negative Prompt 独立字段；内容变化建版本、元数据不建；
+  版本 immutable；恢复旧版本 = 复制为新最新版；归档/恢复（软删除）；PromptComposer 后端权威合成
+  + `/api/v1/prompts/compose` 前端同源预览。
+- **Asset**：face/clothing/pose/scene 四分类；预览图上传（扩展名+MIME+magic bytes+大小≤10MB 校验）；
+  temp → 校验 → 原子移动 → 提交 的安全文件流（提交失败清理文件）；DataRoot 相对路径入库；
+  `StorageManager.resolve_under()` 防路径穿越；版本 immutable。
+- **Recipe**：完整工作台快照（Prompt 快照+来源 FK、素材按 slot 锁定 asset_version 并复制内容快照、
+  generation_settings（model_ref 占位槽位）、workflow_snapshot 预留 modules 结构、seed 固定 random）。
+- **API**：/api/v1/prompts、/api/v1/assets、/api/v1/recipes 全套 CRUD+版本+归档+预览图+compose；
+  统一错误格式 `{"error":{"code","message"}}`；列表统一 search/favorite/archived/limit/offset。
+- **前端**：WorkbenchStore 统一工作台状态；生成工作台三栏（左 Prompt 编辑/中 预览占位/右 基础配置）；
+  提示词页（我的 Prompt / 配方 / 历史 三 Tab + 编辑抽屉 + 版本历史）；素材页（分类 Tabs + 卡片网格 +
+  上传 + 详情抽屉 + 用于生成）；"在生成工作台打开" 100% 恢复（Prompt / Recipe / Asset 三条注入路径复用
+  WorkbenchSnapshot）；生成按钮明确显示"生成引擎尚未接入"。
+- **测试**：33 → 68 例（Composer/服务/事务回滚/约束/迁移升级/文件安全/API 全链路）。
+- **文档**：docs/DATA_MODEL_V1.md、docs/WORKBENCH_STATE.md 新增。
+
 ## [0.1.2] — 2026-10-07
 
 ### Changed（Phase 0.1.1：审查合同遗留契约修正）

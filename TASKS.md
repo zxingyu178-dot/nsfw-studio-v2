@@ -1,5 +1,32 @@
 # TASKS — NSFW Studio V2
 
+## Phase 1：Prompt / Asset / Recipe Core ✅（2026-10-07，v0.2.0）
+
+- [x] 数据模型 + Migration 0002_prompt / 0003_asset / 0004_recipe（未改动 0001）
+- [x] 统一 ID（prm_/prmv_/ast_/astv_/rcp_/rcpv_ + uuid4，TEXT 主键）
+- [x] 统一时间工具（UTC ISO 8601，core/timeutil.py）
+- [x] Prompt：结构化八栏/完整双模式、Negative、版本机制、归档/恢复、元数据不建版本
+- [x] PromptComposer 后端权威合成 + compose 接口（前端预览同源）
+- [x] Asset：四分类、预览图上传（四重校验）、temp→原子移动→提交 安全文件流、版本不可变
+- [x] StorageManager.resolve_under 防穿越 + 安全测试
+- [x] Recipe：Prompt 快照+FK、素材 slot 快照（UNIQUE 约束）、generation_settings（model_ref 占位）、workflow_snapshot 预留
+- [x] Service 层（Prompt/Asset/Recipe）+ 单事务 + 并发冲突保护（VERSION_CONFLICT）
+- [x] API 三组 + 统一错误格式 {"error":{code,message}} + 列表统一参数
+- [x] 前端 WorkbenchStore + 生成三栏 + 提示词页三 Tab + 素材页 + 100% 恢复
+- [x] 生成按钮显示"生成引擎尚未接入"（无假结果、无 Job/Worker/ComfyUI）
+- [x] 测试 33 → 68 例全绿；v0.1.2 库升级测试；真实库迁移（先备份）
+- [x] 浏览器人工验证（§五十九 清单：新建/保存/重开/素材/配方恢复/主题）
+- [x] 文档：DATA_MODEL_V1 + WORKBENCH_STATE + 全部同步
+- [x] feature/phase1 → develop → CI 绿 → main → CI 绿 → tag v0.2.0
+
+## Phase 2（预告）：EngineAdapter 首个实现（ComfyUIAdapter）与 Job/Queue
+
+- [ ] Job / JobItem / Image 数据模型与迁移
+- [ ] QueueWorker 首个实现（消费已持久化 Job）
+- [ ] ComfyUIAdapter（实现 EngineAdapter 异步契约）
+- [ ] 图库页（Image 浏览）
+- [ ] assets.source_image_id / recipes.cover_image_id 回填
+
 ## Phase 0.1.1：审查遗留契约修正 ✅（2026-10-07，v0.1.2）
 
 - [x] `WorkflowModule.execute` 改为 async（与 EngineAdapter 异步契约统一；纯计算接口保持 sync）

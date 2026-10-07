@@ -1,5 +1,43 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 1：Prompt / Asset / Recipe Core（v0.2.0）
+
+**执行**：ZCode Agent（feature/phase1-prompt-asset-recipe → develop → CI → main → tag v0.2.0）
+
+### 交付
+
+- 数据模型：migration 0002/0003/0004（prompts、assets、recipes 三族 + 素材快照表），
+  TEXT 主键 + 前缀化 uuid4、UTC 时间工具、FK/UNIQUE/CHECK 全量约束；Job/Image 仅文档预留。
+- Prompt：双模式 + 版本机制（内容变才建版、元数据不建、恢复=复制为新版）+ 软删除 + PromptComposer
+  后端权威合成（compose 接口前端同源预览）。
+- Asset：四分类 + 预览图上传（ext/MIME/magic/size 四重校验）+ temp→原子移动→提交
+  （提交失败清理文件、文件失败不提交）+ resolve_under 防穿越 + 版本不可变。
+- Recipe：工作台快照（Prompt 快照+FK、slot 级素材版本快照、generation_settings、workflow 预留）。
+- API 三组 + 统一错误 `{"error":{code,message}}` + 列表统一参数；lifespan 建 session 工厂。
+- 前端：WorkbenchStore + 三栏工作台 + 提示词三 Tab + 素材页；三条"打开工作台"路径复用
+  WorkbenchSnapshot（100% 恢复已实测）。
+- 测试 33 → **68 例**全绿；真实库迁移前先备份（backup API），升级 0.1.2→0.2.0 成功。
+- 浏览器人工验证 §五十九 全清单（含深浅主题）。
+
+### 实测发现并修复
+
+1. 0004 迁移 DDL 缺 recipe_asset_snapshots.created_at 列（测试暴露，迁移未发布前修正）。
+2. StorageManager.path 白名单不含父目录（resolve_under("assets") 被拒）→ 允许登记目录的父目录。
+3. 结构化合成只在路由层做、服务层缺失 → 下沉为 Service 权威逻辑（prompt/recipe 一致，幂等）。
+4. 升级测试 monkeypatch 恢复方式错误（自我赋值）→ 修正测试。
+5. **环境教训**：此前 TaskStop 停掉 dev server 的 bash 包装进程后 node 子进程残留，
+   占用 5173 并缓存旧 CSS，浏览器验证一度出现"整页无样式"假象 → 用 netstat 定位 PID 清理。
+   后续停止 dev server 需确认端口释放。
+
+### 决策
+
+| 决策 | 理由 |
+| --- | --- |
+| 结构化正向快照由 Service 合成（而非仅路由） | "UI 看到的 == 保存的"必须由单一权威实现保证，且服务层可独立测试 |
+| RecipeVersion.default_count 列 + JSON 内镜像 | 规范 §二十三/§二十七 双处要求；单一写入方（Service）保证一致 |
+| 未命中内容不建冗余版本 | 规范 §十一"内容变化才建版本"的镜像面；API/服务返回 created 标志 |
+| 配方版本内容不变不建版本 | 与 Prompt/Asset 一致的三方语义 |
+
 ## 2026-10-07 — Phase 0.1.1：审查遗留契约修正（v0.1.2）
 
 **执行**：ZCode Agent（develop → CI 绿 → 合并 main → tag v0.1.2；不新增任何产品功能）

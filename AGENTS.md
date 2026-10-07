@@ -14,18 +14,27 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 0）
+## 3. 阶段纪律（当前 Phase 1 完成）
 
-禁止在本项目中接入或实现：
+已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）。
+
+仍然禁止在本项目中接入或实现：
 
 - ComfyUI 或任何实际生成引擎（不写引擎地址 / 节点 ID / 模型名 / Workflow JSON）；
-- 实际生图工作流；
+- 实际生图执行（工作台"生成"按钮只显示"生成引擎尚未接入"）、Job Worker / 生成队列；
 - 豆包 / 手机端 / 云服务 / 多用户 / 分布式。
 
-所有生成相关能力只能通过两个预留接口扩展，且不得修改核心：
+生成相关能力只能通过两个预留接口扩展，且不得修改核心：
 
 - `backend/app/engine/` — EngineAdapter（未来 ComfyUIAdapter 放 `engine/adapters/`）；
-- `backend/app/workflows/` — WorkflowModule。
+- `backend/app/workflows/` — WorkflowModule（执行链路统一 async）。
+
+数据纪律（Phase 1 起生效）：
+
+- 业务对象 ID 一律 `<前缀>_<uuid4>`（TEXT 主键）；业务时间一律 UTC ISO 8601（`core/timeutil.py`）；
+- Version 表 immutable：只 INSERT 不 UPDATE；恢复旧版本 = 复制为新最新版；
+- 软删除：普通 UI 禁止物理删除（archived 标记）；
+- 文件路径入库只存 DataRoot 相对路径；结构化 Prompt 合成以后端 PromptComposer 为权威。
 
 ## 4. 架构红线
 
