@@ -33,6 +33,10 @@ class StorageManager:
         return self.data_root / "database"
 
     @property
+    def backups_dir(self) -> Path:
+        return self.data_root / "backups"
+
+    @property
     def images_dir(self) -> Path:
         return self.data_root / "images"
 
