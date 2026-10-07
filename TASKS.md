@@ -51,9 +51,9 @@
 - [x] 前端：右栏真实 Engine 状态 + 生成按钮（normal / 优先插队）+ 当前任务进度 + 队列（暂停/继续/取消/优先/拖拽）
 - [x] 前端：中栏当前图 + 本 Job 已完成缩略图逐张显示（续跑父子合并）
 - [x] 前端：图库页（筛选 / Grid / 详情 Drawer / 审核 / 收藏 / 按任务查看 / 打开工作台 / 创建素材）
-- [ ] 真实 ComfyUI 集成测试 1 / 3 / 8 张（ComfyUI 离线自动 skip；顺序执行 / Seed=base+index / 逐张入 Gallery / 元数据 / Snapshot）
+- [x] 真实 ComfyUI 集成测试 1 / 3 / 8 张（3 passed，12 张图；顺序执行 / Seed=base+index / 逐张入 Gallery / 元数据 / Snapshot）
 - [x] 文档：JOB_STATE_MACHINE / QUEUE_SPEC / RECOVERY_SPEC / COMFY_ADAPTER / IMAGE_MODEL 新增；DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN / WORKBENCH_STATE / README / AGENTS 同步
-- [ ] 全量 pytest / 前端 build 验证；三段提交（2A/2B/2C）→ develop → CI → main → tag v0.3.0
+- [x] 全量 pytest（91 快速 + 3 集成）/ 前端 build 验证；三段提交（2A/2B/2C）→ develop → CI 绿 → main → CI 绿 → tag v0.3.0
 
 ## Phase 0.1.1：审查遗留契约修正 ✅（2026-10-07，v0.1.2）
 

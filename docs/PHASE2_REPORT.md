@@ -66,7 +66,7 @@
 | Image → Workbench 恢复正常 | ✅ 快照恢复 + 使用此图 Seed 测试 |
 | 全部 pytest GREEN | ✅ 91 passed（快速套件）+ 3 passed（真实 ComfyUI 集成） |
 | 前端 build GREEN | ✅ tsc + vite build |
-| develop / main CI GREEN | ⏳ 推送后由 GitHub Actions 运行（feature → develop → main，tag v0.3.0） |
+| develop / main CI GREEN | ✅ GitHub Actions：develop 9da5821 success、main 9da5821 success |
 | 未提前开发高清/图生图等 | ✅ 未开发（禁止清单逐项未触碰） |
 
 ## 四、真实运行实测记录

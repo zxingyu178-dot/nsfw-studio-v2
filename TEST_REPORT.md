@@ -33,8 +33,10 @@
 ### 未验证 / 限制（如实标注）
 
 - 未做浏览器 E2E 自动化（IAB 沙箱限制）；前端以 API 测试 + 构建 + dev 手动运行验证为准；
-- CI 结果需在 feature → develop → main 推送后由 GitHub Actions 确认（见 GIT_COMMITS/CI 记录）；
 - 队列内存态暂停、进程崩溃窗口等边界依赖 Mock 测试覆盖（真实 ComfyUI 场景不模拟崩溃）。
+
+**GitHub CI**（feature/phase2-execution-gallery → develop → main）：
+develop 与 main 推送后 GitHub Actions 均 **success**（head 9da5821，pytest + 前端构建两个 job 全绿）。
 
 ## 零-c、Phase 1 测试（v0.2.0，Prompt/Asset/Recipe Core）
 
