@@ -14,7 +14,6 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.64.0",
     "@types/node": "^22.7.4",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
@@ -22,5 +21,8 @@
     "rollup": "^4.64.0",
     "typescript": "~5.6.2",
     "vite": "^5.4.8"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.64.0"
   }
 }
