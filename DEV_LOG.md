@@ -36,4 +36,6 @@
 
 ### 遗留
 
-- GitHub 推送未执行：本机无 `gh` CLI、无已配置远端（详见 docs/PHASE0_REPORT.md §五）。
+- ~~GitHub 推送未执行~~ → **当日已解决**：检测到本机 Git Credential Manager 存有 GitHub 凭据
+  （zxingyu178-dot），经 GitHub API 创建私有仓库 `nsfw-studio-v2` 后推送 main / develop / v0.1.0 成功，
+  `git ls-remote` 验证通过。`gh` CLI 仍未安装（AIHome tool-registry 登记 not_found）。

@@ -61,6 +61,7 @@
 
 ## 五、未执行 / 部分验证项（如实声明）
 
-- **GitHub clone 验证：未执行** —— 本机未安装 `gh` CLI、无已配置 GitHub 远端，无法创建远端仓库并推送。
-  本地 git 已就绪（main + develop、规范化 commit），推送命令见 docs/PHASE0_REPORT.md §五。
+- ~~GitHub clone 验证：未执行~~ **已补充验证（2026-10-07）**：使用本机凭据管理器已存凭据创建私有仓库
+  `https://github.com/zxingyu178-dot/nsfw-studio-v2`，推送 main / develop / tag v0.1.0 成功，
+  `git ls-remote origin` 确认远端引用完整（clone 需账户权限）。
 - 前端自动化测试（Vitest）：按规范属 Phase 1 范围，未包含。

@@ -22,7 +22,7 @@
 - [x] 文档：PROJECT_STRUCTURE / DEVELOPMENT_GUIDE / DATABASE_PLAN / API_PLAN / PHASE0_REPORT
 - [x] 开发与交接脚本：dev_backend / dev_frontend / init_dataroot / build_handoff
 - [x] Registry 登记（projects/nsfw-studio-v2）
-- [ ] GitHub 推送（待用户：本机无 gh CLI / 无远端配置）
+- [x] GitHub 推送（私有仓库 zxingyu178-dot/nsfw-studio-v2，main + develop + tag v0.1.0，2026-10-07）
 
 ## Phase 1：数据模型设计 + Prompt/素材/配方系统（待启动）
 

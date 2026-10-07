@@ -28,7 +28,7 @@ WorkflowModule 与 EngineAdapter 接口预留、Git 规范、基础 UI 壳。
 
 | 标准 | 结果 |
 | --- | --- |
-| GitHub 可以正常 clone | ⚠️ **未执行** —— 本机未安装 `gh` CLI、无已配置的 GitHub 远端凭据，Agent 无法创建远端仓库。仓库已完成本地 git 初始化（main + develop 分支、规范化 commit），推送命令见第五节，由用户执行或授权后执行 |
+| GitHub 可以正常 clone | ✅ 私有仓库 `zxingyu178-dot/nsfw-studio-v2` 已创建并推送（main + develop + tag v0.1.0），`git ls-remote` 验证通过；clone 需账户权限 |
 | 前后端可以启动 | ✅ uvicorn 启动成功；vite dev server 启动成功（HTTP 200） |
 
 ### 后端
@@ -76,11 +76,7 @@ WorkflowModule 与 EngineAdapter 接口预留、Git 规范、基础 UI 壳。
 
 ## 五、限制与待办
 
-1. **GitHub 推送未执行**（本机无 gh、无远端配置）。用户执行：
-   ```bash
-   gh repo create nsfw-studio-v2 --private --source . --push   # 需安装并登录 gh
-   git push -u origin main && git push origin develop           # 或已有远端时
-   ```
+1. ~~GitHub 推送未执行~~ **已解决（2026-10-07）**：使用本机凭据管理器中已存的 GitHub 凭据（zxingyu178-dot）经 API 创建私有仓库并推送成功；`gh` CLI 仍未安装，后续如需常用可考虑安装。
 2. 前端自动化测试（Vitest）与集成冒烟测试按计划放 Phase 1。
 3. Worker / Workflow / Engine 均为接口占位，无任何运行线程。
 
