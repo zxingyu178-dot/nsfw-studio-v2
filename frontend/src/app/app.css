@@ -1,0 +1,220 @@
+@import '../themes/tokens.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    'Segoe UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ===== 应用骨架 ===== */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+/* ===== 顶部导航 ===== */
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 24px;
+  height: 56px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.topnav__brand {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.topnav__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.topnav__link {
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--fg-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.topnav__link:hover {
+  color: var(--fg);
+  background: var(--panel);
+}
+
+.topnav__link--active {
+  color: var(--accent-strong);
+  background: var(--panel);
+  font-weight: 600;
+}
+
+.topnav__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+/* ===== Engine 状态指示 ===== */
+.engine-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.engine-status__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--offline);
+  transition: background-color 0.2s ease;
+}
+
+.engine-status--online .engine-status__dot {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+.engine-status--checking .engine-status__dot {
+  background: var(--warn);
+}
+
+/* ===== 主题切换按钮 ===== */
+.theme-toggle {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* ===== 页面通用 ===== */
+.page {
+  max-width: 720px;
+}
+
+.page__title {
+  font-size: 22px;
+  margin: 0 0 20px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.panel__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--fg);
+}
+
+.panel__text {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+  margin-top: 8vh;
+  text-align: center;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  padding: 64px 32px;
+}
+
+.empty-state__badge {
+  display: inline-block;
+  padding: 4px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-strong);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.empty-state__title {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.empty-state__desc {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+/* ===== 设置页主题选项 ===== */
+.theme-options {
+  display: flex;
+  gap: 18px;
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.theme-option:hover {
+  border-color: var(--accent);
+}

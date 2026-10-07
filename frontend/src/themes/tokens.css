@@ -1,0 +1,32 @@
+/* 主题变量：深色为默认（:root），浅色通过 [data-theme='light'] 覆盖 */
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --bg-soft: #161a22;
+  --panel: #1b2029;
+  --border: #2a3140;
+  --fg: #e8ebf2;
+  --fg-muted: #9aa3b5;
+  --accent: #7c5cff;
+  --accent-strong: #9b82ff;
+  --ok: #3ecf8e;
+  --offline: #6b7280;
+  --warn: #e0a437;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f6fa;
+  --bg-soft: #ffffff;
+  --panel: #ffffff;
+  --border: #dde2ec;
+  --fg: #1c2333;
+  --fg-muted: #5f6b81;
+  --accent: #6a4df0;
+  --accent-strong: #5a3fe0;
+  --ok: #1fa971;
+  --offline: #9aa3b5;
+  --warn: #b57f14;
+  --shadow: 0 8px 24px rgba(28, 35, 51, 0.12);
+}
