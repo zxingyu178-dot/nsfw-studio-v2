@@ -41,13 +41,12 @@ def test_bootstrap_is_idempotent(settings):
 
 
 def test_storage_manager_whitelist(settings):
+    import pytest
+
+    from app.core.errors import ValidationError
     from app.storage import StorageManager
 
     manager = StorageManager(settings)
     assert manager.path("database") == settings.storage.data_root / "database"
-    try:
+    with pytest.raises(ValidationError):
         manager.path("../escape")
-    except KeyError:
-        pass
-    else:
-        raise AssertionError("越界路径应被拒绝")
