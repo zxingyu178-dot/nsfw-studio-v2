@@ -30,7 +30,8 @@
     running 目标才 interrupt / 别人 running 时不 interrupt 且不写队列）
 前端 npm run build：通过（tsc + vite）
 真实 ComfyUI：本阶段不需要生成图片（合同 §6），全部用 Mock / stub 离线验证
-develop / main CI：见 GitHub Actions（推送后记录）
+develop CI：success（head d90f1b4）
+main CI：success（head d90f1b4）
 ```
 
 ## 三、关键行为契约（Phase 2.2 起固定）

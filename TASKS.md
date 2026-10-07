@@ -9,7 +9,7 @@
 - [x] §4 P1：ComfyUI 取消先读 /queue——pending 只 delete、running 才 interrupt、其他 running 不打扰
 - [x] §5：文档同步（IMAGE_MODEL / RECOVERY_SPEC / COMFY_ADAPTER / JOB_STATE_MACHINE / QUEUE_SPEC / PHASE2_1_REPORT / TEST_REPORT / DEV_LOG / TASKS / CHANGELOG）
 - [x] 回归测试新增 9 例；快速套件 129 passed；前端 build 通过（本阶段不跑真实生成）
-- [ ] fix/phase2-data-consistency → develop → CI → main → CI → tag v0.3.2
+- [x] fix/phase2-data-consistency → develop → CI 绿（d90f1b4）→ main → CI 绿（d90f1b4）→ tag v0.3.2
 
 ## Phase 2.1：Stable Execution & Pipeline Contract Closure ✅（2026-10-07，v0.3.1）
 

@@ -24,6 +24,9 @@
 - 恢复归并（`_finalize_recovery`）仅在启动恢复路径生效，正常运行路径终态仍由 `_finish_job` 写入；
 - 取消边界测试为 stub 级验证（合同明确不做破坏性真实取消测试）。
 
+**GitHub CI**（fix/phase2-data-consistency → develop → main）：
+develop 与 main 推送后 GitHub Actions 均 **success**（head d90f1b4，pytest + 前端构建两个 job 全绿）。
+
 ## Phase 2.1 测试（v0.3.1，Stable Execution & Pipeline Contract Closure）
 
 ### 快速套件（CI 同口径）
