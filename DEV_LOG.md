@@ -1,5 +1,38 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-07 — Phase 2.2：Data Consistency & Recovery Closure（v0.3.2）
+
+**执行**：TRAE Code Agent（fix/phase2-data-consistency → develop → CI → main → CI → tag v0.3.2）
+短收口任务：修数据一致性，无新功能；完成后 Phase 2.x 收口结束。
+
+### 交付
+
+- **§1（P0）导入整批原子化**：prepare_image_output() + import_outputs_transaction()；
+  全部先校验 → 全部 temp → 全部移动 → 单事务入库；失败回滚 DB + 删除本批次全部正式文件 + 清 temp。
+- **§2（P0）恢复终态归并**：`_finalize_recovery()`——全部 Item COMPLETED → Job COMPLETED
+  （finished_at + JOB_RECOVERED_COMPLETED 事件）；否则保持 INTERRUPTED 且 completed_count 更新。
+- **§2 附带真 bug（实测发现并修复）**：process_job 的 finally 会在任务被取消/异常时照写终态，
+  把仍有未完成 Item 的 Job 误标 COMPLETED（Phase 2.1 用例在本阶段重启验证时暴露）——
+  重构为 `_execute_job()` 承载执行、终态只在正常返回时写；取消/异常一律保持 RUNNING 现场。
+- **§3（P1）Resume 身份继承**：去掉 module_identity 重读，完整继承 Parent 全字段；禁止静默升级。
+- **§4（P1）取消边界**：cancel_job 先读 /queue；pending 只 delete、running 才 interrupt、
+  其他 running 不打扰。
+
+### 验证（如实）
+
+- 快速套件：**129 passed**（120 + 新增 9；新增覆盖见 TEST_REPORT）；
+- 前端 `npm run build`：通过；
+- 本阶段按合同**不跑真实 ComfyUI 生成**（全部 Mock / stub 离线验证）。
+
+### 决策
+
+| 决策 | 理由 |
+| --- | --- |
+| 批次失败时删除"本批次已移动"的正式文件（而非仅失败的那张） | 图库资产必须以批次为单位守恒；跨批次删除有误伤风险，用本批次目录清单精确回滚 |
+| Worker 取消/异常不写终态而是留 RUNNING | 终态必须有可信证据（成功=导入完成、失败=明确错误）；中断属于"未完成"，恢复流程才有权判定 |
+| Resume 不重读 module_identity | "继续剩余"语义 = 原环境完成原任务；想换新版本 Workflow 应创建新 Job |
+| cancel_job 读队列后再决定 interrupt | /interrupt 是全局行为，必须避免打断用户手工在 ComfyUI 运行的其他任务 |
+
 ## 2026-10-07 — Phase 2.1：Stable Execution & Pipeline Contract Closure（v0.3.1）
 
 **执行**：TRAE Code Agent（fix/phase2-stable-execution → develop → CI → main → CI → tag v0.3.1）

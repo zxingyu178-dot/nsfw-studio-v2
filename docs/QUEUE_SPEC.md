@@ -74,6 +74,12 @@
 正在执行（当前任务卡片）+ 等待任务列表（暂停 / 继续 / 取消 / 优先 / 拖拽排序）。
 "优先"按钮 = 将该 Job 移到等待列表最前（等价 reorder）。
 
+## 6.1 Worker 取消语义（Phase 2.2）
+
+Worker 任务被取消（进程退出 / 停机超时）或意外异常时**不写 Job 终态**：
+Job/Item 保持 RUNNING 落库，由下次启动恢复流程接管（详见 RECOVERY_SPEC §2.2）。
+禁止经 `finally` 把仍有未完成 Item 的 Job 误标为 COMPLETED。
+
 ## 7. 并发与一致性
 
 - `_pick_next_job` 与状态操作都在独立会话中完成；Job 状态更新是单事务；

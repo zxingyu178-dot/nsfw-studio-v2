@@ -1,4 +1,4 @@
-# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1，v0.3.1）
+# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1 / 2.2，v0.3.2）
 
 > 更新：2026-10-07。实现：`backend/app/engine/comfyui.py`。
 > 环境事实见 docs/COMFY_ENV_INVENTORY.md；工作流选型见 docs/WORKFLOW_INVENTORY.md。
@@ -42,9 +42,22 @@ Worker 轮询 `get_job_status()`（engine_poll_ms）；`_live` 内存态由 WebS
 | --- | --- |
 | `health()` | `GET /system_stats`（5s 超时，trust_env=False）→ online/detail/version |
 | `submit_job()` | binding 注入 → `POST /prompt`；node_errors → 分类错误 |
-| `get_job_status()` | `_live`（WS）优先；`/history` 兜底；掉线返回 running 不判 FAILED |
-| `cancel_job()` | `POST /queue {delete:[id]}` + `POST /interrupt`（安全取消） |
+| `get_job_status()` | `/history` 权威 + `/queue` 与 WS 新鲜度判定；请求失败抛 OFFLINE/NETWORK（见 §5.1） |
+| `cancel_job()` | 先读 `GET /queue` 判断 target 位置（Phase 2.2 §4，见 §3.1） |
 | `get_job_outputs()` | `/history` → `/view` 取回字节；无输出 → `OUTPUT_MISSING` |
+
+## 3.1 取消边界（Phase 2.2 §4，固定）
+
+`/interrupt` 是 ComfyUI 的**全局行为**，会打断当前正在运行的任务——因此必须先读 `/queue`：
+
+```text
+target 在 queue_pending            → 只 POST /queue {delete:[target]}，禁止 /interrupt
+target 正是 queue_running 的第一位 → 允许 POST /interrupt（同时 delete 清理）
+target 不在队列（已完成/被删）
+  或 running 是别人的 prompt       → 什么都不做，返回 False
+```
+
+原则：**Studio 不能为了取消自己的一个等待任务，打断用户手工在 ComfyUI 里运行的其他任务。**
 
 ## 4. 进度通道（§三十四）
 

@@ -32,6 +32,29 @@ lifespan 启动：
 恢复的 COMPLETED 与正常执行共享同一完成条件（Phase 2.1 §一）：拿到输出 **且** 成功导入
 Studio Image 才允许 COMPLETED，否则保持可恢复状态。
 
+### 2.1 恢复后的 Job 终态归并（Phase 2.2 §2，P0）
+
+每个 Job 核对完成后执行 `_finalize_recovery()`：
+
+```text
+全部 JobItem = COMPLETED        → Job COMPLETED + completed_count + finished_at
+                                  + JOB_RECOVERED_COMPLETED 事件
+仍有 INTERRUPTED / QUEUED / FAILED → Job 保持 INTERRUPTED，completed_count 更新
+```
+
+禁止状态：**全部 Item COMPLETED 但 Job 仍 INTERRUPTED**。
+
+### 2.2 运行中的取消不得写终态（Phase 2.2 实测发现并修复）
+
+Worker 任务被取消（进程退出 / 停机超时）或发生意外异常时：
+
+```text
+process_job 不写 Job 终态 → 现场保持 RUNNING（Item 保持 RUNNING）
+→ 下次启动按上面 §2/§2.1 流程恢复（RUNNING → INTERRUPTED → 核对 → 归并）
+```
+
+禁止：取消/异常路径经 `finally` 把仍有未完成 Item 的 Job 误标为 COMPLETED。
+
 注意：`get_job_status` 依赖 ComfyUI `/history`（只存已结束任务）——
 引擎重启后丢失的任务返回 `unknown`，按"无法确认成功"处理。
 

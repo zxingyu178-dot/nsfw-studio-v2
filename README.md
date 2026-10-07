@@ -4,7 +4,10 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 2.1 — Stable Execution & Pipeline Contract Closure（已完成，v0.3.1）。**
+**当前阶段：Phase 2.2 — Data Consistency & Recovery Closure（已完成，v0.3.2）。
+Phase 2.x 收口结束，下一阶段进入 Phase 3。**
+Phase 2.2 修复：导入批次整批原子化（P0）、恢复后 Job 终态归并（P0）、Worker 取消不误写终态、
+Resume 完整继承原 Workflow 身份、ComfyUI 取消不误伤其他任务。
 Phase 2.1 修复：无图片不得 COMPLETED（P0）、引擎掉线不得永久 RUNNING、Worker 去模块硬编码
 （BasicGenerateModule + ModuleRegistry + PipelineExecutor）、workflow_snapshot 同步真实执行、
 Resume 新随机 Seed、queue_position 唯一执行顺序、binding 版本化解析、Job API 严格校验、
@@ -42,7 +45,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.1"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.2"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
@@ -105,6 +108,8 @@ NSFW-Studio-Data/
 - [docs/WORKFLOW_INVENTORY.md](docs/WORKFLOW_INVENTORY.md) — 本机工作流调查与 basic_generate 选型
 - [docs/COMFY_ADAPTER.md](docs/COMFY_ADAPTER.md) — ComfyUIAdapter 设计与契约
 - [docs/IMAGE_MODEL.md](docs/IMAGE_MODEL.md) — Image / Gallery 模型与流程
+- [docs/PHASE2_1_REPORT.md](docs/PHASE2_1_REPORT.md) — Phase 2.1 验收报告（执行稳定性收口）
+- [docs/PHASE2_2_REPORT.md](docs/PHASE2_2_REPORT.md) — Phase 2.2 验收报告（数据一致性收口）
 - [DEV_LOG.md](DEV_LOG.md) / [TASKS.md](TASKS.md) / [CHANGELOG.md](CHANGELOG.md) / [TEST_REPORT.md](TEST_REPORT.md)
 
 ## Git 规范

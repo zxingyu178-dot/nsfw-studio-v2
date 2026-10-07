@@ -1,4 +1,4 @@
-# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2 + 2.1，v0.3.1）
+# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2 + 2.1 + 2.2，v0.3.2）
 
 > 更新：2026-10-07。权威实现在 `backend/app/services/job_service.py` 与
 > `backend/app/workers/queue_worker.py`；数据库状态是唯一事实源（SSE 只是通知）。
@@ -110,10 +110,24 @@ output_importer 抛异常              → STORAGE_ERROR → Item FAILED
 统一后果：Item FAILED、Job 最终 FAILED、`completed_count` 不增加、`image_id = null`。
 **禁止状态：`COMPLETED` 且 `image_id = null`**（崩溃恢复的 `ITEM_RECOVERED` 路径同样遵守）。
 
-## 10. Seed 与续跑（Phase 2.1 §五，固定）
+## 10. Seed 与续跑（Phase 2.1 §五 + 2.2 §3，固定）
 
 - 每张图执行时分配 Seed（random：SystemRandom；fixed：base + item_index）；
 - **续跑（resume-remaining）一律使用新随机 Seed**：子 Job 快照
   `count = remaining, seed_mode = random, seed = null`（workbench_snapshot 与
   generation_settings_json 同步重建）；
+- **续跑完整继承 Parent 的 Workflow 身份**（Phase 2.2 §3）：workflow_snapshot_json +
+  module_id / module_version / provider / binding_version / workflow_hash 全部原样继承，
+  不读取当前 settings、不静默升级；原 binding 已不存在时执行期明确报 BINDING_NOT_FOUND；
+- 想"用最新版 Workflow 重做剩余内容"请创建新 Job，而不是 Resume；
 - 原 Job 的 workbench_snapshot 永不修改；已成功 Item 的 Seed 永远保留。
+
+## 11. Worker 取消不写终态（Phase 2.2 实测发现）
+
+Worker 任务被取消（进程退出 / 停机超时）或意外异常时：
+
+```text
+process_job 不写 Job 终态（也不把仍有未完成 Item 的 Job 标成 COMPLETED）
+→ Job / Item 保持 RUNNING 原样落库
+→ 下次启动恢复流程接管（RUNNING → INTERRUPTED → 核对 → 归并终态）
+```

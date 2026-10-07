@@ -1,4 +1,28 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2（2026-10-07）
+
+## Phase 2.2 测试（v0.3.2，Data Consistency & Recovery Closure）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：129 passed**（0.3.1 的 120 例 + 新增 9 例）。
+
+| 新增用例 | 覆盖点 |
+| --- | --- |
+| test_image_service.py 批次原子 3 例 | ① 合法 PNG + 损坏 PNG → 整批失败、images=0、originals/temp 无残留；② 双合法 → 同批同时成功；③ 移动阶段第 2 张失败 → 第 1 张已移动的正式文件也随整批回滚删除 |
+| test_phase22_consistency.py 3 例 | Case A：1 张崩溃→重启后引擎可确认 → Item COMPLETED + Job COMPLETED + completed_count=1 + finished_at + JOB_RECOVERED_COMPLETED 事件；Case B：3 张前 2 张完成、第 3 张无法确认 → Job INTERRUPTED + completed_count=2 + 无 RUNNING Item；Resume 身份：Parent=v1、当前系统升级 v2 后，Child 全字段（快照 + 列）仍为 v1 且两处一致，新 Job 才用 v2 |
+| test_comfyui_resilience.py 取消边界 3 例 | pending target → 只 delete、无 interrupt；running target → 允许 interrupt；别人 running（target 不在队列）→ 无 interrupt 且零队列写操作 |
+
+### 本阶段不跑真实 ComfyUI 生成（合同 §6）
+
+批次原子 / 恢复归并 / Resume 身份 / 取消边界全部通过 Mock 引擎与 httpx stub 离线验证；
+真实链路已在 2.1 由 1 张 smoke 证据支撑。
+
+### 未验证 / 限制（如实标注）
+
+- 恢复归并（`_finalize_recovery`）仅在启动恢复路径生效，正常运行路径终态仍由 `_finish_job` 写入；
+- 取消边界测试为 stub 级验证（合同明确不做破坏性真实取消测试）。
 
 ## Phase 2.1 测试（v0.3.1，Stable Execution & Pipeline Contract Closure）
 

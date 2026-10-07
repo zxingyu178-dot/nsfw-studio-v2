@@ -2,6 +2,34 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.3.2] — 2026-10-07
+
+### Fixed（Phase 2.2：Data Consistency & Recovery Closure，无新功能）
+
+- **P0 多输出导入整批原子化**：拆分为 `prepare_image_output()`（全部先校验）+
+  `import_outputs_transaction()`（全部写 temp → 全部移动 → 单事务写入全部 Image）；
+  任一步失败：回滚 DB + 删除本批次全部正式文件 + 清理 temp，不再出现"半成功图库资产"。
+  `import_adapter_outputs()` 不再循环调用内部 commit 的单图函数。
+- **P0 崩溃恢复后的 Job 终态归并**：恢复核对后重算 completed_count；全部 Item COMPLETED →
+  Job COMPLETED + finished_at + `JOB_RECOVERED_COMPLETED` 事件；仍有未完成 Item → 保持
+  INTERRUPTED。禁止"全部 Item COMPLETED 但 Job INTERRUPTED"。
+- **附带修复（实测发现）**：Worker 任务被取消（进程退出/停机超时）或意外异常时不再经
+  `finally` 写 Job 终态——此前会把仍有未完成 Item 的 Job 误标为 COMPLETED；现在保持
+  RUNNING 现场，交由下次启动恢复。
+- **P1 Resume 保持原 Workflow 身份**：`resume_remaining()` 完整继承 Parent 的
+  workflow_snapshot + module/provider/binding/workflow_hash，不再读取当前 settings，
+  禁止静默升级；原 binding 缺失时执行期报 BINDING_NOT_FOUND。升级 Workflow 属于创建新 Job。
+- **P1 ComfyUI 取消不误伤其他任务**：先读 `/queue` 判断 target 位置——pending 只 delete、
+  绝不 `/interrupt`；target 正是当前 running 才允许 interrupt；running 是别人的 prompt 时
+  什么都不做（不再打断用户手工任务）。
+- 文档同步：IMAGE_MODEL / RECOVERY_SPEC / COMFY_ADAPTER / JOB_STATE_MACHINE / QUEUE_SPEC /
+  PHASE2_1_REPORT（原子化交叉引用）/ TEST_REPORT / DEV_LOG / TASKS / README。
+
+### Tests
+
+- 新增 9 例（批次原子 3 + 恢复归并/Resume 身份 3 + 取消边界 3）；快速套件 120 → **129 passed**；
+  本阶段全部离线 Mock / stub 验证（合同不要求真实生成）；前端 build 通过。
+
 ## [0.3.1] — 2026-10-07
 
 ### Fixed（Phase 2.1：Stable Execution & Pipeline Contract Closure，无新功能）

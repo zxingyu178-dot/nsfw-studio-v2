@@ -20,17 +20,20 @@
 | metadata_json | TEXT | module/provider/binding/workflow_hash 等溯源 |
 | created_at / updated_at | TEXT | UTC ISO 8601 |
 
-## 2. 引擎输出导入流程（§三十九、§四十）
+## 2. 引擎输出导入流程（§三十九、§四十；Phase 2.2 §1 整批原子化）
 
 ```text
-ComfyUI output（仅输出来源，绝非永久图库）
-  → Adapter /view 取回字节
-  → Studio temp 写入 → 校验（magic bytes + 尺寸解析，失败即拒）
-  → 原子移动 DataRoot/images/originals/<img_id>/original.png
-  → 数据库登记（失败 → 回滚删除文件，不留孤儿资产）
+ComfyUI output（仅输出来源，绝非永久图库）——一个 Item 的输出 = 一个批次
+  → prepare_image_output()：全部输出先校验（magic bytes + 尺寸，任一不合法即整批失败）
+  → 全部写入 Studio temp
+  → 全部移动到 DataRoot/images/originals/<img_id>/original.<ext>
+  → import_outputs_transaction()：单事务写入全部 Image → commit
 ```
 
-- 任一环节失败：不会产生"半登记"图片；Item 标 `STORAGE_ERROR` / `OUTPUT_MISSING`；
+- 任一步失败（校验 / temp / 移动 / 入库）：回滚 DB + 删除本批次已创建的全部正式文件 +
+  清理 temp——**不会出现"半成功图库资产"**；Item 标 `STORAGE_ERROR` / `OUTPUT_MISSING`；
+- 禁止在批次循环中调用任何内部 commit 的单图函数（`import_engine_output` 仅为单图便捷
+  入口，内部同样走整批事务）；
 - 导入完成后 Worker 写回 `JobItem.image_id` 并记录 ITEM_COMPLETED（含 image_ids）。
 
 ## 3. Gallery API（§四十四）

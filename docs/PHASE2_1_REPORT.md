@@ -57,6 +57,9 @@ provider binding：
   → workflows/providers/comfyui/<module_id>/<binding_version>/；缺失 → BINDING_NOT_FOUND
 ```
 
+> 交叉引用：本报告 §一 的"导入失败全回滚"承诺在多输出场景下的**整批原子化**由
+> Phase 2.2（v0.3.2）补齐（docs/PHASE2_2_REPORT.md §1），自 2.2 起该措辞完全成立。
+
 ## 四、开发期间发现并修复（本阶段）
 
 1. 测试自身缺陷：worker 源码断言最初直接搜索字符串，会连注释一起命中 → 改为 tokenize 去注释/字符串后断言。

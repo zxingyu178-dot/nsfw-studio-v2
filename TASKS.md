@@ -1,5 +1,16 @@
 # TASKS — NSFW Studio V2
 
+## Phase 2.2：Data Consistency & Recovery Closure ✅（2026-10-07，v0.3.2）
+
+- [x] §1 P0：多输出导入整批原子化（全部先校验 → 全部 temp → 全部移动 → 单事务入库；失败全回滚清残留；不再循环单图 commit 函数）
+- [x] §2 P0：恢复核对后 Job 终态归并（全完成 → COMPLETED + JOB_RECOVERED_COMPLETED；否则保持 INTERRUPTED + 计数更新）
+- [x] §2 附带真 bug：Worker 取消/异常不再经 finally 误写 COMPLETED 终态（保持 RUNNING 现场交启动恢复）
+- [x] §3 P1：Resume 完整继承 Parent Workflow 身份（快照 + 全列），禁止静默升级；binding 缺失执行期报 BINDING_NOT_FOUND
+- [x] §4 P1：ComfyUI 取消先读 /queue——pending 只 delete、running 才 interrupt、其他 running 不打扰
+- [x] §5：文档同步（IMAGE_MODEL / RECOVERY_SPEC / COMFY_ADAPTER / JOB_STATE_MACHINE / QUEUE_SPEC / PHASE2_1_REPORT / TEST_REPORT / DEV_LOG / TASKS / CHANGELOG）
+- [x] 回归测试新增 9 例；快速套件 129 passed；前端 build 通过（本阶段不跑真实生成）
+- [ ] fix/phase2-data-consistency → develop → CI → main → CI → tag v0.3.2
+
 ## Phase 2.1：Stable Execution & Pipeline Contract Closure ✅（2026-10-07，v0.3.1）
 
 - [x] P0：无图片不得 COMPLETED（输出非空 ∧ 导入 ≥1 Image 才 COMPLETED；OUTPUT_MISSING/STORAGE_ERROR 一律 FAILED；恢复路径同规则）
