@@ -393,10 +393,12 @@ def test_engine_input_ttl_cleanup_only_touches_registered_studio_files(tmp_path,
     assert "user_files/user_keep.png" in remaining
 
 
-def test_engine_input_cleanup_skips_without_input_dir(tmp_path, settings):
+def test_engine_input_cleanup_skips_without_input_dir(settings):
     from app.services.engine_input_service import cleanup_engine_inputs
 
-    stats = cleanup_engine_inputs(settings, None)
+    # 显式空 comfyui 配置：不依赖本机 config.local.yaml 是否配置了 input_dir
+    bare = dataclasses.replace(settings, comfyui={})
+    stats = cleanup_engine_inputs(bare, None)
     assert stats["skipped"] is True
 
 
