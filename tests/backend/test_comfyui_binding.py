@@ -42,7 +42,7 @@ def test_workflow_template_nodes_and_empty_prompts():
 
 def test_build_prompt_injects_standard_inputs():
     adapter = make_adapter()
-    workflow, binding, _hash = adapter.load_binding(basic_ref())
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(basic_ref())
     request = EngineJobRequest(
         binding=basic_ref(),
         parameters={
@@ -68,7 +68,7 @@ def test_build_prompt_injects_standard_inputs():
 
 def test_build_prompt_clamps_seed_and_does_not_mutate_template():
     adapter = make_adapter()
-    workflow, binding, _hash = adapter.load_binding(basic_ref())
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(basic_ref())
     over = adapter._build_prompt(
         EngineJobRequest(binding=basic_ref(), parameters={"seed": 2**40}), workflow, binding
     )
@@ -83,7 +83,8 @@ def test_build_prompt_clamps_seed_and_does_not_mutate_template():
 def test_workflow_hash_and_binding_version_traceable():
     adapter = make_adapter()
     expected = hashlib.sha256((BINDING_DIR / "workflow.json").read_bytes()).hexdigest()[:16]
-    assert adapter.binding_identity("basic_generate", "v1") == ("v1", expected)
+    expected_binding = hashlib.sha256((BINDING_DIR / "binding.yaml").read_bytes()).hexdigest()[:16]
+    assert adapter.binding_identity("basic_generate", "v1") == ("v1", expected, expected_binding)
 
 
 def test_workflow_hash_mismatch_rejected():
@@ -98,11 +99,79 @@ def test_workflow_hash_mismatch_rejected():
     assert excinfo.value.error_type == "WORKFLOW_HASH_MISMATCH"
 
 
+def test_binding_hash_mismatch_rejected():
+    """Task1：binding.yaml 指纹与磁盘不一致（inputs/defaults/save_image_* 被改动）→ 拒绝。"""
+    adapter = make_adapter()
+    tampered = EngineBindingRef(
+        module_id="basic_generate", provider="comfyui", binding_version="v1",
+        binding_hash="0000000000000000",
+    )
+    with pytest.raises(EngineError) as excinfo:
+        adapter.load_binding(tampered)
+    assert excinfo.value.error_type == "BINDING_HASH_MISMATCH"
+
+
+def test_binding_self_description_mismatch_rejected(tmp_path, monkeypatch):
+    """Task1：binding 自描述（module/provider/binding_version）与请求身份不符 → 直接拒绝。"""
+    adapter = make_adapter()
+    fake_dir = tmp_path / "upscale" / "v1"
+    fake_dir.mkdir(parents=True)
+    (fake_dir / "workflow.json").write_text("{}", encoding="utf-8")
+    (fake_dir / "binding.yaml").write_text(
+        "binding_version: v1\nmodule: not_upscale\nprovider: comfyui\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ComfyUIAdapter, "binding_dir", staticmethod(lambda _m, _v: fake_dir))
+    with pytest.raises(EngineError) as excinfo:
+        adapter.load_binding(EngineBindingRef(
+            module_id="upscale", provider="comfyui", binding_version="v1",
+        ))
+    assert excinfo.value.error_type == "BINDING_IDENTITY_MISMATCH"
+
+
+def test_binding_yaml_change_changes_binding_hash(tmp_path, monkeypatch):
+    """Task1：修改 binding.yaml（workflow.json 不动）必须改变 binding_hash → 老 Job 拒绝静默执行。"""
+    source = UPSCALE_DIR / "v1" if (UPSCALE_DIR / "v1").is_dir() else UPSCALE_DIR
+    fake_dir = tmp_path / "upscale" / "v1"
+    fake_dir.mkdir(parents=True)
+    (fake_dir / "workflow.json").write_text((source / "workflow.json").read_text(encoding="utf-8"), encoding="utf-8")
+    binding_text = (source / "binding.yaml").read_text(encoding="utf-8")
+    (fake_dir / "binding.yaml").write_text(binding_text, encoding="utf-8")
+    monkeypatch.setattr(ComfyUIAdapter, "binding_dir", staticmethod(lambda _m, _v: fake_dir))
+
+    adapter = make_adapter()
+    _workflow, _binding, workflow_hash, binding_hash = adapter.load_binding(EngineBindingRef(
+        module_id="upscale", provider="comfyui", binding_version="v1",
+    ))
+
+    # 只修改 binding.yaml（inputs/defaults/save_image_prefix 级别的内容变化），workflow.json 不变
+    adapter2 = make_adapter()
+    (fake_dir / "binding.yaml").write_text(
+        binding_text.replace('save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"',
+                             'save_image_prefix: "NSFWStudio/changed/{job_short}/{stage}/{item_short}"'),
+        encoding="utf-8",
+    )
+    _w2, _b2, workflow_hash2, binding_hash2 = adapter2.load_binding(EngineBindingRef(
+        module_id="upscale", provider="comfyui", binding_version="v1",
+    ))
+    assert workflow_hash2 == workflow_hash, "workflow.json 未改动，workflow_hash 必须不变"
+    assert binding_hash2 != binding_hash, "binding.yaml 改动必须改变 binding_hash"
+
+    # 老 Job 携带旧 binding_hash → 拒绝执行（BINDING_HASH_MISMATCH）
+    stale = EngineBindingRef(
+        module_id="upscale", provider="comfyui", binding_version="v1",
+        workflow_hash=workflow_hash, binding_hash=binding_hash,
+    )
+    with pytest.raises(EngineError) as excinfo:
+        adapter2.load_binding(stale)
+    assert excinfo.value.error_type == "BINDING_HASH_MISMATCH"
+
+
 def test_one_adapter_serves_all_modules_dynamically():
     """§0.2/§二十二：同一 Adapter 交替加载 basic_generate/v1、upscale/v1、basic_generate/v1。"""
     adapter = make_adapter()
     for module_id in ("basic_generate", "upscale", "basic_generate"):
-        _workflow, binding, _hash = adapter.load_binding(EngineBindingRef(
+        _workflow, binding, _hash, _binding_hash = adapter.load_binding(EngineBindingRef(
             module_id=module_id, provider="comfyui", binding_version="v1",
         ))
         assert binding.get("module") == module_id

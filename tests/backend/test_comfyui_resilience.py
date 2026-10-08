@@ -166,11 +166,12 @@ def test_binding_version_switchable(tmp_path, monkeypatch):
     monkeypatch.setattr(comfyui_module, "PROVIDERS_DIR", tmp_path)
 
     adapter = ComfyUIAdapter({}, {"url": "http://stub"})
-    _workflow, binding, workflow_hash = adapter.load_binding(EngineBindingRef(
+    _workflow, binding, workflow_hash, binding_hash = adapter.load_binding(EngineBindingRef(
         module_id="basic_generate", provider="comfyui", binding_version="v2",
     ))
     assert str(binding["binding_version"]) == "v2"
     assert workflow_hash, "v2 binding 必须可加载并计算出 workflow_hash"
+    assert binding_hash, "v2 binding 必须可加载并计算出 binding_hash"
     assert ComfyUIAdapter.binding_dir("basic_generate", "v2") == target
 
 
