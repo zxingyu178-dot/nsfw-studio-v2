@@ -45,6 +45,8 @@ class Job(Base):
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     binding_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     workflow_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Phase 4 Task1：binding.yaml 指纹（与 workflow_hash 并列，覆盖 inputs/defaults/save_image_* 等）
+    binding_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
     completed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -116,6 +118,7 @@ class JobStage(Base):
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     binding_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     workflow_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    binding_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
     total_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -152,6 +155,8 @@ class JobStageItem(Base):
 
     input_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     output_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Phase 4 Task3：本 StageItem 实际使用的 Seed（uses_seed=false 的 Stage 必须为 NULL）
+    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
     engine_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -6,15 +6,17 @@
   status='failed' 的记录下次启动仍按"未完成"处理，不得静默跳过；
 - 重试成功前先清除同一 migration_id 的历史 failed 记录，避免主键冲突；
 - 失败时记录 ``failed`` 并抛出，阻止带伤启动；
+- Phase 4：statement 可以是 SQL 字符串或 callable（数据回填等需要程序逻辑的迁移）；
 - Phase 1 若复杂度上升，可平滑替换为 Alembic（见 docs/DATABASE_PLAN.md）。
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 
 @dataclass(frozen=True)
@@ -22,7 +24,104 @@ class Migration:
     migration_id: str
     version: str
     description: str
-    statements: tuple[str, ...]
+    # 每条 statement 为 SQL 字符串，或接收 Connection 的 callable（同一事务内执行）
+    statements: tuple[str | Callable[[Connection], None], ...]
+
+
+def _backfill_stage_status(job_status: str, item_statuses: list[str]) -> str:
+    """旧 Job 状态 → Stage 状态映射（Phase 4 Task0）。
+
+    - 终态 / RUNNING / INTERRUPTED 一一对应（RUNNING 由下次启动恢复转 INTERRUPTED）；
+    - PAUSED：已开始过的 Stage 保持 RUNNING（与在线暂停语义一致），未开始为 QUEUED；
+    - QUEUED / 未知：QUEUED。
+    """
+    if job_status in ("COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED", "RUNNING"):
+        return job_status
+    if job_status == "PAUSED":
+        started = any(status != "QUEUED" for status in item_statuses)
+        return "RUNNING" if started else "QUEUED"
+    return "QUEUED"
+
+
+def _backfill_pipeline_stages(conn: Connection) -> None:
+    """0008：为已执行过 0007、但没有 Stage 的历史 Job 回填 Stage0 + StageItem（Phase 4 Task0）。
+
+    规则（合同 Task 0）：
+    - 只处理 ``jobs WHERE NOT EXISTS job_stages``；**不改变历史 Job 本身状态**；
+    - Stage 身份优先继承 job 列（module_id/module_version/provider/binding_version/workflow_hash）；
+    - StageItem 状态直接映射自 JobItem（旧 RUNNING 保留，由启动恢复流程转 INTERRUPTED）；
+    - output_image_id = JobItem.image_id；input_image_id 保持 NULL（v0.3.x 无输入图片语义）；
+    - total_count = requested_count，completed_count = 已完成数量。
+    """
+    from app.core.ids import JOB_STAGE, JOB_STAGE_ITEM, new_id
+
+    jobs = conn.execute(text(
+        "SELECT id, status, requested_count, module_id, module_version, provider, binding_version, "
+        "workflow_hash, created_at, updated_at, finished_at FROM jobs "
+        "WHERE NOT EXISTS (SELECT 1 FROM job_stages WHERE job_stages.job_id = jobs.id)"
+    )).mappings().all()
+
+    for job in jobs:
+        items = conn.execute(text(
+            "SELECT id, item_index, status, engine_job_id, progress, image_id, error_type, error_message, "
+            "retry_count, created_at, started_at, finished_at, updated_at FROM job_items "
+            "WHERE job_id = :job_id ORDER BY item_index"
+        ), {"job_id": job["id"]}).mappings().all()
+
+        completed_count = sum(1 for item in items if item["status"] == "COMPLETED")
+        stage_status = _backfill_stage_status(
+            str(job["status"]), [str(item["status"]) for item in items]
+        )
+        stage_id = new_id(JOB_STAGE)
+        started_at = next((item["started_at"] for item in items if item["started_at"]), None)
+        conn.execute(text(
+            "INSERT INTO job_stages (id, job_id, stage_index, module_id, module_version, provider, "
+            "binding_version, workflow_hash, status, total_count, completed_count, config_json, "
+            "created_at, started_at, finished_at, updated_at) "
+            "VALUES (:id, :job_id, 0, :module_id, :module_version, :provider, :binding_version, "
+            ":workflow_hash, :status, :total_count, :completed_count, '{}', "
+            ":created_at, :started_at, :finished_at, :updated_at)"
+        ), {
+            "id": stage_id,
+            "job_id": job["id"],
+            "module_id": job["module_id"] or "basic_generate",
+            "module_version": job["module_version"] or "v1",
+            "provider": job["provider"],
+            "binding_version": job["binding_version"],
+            "workflow_hash": job["workflow_hash"],
+            "status": stage_status,
+            "total_count": job["requested_count"],
+            "completed_count": completed_count,
+            "created_at": job["created_at"],
+            "started_at": started_at,
+            "finished_at": job["finished_at"],
+            "updated_at": job["updated_at"],
+        })
+        for item in items:
+            conn.execute(text(
+                "INSERT INTO job_stage_items (id, job_stage_id, job_item_id, item_index, input_image_id, "
+                "output_image_id, status, engine_job_id, progress, error_type, error_message, retry_count, "
+                "created_at, started_at, finished_at, updated_at) "
+                "VALUES (:id, :job_stage_id, :job_item_id, :item_index, NULL, :output_image_id, "
+                ":status, :engine_job_id, :progress, :error_type, :error_message, :retry_count, "
+                ":created_at, :started_at, :finished_at, :updated_at)"
+            ), {
+                "id": new_id(JOB_STAGE_ITEM),
+                "job_stage_id": stage_id,
+                "job_item_id": item["id"],
+                "item_index": item["item_index"],
+                "output_image_id": item["image_id"],
+                "status": item["status"],
+                "engine_job_id": item["engine_job_id"],
+                "progress": item["progress"],
+                "error_type": item["error_type"],
+                "error_message": item["error_message"],
+                "retry_count": item["retry_count"],
+                "created_at": item["created_at"],
+                "started_at": item["started_at"],
+                "finished_at": item["finished_at"],
+                "updated_at": item["updated_at"],
+            })
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -327,6 +426,55 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_stage_items_item ON job_stage_items(job_item_id)",
         ),
     ),
+    Migration(
+        migration_id="0008_pipeline_backfill",
+        version="0.5.0",
+        description="Phase 4：为已执行过 0007 但没有 Stage 的历史 Job 回填 Stage0/StageItem",
+        statements=(
+            _backfill_pipeline_stages,
+        ),
+    ),
+    Migration(
+        migration_id="0009_execution_fingerprint",
+        version="0.5.0",
+        description="Phase 4：jobs/job_stages.binding_hash + job_stage_items.seed（执行指纹完整化）",
+        statements=(
+            # Task 1：binding_hash 与 workflow_hash 并列，完整覆盖 workflow.json + binding.yaml
+            "ALTER TABLE jobs ADD COLUMN binding_hash TEXT",
+            "ALTER TABLE job_stages ADD COLUMN binding_hash TEXT",
+            # Task 3：StageItem 自己的真实 Seed（uses_seed=false 的 Stage 为 NULL）
+            "ALTER TABLE job_stage_items ADD COLUMN seed INTEGER",
+            # 历史数据修正 1：回填 StageItem.seed（仅 basic_generate Stage——upscale Stage 不使用 seed，
+            # 旧版写入 JobItem 的随机数从未被高清模型使用，禁止冒领）
+            """
+            UPDATE job_stage_items SET seed = (
+                SELECT ji.seed FROM job_items ji WHERE ji.id = job_stage_items.job_item_id
+            )
+            WHERE seed IS NULL
+              AND job_stage_id IN (SELECT id FROM job_stages WHERE module_id = 'basic_generate')
+              AND EXISTS (
+                SELECT 1 FROM job_items ji
+                WHERE ji.id = job_stage_items.job_item_id AND ji.seed IS NOT NULL
+              )
+            """,
+            # 历史数据修正 2：upscale Stage 输出的高清图不得携带"假 Seed"（从未被高清模型使用）
+            """
+            UPDATE images SET seed = NULL
+            WHERE seed IS NOT NULL AND id IN (
+                SELECT si.output_image_id FROM job_stage_items si
+                JOIN job_stages st ON st.id = si.job_stage_id
+                WHERE st.module_id = 'upscale' AND si.output_image_id IS NOT NULL
+            )
+            """,
+            # 历史数据修正 3：upscale-only（process）Job 的 JobItem.seed 同样为假 Seed → 清空
+            """
+            UPDATE job_items SET seed = NULL
+            WHERE seed IS NOT NULL
+              AND job_id IN (SELECT DISTINCT job_id FROM job_stages WHERE module_id = 'upscale')
+              AND job_id NOT IN (SELECT DISTINCT job_id FROM job_stages WHERE module_id = 'basic_generate')
+            """,
+        ),
+    ),
 )
 
 
@@ -371,7 +519,10 @@ def apply_pending_migrations(engine: Engine) -> list[Migration]:
                     {"mid": migration.migration_id},
                 )
                 for statement in migration.statements:
-                    conn.execute(text(statement))
+                    if callable(statement):
+                        statement(conn)  # 数据回填等程序化迁移（同一事务）
+                    else:
+                        conn.execute(text(statement))
                 conn.execute(
                     text(
                         "INSERT INTO migration (migration_id, version, time, status) "
