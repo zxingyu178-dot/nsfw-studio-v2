@@ -14,28 +14,37 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 2 完成，v0.3.0）
+## 3. 阶段纪律（当前 Phase 3 完成，v0.4.0）
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
-2（Job Execution Core + ComfyUIAdapter + Gallery）。
+2（Job Execution Core + ComfyUIAdapter + Gallery）/
+2.1 / 2.2（执行稳定性与数据一致性收口）/
+3（Multi-stage Pipeline + Upscale：JobStage/JobStageItem、Stage Gate、UpscaleModule、
+图库高清 process Job、Image 父子关系）。
 
 本阶段仍禁止扩大范围实现：
 
-- 高清放大 / 图生图 / 参考图 / ControlNet / FaceID / 视频；
+- 图生图 / 参考图 / ControlNet / FaceID / 视频；
 - 手机端 / 豆包正式接入 / Agent 正式接入 / 全局搜索；
 - 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 
 生成链路约束：
 
-- 执行链路：Workbench → `POST /api/v1/jobs`（JobService 固化快照）→ 单队列 Worker →
+- 执行链路：Workbench → `POST /api/v1/jobs`（JobService 固化快照并物化 JobStage）→
+  单队列 Worker → Stage 顺序执行（Stage Gate：前一 Stage 全部完成才进下一 Stage）→
   WorkflowModule → EngineAdapter → ComfyUI → Image（导入 DataRoot）→ Gallery；
 - 前端绝不直连 ComfyUI；Job 创建只发生在 `JobService`，Worker 只消费已持久化 Job；
-- ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/` binding 层，
-  禁止污染引擎无关层；
+- **执行真源 = JobStage + workflow_snapshot**（§二十三）：Job 创建后当前配置变化不影响该 Job，
+  Resume 完整继承原 Stage/Binding，禁止静默升级；
+- ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/<module>/<binding>/` 层，
+  禁止污染引擎无关层；**已投入使用的 binding 目录视为 immutable**（workflow.json 改动必须新建 v2，
+  workflow_hash 不一致会被拒绝执行）；
+- 绑定属于每次请求：QueueWorker / ComfyUIAdapter 不得固化单一模块身份（§0.2/§二十二），
+  新增模块（img2img 等）只注册 WorkflowModule + 新增 binding 目录，核心执行逻辑零改动；
 - 机器信息（ComfyUI URL / 安装路径 / 输出路径）只进 `configs/config.local.yaml`（gitignore）
   或环境变量；公共配置不得出现 `127.0.0.1` / `localhost`（守卫测试会失败）；
-- 错误分类 / 重试 / 恢复语义见 `docs/JOB_STATE_MACHINE.md`、`QUEUE_SPEC.md`、`RECOVERY_SPEC.md`，
-  修改状态机前必须先同步文档。
+- 错误分类 / 重试 / 恢复语义见 `docs/JOB_STATE_MACHINE.md`、`PIPELINE_STATE_MACHINE.md`、
+  `QUEUE_SPEC.md`、`RECOVERY_SPEC.md`，修改状态机前必须先同步文档。
 
 数据纪律（Phase 1 起生效）：
 

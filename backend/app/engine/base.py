@@ -23,12 +23,32 @@ class EngineStatus:
 
 
 @dataclass(frozen=True)
+class EngineBindingRef:
+    """引擎任务要使用的 provider binding 身份（Phase 3 §0.2）。
+
+    绑定属于**每次请求**，不属于 Adapter 实例——同一个 Adapter 可以交替执行
+    basic_generate/v1、upscale/v1、basic_generate/v1 而不需要多套 Adapter。
+    """
+
+    module_id: str
+    module_version: str = "v1"
+    provider: str = "unbound"
+    binding_version: str = "v1"
+    workflow_hash: str | None = None
+
+
+@dataclass(frozen=True)
 class EngineJobRequest:
     """引擎无关的生成请求：由 WorkflowModule 从 WorkflowInput 转换而来。"""
 
-    job_type: str
+    binding: EngineBindingRef
     parameters: Mapping[str, Any] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def job_type(self) -> str:
+        """兼容性别名：等同 binding.module_id（旧代码/测试仍可用）。"""
+        return self.binding.module_id
 
 
 @dataclass(frozen=True)

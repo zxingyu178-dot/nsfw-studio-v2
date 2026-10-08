@@ -4,8 +4,14 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 2.2 — Data Consistency & Recovery Closure（已完成，v0.3.2）。
-Phase 2.x 收口结束，下一阶段进入 Phase 3。**
+**当前阶段：Phase 3 — Multi-stage Pipeline + Upscale（已完成，v0.4.0）。**
+Phase 3 新增：多阶段管线（JobStage / JobStageItem，**生成 N 张原图全部完成后才进入高清放大**，
+Stage Gate 严格门控）、第二个 WorkflowModule `upscale`（4x-UltraSharp 链，复用本机已验证资源）、
+图库已有图片单独高清（upscale-only process Job，同一 Worker / 同一模块）、
+Image 父子关系（高清 parent_image_id + images/upscaled 存储 + 图库切换）、
+分阶段实时进度与 HD 标记、配方高清开关 100% 恢复；
+Task 0 修复：Worker 意外异常 → Job INTERRUPTED + 队列暂停（§0.1）、请求级动态 binding（§0.2）、
+workflow_hash 校验（§0.3）、固定 Seed 仅限单张（§0.4）。
 Phase 2.2 修复：导入批次整批原子化（P0）、恢复后 Job 终态归并（P0）、Worker 取消不误写终态、
 Resume 完整继承原 Workflow 身份、ComfyUI 取消不误伤其他任务。
 Phase 2.1 修复：无图片不得 COMPLETED（P0）、引擎掉线不得永久 RUNNING、Worker 去模块硬编码
@@ -17,9 +23,11 @@ Phase 1 已完成：Prompt（结构化八栏/完整双模式 + 版本历史 + �
 Phase 2 已完成：Job / JobItem / 单队列 Worker（暂停 / 取消 / 续跑 / 幂等 / 崩溃恢复）、
 SSE 任务事件、ComfyUIAdapter（真实对接本机 ComfyUI + provider binding）、
 Image 导入 DataRoot + 图库（审核 / 收藏 / 按任务查看 / Image → 工作台 / 从图库创建素材）。
-执行链路：Workbench → POST /jobs → 单队列 → WorkflowModule → EngineAdapter → ComfyUI → Image → Gallery。
-本机 ComfyUI 环境事实见 `docs/COMFY_ENV_INVENTORY.md` / `docs/WORKFLOW_INVENTORY.md`；
-仍禁止：高清放大 / 图生图 / 参考图 / ControlNet / 视频 / 手机端 / Agent 正式接入。
+执行链路：Workbench → POST /jobs → 单队列 → Stage 顺序执行 → WorkflowModule → EngineAdapter →
+ComfyUI → Image → Gallery。
+本机 ComfyUI 环境事实见 `docs/COMFY_ENV_INVENTORY.md` / `docs/WORKFLOW_INVENTORY.md` /
+`docs/UPSCALE_WORKFLOW_INVENTORY.md`；
+仍禁止：图生图 / 参考图 / ControlNet / 视频 / 手机端 / Agent 正式接入。
 
 ## 技术栈
 
@@ -45,7 +53,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.3.2"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.4.0"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
@@ -110,6 +118,11 @@ NSFW-Studio-Data/
 - [docs/IMAGE_MODEL.md](docs/IMAGE_MODEL.md) — Image / Gallery 模型与流程
 - [docs/PHASE2_1_REPORT.md](docs/PHASE2_1_REPORT.md) — Phase 2.1 验收报告（执行稳定性收口）
 - [docs/PHASE2_2_REPORT.md](docs/PHASE2_2_REPORT.md) — Phase 2.2 验收报告（数据一致性收口）
+- [docs/PIPELINE_V2.md](docs/PIPELINE_V2.md) — 多阶段管线架构（JobStage / Stage Gate / 图片流转）
+- [docs/PIPELINE_STATE_MACHINE.md](docs/PIPELINE_STATE_MACHINE.md) — Stage / StageItem 状态机
+- [docs/UPSCALE_MODULE.md](docs/UPSCALE_MODULE.md) — 高清放大模块契约
+- [docs/UPSCALE_WORKFLOW_INVENTORY.md](docs/UPSCALE_WORKFLOW_INVENTORY.md) — 本机高清链调查与选型
+- [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md) — Phase 3 验收报告（多阶段管线 + 高清）
 - [DEV_LOG.md](DEV_LOG.md) / [TASKS.md](TASKS.md) / [CHANGELOG.md](CHANGELOG.md) / [TEST_REPORT.md](TEST_REPORT.md)
 
 ## Git 规范

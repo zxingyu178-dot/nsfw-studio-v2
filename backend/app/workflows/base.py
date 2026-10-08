@@ -23,7 +23,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from app.engine.base import EngineAdapter
+from app.engine.base import EngineAdapter, EngineBindingRef
 
 
 @dataclass(frozen=True)
@@ -77,11 +77,24 @@ class WorkflowValidation:
 
 
 @dataclass(frozen=True)
+class InputImageRef:
+    """处理型 StageItem 的输入图片（如高清放大的待处理原图，§二十一）。"""
+
+    image_id: str
+    file_name: str
+    data: bytes
+    width: int = 0
+    height: int = 0
+
+
+@dataclass(frozen=True)
 class JobRequestContext:
     """模块构建引擎请求所需的通用 Job 上下文。
 
     由 PipelineExecutor 从 Job 的通用快照字段构造（不含任何模块专属参数名），
     由具体 WorkflowModule 解释并映射为自己的标准输入 / EngineJobRequest。
+    binding：本次请求要使用的 provider binding 身份（§0.2，来自 Job/Stage 固化身份）。
+    input_image：处理型模块的输入图片（生成型模块为 None）。
     """
 
     positive_prompt: str = ""
@@ -89,6 +102,8 @@ class JobRequestContext:
     generation_settings: Mapping[str, Any] = field(default_factory=dict)
     seed: int = 0
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    binding: EngineBindingRef | None = None
+    input_image: InputImageRef | None = None
 
 
 class WorkflowModule(ABC):
@@ -105,11 +120,27 @@ class WorkflowModule(ABC):
     def validate_input(self, payload: WorkflowInput) -> WorkflowValidation:
         """校验输入；不合法时返回 ok=False 与错误列表。"""
 
+    async def prepare_inputs(self, context: JobRequestContext, engine: EngineAdapter) -> Mapping[str, Any]:
+        """可选钩子：执行前准备引擎侧输入（如上传待处理图片，§十三）。
+
+        返回的 dict 会作为 prepared 传给 build_engine_request；默认不做任何事。
+        """
+        return {}
+
+    def build_engine_request(self, context: JobRequestContext, prepared: Mapping[str, Any] | None = None) -> Any:
+        """把 Job 上下文映射为 EngineJobRequest（参数名属于模块契约，不属于 Worker）。
+
+        由具体模块实现；返回类型为 ``app.engine.base.EngineJobRequest``。
+        """
+        raise NotImplementedError(f"{type(self).__name__} 未实现 build_engine_request")
+
     @abstractmethod
-    async def execute(self, payload: WorkflowInput, engine: EngineAdapter) -> WorkflowOutput:
+    async def execute(self, payload: WorkflowInput, engine: EngineAdapter,
+                      *, binding: EngineBindingRef | None = None) -> WorkflowOutput:
         """执行工作流（Phase 1+ 由具体模块实现）。
 
         **必须为 async**（执行链路统一异步：Pipeline → WorkflowModule →
         EngineAdapter → 具体引擎）。只允许通过 ``engine``（EngineAdapter 接口）
         await 引擎调用，不得在模块内实现任何具体引擎的执行逻辑。
+        ``binding``：本次请求使用的 provider binding 身份（§0.2，来自固化快照/Stage）。
         """

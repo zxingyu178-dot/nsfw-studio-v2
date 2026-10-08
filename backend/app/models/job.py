@@ -14,6 +14,9 @@ from app.database.base import Base
 JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED", "COMPLETED", "FAILED", "CANCELLED")
 JOB_ITEM_STATUSES = ("QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED")
 JOB_SOURCES = ("web", "resume", "agent", "doubao")
+# Phase 3：generate = 生成流水线（basic[+upscale]）；process = 处理型（图库高清等）
+JOB_KINDS = ("generate", "process")
+STAGE_STATUSES = ("QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED")
 
 
 class Job(Base):
@@ -58,8 +61,14 @@ class Job(Base):
     finished_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)
 
+    # Phase 3：generate（生成流水线）/ process（图库高清等处理型）
+    job_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="generate")
+
     items: Mapped[list["JobItem"]] = relationship(
         back_populates="job", order_by="JobItem.item_index", cascade="all, delete-orphan"
+    )
+    stages: Mapped[list["JobStage"]] = relationship(
+        back_populates="job", order_by="JobStage.stage_index", cascade="all, delete-orphan"
     )
 
 
@@ -84,6 +93,80 @@ class JobItem(Base):
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)
 
     job: Mapped[Job] = relationship(back_populates="items")
+
+
+class JobStage(Base):
+    """多阶段管线中的一个阶段（Phase 3 §一/§二）。
+
+    每个 Stage 固化自己的 Workflow 身份（module/binding/hash），
+    执行真源 = Stage + workflow_snapshot，而不是当前配置。
+    """
+
+    __tablename__ = "job_stages"
+    __table_args__ = (
+        Index("uq_job_stages_index", "job_id", "stage_index", unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"), nullable=False)
+    stage_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    module_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    module_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    binding_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    workflow_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
+    total_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
+    started_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)
+
+    job: Mapped[Job] = relationship(back_populates="stages")
+    stage_items: Mapped[list["JobStageItem"]] = relationship(
+        back_populates="stage", order_by="JobStageItem.item_index", cascade="all, delete-orphan"
+    )
+
+
+class JobStageItem(Base):
+    """一个逻辑图片槽位在某个 Stage 的实际执行记录（Phase 3 §三）。
+
+    input_image_id / output_image_id 表达图片流转；engine_job_id 用于崩溃恢复核对。
+    """
+
+    __tablename__ = "job_stage_items"
+    __table_args__ = (
+        Index("idx_stage_items_stage", "job_stage_id"),
+        Index("idx_stage_items_item", "job_item_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_stage_id: Mapped[str] = mapped_column(ForeignKey("job_stages.id"), nullable=False)
+    job_item_id: Mapped[str] = mapped_column(ForeignKey("job_items.id"), nullable=False)
+    item_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    input_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    output_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
+    engine_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    progress: Mapped[float | None] = mapped_column(nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
+    started_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)
+
+    stage: Mapped[JobStage] = relationship(back_populates="stage_items")
+    job_item: Mapped[JobItem] = relationship()
 
 
 class JobEvent(Base):

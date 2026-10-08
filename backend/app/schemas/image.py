@@ -1,7 +1,7 @@
 """Image / Gallery 相关出入参。"""
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models import Image
 import json
@@ -15,6 +15,20 @@ class ImageReviewRequest(BaseModel):
 
 class ImageFavoriteRequest(BaseModel):
     favorite: bool
+
+
+class ImageUpscaleRequest(BaseModel):
+    """图库高清放大请求（§二十四）：选择 1 张或多张已有图片创建处理型 Job。"""
+
+    image_ids: list[str] = Field(min_length=1, max_length=64)
+
+
+class ImageVersionsResponse(BaseModel):
+    """父子关系（§十九）：原图 → 派生版本（高清等）/ 高清图 → 来源原图。"""
+
+    image: "ImageResponse"
+    parent: "ImageResponse | None"
+    children: list["ImageResponse"]
 
 
 class ImageResponse(BaseModel):

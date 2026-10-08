@@ -4,12 +4,14 @@ import { ApiRequestError, assetApi, imageApi, jobApi } from '../../api/client'
 import { formatDateTime } from '../../utils/format'
 import {
   ASSET_TYPES,
+  IMAGE_KIND_LABEL,
   IMAGE_SOURCE_LABEL,
   REVIEW_STATUS_LABEL,
   imageContentUrl,
   shortJobId,
   type AssetType,
   type ImageDTO,
+  type ImageVersionsDTO,
   type JobDTO,
 } from '../../types/workbench'
 
@@ -51,6 +53,11 @@ export default function GalleryPage() {
   const [detail, setDetail] = useState<ImageDTO | null>(null)
   const [groups, setGroups] = useState<{ job: JobDTO; summary: JobSummary }[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
+  // §二十：图库多选 → 高清放大（创建 process Job）
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [upscaling, setUpscaling] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -117,6 +124,31 @@ export default function GalleryPage() {
     setDetail((current) => (current && current.id === updated.id ? updated : current))
   }
 
+  function toggleSelect(imageId: string): void {
+    setSelectedIds((previous) =>
+      previous.includes(imageId) ? previous.filter((id) => id !== imageId) : [...previous, imageId],
+    )
+  }
+
+  /** §二十：选择图库已有图片（1 张或多张）→ 创建 upscale-only process Job（绝不直连 ComfyUI） */
+  async function submitUpscale(imageIds: string[]): Promise<JobDTO | null> {
+    if (imageIds.length === 0) return null
+    setUpscaling(true)
+    setNotice(null)
+    try {
+      const job = await imageApi.upscale(imageIds)
+      setNotice(`已创建高清任务 ${shortJobId(job.id)}（${imageIds.length} 张），完成后可在图库查看高清版本`)
+      setSelectedIds([])
+      setSelectMode(false)
+      return job
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '创建高清任务失败')
+      return null
+    } finally {
+      setUpscaling(false)
+    }
+  }
+
   return (
     <section className="page page--wide">
       <div className="tabs" role="tablist" aria-label="图库筛选">
@@ -135,12 +167,39 @@ export default function GalleryPage() {
         <span className="toolbar__spacer" />
         <button
           type="button"
+          className={`tabs__item${selectMode ? ' tabs__item--active' : ''}`}
+          onClick={() => {
+            setSelectMode(!selectMode)
+            setSelectedIds([])
+          }}
+        >
+          {selectMode ? '退出选择' : '选择'}
+        </button>
+        <button
+          type="button"
           className={`tabs__item${view === 'group' ? ' tabs__item--active' : ''}`}
           onClick={() => setView(view === 'group' ? 'flat' : 'group')}
         >
           按任务查看
         </button>
       </div>
+
+      {selectMode && (
+        <div className="toolbar">
+          <span className="badge badge--mode">已选 {selectedIds.length} 张</span>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            disabled={upscaling || selectedIds.length === 0}
+            onClick={() => void submitUpscale(selectedIds)}
+          >
+            {upscaling ? '提交中…' : '高清放大'}
+          </button>
+          <span className="muted">选择图库已有图片（可多张）→ 创建高清任务，不重复生成原图。</span>
+        </div>
+      )}
+
+      {notice && <p className="notice notice--ok" role="status">{notice}</p>}
 
       {jobFilter && (
         <div className="toolbar">
@@ -201,9 +260,9 @@ export default function GalleryPage() {
               <button
                 key={image.id}
                 type="button"
-                className="gallery-card"
-                onClick={() => setDetail(image)}
-                title={`${shortJobId(image.job_id ?? '')} · ${REVIEW_STATUS_LABEL[image.review_status]}`}
+                className={`gallery-card${selectedIds.includes(image.id) ? ' gallery-card--selected' : ''}`}
+                onClick={() => (selectMode ? toggleSelect(image.id) : setDetail(image))}
+                title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${REVIEW_STATUS_LABEL[image.review_status]}`}
               >
                 <img
                   className="gallery-card__img"
@@ -212,6 +271,8 @@ export default function GalleryPage() {
                   loading="lazy"
                 />
                 <span className="gallery-card__badges">
+                  {image.kind === 'upscaled' && <span className="status-chip status-chip--hd">HD</span>}
+                  {selectedIds.includes(image.id) && <span className="status-chip status-chip--kept">✓</span>}
                   {image.favorite && <span className="status-chip status-chip--favorite">★</span>}
                   {image.review_status !== 'UNREVIEWED' && (
                     <span className={`status-chip status-chip--${image.review_status.toLowerCase()}`}>
@@ -230,6 +291,12 @@ export default function GalleryPage() {
           image={detail}
           onClose={() => setDetail(null)}
           onUpdated={handleUpdated}
+          onSelectImage={(image) => {
+            setDetail(image)
+            setItems((previous) => previous.map((item) => (item.id === image.id ? image : item)))
+          }}
+          onUpscale={(imageId) => void submitUpscale([imageId])}
+          upscaling={upscaling}
         />
       )}
     </section>
@@ -242,14 +309,20 @@ interface DetailDrawerProps {
   image: ImageDTO
   onClose: () => void
   onUpdated: (image: ImageDTO) => void
+  /** §十九：在原图 / 高清之间切换 */
+  onSelectImage: (image: ImageDTO) => void
+  /** §二十：单张高清放大 */
+  onUpscale: (imageId: string) => void
+  upscaling: boolean
 }
 
-function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
+function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpscale, upscaling }: DetailDrawerProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [versions, setVersions] = useState<ImageVersionsDTO | null>(null)
   const [assetType, setAssetType] = useState<AssetType>('face')
   const [assetName, setAssetName] = useState(`图库-${image.id.replace(/^img_/, '').slice(0, 8)}`)
 
@@ -268,6 +341,23 @@ function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
       cancelled = true
     }
   }, [image.job_id])
+
+  // §十九：父子关系（来源原图 / 派生版本）
+  useEffect(() => {
+    let cancelled = false
+    setVersions(null)
+    imageApi
+      .versions(image.id)
+      .then((result) => {
+        if (!cancelled) setVersions(result)
+      })
+      .catch(() => {
+        // 关系信息缺失不阻塞图片查看
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [image.id])
 
   async function run(action: () => Promise<ImageDTO>, okText: string): Promise<void> {
     setBusy(true)
@@ -292,6 +382,7 @@ function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
         if (useSeed && image.seed !== null) {
           snapshot.seed = image.seed
           snapshot.seed_mode = 'fixed'
+          snapshot.count = 1 // §0.4：固定 Seed 仅用于单张精确复现
         }
         onClose()
         navigate('/generate', { state: { workbench: snapshot } })
@@ -349,7 +440,42 @@ function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
 
         <div className="gallery-detail__preview">
           <img src={imageContentUrl(image.id)} alt="" />
+          {image.kind === 'upscaled' && <span className="result-pane__hd">HD</span>}
         </div>
+
+        {/* ===== 父子关系（§十九）：来源原图 / 派生版本，直接点击切换 ===== */}
+        {(versions?.parent || (versions?.children.length ?? 0) > 0) && (
+          <div className="version-links">
+            {versions?.parent && (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() => onSelectImage(versions.parent as ImageDTO)}
+              >
+                来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看
+              </button>
+            )}
+            {(versions?.children.length ?? 0) > 0 && (
+              <div className="version-links__children">
+                <span className="muted">派生版本：</span>
+                {versions!.children.map((child) => {
+                  const scale = image.width > 0 ? Math.round(child.width / image.width) : 0
+                  return (
+                    <button
+                      key={child.id}
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => onSelectImage(child)}
+                    >
+                      {IMAGE_KIND_LABEL[child.kind] ?? child.kind}
+                      {scale > 1 ? ` ×${scale}` : ''} · {child.width}×{child.height}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="drawer__meta-actions">
           <button
@@ -405,6 +531,15 @@ function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
           >
             使用此图 Seed
           </button>
+          <button
+            type="button"
+            className="btn btn--sm"
+            disabled={upscaling}
+            onClick={() => onUpscale(image.id)}
+            title="创建高清任务（不重复生成原图）"
+          >
+            {upscaling ? '提交中…' : '高清放大'}
+          </button>
         </div>
 
         {message && <p className="notice notice--ok" role="status">{message}</p>}
@@ -419,6 +554,8 @@ function GalleryDetailDrawer({ image, onClose, onUpdated }: DetailDrawerProps) {
           <dd>{image.seed ?? '—'}</dd>
           <dt>任务</dt>
           <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
+          <dt>类型</dt>
+          <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
           <dt>来源</dt>
           <dd>{IMAGE_SOURCE_LABEL[image.source] ?? image.source}</dd>
           <dt>时间</dt>

@@ -22,7 +22,7 @@ from app.core.errors import AppError
 from app.core.events import EventBroker
 from app.database.base import make_engine, make_session_factory
 from app.engine.factory import create_engine_adapter
-from app.models import Job, JobItem
+from app.models import Job, JobItem, JobStageItem
 from app.services import job_service
 from app.services.system_service import bootstrap
 from app.storage.manager import StorageManager
@@ -37,16 +37,27 @@ def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
 
 
 def _make_output_importer(session_factory, storage: StorageManager):
-    """Worker 的输出导入回调（Phase 2C）：引擎输出 → DataRoot 正式 Image。"""
+    """Worker 的输出导入回调（Phase 3）：引擎输出 → DataRoot 正式 Image（按 StageItem 判定 kind）。"""
     from app.services.image_service import import_adapter_outputs
 
-    def importer(job, item, outputs):
+    def importer(job, stage_item, outputs):
         with session_factory() as session:
             job_ref = session.get(Job, job.id)
-            item_ref = session.get(JobItem, item.id)
-            return import_adapter_outputs(session, storage, job_ref, item_ref, outputs)
+            stage_item_ref = session.get(JobStageItem, stage_item.id)
+            return import_adapter_outputs(session, storage, job_ref, stage_item_ref, outputs)
 
     return importer
+
+
+def _make_input_loader(session_factory, storage: StorageManager):
+    """处理型 Stage 的输入图片加载（Phase 3 §十三/§二十一）：Image → InputImageRef。"""
+    from app.services.image_service import load_input_image_ref
+
+    def loader(image_id):
+        with session_factory() as session:
+            return load_input_image_ref(session, storage, image_id)
+
+    return loader
 
 
 @asynccontextmanager
@@ -67,6 +78,7 @@ async def lifespan(application: FastAPI):
         adapter,
         pipeline=PipelineExecutor(),  # §三：Worker 经 Pipeline 解析 WorkflowModule
         output_importer=_make_output_importer(session_factory, storage),
+        input_loader=_make_input_loader(session_factory, storage),
         poll_interval_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("worker_poll_interval_ms", 300)),
         engine_poll_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("engine_poll_ms", 200)),
     )

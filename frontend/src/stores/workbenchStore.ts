@@ -22,7 +22,8 @@ export interface WorkbenchState {
   count: number
   seedMode: 'random' | 'fixed'
   seed: number | null
-  workflowModules: Record<string, unknown>[]
+  /** 工作流开关（§十五）：开启后 Pipeline = basic_generate → upscale */
+  upscaleEnabled: boolean
   sourcePromptId: string | null
   sourcePromptVersionId: string | null
   sourceRecipeId: string | null
@@ -40,7 +41,7 @@ function initialState(): WorkbenchState {
     count: 1,
     seedMode: 'random',
     seed: null,
-    workflowModules: [],
+    upscaleEnabled: false,
     sourcePromptId: null,
     sourcePromptVersionId: null,
     sourceRecipeId: null,
@@ -68,6 +69,13 @@ export function useWorkbench(): WorkbenchState {
   return useSyncExternalStore(subscribeWorkbench, getWorkbenchState)
 }
 
+/** 工作流模块列表（§五/§十五）：开关决定 Pipeline，而不是前端任意拼结构 */
+export function workflowModulesFor(upscaleEnabled: boolean): Record<string, unknown>[] {
+  return upscaleEnabled
+    ? [{ module_id: 'basic_generate' }, { module_id: 'upscale' }]
+    : []
+}
+
 /** 当前状态 → 统一快照（保存 Prompt / 保存配方时使用） */
 export function snapshotFromState(): WorkbenchSnapshot {
   return {
@@ -81,14 +89,18 @@ export function snapshotFromState(): WorkbenchSnapshot {
     count: state.count,
     seed_mode: state.seedMode,
     seed: state.seedMode === 'fixed' ? state.seed : null,
-    workflow_modules: [...state.workflowModules],
+    workflow_modules: workflowModulesFor(state.upscaleEnabled),
     source_prompt_id: state.sourcePromptId,
     source_prompt_version_id: state.sourcePromptVersionId,
   }
 }
 
-/** 整体注入快照（Prompt / Recipe → 工作台，100% 恢复） */
+/** 整体注入快照（Prompt / Recipe → 工作台，100% 恢复，含高清开关 §十六） */
 export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: string | null = null): void {
+  const modules = snapshot.workflow_modules ?? []
+  const upscaleEnabled = modules.some(
+    (module) => (module as { module_id?: string }).module_id === 'upscale',
+  )
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
@@ -101,7 +113,7 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     // Seed 默认 random；仅"使用此图 Seed"等显式固定时才恢复固定值（规范 §四十七）
     seedMode: typeof snapshot.seed === 'number' ? 'fixed' : 'random',
     seed: typeof snapshot.seed === 'number' ? snapshot.seed : null,
-    workflowModules: [...(snapshot.workflow_modules ?? [])],
+    upscaleEnabled,
     sourcePromptId: snapshot.source_prompt_id ?? null,
     sourcePromptVersionId: snapshot.source_prompt_version_id ?? null,
     sourceRecipeId,
@@ -136,12 +148,27 @@ export function setSize(width: number, height: number): void {
 }
 
 export function setCount(count: number): void {
+  // §0.4：固定 Seed 仅用于单张精确复现；用户把数量改成 >1 → 自动切回随机 Seed
+  if (count > 1 && state.seedMode === 'fixed') {
+    setState({ count, seedMode: 'random', seed: null })
+    return
+  }
   setState({ count })
 }
 
 /** 固定 Seed（"使用此图 Seed"）或恢复随机（seed = null） */
 export function setSeed(seed: number | null): void {
-  setState({ seedMode: seed === null ? 'random' : 'fixed', seed })
+  // §0.4：固定 Seed 自动收敛为单张（count = 1）
+  if (seed !== null) {
+    setState({ seedMode: 'fixed', seed, count: 1 })
+    return
+  }
+  setState({ seedMode: 'random', seed: null })
+}
+
+/** 工作流开关（§十五）：② 高清放大 */
+export function setUpscaleEnabled(enabled: boolean): void {
+  setState({ upscaleEnabled: enabled })
 }
 
 /**

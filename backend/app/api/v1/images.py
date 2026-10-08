@@ -1,24 +1,28 @@
-"""Images / Gallery API（Phase 2C，规范 §四十四、§四十七、§四十八）。"""
+"""Images / Gallery API（Phase 2C，规范 §四十四、§四十七、§四十八；Phase 3 §十九/§二十四）。"""
 from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session, get_storage
-from app.core.errors import NotFoundError
+from app.api.v1.jobs import check_disk_space, resolve_requested_modules
+from app.core.errors import NotFoundError, ValidationError
 from app.core.filetypes import mime_for_suffix
 from app.schemas.image import (
     ImageFavoriteRequest,
     ImageListResponse,
     ImageResponse,
     ImageReviewRequest,
+    ImageUpscaleRequest,
+    ImageVersionsResponse,
     ImageWorkbenchResponse,
     image_response,
 )
-from app.services import image_service
+from app.schemas.job import JobResponse, job_response
+from app.services import image_service, job_service
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/images", tags=["images"])
@@ -84,6 +88,62 @@ def image_to_workbench(image_id: str, session: Session = Depends(get_session)) -
     snapshot = json.loads(job.workbench_snapshot_json)
     # Seed 默认 random；"使用此图 Seed" 由前端把 seed 写入快照后提交
     return ImageWorkbenchResponse(image_id=image.id, seed=image.seed, snapshot=snapshot)
+
+
+@router.post("/upscale", response_model=JobResponse, status_code=201,
+             summary="图库图片高清放大（创建处理型 Job，§二十/§二十四）")
+def upscale_images(request: Request, body: ImageUpscaleRequest,
+                   session: Session = Depends(get_session),
+                   storage: StorageManager = Depends(get_storage)) -> JobResponse:
+    """选择已有图片（1 张或多张）→ 创建 job_kind=process 的普通 Job，由同一 QueueWorker 执行。
+
+    绝不在此直接调用引擎；Pipeline = upscale（不重跑基础生成，§二十）。
+    """
+    disk = check_disk_space(request)
+    settings = request.app.state.settings
+    image_ids = list(dict.fromkeys(body.image_ids))  # 去重且保持选择顺序
+    images = [image_service.get_image(session, image_id) for image_id in image_ids]
+    for image in images:
+        if not storage.absolutize(image.file_path).is_file():
+            raise ValidationError(f"图片文件缺失，无法放大: {image.id}", code="IMAGE_FILE_MISSING")
+
+    modules = resolve_requested_modules(settings, [{"module_id": "upscale"}])
+    first = images[0]
+    snapshot = {
+        "prompt_mode": "structured",
+        "structured_prompt": {},
+        "full_prompt": "",
+        "negative_prompt": "",
+        "selected_assets": {},
+        "width": first.width,
+        "height": first.height,
+        "count": len(images),
+        "seed_mode": "random",
+        "seed": None,
+        "workflow_modules": [{"module_id": "upscale"}],
+    }
+    job, _created = job_service.create_job(
+        session,
+        source="web",
+        snapshot=snapshot,
+        workflow_modules=modules,
+        job_kind="process",
+        input_image_ids=image_ids,
+    )
+    response = job_response(job)
+    response.disk_space = disk
+    return response
+
+
+@router.get("/{image_id}/versions", response_model=ImageVersionsResponse,
+            summary="父子关系（§十九）：派生版本 / 来源原图")
+def image_versions(image_id: str, session: Session = Depends(get_session)) -> ImageVersionsResponse:
+    versions = image_service.get_versions(session, image_id)
+    return ImageVersionsResponse(
+        image=image_response(versions["image"]),
+        parent=image_response(versions["parent"]) if versions["parent"] is not None else None,
+        children=[image_response(child) for child in versions["children"]],
+    )
 
 
 @router.get("/by-job/{job_id}/summary", summary="按 Job 统计（规范 §四十九）")

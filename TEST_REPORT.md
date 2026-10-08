@@ -1,4 +1,44 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2（2026-10-07）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3（2026-10-08）
+
+## Phase 3 测试（v0.4.0，Multi-stage Pipeline + Upscale）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：144 passed**（v0.3.2 的 132 例 + Phase 3 新增 12 例）。
+
+| 新增用例 | 覆盖点 |
+| --- | --- |
+| test_phase3_pipeline.py 12 例 | basic-only 单 Stage；basic+upscale 严格顺序（提交序列 basic×3→upscale×3 + StageItem 输入=上一 Stage 输出 + parent/kind/存储目录）；Stage 0 失败 → Stage 1 不启动；Stage 2 第 2 张失败 → 原图全保留；Stage 2 暂停/继续；Stage 2 取消保留已生成；Stage 2 崩溃恢复（高清挂回原图 + 不重跑已完成 Stage + JOB_RECOVERED_COMPLETED）；图库 3 张 → upscale-only process Job（同一模块、input_image_id 对应）；Worker 内部 RuntimeError → Job INTERRUPTED + 队列暂停 + 第二 Job 不启动；hash 不一致系统性失败；ENGINE_TIMEOUT（不重试、不暂停队列）；Recipe 高清开关往返 |
+| test_comfyui_binding.py（重写 + 新增） | EngineBindingRef 注入；hash 溯源；hash 不一致拒绝（WORKFLOW_HASH_MISMATCH）；一个 Adapter 动态加载 basic_generate/v1 与 upscale/v1；upscale/v1 图结构（LoadImage→UpscaleModelLoader(4x-UltraSharp)→ImageUpscaleWithModel→SaveImage） |
+| test_comfyui_resilience.py（更新） | binding 版本切换改为请求级 `load_binding`（v2 目录可切换、v9 → BINDING_NOT_FOUND） |
+| test_job_queue.py / test_phase21_stability.py（更新） | 固定 Seed 语义：fixed 单张使用该 Seed；fixed+count>1 → 400 `FIXED_SEED_SINGLE_ONLY`；续跑子 Job 新随机 Seed 且不复用父 Seed |
+| test_image_service.py（更新） | 导入回调按 StageItem 判定（阶段输入 → upscaled + parent；否则 original） |
+| test_migration_upgrade.py（更新） | 升级路径补 `0007_pipeline_stage` |
+
+### 全量套件（含真实 ComfyUI 链路）
+
+命令：`.venv\Scripts\python -m pytest tests/backend`
+
+**结果：147 passed（144 快速 + 3 真实），退出码 0。**
+
+### 真实 ComfyUI 验收（§二十六：只跑最短链路）
+
+| 场景 | 结果 |
+| --- | --- |
+| 1 张基础生成（test_real_basic_generation_smoke） | ✅ 640×960 真实图（931KB）；ComfyUI history `success`；输出 `NSFWStudio/<job>/0/<item>` |
+| 1 张基础 → 1 张真实高清（test_real_pipeline_basic_then_upscale） | ✅ 原图 640×960 → 高清 **2560×3840**（11.0MB，4 倍）；Stage 0/1 COMPLETED；parent 指向原图 |
+| 图库 1 张 → 单独高清（test_real_gallery_upscale_only） | ✅ 64×64 → **256×256**；kind=upscaled 入 `images/upscaled/`；versions 父子互查通过 |
+
+### 前端
+
+`npm run build`：tsc --noEmit 通过 + vite build 通过（v0.4.0）。
+
+### 环境说明（如实记录）
+
+真实验收期间 ComfyUI 队列存在用户夜间批量；按用户当日指令暂停（现场已保存，恢复步骤见
+`temp/nightbatch_restore_notes.md`）后完成上述真实链路。未触碰用户手工任务。
 
 ## Phase 2.2 测试（v0.3.2，Data Consistency & Recovery Closure）
 

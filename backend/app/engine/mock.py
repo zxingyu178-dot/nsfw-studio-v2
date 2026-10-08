@@ -51,6 +51,8 @@ class MockEngineAdapter(EngineAdapter):
         self._canceled: set[str] = set()
         self._completed: dict[str, int] = {}
         self._submitted = 0
+        # 测试辅助：记录全部 EngineJobRequest（用于断言模块顺序与 binding 身份，Phase 3 §二十五）
+        self.submitted_requests: list[EngineJobRequest] = []
         self.online = True
 
     async def health(self) -> EngineStatus:
@@ -66,6 +68,7 @@ class MockEngineAdapter(EngineAdapter):
             self._transient_failures += 1
             raise EngineError("ENGINE_NETWORK", "mock transient network failure", transient=True)
         self._submitted += 1
+        self.submitted_requests.append(request)
         engine_job_id = f"mock_{uuid.uuid4().hex[:12]}"
         if self.mode in ("fail", "oom", "workflow_error") or (
             self.fail_after_items and self._submitted > self.fail_after_items
@@ -111,6 +114,10 @@ class MockEngineAdapter(EngineAdapter):
     async def cancel_job(self, engine_job_id: str) -> bool:
         self._canceled.add(engine_job_id)
         return True
+
+    async def upload_image(self, filename: str, data: bytes) -> str:
+        """处理型 Stage（如高清放大）的输入图片上传（测试用替身命名）。"""
+        return f"mock_inputs/{filename}"
 
     # ===== 测试辅助 =====
     def set_offline(self, offline: bool) -> None:

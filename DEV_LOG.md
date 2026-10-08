@@ -1,5 +1,46 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-08 — Phase 3：Multi-stage Pipeline + Upscale（v0.4.0）
+
+**执行**：TRAE Code Agent（feature/phase3-pipeline-upscale → develop → CI → main → CI → tag v0.4.0）
+单线开发（合同 §二十八：不再并行拆 Agent）。
+
+### 交付
+
+- **Task 0 先行修复**：0.1 Worker 内部异常 → Job/Stage INTERRUPTED + queue_paused +
+  WORKER_INTERNAL_ERROR；0.2 EngineBindingRef 请求级动态绑定（Adapter 按
+  (module_id,binding_version) 缓存）；0.3 workflow_hash 校验（不一致 → WORKFLOW_HASH_MISMATCH）；
+  0.4 固定 Seed 仅限单张（fixed+count>1 → 400；前端自动收敛/切回随机）。
+- **多阶段管线**：迁移 0007（job_kind + job_stages + job_stage_items）；创建时物化 Stage，
+  执行真源 = JobStage + workflow_snapshot；Stage Gate（basic×N 全部完成才进 upscale×N）；
+  暂停/取消在 StageItem 边界；崩溃恢复按 StageItem + 文件级兜底（§九）；execution_timeout（§十）。
+- **UpscaleModule + upscale/v1**：4x-UltraSharp 链（复用本机已验证资源，只读调查 →
+  docs/UPSCALE_WORKFLOW_INVENTORY.md）；输入图片经 /upload/image（Studio 唯一命名）；
+  Image 存储泛化（images/originals|upscaled|processed + parent_image_id）。
+- **图库高清**：POST /api/v1/images/upscale → upscale-only process Job（同一 Worker/模块）；
+  Job Detail stages[]；/images/{id}/versions 父子关系。
+- **前端**：工作流开关（配方 100% 恢复）；分阶段实时进度；HD 标记；图库多选高清 +
+  父子切换；"使用此图 Seed" count=1。
+- **文档**：新增 PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_MODULE /
+  UPSCALE_WORKFLOW_INVENTORY / PHASE3_REPORT；同步 10 份既有文档 + 根级日志。
+
+### 验证
+
+- 快速套件 **144 passed**（132 基线 + 12 新增；--ignore 集成）；
+- 全量套件 **147 passed**（含 3 条真实 ComfyUI 链路），退出码 0；
+- 真实验收：1 张基础（640×960）→ 1 张高清（**2560×3840**，4 倍，父子正确）；
+  图库 64×64 → **256×256**；ComfyUI history success；输出命名 `NSFWStudio/<job>/<stage>/<item>`；
+- 前端 `npm run build` 通过（tsc + vite，v0.4.0）。
+
+### 环境（如实记录）
+
+- 真实验收期间 ComfyUI 存在用户夜间批量（V1 内部批量 + 千问外部批量）。按用户当日指令
+  "取消夜间任务，开发验收优先，完成后恢复"：通过 V1 自带接口 `/api/batch/cancel` 取消
+  19 个 pending/running（快照 temp/v1_batch_snapshot_before_cancel.json）、结束千问外部批量
+  进程（断点续跑能力保留）、移除队列中 2 个夜间 prompt（payload 已保存
+  temp/nightbatch_requeue_snapshot.json）；恢复步骤见 temp/nightbatch_restore_notes.md。
+- 未触碰用户手工任务与其它 AIHome 服务。
+
 ## 2026-10-07 — Phase 2.2：Data Consistency & Recovery Closure（v0.3.2）
 
 **执行**：TRAE Code Agent（fix/phase2-data-consistency → develop → CI → main → CI → tag v0.3.2）

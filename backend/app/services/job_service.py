@@ -17,11 +17,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
-from app.core.ids import JOB, JOB_ITEM, new_id
+from app.core.ids import JOB, JOB_ITEM, JOB_STAGE, JOB_STAGE_ITEM, new_id
 from app.core.timeutil import utc_now_iso
 from app.engine.errors import classify_engine_message
-from app.models import JOB_SOURCES, JOB_STATUSES, Job, JobEvent, JobItem
+from app.models import (
+    JOB_KINDS,
+    JOB_SOURCES,
+    JOB_STATUSES,
+    Job,
+    JobEvent,
+    JobItem,
+    JobStage,
+    JobStageItem,
+)
 from app.services.prompt_composer import compose_structured, dumps_structured
+from app.workflows.registry import default_registry
 
 TERMINAL_JOB_STATUSES = ("COMPLETED", "FAILED", "CANCELLED")
 ACTIVE_JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED")
@@ -50,16 +60,67 @@ def _publish(event_type: str, job_id: str, *, item_id: str | None = None, payloa
         })
 
 
-def _workflow_snapshot_from_identity(identity: dict[str, Any]) -> dict:
-    """§四：由实际模块身份构造 workflow_snapshot（禁止"执行了模块但 modules=[]"）。"""
-    module = {
-        "module_id": identity.get("module_id"),
-        "module_version": identity.get("module_version"),
-        "provider": identity.get("provider"),
-        "binding_version": identity.get("binding_version"),
-        "workflow_hash": identity.get("workflow_hash"),
-    }
-    return {"modules": [module] if module["module_id"] else []}
+def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
+    """§四/§二十三：由真实模块身份列表构造 workflow_snapshot（唯一执行真源）。"""
+    normalized = [
+        {
+            "module_id": module.get("module_id"),
+            "module_version": module.get("module_version"),
+            "provider": module.get("provider"),
+            "binding_version": module.get("binding_version"),
+            "workflow_hash": module.get("workflow_hash"),
+        }
+        for module in modules
+        if module.get("module_id")
+    ]
+    return {"modules": normalized}
+
+
+def _materialize_stages(
+    session: Session,
+    job: Job,
+    modules: list[dict[str, Any]],
+    item_ids: list[str],
+    *,
+    stage_configs: list[dict[str, Any]] | None = None,
+    input_image_ids: list[str] | None = None,
+) -> None:
+    """把 workflow_snapshot.modules 物化为 JobStage + JobStageItem（§五）。
+
+    - 每个模块 = 一个 Stage（stage_index = 顺序）；
+    - 每个 Stage 为全部逻辑槽位创建 StageItem；
+    - 处理型 Job（process）：第一（唯一）个 Stage 的 StageItem 预置 input_image_id（§二十一）。
+    """
+    configs = list(stage_configs or [])
+    for stage_index, module in enumerate(modules):
+        stage = JobStage(
+            id=new_id(JOB_STAGE),
+            job_id=job.id,
+            stage_index=stage_index,
+            module_id=str(module.get("module_id")),
+            module_version=str(module.get("module_version") or "v1"),
+            provider=module.get("provider"),
+            binding_version=module.get("binding_version"),
+            workflow_hash=module.get("workflow_hash"),
+            status="QUEUED",
+            total_count=len(item_ids),
+            completed_count=0,
+            config_json=json.dumps(configs[stage_index] if stage_index < len(configs) else {}, ensure_ascii=False),
+        )
+        session.add(stage)
+        session.flush()
+        for index, item_id in enumerate(item_ids):
+            input_image_id = None
+            if input_image_ids is not None and stage_index == 0:
+                input_image_id = input_image_ids[index]
+            session.add(JobStageItem(
+                id=new_id(JOB_STAGE_ITEM),
+                job_stage_id=stage.id,
+                job_item_id=item_id,
+                item_index=index,
+                input_image_id=input_image_id,
+                status="QUEUED",
+            ))
 
 
 def record_event(session: Session, job_id: str, event_type: str, *, item_id: str | None = None, payload: dict | None = None) -> None:
@@ -122,16 +183,23 @@ def create_job(
     snapshot: dict[str, Any],
     client_request_id: str | None = None,
     queue_mode: str = "normal",
-    module_identity: dict[str, str | None] | None = None,
+    workflow_modules: list[dict[str, Any]] | None = None,
+    job_kind: str = "generate",
+    input_image_ids: list[str] | None = None,
+    stage_configs: list[dict[str, Any]] | None = None,
 ) -> tuple[Job, bool]:
-    """创建 Job + N 个 JobItem（单事务）。
+    """创建 Job + N 个 JobItem + 物化 JobStage/JobStageItem（单事务，Phase 3 §五）。
 
+    workflow_modules：真实执行身份列表（API 层经 resolve_workflow_modules 解析），
+    缺省时为最小基础生成身份（直接调用 service 的测试/内部路径）。
     返回 (job, created)；幂等命中时 created=False。
     """
     if source not in JOB_SOURCES:
         raise ValidationError(f"非法任务来源: {source}", code="JOB_SOURCE_INVALID")
     if queue_mode not in ("normal", "next"):
         raise ValidationError(f"非法队列模式: {queue_mode}", code="QUEUE_MODE_INVALID")
+    if job_kind not in JOB_KINDS:
+        raise ValidationError(f"非法任务类型: {job_kind}", code="JOB_KIND_INVALID")
 
     # 幂等（规范 §十二）
     if client_request_id:
@@ -177,9 +245,34 @@ def create_job(
         raise ValidationError("seed_mode 仅支持 random/fixed", code="SEED_MODE_INVALID")
     if seed_mode == "fixed" and seed_value is None:
         raise ValidationError("固定 Seed 模式必须提供 seed", code="SEED_MODE_INVALID")
+    # Phase 3 §0.4：固定 Seed 仅用于精确复现单张；多张必须使用独立随机 Seed
+    if seed_mode == "fixed" and count != 1:
+        raise ValidationError(
+            "固定 Seed 仅用于单张精确复现（count 必须为 1）；多张请使用随机 Seed",
+            code="FIXED_SEED_SINGLE_ONLY",
+        )
 
-    identity = module_identity or {}
-    workflow_snapshot = _workflow_snapshot_from_identity(identity)
+    modules: list[dict[str, Any]] = list(workflow_modules or [])
+    if not modules:
+        modules = [{
+            "module_id": "basic_generate", "module_version": "v1",
+            "provider": "unbound", "binding_version": "v1", "workflow_hash": None,
+        }]
+    # §三：Pipeline 的模块必须已注册（未知模块在创建期就被拒绝，而不是执行期才炸）
+    registry = default_registry()
+    for module in modules:
+        module_id = str(module.get("module_id") or "")
+        if not registry.has(module_id):
+            raise ValidationError(f"WorkflowModule 未注册: {module_id}", code="WORKFLOW_ERROR")
+    if job_kind == "process":
+        # §二十/§二十一：处理型 Job 只跑处理模块，每个 JobItem 对应一张已有图片
+        if [m.get("module_id") for m in modules] != ["upscale"]:
+            raise ValidationError("处理型 Job 的 Pipeline 必须且只能是 upscale", code="PIPELINE_INVALID")
+        image_ids = list(input_image_ids or [])
+        if len(image_ids) != count:
+            raise ValidationError("处理型 Job 的图片数量与 count 不一致", code="PIPELINE_INVALID")
+    identity = modules[0]
+    workflow_snapshot = _workflow_snapshot_from_modules(modules)
     generation_settings = {
         "model_ref": None,
         "width": width,
@@ -194,6 +287,7 @@ def create_job(
         source=source,
         client_request_id=client_request_id,
         status="QUEUED",
+        job_kind=job_kind,
         prompt_mode=prompt_mode,
         positive_prompt_snapshot=positive,
         negative_prompt_snapshot=negative,
@@ -221,11 +315,21 @@ def create_job(
     try:
         session.add(job)
         session.flush()
+        item_ids: list[str] = []
         for index in range(count):
-            session.add(JobItem(
-                id=new_id(JOB_ITEM), job_id=job.id, item_index=index, status="QUEUED",
-            ))
-        record_event(session, job.id, "JOB_CREATED", payload={"count": count, "queue_mode": queue_mode})
+            item_id = new_id(JOB_ITEM)
+            item_ids.append(item_id)
+            session.add(JobItem(id=item_id, job_id=job.id, item_index=index, status="QUEUED"))
+        # §五：物化 JobStage / JobStageItem（Pipeline 从此刻起是唯一执行真源）
+        _materialize_stages(
+            session, job, modules, item_ids,
+            stage_configs=stage_configs,
+            input_image_ids=input_image_ids if job_kind == "process" else None,
+        )
+        record_event(session, job.id, "JOB_CREATED", payload={
+            "count": count, "queue_mode": queue_mode, "job_kind": job_kind,
+            "modules": [m.get("module_id") for m in modules],
+        })
         session.commit()
     except IntegrityError:
         session.rollback()
@@ -327,10 +431,27 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
     # §3（Phase 2.2）：Resume 必须完整继承 Parent 的 Workflow 身份（快照 + 全部列），
     # 不得读取当前 module_identity 静默升级到新 Workflow 版本；
     # 若原 binding 已不存在，执行时由 Adapter 明确报 BINDING_NOT_FOUND。
+    resume_module_ids = json.loads(original.workflow_snapshot_json).get("modules") or []
+    remaining_inputs: list[str] | None = None
+    if original.job_kind == "process":
+        # 处理型 Job：剩余槽位沿用父 Job 的输入图片（按 item_index 对齐）
+        parent_stage_items = session.execute(
+            select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+            .where(JobStage.job_id == original.id, JobStage.stage_index == 0)
+        ).scalars().all()
+        incomplete_indexes = [
+            item.item_index for item in session.execute(
+                select(JobItem).where(JobItem.job_id == original.id, JobItem.status != "COMPLETED")
+            ).scalars()
+        ]
+        inputs_by_index = {item.item_index: item.input_image_id for item in parent_stage_items}
+        remaining_inputs = [inputs_by_index.get(index) for index in sorted(incomplete_indexes)]
+
     job = Job(
         id=new_id(JOB),
         source="resume",
         status="QUEUED",
+        job_kind=original.job_kind,
         prompt_mode=original.prompt_mode,
         positive_prompt_snapshot=original.positive_prompt_snapshot,
         negative_prompt_snapshot=original.negative_prompt_snapshot,
@@ -351,8 +472,13 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
     try:
         session.add(job)
         session.flush()
+        item_ids = []
         for index in range(remaining):
-            session.add(JobItem(id=new_id(JOB_ITEM), job_id=job.id, item_index=index, status="QUEUED"))
+            item_id = new_id(JOB_ITEM)
+            item_ids.append(item_id)
+            session.add(JobItem(id=item_id, job_id=job.id, item_index=index, status="QUEUED"))
+        # §二十三：续跑同样物化 Stage（继承原 Workflow 身份，不由当前配置决定）
+        _materialize_stages(session, job, resume_module_ids, item_ids, input_image_ids=remaining_inputs)
         record_event(session, job.id, "JOB_CREATED", payload={"count": remaining, "resume_of": original.id})
         session.commit()
     except IntegrityError:
@@ -389,7 +515,7 @@ def reorder_queue(session: Session, ordered_job_ids: list[str]) -> list[Job]:
 # ===== 崩溃恢复（规范 §三十七） =====
 
 def mark_interrupted_at_startup(session: Session) -> list[str]:
-    """启动时把遗留 RUNNING Job/Item 转为 INTERRUPTED（不重新排队）。"""
+    """启动时把遗留 RUNNING Job/Stage/Item 转为 INTERRUPTED（不重新排队；Phase 3 §八）。"""
     interrupted_jobs: list[str] = []
     for job in session.execute(select(Job).where(Job.status == "RUNNING")).scalars():
         job.status = "INTERRUPTED"
@@ -398,6 +524,15 @@ def mark_interrupted_at_startup(session: Session) -> list[str]:
             JobItem.job_id == job.id, JobItem.status == "RUNNING"
         )).scalars():
             item.status = "INTERRUPTED"
+        for stage in session.execute(select(JobStage).where(
+            JobStage.job_id == job.id, JobStage.status == "RUNNING"
+        )).scalars():
+            stage.status = "INTERRUPTED"
+        for stage_item in session.execute(
+            select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+            .where(JobStage.job_id == job.id, JobStageItem.status == "RUNNING")
+        ).scalars():
+            stage_item.status = "INTERRUPTED"
         record_event(session, job.id, "JOB_INTERRUPTED", payload={"reason": "startup_recovery"})
     session.commit()
     for job_id in interrupted_jobs:

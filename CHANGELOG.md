@@ -2,6 +2,53 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.4.0] — 2026-10-08
+
+### Added（Phase 3：Multi-stage Pipeline + Upscale）
+
+- **多阶段管线**：新增 JobStage / JobStageItem（迁移 0007 + jobs.job_kind）；
+  Job 创建时从 `workflow_snapshot.modules` 物化 Stage，**执行真源 = JobStage + workflow_snapshot**；
+  Stage Gate 严格门控：`basic×N 全部 COMPLETED` 才启动 `upscale×N`，禁止交错与跨 Stage 抢跑。
+- **UpscaleModule（第二套正式 WorkflowModule）**：标准输入只有 `input_image`；
+  provider binding `upscale/v1`（4x-UltraSharp 链，复用本机已验证资源，见
+  docs/UPSCALE_WORKFLOW_INVENTORY.md）；输入图片经 `POST /upload/image` 上传（Studio 唯一命名）。
+- **图库已有图片单独高清**：`POST /api/v1/images/upscale` 创建 upscale-only `process` Job，
+  与生成流水线共用同一 QueueWorker / UpscaleModule（禁止两套高清代码）。
+- **Image 父子关系**：高清 `kind=upscaled` 存 `images/upscaled/`，`parent_image_id` 指向原图；
+  `GET /images/{id}/versions` 支持原图 ↔ 高清切换；图库 HD 标记与多选"高清放大"。
+- **前端**：工作台"② 高清放大"开关（配方保存/恢复 100% 一致）；分阶段实时进度
+  （原图生成 x/y ✓、高清放大 m/n · 第 k 张 · p%）；缩略图 HD 标记。
+- **Job API**：Job Detail 返回 `stages[]`（module/status/total/completed/current_item/progress）。
+
+### Fixed（Task 0 执行漏洞修复）
+
+- **§0.1 Worker 意外异常必须停队列**：代码级意外异常（非 EngineError）→ 当前 Job/Stage
+  INTERRUPTED（保留 engine_job_id）+ `queue_paused=true` + WORKER_INTERNAL_ERROR，绝不继续领取
+  下一个 Job；正常 shutdown 的 CancelledError 仍按原崩溃恢复逻辑（不写终态）。
+- **§0.2 Binding 改为每次请求动态选择**：取消 Adapter 实例级绑定；新增 `EngineBindingRef`
+  （module/module_version/provider/binding_version/workflow_hash），Adapter 按
+  `(module_id, binding_version)` 缓存动态加载——一个 Adapter 服务全部模块。
+- **§0.3 Workflow Hash 必须校验**：Job 固化的 workflow_hash 与磁盘不一致 →
+  `WORKFLOW_HASH_MISMATCH`（系统性）拒绝执行；binding 目录视为 immutable，改 Workflow 必须新建 v2。
+- **§0.4 修正固定 Seed**：恢复"每张独立随机 Seed"；`seed_mode=fixed` 仅用于单张精确复现
+  （后端 fixed+count>1 → 400 FIXED_SEED_SINGLE_ONLY；前端"使用此图 Seed"自动 count=1，
+  数量改 >1 自动切回随机）；删除 `base_seed + item_index`。
+- **§十 执行总超时**：StageItem `execution_timeout`（默认 1800s，可由 Stage config 覆盖）→
+  `ENGINE_TIMEOUT`，不无限 RUNNING。
+- **§九 文件系统恢复**：ComfyUI SaveImage 输出前缀含 Studio 身份
+  （`NSFWStudio/{job_short}/{stage}/{item_short}`）；history 丢失时按命名规则扫描自有输出兜底
+  （绝不触碰用户普通图片）。
+
+### Changed
+
+- `WorkflowModule.execute()` / `build_engine_request()` 契约扩展：binding 来自 context（请求级）；
+  `prepare_inputs()` 可选钩子（处理型模块的引擎侧输入准备）。
+- `JobService.create_job`：workflow_modules / job_kind / input_image_ids / stage_configs；
+  未知模块在创建期拒绝（400 WORKFLOW_ERROR）。
+- 文档新增 PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_MODULE / UPSCALE_WORKFLOW_INVENTORY；
+  同步 JOB_STATE_MACHINE / RECOVERY_SPEC / COMFY_ADAPTER / IMAGE_MODEL / WORKBENCH_STATE /
+  DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN / README / AGENTS。
+
 ## [0.3.2] — 2026-10-07
 
 ### Fixed（Phase 2.2：Data Consistency & Recovery Closure，无新功能）

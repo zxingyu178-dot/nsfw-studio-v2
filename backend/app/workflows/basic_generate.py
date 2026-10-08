@@ -11,9 +11,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Mapping
 
-from app.engine.base import EngineAdapter, EngineError, EngineJobRequest
+from app.engine.base import EngineAdapter, EngineBindingRef, EngineError, EngineJobRequest
 from app.workflows.base import (
     JobRequestContext,
     ModuleCapabilities,
@@ -87,26 +87,36 @@ class BasicGenerateModule(WorkflowModule):
         return WorkflowValidation(ok=not errors, errors=tuple(errors))
 
     # ===== 引擎请求（Worker 经 PipelineExecutor 调用） =====
-    def build_engine_request(self, context: JobRequestContext) -> EngineJobRequest:
+    def build_engine_request(self, context: JobRequestContext,
+                             prepared: Mapping[str, Any] | None = None) -> EngineJobRequest:
         payload = self.build_input(context)
         validation = self.validate_input(payload)
         if not validation.ok:
             raise EngineError("WORKFLOW_ERROR", f"模块输入校验失败: {'; '.join(validation.errors)}")
         return EngineJobRequest(
-            job_type=self.module_id,
+            # §0.2：binding 属于每次请求（来自固化 Snapshot/Stage），不在模块里硬编码
+            binding=context.binding or EngineBindingRef(
+                module_id=self.module_id, module_version=self.module_version,
+                provider="unbound", binding_version="v1",
+            ),
             parameters=dict(payload.values),
             metadata=dict(context.metadata or {}),
         )
 
     # ===== 完整执行（Pipeline 直跑路径；队列 Worker 用细粒度 API 保留暂停/取消语义） =====
-    async def execute(self, payload: WorkflowInput, engine: EngineAdapter) -> WorkflowOutput:
+    async def execute(self, payload: WorkflowInput, engine: EngineAdapter,
+                      *, binding: EngineBindingRef | None = None) -> WorkflowOutput:
         validation = self.validate_input(payload)
         if not validation.ok:
             raise EngineError("WORKFLOW_ERROR", f"模块输入校验失败: {'; '.join(validation.errors)}")
 
-        engine_job_id = await engine.submit_job(
-            EngineJobRequest(job_type=self.module_id, parameters=dict(payload.values))
-        )
+        engine_job_id = await engine.submit_job(EngineJobRequest(
+            binding=binding or EngineBindingRef(
+                module_id=self.module_id, module_version=self.module_version,
+                provider="unbound", binding_version="v1",
+            ),
+            parameters=dict(payload.values),
+        ))
         while True:
             status = await engine.get_job_status(engine_job_id)
             if status.state == "succeeded":

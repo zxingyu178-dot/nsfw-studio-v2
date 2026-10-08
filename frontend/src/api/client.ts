@@ -49,6 +49,7 @@ import type {
   ComposeResult,
   EngineStatusDTO,
   ImageDTO,
+  ImageVersionsDTO,
   JobDTO,
   JobEventDTO,
   ListResponse,
@@ -276,6 +277,14 @@ export const imageApi = {
     favorites: number
   }> {
     return request(`/api/v1/images/by-job/${jobId}/summary`)
+  },
+  /** 图库高清放大（§二十/§二十四）：创建 process Job，由同一队列 Worker 执行 */
+  upscale(imageIds: string[]): Promise<JobDTO> {
+    return request('/api/v1/images/upscale', jsonInit('POST', { image_ids: imageIds }))
+  },
+  /** 父子关系（§十九）：派生版本 / 来源原图 */
+  versions(id: string): Promise<ImageVersionsDTO> {
+    return request(`/api/v1/images/${id}/versions`)
   },
 }
 

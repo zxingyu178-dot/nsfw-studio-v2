@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.models import Job, JobItem
+from app.models import Job, JobItem, JobStage, JobStageItem
 from app.schemas.workbench import (
     StructuredPromptModel,
     WorkbenchSnapshotModel,
@@ -43,11 +43,52 @@ class JobItemResponse(BaseModel):
     finished_at: str | None
 
 
+class JobStageItemResponse(BaseModel):
+    """StageItem：一个逻辑图片槽位在某 Stage 的实际执行记录（§二十四）。"""
+
+    id: str
+    job_stage_id: str
+    job_item_id: str
+    item_index: int
+    input_image_id: str | None
+    output_image_id: str | None
+    status: str
+    engine_job_id: str | None
+    progress: float | None
+    error_type: str | None
+    error_message: str | None
+    retry_count: int
+    started_at: str | None
+    finished_at: str | None
+
+
+class JobStageResponse(BaseModel):
+    """Stage：多阶段管线中的一个阶段（§二十四：module/status/total/completed/current_item/progress）。"""
+
+    id: str
+    stage_index: int
+    module_id: str
+    module_version: str
+    provider: str | None
+    binding_version: str | None
+    workflow_hash: str | None
+    status: str
+    total_count: int
+    completed_count: int
+    current_item: int | None
+    progress: float | None
+    created_at: str
+    started_at: str | None
+    finished_at: str | None
+    items: list[JobStageItemResponse]
+
+
 class JobResponse(BaseModel):
     id: str
     source: str
     client_request_id: str | None
     status: str
+    job_kind: str
     prompt_mode: str
     positive_prompt_snapshot: str
     negative_prompt_snapshot: str
@@ -74,6 +115,7 @@ class JobResponse(BaseModel):
     finished_at: str | None
     updated_at: str
     items: list[JobItemResponse]
+    stages: list[JobStageResponse]
     idempotent_replay: bool | None = None  # 仅创建响应携带：命中幂等时 True
     disk_space: str | None = None          # 仅创建响应携带：ok | warning
 
@@ -102,9 +144,43 @@ def job_item_response(item: JobItem) -> JobItemResponse:
     )
 
 
+def _stage_item_response(stage_item: JobStageItem) -> JobStageItemResponse:
+    return JobStageItemResponse(
+        id=stage_item.id, job_stage_id=stage_item.job_stage_id, job_item_id=stage_item.job_item_id,
+        item_index=stage_item.item_index, input_image_id=stage_item.input_image_id,
+        output_image_id=stage_item.output_image_id, status=stage_item.status,
+        engine_job_id=stage_item.engine_job_id, progress=stage_item.progress,
+        error_type=stage_item.error_type, error_message=stage_item.error_message,
+        retry_count=stage_item.retry_count, started_at=stage_item.started_at,
+        finished_at=stage_item.finished_at,
+    )
+
+
+def job_stage_response(stage: JobStage) -> JobStageResponse:
+    """Stage 响应：current_item = 当前 RUNNING 的槽位；progress = 含运行中部分分量的整体进度。"""
+    items = list(stage.stage_items)
+    running = next((item for item in items if item.status == "RUNNING"), None)
+    total = stage.total_count
+    if total:
+        partial = float(running.progress) if (running is not None and running.progress is not None) else 0.0
+        progress = min(1.0, (stage.completed_count + partial) / total)
+    else:
+        progress = None
+    return JobStageResponse(
+        id=stage.id, stage_index=stage.stage_index, module_id=stage.module_id,
+        module_version=stage.module_version, provider=stage.provider,
+        binding_version=stage.binding_version, workflow_hash=stage.workflow_hash,
+        status=stage.status, total_count=stage.total_count, completed_count=stage.completed_count,
+        current_item=running.item_index if running is not None else None, progress=progress,
+        created_at=stage.created_at, started_at=stage.started_at, finished_at=stage.finished_at,
+        items=[_stage_item_response(item) for item in items],
+    )
+
+
 def job_response(job: Job, items: list[JobItem] | None = None) -> JobResponse:
     return JobResponse(
         id=job.id, source=job.source, client_request_id=job.client_request_id, status=job.status,
+        job_kind=job.job_kind,
         prompt_mode=job.prompt_mode,
         positive_prompt_snapshot=job.positive_prompt_snapshot,
         negative_prompt_snapshot=job.negative_prompt_snapshot,
@@ -122,4 +198,5 @@ def job_response(job: Job, items: list[JobItem] | None = None) -> JobResponse:
         created_at=job.created_at, started_at=job.started_at, finished_at=job.finished_at,
         updated_at=job.updated_at,
         items=[job_item_response(item) for item in (items if items is not None else job.items)],
+        stages=[job_stage_response(stage) for stage in job.stages],
     )

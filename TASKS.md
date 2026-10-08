@@ -1,5 +1,23 @@
 # TASKS — NSFW Studio V2
 
+## Phase 3：Multi-stage Pipeline + Upscale ✅（2026-10-08，v0.4.0）
+
+- [x] Task 0.1：Worker 代码级意外异常 → 当前 Job/Stage INTERRUPTED + queue_paused + WORKER_INTERNAL_ERROR（CancelledError 保持原恢复逻辑）
+- [x] Task 0.2：EngineBindingRef 请求级动态绑定（一个 Adapter 服务全部模块，缓存 key=(module_id,binding_version)）
+- [x] Task 0.3：workflow_hash 校验（binding immutable；不一致 → WORKFLOW_HASH_MISMATCH 拒绝执行）
+- [x] Task 0.4：固定 Seed 仅限单张（后端 fixed+count>1 → 400 FIXED_SEED_SINGLE_ONLY；前端自动收敛/切回随机）
+- [x] §一-§五：迁移 0007 + JobStage/JobStageItem + Job 创建物化 Stage + job_kind（generate/process）
+- [x] §六-§八：Stage Gate 严格门控（basic×N 全部完成 → 才进 upscale×N）；暂停/取消在 StageItem 边界；按 StageItem 崩溃恢复
+- [x] §九/§十：输出命名含 Studio 身份（NSFWStudio/{job}/{stage}/{item}）+ scan_stage_outputs 文件级恢复 + execution_timeout/ENGINE_TIMEOUT
+- [x] §十一/§十二：UpscaleModule + upscale/v1 binding（4x-UltraSharp 链，复用本机已验证资源；investigation → docs/UPSCALE_WORKFLOW_INVENTORY.md）
+- [x] §十三/§十四：输入图片经 /upload/image 上传（Studio 唯一命名）；Image 存储泛化（originals/upscaled/processed + parent_image_id）
+- [x] §十五-§十九：前端工作流开关（配方 100% 恢复）、分阶段实时进度、HD 标记、图库父子关系切换与多选高清
+- [x] §二十/§廿一/§廿四：POST /api/v1/images/upscale → upscale-only process Job（同一 Worker）；Job Detail stages[]
+- [x] §二十五：多阶段测试 15 场景（顺序/Gate/暂停取消恢复/父子/process Job/内部异常/hash/超时/配方）——快速套件 144 passed；全量 147 passed（含 3 真实链路）
+- [x] §二十六：真实 ComfyUI 验收（1 张基础 640×960 → 1 张真实高清 2560×3840；图库 64×64 → 256×256）
+- [x] §二十七：文档（PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_WORKFLOW_INVENTORY / UPSCALE_MODULE / PHASE3_REPORT 新增 + 既有同步）
+- [ ] feature/phase3-pipeline-upscale → develop → CI 绿 → main → CI 绿 → tag v0.4.0 + 交接 ZIP 邮件——执行中
+
 ## Phase 2.2：Data Consistency & Recovery Closure ✅（2026-10-07，v0.3.2）
 
 - [x] §1 P0：多输出导入整批原子化（全部先校验 → 全部 temp → 全部移动 → 单事务入库；失败全回滚清残留；不再循环单图 commit 函数）

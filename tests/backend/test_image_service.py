@@ -20,6 +20,7 @@ def test_import_engine_output(session, settings, png_bytes):
     })
     item = job_service.get_items(session, job.id)[0]
     item.seed = 424242
+    stage_item = job.stages[0].stage_items[0]  # Phase 3 §十四：导入按 StageItem 判定 kind/parent
     session.commit()
 
     image = image_service.import_engine_output(
@@ -36,8 +37,8 @@ def test_import_engine_output(session, settings, png_bytes):
     assert json.loads(image.metadata_json)["workflow_hash"] == "abc123"
     assert storage.absolutize(image.file_path).is_file()
 
-    # Item 关联（Worker 回调路径）
-    ids = image_service.import_adapter_outputs(session, storage, job, item, [])
+    # StageItem 关联（Worker 回调路径）
+    ids = image_service.import_adapter_outputs(session, storage, job, stage_item, [])
     assert ids == []
 
 
@@ -60,7 +61,7 @@ def _make_job_item(session):
     })
     item = job_service.get_items(session, job.id)[0]
     session.commit()
-    return job, item
+    return job, job.stages[0].stage_items[0]
 
 
 def _dir_entries(path) -> list:
@@ -73,13 +74,13 @@ def test_import_batch_atomic_valid_plus_corrupt(session, settings, png_bytes):
     from app.storage.manager import StorageManager
 
     storage = StorageManager(settings)
-    job, item = _make_job_item(session)
+    job, stage_item = _make_job_item(session)
     outputs = [
         EngineOutputFile(filename="good.png", data=png_bytes),
         EngineOutputFile(filename="bad.png", data=b"this is not an image"),
     ]
     with pytest.raises(ValidationError):
-        image_service.import_adapter_outputs(session, storage, job, item, outputs)
+        image_service.import_adapter_outputs(session, storage, job, stage_item, outputs)
 
     assert image_service.list_images(session, job_id=job.id)[1] == 0, "整批失败不得留下半成功图片"
     assert _dir_entries(storage.resolve_under("images/originals")) == [], "originals 不得有残留"
@@ -92,12 +93,12 @@ def test_import_batch_two_valid_outputs_succeed_together(session, settings, png_
     from app.storage.manager import StorageManager
 
     storage = StorageManager(settings)
-    job, item = _make_job_item(session)
+    job, stage_item = _make_job_item(session)
     outputs = [
         EngineOutputFile(filename="a.png", data=png_bytes),
         EngineOutputFile(filename="b.png", data=png_bytes),
     ]
-    image_ids = image_service.import_adapter_outputs(session, storage, job, item, outputs)
+    image_ids = image_service.import_adapter_outputs(session, storage, job, stage_item, outputs)
 
     assert len(image_ids) == 2 and len(set(image_ids)) == 2
     images, total = image_service.list_images(session, job_id=job.id)
@@ -112,7 +113,7 @@ def test_import_batch_rolls_back_when_move_fails(session, settings, png_bytes, m
     from app.storage.manager import StorageManager
 
     storage = StorageManager(settings)
-    job, item = _make_job_item(session)
+    job, stage_item = _make_job_item(session)
     original_move = storage.atomic_move_into
     calls = {"count": 0}
 
@@ -128,7 +129,7 @@ def test_import_batch_rolls_back_when_move_fails(session, settings, png_bytes, m
         EngineOutputFile(filename="b.png", data=png_bytes),
     ]
     with pytest.raises(OSError):
-        image_service.import_adapter_outputs(session, storage, job, item, outputs)
+        image_service.import_adapter_outputs(session, storage, job, stage_item, outputs)
 
     assert image_service.list_images(session, job_id=job.id)[1] == 0
     assert _dir_entries(storage.resolve_under("images/originals")) == [], \

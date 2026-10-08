@@ -260,42 +260,43 @@ def test_registry_rejects_unknown_module():
     from app.workflows import default_registry
 
     with pytest.raises(EngineError) as excinfo:
-        default_registry().get("upscale", "v1")
+        default_registry().get("unknown_module", "v1")
     assert excinfo.value.error_type == "WORKFLOW_ERROR"
     assert default_registry().has("basic_generate", "v1")
+    assert default_registry().has("upscale", "v1"), "Phase 3 §十一：高清模块已注册"
 
 
 # ===== §五：Resume 必须使用新随机 Seed =====
 
 def test_resume_remaining_uses_new_random_seed(mock_client):
-    """fixed-seed Parent → 取消 → Resume Child：Child 必须 random，不得复用 Parent Seed。"""
-    body = {"snapshot": make_snapshot(count=4, seed_mode="fixed", seed=1000)}
-    job = mock_client.post("/api/v1/jobs", json=body).json()
-    wait_for(mock_client, job["id"], lambda j: j["status"] == "RUNNING" and j["completed_count"] >= 1)
-    mock_client.post(f"/api/v1/jobs/{job['id']}/cancel")
-    parent = wait_for(mock_client, job["id"], lambda j: j["status"] == "CANCELLED")
-    parent_completed = [i for i in parent["items"] if i["status"] == "COMPLETED"]
-    assert parent_completed, "取消前应至少完成一张"
+    """fixed-seed Parent → 失败 → Resume Child：Child 必须 random，不得复用 Parent Seed（§0.4）。"""
+    adapter = mock_client.app.state.adapter
+    adapter.mode = "workflow_error"  # 系统性失败 → Job FAILED + 队列暂停（Child 保持 QUEUED 可确定性断言）
+    try:
+        body = {"snapshot": make_snapshot(count=1, seed_mode="fixed", seed=1000)}
+        job = mock_client.post("/api/v1/jobs", json=body).json()
+        parent = wait_for(mock_client, job["id"], lambda j: j["status"] == "FAILED")
+        assert parent["items"][0]["seed"] == 1000, "固定 Seed 单张必须使用该 Seed"
 
-    child = mock_client.post(f"/api/v1/jobs/{job['id']}/resume-remaining").json()
-    snapshot = child["workbench_snapshot"]
-    assert snapshot["seed_mode"] == "random" and snapshot["seed"] is None
-    assert snapshot["count"] == parent["requested_count"] - len(parent_completed)
-    assert child["generation_settings"]["seed_mode"] == "random"
-    assert child["generation_settings"]["seed"] is None
-    assert child["resume_of_job_id"] == job["id"]
+        child = mock_client.post(f"/api/v1/jobs/{job['id']}/resume-remaining").json()
+        snapshot = child["workbench_snapshot"]
+        assert snapshot["seed_mode"] == "random" and snapshot["seed"] is None
+        assert snapshot["count"] == 1
+        assert child["generation_settings"]["seed_mode"] == "random"
+        assert child["generation_settings"]["seed"] is None
+        assert child["resume_of_job_id"] == job["id"]
 
-    # 原 Job 快照永不修改
-    parent_after = mock_client.get(f"/api/v1/jobs/{job['id']}").json()
-    assert parent_after["workbench_snapshot"]["seed_mode"] == "fixed"
-    assert parent_after["workbench_snapshot"]["seed"] == 1000
+        # 原 Job 快照永不修改
+        parent_after = mock_client.get(f"/api/v1/jobs/{job['id']}").json()
+        assert parent_after["workbench_snapshot"]["seed_mode"] == "fixed"
+        assert parent_after["workbench_snapshot"]["seed"] == 1000
+    finally:
+        adapter.mode = "success"
+        mock_client.post("/api/v1/queue/resume")
 
-    # 子 Job 实际执行使用新随机 Seed（不得出现 1000+index）
+    # 子 Job 实际执行使用新随机 Seed（不得复用父 Job 的 1000）
     child_final = wait_for(mock_client, child["id"], lambda j: j["status"] == "COMPLETED")
-    child_seeds = {item["seed"] for item in child_final["items"]}
-    assert len(child_seeds) == child["requested_count"]
-    assert not (child_seeds & {1000 + index for index in range(parent["requested_count"])}), \
-        "续跑不得复用父 Job 的固定 Seed"
+    assert child_final["items"][0]["seed"] != 1000, "续跑不得复用父 Job 的固定 Seed"
 
 
 # ===== §六：queue_position 是唯一执行顺序事实源 =====

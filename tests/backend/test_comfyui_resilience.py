@@ -150,10 +150,12 @@ def test_fresh_live_state_keeps_waiting(monkeypatch):
         assert status.state == "running", "WS 新鲜时不得判定任务丢失"
 
 
-# ===== §七：binding 版本由 module_id + binding_version 解析 =====
+# ===== §七（Phase 2.1）：binding 版本由 module_id + binding_version 解析（Phase 3 §0.2 动态绑定） =====
 
 def test_binding_version_switchable(tmp_path, monkeypatch):
-    """v1 可加载；把同一 binding 复制为 v2 后，配置 binding_version=v2 即可切换。"""
+    """v1 可加载；把同一 binding 复制为 v2 后，请求 binding_version=v2 即可切换。"""
+    from app.engine.base import EngineBindingRef
+
     source = Path(comfyui_module.PROVIDERS_DIR) / "basic_generate" / "v1"
     target = tmp_path / "basic_generate" / "v2"
     shutil.copytree(source, target)
@@ -163,17 +165,24 @@ def test_binding_version_switchable(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(comfyui_module, "PROVIDERS_DIR", tmp_path)
 
-    adapter = ComfyUIAdapter({}, {"url": "http://stub"}, binding_version="v2")
-    assert adapter.binding_version == "v2"
-    assert adapter.workflow_hash, "v2 binding 必须可加载并计算出 workflow_hash"
-    assert adapter.binding_dir() == target
+    adapter = ComfyUIAdapter({}, {"url": "http://stub"})
+    _workflow, binding, workflow_hash = adapter.load_binding(EngineBindingRef(
+        module_id="basic_generate", provider="comfyui", binding_version="v2",
+    ))
+    assert str(binding["binding_version"]) == "v2"
+    assert workflow_hash, "v2 binding 必须可加载并计算出 workflow_hash"
+    assert ComfyUIAdapter.binding_dir("basic_generate", "v2") == target
 
 
 def test_missing_binding_version_raises_binding_not_found(tmp_path, monkeypatch):
+    from app.engine.base import EngineBindingRef
+
     monkeypatch.setattr(comfyui_module, "PROVIDERS_DIR", tmp_path)
-    adapter = ComfyUIAdapter({}, {"url": "http://stub"}, binding_version="v9")
+    adapter = ComfyUIAdapter({}, {"url": "http://stub"})
     with pytest.raises(EngineError) as excinfo:
-        _ = adapter.workflow_hash
+        adapter.load_binding(EngineBindingRef(
+            module_id="basic_generate", provider="comfyui", binding_version="v9",
+        ))
     assert excinfo.value.error_type == "BINDING_NOT_FOUND"
 
 

@@ -204,11 +204,49 @@ export interface JobItemDTO {
   finished_at: string | null
 }
 
+export interface JobStageItemDTO {
+  id: string
+  job_stage_id: string
+  job_item_id: string
+  item_index: number
+  input_image_id: string | null
+  output_image_id: string | null
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
+  engine_job_id: string | null
+  progress: number | null
+  error_type: string | null
+  error_message: string | null
+  retry_count: number
+  started_at: string | null
+  finished_at: string | null
+}
+
+/** Stage（Phase 3 §二十四）：module/status/total/completed/current_item/progress */
+export interface JobStageDTO {
+  id: string
+  stage_index: number
+  module_id: string
+  module_version: string
+  provider: string | null
+  binding_version: string | null
+  workflow_hash: string | null
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
+  total_count: number
+  completed_count: number
+  current_item: number | null
+  progress: number | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  items: JobStageItemDTO[]
+}
+
 export interface JobDTO {
   id: string
   source: string
   client_request_id: string | null
   status: JobStatus
+  job_kind: 'generate' | 'process'
   prompt_mode: PromptMode
   positive_prompt_snapshot: string
   negative_prompt_snapshot: string
@@ -235,6 +273,7 @@ export interface JobDTO {
   finished_at: string | null
   updated_at: string
   items: JobItemDTO[]
+  stages: JobStageDTO[]
   idempotent_replay?: boolean | null
   disk_space?: string | null
 }
@@ -262,6 +301,12 @@ export interface ImageDTO {
   metadata: Record<string, unknown>
   created_at: string
   updated_at: string
+}
+
+export interface ImageVersionsDTO {
+  image: ImageDTO
+  parent: ImageDTO | null
+  children: ImageDTO[]
 }
 
 export interface EngineStatusDTO {
@@ -313,6 +358,13 @@ export const IMAGE_SOURCE_LABEL: Record<string, string> = {
 
 export const MODULE_LABEL: Record<string, string> = {
   basic_generate: '基础生成',
+  upscale: '高清放大',
+}
+
+export const IMAGE_KIND_LABEL: Record<string, string> = {
+  original: '原图',
+  upscaled: '高清',
+  processed: '处理图',
 }
 
 export const STAGE_LABEL: Record<string, string> = {

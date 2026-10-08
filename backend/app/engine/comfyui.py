@@ -49,6 +49,19 @@ LIVE_STALE_SECONDS = 30.0
 MISSING_TOLERANCE = 10
 
 
+def _format_prefix(template: str, values: dict[str, str]) -> str:
+    """渲染 save_image_prefix 模板；未知占位符原样保留（不抛异常）。"""
+
+    class _Safe(dict):
+        def __missing__(self, key: str) -> str:
+            return "{" + key + "}"
+
+    try:
+        return template.format_map(_Safe(values))
+    except (ValueError, IndexError):
+        return template
+
+
 class ComfyUIAdapter(EngineAdapter):
     name = "comfyui"
     version = "0.1.0"
@@ -57,9 +70,6 @@ class ComfyUIAdapter(EngineAdapter):
         self,
         options: dict | None = None,
         comfyui_config: dict | None = None,
-        *,
-        module_id: str = "basic_generate",
-        binding_version: str = "v1",
     ) -> None:
         options = options or {}
         comfyui_config = comfyui_config or {}
@@ -67,46 +77,61 @@ class ComfyUIAdapter(EngineAdapter):
         self.client_id = uuid.uuid4().hex
         self.request_timeout = float(options.get("timeout_seconds", 600))
         self.ws_enabled = bool(options.get("websocket_progress", True))
-        # provider binding 目录由 module_id + binding_version 解析（§七，禁止硬编码 v1）
-        self.module_id = module_id
-        self.configured_binding_version = binding_version
-        self._workflow: dict | None = None
-        self._binding: dict | None = None
-        self._workflow_hash: str | None = None
+        # §九：可选的 ComfyUI output 目录（仅 config.local.yaml），用于文件级恢复兜底
+        output_dir = comfyui_config.get("output_dir")
+        self.output_dir = Path(output_dir) if output_dir else None
+        # Phase 3 §0.2：binding 属于每次请求；缓存 key = (module_id, binding_version)
+        self._bindings: dict[tuple[str, str], tuple[dict, dict, str]] = {}
         # prompt_id → {"stage","progress","state","error","updated"}（WebSocket 实时层）
         self._live: dict[str, dict] = {}
         self._missing_polls: dict[str, int] = {}
         self._ws_task: asyncio.Task | None = None
 
-    # ===== Binding =====
-    def binding_dir(self) -> Path:
-        """实际 provider binding 目录：workflows/providers/comfyui/<module_id>/<binding_version>/"""
-        return PROVIDERS_DIR / self.module_id / self.configured_binding_version
+    # ===== Binding（按请求动态加载；Phase 3 §0.2/§0.3） =====
+    @staticmethod
+    def binding_dir(module_id: str, binding_version: str) -> Path:
+        """provider binding 目录：workflows/providers/comfyui/<module_id>/<binding_version>/"""
+        return PROVIDERS_DIR / module_id / binding_version
 
-    def _load_binding(self) -> tuple[dict, dict]:
-        if self._workflow is None or self._binding is None:
-            directory = self.binding_dir()
+    def load_binding(self, ref) -> tuple[dict, dict, str]:
+        """按请求身份加载 (workflow, binding, workflow_hash)。
+
+        - 缓存 key = (module_id, binding_version)，一个 Adapter 服务所有模块；
+        - 已投入使用的 binding 目录视为 **immutable**：请求携带的 workflow_hash
+          与磁盘不一致 → WORKFLOW_HASH_MISMATCH，禁止静默执行（§0.3）。
+        """
+        key = (ref.module_id, ref.binding_version)
+        cached = self._bindings.get(key)
+        if cached is None:
+            directory = self.binding_dir(ref.module_id, ref.binding_version)
             workflow_path = directory / "workflow.json"
             binding_path = directory / "binding.yaml"
             if not workflow_path.is_file() or not binding_path.is_file():
                 raise EngineError("BINDING_NOT_FOUND", f"provider binding 不存在: {directory}")
-            self._workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
-            self._binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
-            self._workflow_hash = hashlib.sha256(workflow_path.read_bytes()).hexdigest()[:16]
-        return self._workflow, self._binding
+            workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+            binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
+            workflow_hash = hashlib.sha256(workflow_path.read_bytes()).hexdigest()[:16]
+            cached = (workflow, binding, workflow_hash)
+            self._bindings[key] = cached
+        workflow, binding, workflow_hash = cached
+        if ref.workflow_hash and ref.workflow_hash != workflow_hash:
+            raise EngineError(
+                "WORKFLOW_HASH_MISMATCH",
+                f"workflow_hash 不一致（binding 视为 immutable，修改请新建版本）: "
+                f"job={ref.workflow_hash} 磁盘={workflow_hash} ({key[0]}/{key[1]})",
+            )
+        return cached
 
-    @property
-    def workflow_hash(self) -> str | None:
-        self._load_binding()
-        return self._workflow_hash
+    def binding_identity(self, module_id: str, binding_version: str) -> tuple[str, str]:
+        """返回 (实际 binding_version, workflow_hash)，供 Job 创建时记录真实身份。"""
+        from app.engine.base import EngineBindingRef
 
-    @property
-    def binding_version(self) -> str:
-        self._load_binding()
-        return str(self._binding.get("binding_version", "v1"))
+        _workflow, binding, workflow_hash = self.load_binding(
+            EngineBindingRef(module_id=module_id, provider="comfyui", binding_version=binding_version)
+        )
+        return str(binding.get("binding_version", binding_version)), workflow_hash
 
-    def _build_prompt(self, request: EngineJobRequest) -> dict:
-        workflow, binding = self._load_binding()
+    def _build_prompt(self, request: EngineJobRequest, workflow: dict, binding: dict) -> dict:
         prompt = json.loads(json.dumps(workflow))  # deep copy
         params = request.parameters
         for name, target in (binding.get("inputs") or {}).items():
@@ -120,10 +145,19 @@ class ComfyUIAdapter(EngineAdapter):
         for node_id, fields in (binding.get("defaults") or {}).items():
             prompt[str(node_id)]["inputs"].update(fields)
         save_node = str(binding["save_image_node"])
-        date = _dt.date.today().strftime("%Y%m%d")
-        prompt[save_node]["inputs"]["filename_prefix"] = str(binding.get("save_image_prefix", "NSFWStudio")).replace(
-            "{date}", date
-        )
+        template = str(binding.get("save_image_prefix", "NSFWStudio"))
+        metadata = dict(request.metadata or {})
+        job_id = str(metadata.get("job_id", ""))
+        item_id = str(metadata.get("stage_item_id") or metadata.get("item_id") or "")
+        values = {
+            "date": _dt.date.today().strftime("%Y%m%d"),
+            "job_id": job_id,
+            "job_short": job_id[-8:] if job_id else "unknown",
+            "stage": str(metadata.get("stage_index", 0)),
+            "item_short": item_id[-8:] if item_id else "unknown",
+            "seed": str(params.get("seed", "")),
+        }
+        prompt[save_node]["inputs"]["filename_prefix"] = _format_prefix(template, values)
         return prompt
 
     # ===== 健康探测 =====
@@ -139,9 +173,65 @@ class ComfyUIAdapter(EngineAdapter):
         except Exception as error:
             return EngineStatus(online=False, detail=f"ComfyUI 不可达: {error}", engine_name=self.name)
 
+    # ===== 上传输入图片（§十三：仅使用 Studio 唯一命名，便于只清理自己的文件） =====
+    async def upload_image(self, filename: str, data: bytes) -> str:
+        """上传待处理图片到 ComfyUI input（/upload/image），返回引擎侧引用名。"""
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=60) as client:
+                response = await client.post(
+                    f"{self.base_url}/upload/image",
+                    files={"image": (filename, data, "application/octet-stream")},
+                    data={"overwrite": "true", "type": "input", "subfolder": "NSFWStudio_inputs"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.ConnectError as error:
+            raise EngineError("ENGINE_OFFLINE", f"ComfyUI 连接失败: {error}") from error
+        except httpx.HTTPError as error:
+            raise EngineError("ENGINE_NETWORK", f"ComfyUI 上传失败: {error}", transient=True) from error
+        name = payload.get("name")
+        if not name:
+            raise EngineError("UNKNOWN_ENGINE_ERROR", f"上传图片未返回文件名: {payload}")
+        subfolder = payload.get("subfolder") or ""
+        return f"{subfolder}/{name}" if subfolder else str(name)
+
+    # ===== 文件级恢复兜底（§九：只扫描 Studio 自己命名的输出） =====
+    def scan_stage_outputs(self, ref, *, job_id: str, stage_index: int,
+                           stage_item_id: str) -> list[EngineOutputFile]:
+        """在 ComfyUI output 目录中扫描某 StageItem 自己命名的输出（marker 由 binding 前缀模板渲染）。
+
+        ComfyUI 重启后 /history 丢失时，只要输出文件已写完，Studio 仍可核对结果；
+        绝不允许扫描/接管用户普通 ComfyUI 图片——目录必须由 provider binding 的
+        save_image_prefix 模板推导，且必须位于 output_dir 之内。
+        """
+        if self.output_dir is None:
+            return []
+        _workflow, binding, _hash = self.load_binding(ref)
+        template = str(binding.get("save_image_prefix", "NSFWStudio"))
+        marker = _format_prefix(template, {
+            "date": _dt.date.today().strftime("%Y%m%d"),
+            "job_id": job_id,
+            "job_short": job_id[-8:] if job_id else "unknown",
+            "stage": str(stage_index),
+            "item_short": stage_item_id[-8:] if stage_item_id else "unknown",
+            "seed": "",
+        })
+        output_root = self.output_dir.resolve()
+        base = (self.output_dir / marker).resolve()
+        if not base.is_relative_to(output_root):
+            raise EngineError("STORAGE_ERROR", f"非法扫描路径: {marker}")
+        if not base.is_dir():
+            return []
+        files = sorted(
+            path for path in base.iterdir()
+            if path.is_file() and path.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+        )
+        return [EngineOutputFile(filename=path.name, data=path.read_bytes()) for path in files]
+
     # ===== 提交 =====
     async def submit_job(self, request: EngineJobRequest) -> str:
-        prompt = self._build_prompt(request)
+        workflow, binding, _hash = self.load_binding(request.binding)
+        prompt = self._build_prompt(request, workflow, binding)
         payload = {"prompt": prompt, "client_id": self.client_id}
         try:
             async with httpx.AsyncClient(trust_env=False, timeout=30) as client:

@@ -22,11 +22,14 @@
 | 0004_recipe | 0.2.0 | recipes / recipe_versions / recipe_asset_snapshots |
 | 0005_job | 0.3.0 | jobs / job_items / job_events（Phase 2A） |
 | 0006_image | 0.3.0 | images（Phase 2C；文件在 DataRoot/images/originals） |
+| 0007_pipeline_stage | 0.4.0 | jobs.job_kind + job_stages / job_stage_items（Phase 3 多阶段管线） |
 
 约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
 `type / mode / slot / favorite / default_count` 均有 CHECK；
 `jobs` 有 `UNIQUE(source, client_request_id)`（幂等）与 status CHECK；
-`images` 有 `kind / review_status` CHECK。升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0。
+`images` 有 `kind / review_status` CHECK；
+`job_stages` 有 `UNIQUE(job_id, stage_index)` 与 status CHECK（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）；
+升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0。
 
 ### migration 状态机（Phase 0.1 修正）
 

@@ -29,11 +29,11 @@ def test_upgrade_from_v012_database(settings, monkeypatch):
             text("INSERT INTO system_info (id, version, created_time, updated_time) VALUES (1, '0.1.2', 't', 't')")
         )
 
-    # 2) 升级：恢复完整迁移列表 → 应用 0002-0004
+    # 2) 升级：恢复完整迁移列表 → 应用 0002+
     monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
     applied = init_database(engine)
     assert [m.migration_id for m in applied] == [
-        "0002_prompt", "0003_asset", "0004_recipe", "0005_job", "0006_image",
+        "0002_prompt", "0003_asset", "0004_recipe", "0005_job", "0006_image", "0007_pipeline_stage",
     ]
 
     # 3) 旧数据仍在 + 新表可写

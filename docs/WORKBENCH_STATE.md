@@ -1,7 +1,8 @@
-# WORKBENCH_STATE — 工作台状态契约（Phase 1 + Phase 2，v0.3.0）
+# WORKBENCH_STATE — 工作台状态契约（Phase 1 + Phase 2 + Phase 3，v0.4.0）
 
-> 更新：2026-10-07。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
-> 快照同时是 Job 的固化输入（§十）与 Image → Workbench 的恢复载体（§四十七）。
+> 更新：2026-10-08。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
+> 快照同时是 Job 的固化输入（§十）与 Image → Workbench 的恢复载体（§四十七）；
+> Phase 3 起 `workflow_modules` 由"② 高清放大"开关决定（§十五/§十六）。
 
 ## 1. WorkbenchSnapshot
 
@@ -22,9 +23,9 @@
   },
   "width": 1024, "height": 1024,
   "count": 1,
-  "seed_mode": "random",                 // random | fixed（"使用此图 Seed" 时为 fixed）
-  "seed": null,                          // Phase 2：fixed 时的基础 Seed（多张 = seed + 序号）
-  "workflow_modules": [],                // 预留 [{module_id, module_version, config}]
+  "seed_mode": "random",                 // random | fixed（"使用此图 Seed"，仅单张，§0.4）
+  "seed": null,                          // fixed 时的 Seed；仅 count=1 允许（多张自动切回 random）
+  "workflow_modules": [],                // Phase 3：开启高清 = [basic_generate, upscale]；关闭 = []
   "source_prompt_id": null,              // 来源追溯（可选）
   "source_prompt_version_id": null
 }
@@ -39,8 +40,8 @@
 | --- | --- | --- |
 | Prompt → Workbench | 提示词页"在生成工作台打开"：以当前版本构造快照，经路由 state 注入 | prompt_mode / 结构化字段 / 完整 Prompt / Negative；尺寸数量回默认 |
 | Asset → Workbench | 素材页"用于生成"：`GET /api/v1/assets/{id}/workbench` 返回快照（structured[slot]=prompt_text，selected_assets 记录引用） | 素材 Prompt 填入对应 slot（素材在前），用户可继续编辑；**绝不回写 AssetVersion** |
-| Recipe → Workbench | 配方页"在生成工作台打开"：由 RecipeVersion + asset_snapshots 构造快照注入 | **100% 恢复**：Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量 / Workflow 快照（空也走同一结构） |
-| Image → Workbench（§四十七） | 图库详情"在生成工作台中打开"：`GET /api/v1/images/{id}/workbench` 返回 **Job 当时的工作台快照**；"使用此图 Seed" 额外把 `seed_mode=fixed, seed=该图 Seed` 写入快照 | Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量；Seed 默认 random |
+| Recipe → Workbench | 配方页"在生成工作台打开"：由 RecipeVersion + asset_snapshots 构造快照注入 | **100% 恢复**：Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量 / Workflow 快照（含高清开关，§十六） |
+| Image → Workbench（§四十七） | 图库详情"在生成工作台中打开"：`GET /api/v1/images/{id}/workbench` 返回 **Job 当时的工作台快照**；"使用此图 Seed" 额外把 `seed_mode=fixed, seed=该图 Seed, count=1` 写入快照（§0.4） | Prompt / Negative / 结构化字段 / 素材引用 / 尺寸 / 数量；Seed 默认 random |
 | （预留）Agent → Workbench | Agent 生成/修改快照后注入 | — |
 
 **Job 固化（§十）**：提交生成时 `snapshotFromState()` 的快照按原样存入

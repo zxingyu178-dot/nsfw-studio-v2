@@ -13,8 +13,11 @@ import re
 ERROR_TYPES = (
     "ENGINE_OFFLINE",
     "ENGINE_NETWORK",
+    "ENGINE_TIMEOUT",  # Phase 3 §十：StageItem 执行超时（不自动重试）
     "WORKFLOW_ERROR",
     "BINDING_NOT_FOUND",  # Phase 2.1 §七：provider binding 目录/文件缺失（系统性，不可重试）
+    "WORKFLOW_HASH_MISMATCH",  # Phase 3 §0.3：binding 被改动（immutable 违约，系统性）
+    "WORKER_INTERNAL_ERROR",  # Phase 3 §0.1：Worker 代码级异常（Job INTERRUPTED + 队列暂停）
     "MODEL_MISSING",
     "NODE_MISSING",
     "OUT_OF_MEMORY",
@@ -28,6 +31,7 @@ _SYSTEMIC_TYPES = {
     "OUT_OF_MEMORY",
     "WORKFLOW_ERROR",
     "BINDING_NOT_FOUND",
+    "WORKFLOW_HASH_MISMATCH",
     "MODEL_MISSING",
     "NODE_MISSING",
 }

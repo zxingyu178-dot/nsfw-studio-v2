@@ -1,50 +1,63 @@
-# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1 / 2.2，v0.3.2）
+# COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1 / 2.2 / 3，v0.4.0）
 
-> 更新：2026-10-07。实现：`backend/app/engine/comfyui.py`。
-> 环境事实见 docs/COMFY_ENV_INVENTORY.md；工作流选型见 docs/WORKFLOW_INVENTORY.md。
+> 更新：2026-10-08。实现：`backend/app/engine/comfyui.py`。
+> 环境事实见 docs/COMFY_ENV_INVENTORY.md；工作流选型见 docs/WORKFLOW_INVENTORY.md
+> 与 docs/UPSCALE_WORKFLOW_INVENTORY.md。
 
-## 1. 分层边界（§二十九）
+## 1. 分层边界（§二十九；Phase 3 §0.2/§二十二）
 
 ```text
 WorkflowModule / EngineAdapter 核心 ── 零节点知识（不知道任何 node id）
-        ↑ 只认标准输入：positive_prompt / negative_prompt / width / height / seed
-provider binding（workflows/providers/comfyui/basic_generate/v1/）
-        ├── workflow.json   参数化节点图模板（注入点留空）
-        ├── binding.yaml    节点 ID / 字段注入位置 / 默认值 / seed 范围 / save 节点
-        └── README.md       来源与升级约定
+        ↑ 只认标准输入：positive_prompt / negative_prompt / width / height / seed（生成）
+          或 input_image（处理型）
+provider binding（workflows/providers/comfyui/<module_id>/<binding_version>/）
+        ├── basic_generate/v1/   workflow.json + binding.yaml + README.md
+        └── upscale/v1/          LoadImage → UpscaleModelLoader → ImageUpscaleWithModel → SaveImage
 ```
 
-修改工作流 = 新增 `v2/` 目录 + 更新 `binding_version`，核心代码零改动。
+**绑定属于每次请求，不属于 Adapter 实例（§0.2）**：一个 ComfyUIAdapter 交替执行
+`basic_generate/v1 → upscale/v1 → basic_generate/v1`，按 `(module_id, binding_version)`
+动态加载并缓存，无需多套 Adapter。
 
-## 2. 执行流程（§三十三；Phase 2.1 §三 起经 WorkflowModule）
+修改工作流 = 新增 `v2/` 目录 + 更新配置 `binding_version`，核心代码零改动；
+**已投入使用的 binding 目录视为 immutable**：Job 固化的 `workflow_hash` 与磁盘
+`sha256(workflow.json)[:16]` 不一致 → `WORKFLOW_HASH_MISMATCH`（系统性，拒绝执行，§0.3）。
+
+## 2. 执行流程（§三十三；Phase 3：按 Stage 动态绑定）
 
 ```text
-QueueWorker → PipelineExecutor.resolve_module(job)（workflow_snapshot.modules）
-  → BasicGenerateModule.build_engine_request()（模块标准输入 → 参数映射）
-  → EngineJobRequest
+QueueWorker → PipelineExecutor.resolve_stage_module(stage)（JobStage 固化身份）
+  → WorkflowModule.prepare_inputs()（处理型：upload_image 引擎侧输入准备，§十三）
+  → WorkflowModule.build_engine_request() → EngineJobRequest{binding, parameters, metadata}
   ↓ ComfyUIAdapter
-  → _load_binding()（缓存 workflow + binding，计算 workflow_hash）
+  → load_binding(request.binding)（按 (module_id, binding_version) 缓存 + hash 校验，§0.2/§0.3）
   → _build_prompt()：标准输入按 binding.inputs 注入节点字段
                     + binding.defaults 覆盖固定参数
-                    + SaveImage.filename_prefix = NSFWStudio/<YYYYMMDD>
+                    + SaveImage.filename_prefix = NSFWStudio/{job_short}/{stage}/{item_short}
   → POST /prompt  {prompt, client_id}         → prompt_id（engine_job_id）
   → 进度：WebSocket（ws://…/ws?clientId=）优先，HTTP /history 兜底
   → 完成：GET /history/{id} → outputs[].images[] → GET /view?filename=… 取字节
   → 返回 EngineOutputFile（字节级），由 Worker 注入的 output_importer 导入 DataRoot
 ```
 
-Worker 轮询 `get_job_status()`（engine_poll_ms）；`_live` 内存态由 WebSocket 更新，
-`/history` 是完成状态的权威（存储已结束任务）。
+- 输出命名含 Studio 身份（§九）：`NSFWStudio/<job-short>/<stage>/<item-short>/`；
+- `scan_stage_outputs(ref, job_id, stage_index, stage_item_id)`（§九）：ComfyUI 重启后
+  history 丢失时，按 binding 前缀模板扫描 Studio 自己的输出目录（仅 `output_dir` 内），
+  用于崩溃恢复兜底；绝不扫描用户普通图片。
 
 ## 3. EngineAdapter 接口实现
 
 | 方法 | 行为 |
 | --- | --- |
 | `health()` | `GET /system_stats`（5s 超时，trust_env=False）→ online/detail/version |
+| `load_binding(ref)` | 按 `(module_id, binding_version)` 加载并缓存；文件缺失 → BINDING_NOT_FOUND；hash 不一致 → WORKFLOW_HASH_MISMATCH |
+| `binding_identity(module, version)` | 返回 (实际 binding_version, workflow_hash)，供 Job 创建时固化身份 |
+| `upload_image(filename, data)` | `POST /upload/image`（subfolder=NSFWStudio_inputs）→ 引擎侧引用名（处理型 Stage 的输入，§十三） |
 | `submit_job()` | binding 注入 → `POST /prompt`；node_errors → 分类错误 |
 | `get_job_status()` | `/history` 权威 + `/queue` 与 WS 新鲜度判定；请求失败抛 OFFLINE/NETWORK（见 §5.1） |
 | `cancel_job()` | 先读 `GET /queue` 判断 target 位置（Phase 2.2 §4，见 §3.1） |
 | `get_job_outputs()` | `/history` → `/view` 取回字节；无输出 → `OUTPUT_MISSING` |
+| `scan_stage_outputs()` | §九 文件级恢复兜底（仅 Studio 自己命名的输出目录） |
 
 ## 3.1 取消边界（Phase 2.2 §4，固定）
 
@@ -75,12 +88,15 @@ target 不在队列（已完成/被删）
 | --- | --- | --- |
 | ENGINE_OFFLINE | ConnectError / 队列暂停 | 系统性：Job FAILED + 队列暂停 |
 | ENGINE_NETWORK | 网络抖动、超时 | 瞬态：提交/轮询各自动重试 ≤2 |
-| WORKFLOW_ERROR | /prompt 400 非节点错误 | 不自动重试，Item FAILED |
+| ENGINE_TIMEOUT | StageItem 执行总超时（§十，默认 1800s，可配） | 不自动重试，Item FAILED |
+| WORKFLOW_ERROR | /prompt 400 非节点错误 | 不自动重试，系统性 |
 | BINDING_NOT_FOUND | provider binding 目录/文件缺失 | 不自动重试，系统性（Job 创建时 4xx） |
+| WORKFLOW_HASH_MISMATCH | binding 被改动（immutable 违约，§0.3） | 不自动重试，系统性 |
 | MODEL_MISSING / NODE_MISSING | node_errors 消息分类 | 不自动重试，系统性 |
 | OUT_OF_MEMORY | "out of memory"/"allocation" | 不自动重试，系统性 |
 | OUTPUT_MISSING | history 无输出文件 | Item FAILED |
 | STORAGE_ERROR | 导入 DataRoot 失败 | Item FAILED |
+| WORKER_INTERNAL_ERROR | Worker/循环级代码异常（§0.1） | Job INTERRUPTED + 队列暂停 |
 | UNKNOWN_ENGINE_ERROR | 其他 | 不自动重试 |
 
 OOM / Workflow / 模型 / 节点缺失 → **不自动重试**。
@@ -103,26 +119,26 @@ get_job_status 的三种来源（优先级）：
 
 网络异常**禁止**降级为"还在运行"；"history 尚无该 prompt"**禁止**误判为失败。
 
-## 6. 版本溯源与 binding 解析（§五十五；Phase 2.1 §七）
-
-binding 目录由配置解析，不再硬编码：
+## 6. 版本溯源与 binding 解析（§五十五；Phase 2.1 §七；Phase 3 §0.2 动态）
 
 ```text
 workflows/providers/comfyui/<module_id>/<binding_version>/
-  basic_generate/v1/  →  v2/ 仅新增目录 + 配置 binding_version=v2，核心 Adapter 零改动
+  basic_generate/v1/  → v2/   仅新增目录 + 配置 binding_version=v2，核心 Adapter 零改动
+  upscale/v1/                 按请求动态加载（一个 Adapter 服务全部模块）
 ```
 
 目录/文件缺失 → `EngineError("BINDING_NOT_FOUND")`（系统性，不自动重试）；
 Job 创建时该错误转为 4xx（`BINDING_NOT_FOUND`）而不是 500。
+缓存 key 必须是 `(module_id, binding_version)`，不是一个 Adapter 只保存一个绑定。
 
-## 6.1 版本溯源（§五十五、§五十六）
+## 6.1 版本溯源（§五十五、§五十六；Phase 3 §五）
 
-Job 创建时 `module_identity()` 从 binding 读取：
-`module_id=basic_generate / module_version=v1 / provider=comfyui /
-binding_version=v1 / workflow_hash=sha256(workflow.json)[:16]`。
-以后 binding 升级到 v2，老 Job 仍能通过 hash 追溯当时的工作流版本。
-真实模型名（Qwen-Image 2.1 UC GGUF 三件套）来自环境调查，记录在
-`docs/WORKFLOW_INVENTORY.md`，不硬编码进核心。
+Job 创建时 `resolve_workflow_modules()` / `binding_identity()` 从 binding 读取每个模块的真实身份：
+`module_id / module_version / provider / binding_version / workflow_hash=sha256(workflow.json)[:16]`，
+写入 `workflow_snapshot.modules` 并物化为 JobStage（执行真源）。
+以后 binding 升级到 v2，老 Job 仍能通过 hash 追溯当时的工作流版本；hash 不一致直接拒绝执行（§0.3）。
+真实模型名（Qwen-Image 2.1 UC GGUF 三件套 / 4x-UltraSharp）来自环境调查，记录在
+`docs/WORKFLOW_INVENTORY.md` 与 `docs/UPSCALE_WORKFLOW_INVENTORY.md`，不硬编码进核心。
 
 ## 7. 本机配置（§三十二，禁止提交机器信息）
 
@@ -130,6 +146,8 @@ binding_version=v1 / workflow_hash=sha256(workflow.json)[:16]`。
 # configs/config.local.yaml（gitignore）
 comfyui:
   url: "http://127.0.0.1:8188"
+  # 可选：文件级恢复兜底（§九）需要扫描 ComfyUI output 目录时配置
+  # output_dir: "D:/AIHome_2.0_L1_L2/projects/comfyui/app/output"
 ```
 
 公共配置只声明 `workflow.engine.provider: comfyui`（产品默认）与
@@ -139,5 +157,8 @@ comfyui:
 
 ## 8. 测试
 
-- `tests/backend/test_comfyui_binding.py`：binding 注入 / seed 范围 / hash 溯源（CI 可跑，无需 ComfyUI）；
-- `tests/backend/test_comfyui_integration.py`：真实 1/3/8 张生成（ComfyUI 不在线时自动 skip）。
+- `tests/backend/test_comfyui_binding.py`：binding 注入 / seed 范围 / hash 溯源 /
+  hash 不一致拒绝 / 一个 Adapter 多模块动态加载（CI 可跑，无需 ComfyUI）；
+- `tests/backend/test_comfyui_resilience.py`：掉线语义 / binding 版本解析 / 安全取消（离线 stub）；
+- `tests/backend/test_comfyui_integration.py`：真实 1 张基础生成 + 1 张真实高清 +
+  图库单张高清（§二十六；ComfyUI 不在线时自动 skip）。

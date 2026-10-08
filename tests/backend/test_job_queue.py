@@ -329,11 +329,16 @@ def test_sse_stream_receives_events(settings):
         thread.join(timeout=5)
 
 
-def test_seed_fixed_mode(mock_client):
-    """固定 Seed：snapshot.seed + item_index。"""
-    job = mock_client.post("/api/v1/jobs", json={
+def test_seed_fixed_mode_single_image_only(mock_client):
+    """§0.4：固定 Seed 仅用于单张精确复现；count>1 必须拒绝（禁止 base_seed+index）。"""
+    rejected = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(count=3, seed_mode="fixed", seed=12345),
+    })
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["code"] == "FIXED_SEED_SINGLE_ONLY"
+
+    job = mock_client.post("/api/v1/jobs", json={
+        "snapshot": make_snapshot(count=1, seed_mode="fixed", seed=12345),
     }).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=30)
-    seeds = sorted(i["seed"] for i in final["items"])
-    assert seeds == [12345, 12346, 12347]
+    assert [i["seed"] for i in final["items"]] == [12345]

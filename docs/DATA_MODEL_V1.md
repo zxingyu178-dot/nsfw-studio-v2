@@ -125,6 +125,25 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
 | 接入点 | 状态 |
 | --- | --- |
 | `assets.source_image_id` | ✅ Phase 2C 启用：从图库创建素材时回填 |
+| `images.parent_image_id` | ✅ Phase 3 启用：高清图（upscaled）指向来源原图 |
 | `recipes.cover_image_id` | 预留：Recipe 封面图（未启用） |
 | `asset_versions.reference_images_json` | 预留：多参考图（未启用） |
-| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding） |
+| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding）；Phase 3 多模块动态绑定 |
+
+### 8.4 JobStage / JobStageItem（0007_pipeline_stage，Phase 3）
+
+```text
+JobStage（job_stages）           一个阶段（固化 module/binding/workflow_hash）
+  ├─ stage_index / module_id / module_version / provider / binding_version / workflow_hash
+  ├─ status（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）
+  ├─ total_count / completed_count / config_json（如 execution_timeout）
+  └─ JobStageItem（job_stage_items）
+       ├─ job_item_id / item_index（一个逻辑槽位）
+       ├─ input_image_id / output_image_id（图片流转）
+       ├─ status / engine_job_id / progress / error_* / retry_count
+       └─ 崩溃恢复粒度（§八）
+```
+
+- 执行真源 = JobStage + workflow_snapshot（Job 创建后当前配置不再影响该 Job）；
+- `UNIQUE(job_id, stage_index)`；`jobs.job_kind`：generate / process；
+- 详见 `PIPELINE_V2.md` 与 `PIPELINE_STATE_MACHINE.md`。

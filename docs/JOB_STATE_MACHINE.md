@@ -1,7 +1,8 @@
-# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2 + 2.1 + 2.2，v0.3.2）
+# JOB_STATE_MACHINE — Job / JobItem 状态机（Phase 2 + 2.1 + 2.2 + 3，v0.4.0）
 
-> 更新：2026-10-07。权威实现在 `backend/app/services/job_service.py` 与
+> 更新：2026-10-08。权威实现在 `backend/app/services/job_service.py` 与
 > `backend/app/workers/queue_worker.py`；数据库状态是唯一事实源（SSE 只是通知）。
+> Phase 3 新增 JobStage / JobStageItem，见 `PIPELINE_STATE_MACHINE.md` 与 `PIPELINE_V2.md`。
 
 ## 1. Job 状态（固定 7 个，禁止扩展）
 
@@ -52,15 +53,22 @@ POST /jobs/{id}/cancel
 `QUEUED → RUNNING → COMPLETED | FAILED | CANCELLED`，崩溃恢复写入 `INTERRUPTED`。
 暂停发生在 Job / Worker 层，不在 Item 层。
 
+- **Phase 3 多阶段语义**：JobItem = 用户要求的"最终逻辑结果"；
+  非最后 Stage 完成时保持 `RUNNING`（"阶段间进行中"，image_id = 当前输出）；
+  最后 Stage 完成才 `COMPLETED`；Job FAILED/CANCELLED 时未完成槽位统一 `CANCELLED`，不悬空；
 - Item 失败：记录 `error_type / error_message / retry_count`，Job 由 `_finish_job`
   统计（存在 FAILED Item → Job FAILED）；
 - 系统性失败（`_systemic_failure`）：当前 Item FAILED、未执行 Item CANCELLED、
-  Job FAILED + **队列自动暂停**（等待用户处理）。
+  Job FAILED + **队列自动暂停**（等待用户处理）；后续 Stage 不启动。
 
-## 5. Seed 规则（§九）
+## 5. Seed 规则（Phase 3 §0.4，冻结）
 
-- 每张图独立随机 Seed（`random.SystemRandom`），**Item 真正开始执行时**才分配；
-- `seed_mode=fixed`（"使用此图 Seed"/集成测试）：`seed = base + item_index`；
+- 默认：每张图独立随机 Seed（`random.SystemRandom`），**Item 真正开始执行时**才分配；
+- `seed_mode=fixed`（"使用此图 Seed"）：**仅用于单张精确复现**——后端要求 `count == 1`
+  （fixed + count>1 → 400 `FIXED_SEED_SINGLE_ONLY`）；前端选"使用此图 Seed"自动收敛 count=1，
+  用户把数量改成 >1 自动切回随机；
+- 固定 Seed 只作用于第一个（生成）Stage；后续 Stage 使用新随机数（放大链实际不使用 Seed）；
+- 禁止 `base_seed + item_index`（旧行为已删除）；
 - 范围校验在 EngineAdapter / binding（`seed_range`）侧完成；
 - 已成功 Item 的 Seed 永远保留；未完成 Item 重跑（续跑子 Job）生成新随机 Seed。
 
@@ -72,7 +80,9 @@ POST /jobs/{id}/cancel
 | JOB_STARTED / JOB_PAUSED / JOB_PAUSE_REQUESTED / JOB_RESUMED | 状态操作 |
 | JOB_CANCEL_REQUESTED / JOB_CANCELLED | 取消 |
 | ITEM_STARTED（含 seed）/ ITEM_PROGRESS / ITEM_COMPLETED（含 image_ids）/ ITEM_FAILED / ITEM_CANCELLED | Item 生命周期 |
+| STAGE_STARTED / STAGE_ITEM_STARTED / STAGE_ITEM_COMPLETED / STAGE_COMPLETED / STAGE_FAILED | Phase 3 Stage 生命周期 |
 | JOB_COMPLETED / JOB_FAILED / JOB_INTERRUPTED / ITEM_RECOVERED | 终态与恢复 |
+| WORKER_INTERNAL_ERROR | §0.1 Worker 代码级异常（Job INTERRUPTED + 队列暂停） |
 | JOB_UPDATED | 队列位置 / 状态变更的补充通知 |
 
 同一事件同时：写入 `job_events` 表 + 广播到 SSE（`GET /api/v1/events/jobs`）。
@@ -112,7 +122,7 @@ output_importer 抛异常              → STORAGE_ERROR → Item FAILED
 
 ## 10. Seed 与续跑（Phase 2.1 §五 + 2.2 §3，固定）
 
-- 每张图执行时分配 Seed（random：SystemRandom；fixed：base + item_index）；
+- 每张图执行时分配 Seed（random：SystemRandom；fixed：仅单张精确复现，见 §5）；
 - **续跑（resume-remaining）一律使用新随机 Seed**：子 Job 快照
   `count = remaining, seed_mode = random, seed = null`（workbench_snapshot 与
   generation_settings_json 同步重建）；
@@ -122,12 +132,23 @@ output_importer 抛异常              → STORAGE_ERROR → Item FAILED
 - 想"用最新版 Workflow 重做剩余内容"请创建新 Job，而不是 Resume；
 - 原 Job 的 workbench_snapshot 永不修改；已成功 Item 的 Seed 永远保留。
 
-## 11. Worker 取消不写终态（Phase 2.2 实测发现）
+## 11. Worker 取消 / 内部异常（Phase 2.2 + Phase 3 §0.1）
 
-Worker 任务被取消（进程退出 / 停机超时）或意外异常时：
+**正常取消（进程退出 / 停机超时，asyncio.CancelledError）**：
 
 ```text
 process_job 不写 Job 终态（也不把仍有未完成 Item 的 Job 标成 COMPLETED）
-→ Job / Item 保持 RUNNING 原样落库
+→ Job / Item / Stage / StageItem 保持 RUNNING 原样落库
 → 下次启动恢复流程接管（RUNNING → INTERRUPTED → 核对 → 归并终态）
 ```
+
+**代码级意外异常（RuntimeError 等非 EngineError 异常，§0.1）**：
+
+```text
+当前 Job → INTERRUPTED（保留 engine_job_id 等恢复信息）
+Stage / StageItem / Item 的 RUNNING → INTERRUPTED
+queue_paused = true（禁止领取任何新 Job）
+记录 WORKER_INTERNAL_ERROR 事件；Job.error_type = WORKER_INTERNAL_ERROR
+```
+
+绝不出现"A INTERRUPTED 后 B 立刻 RUNNING"或队列继续烧后续任务。

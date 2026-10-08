@@ -1,5 +1,12 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import { setCount, setSeed, setSize, snapshotFromState, useWorkbench } from '../../stores/workbenchStore'
+import {
+  setCount,
+  setSeed,
+  setSize,
+  setUpscaleEnabled,
+  snapshotFromState,
+  useWorkbench,
+} from '../../stores/workbenchStore'
 import {
   activeJob,
   cancelJob,
@@ -18,6 +25,7 @@ import {
   shortJobId,
   type JobDTO,
 } from '../../types/workbench'
+import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 
 /** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。 */
 export function SettingsPane() {
@@ -103,6 +111,25 @@ export function SettingsPane() {
         </p>
       </div>
 
+      {/* ===== 工作流（§十五：轻量模块区，不做节点编辑器） ===== */}
+      <div className="field">
+        <span className="field__label">工作流</span>
+        <div className="workflow-modules">
+          <p className="field__static">① 基础生成</p>
+          <label className="field__check">
+            <input
+              type="checkbox"
+              checked={state.upscaleEnabled}
+              onChange={(event) => setUpscaleEnabled(event.target.checked)}
+            />
+            ② 高清放大
+          </label>
+          {state.upscaleEnabled && (
+            <p className="muted">原图全部完成后，依次生成高清图（原图与高清保持父子关系）。</p>
+          )}
+        </div>
+      </div>
+
       <div className="field">
         <label className="field__label" htmlFor="size-width">宽度 (px)</label>
         <input
@@ -156,7 +183,10 @@ export function SettingsPane() {
           )}
         </div>
         {state.seedMode === 'fixed' && state.seed !== null ? (
-          <p className="field__static">固定 {state.seed}<span className="muted">（多张时 = Seed + 序号）</span></p>
+          <p className="field__static">
+            固定 {state.seed}
+            <span className="muted">（单张精确复现；选择数量 &gt; 1 将自动切回随机）</span>
+          </p>
         ) : (
           <p className="field__static">随机（每张独立）</p>
         )}
@@ -259,16 +289,16 @@ export function SettingsPane() {
 
 function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
   const runningItem = job.items.find((item) => item.status === 'RUNNING')
-  const progress =
-    runningItem?.progress != null
-      ? Math.round(runningItem.progress * 100)
-      : job.requested_count > 0
-        ? Math.round((job.completed_count / job.requested_count) * 100)
-        : 0
+  const progress = overallProgress(job)
+  const stageLines = stageProgressLines(job)
   const progressText =
     job.status === 'RUNNING' && runningItem
       ? `第 ${runningItem.item_index + 1} 张 · ${progress}%`
       : `已完成 ${job.completed_count} / ${job.requested_count}`
+  const moduleLabel =
+    stageLines.length > 0
+      ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' → ')
+      : MODULE_LABEL[job.module_id ?? ''] ?? job.module_id ?? '基础生成'
   const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
   const canResumeRemaining =
     ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(job.status) &&
@@ -288,12 +318,21 @@ function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
       <div className="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
         <span className="progress-bar__fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
       </div>
-      <p className="job-card__meta">
-        {progressText}
-        {runningItem?.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''}
-        {' · '}
-        {MODULE_LABEL[job.module_id ?? ''] ?? job.module_id ?? '基础生成'}
-      </p>
+      {stageLines.length > 0 ? (
+        <ul className="stage-progress" aria-label="分阶段进度">
+          {stageLines.map((line) => (
+            <li key={line.key} className={line.done ? 'stage-progress__done' : undefined}>
+              {line.text}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="job-card__meta">
+          {progressText}
+          {runningItem?.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''}
+        </p>
+      )}
+      <p className="job-card__meta">{moduleLabel}</p>
       {job.resume_of_job_id && (
         <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>
       )}
@@ -367,7 +406,10 @@ function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, 
           <span title={excerpt}>{excerpt.length > 18 ? `${excerpt.slice(0, 18)}…` : excerpt}</span>
         </div>
         <div className="queue-item__meta muted">
-          {shortJobId(job.id)} · {job.requested_count} 张· {MODULE_LABEL[job.module_id ?? ''] ?? '基础生成'}
+          {shortJobId(job.id)} · {job.requested_count} 张 ·{' '}
+          {job.stages && job.stages.length > 1
+            ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' + ')
+            : MODULE_LABEL[job.module_id ?? ''] ?? '基础生成'}
         </div>
       </div>
       <div className="queue-item__actions">{actions}</div>

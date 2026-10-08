@@ -13,7 +13,7 @@ from app.api.deps import get_session
 from app.core.config import Settings
 from app.core.errors import ValidationError
 from app.engine.base import EngineError
-from app.engine.factory import module_identity
+from app.engine.factory import resolve_workflow_modules
 from app.schemas.job import (
     JobCreateRequest,
     JobListResponse,
@@ -27,15 +27,15 @@ from app.services import job_service
 router = APIRouter(tags=["jobs"])
 
 
-def _module_identity(settings: Settings) -> dict:
-    """模块身份（含 provider binding hash）；binding 缺失等引擎层错误转为可读 4xx。"""
+def resolve_requested_modules(settings: Settings, requested: list[dict]) -> list[dict]:
+    """请求的模块列表 → 真实执行身份（含 binding hash）；binding 缺失等引擎层错误转为可读 4xx。"""
     try:
-        return module_identity(settings)
+        return resolve_workflow_modules(settings, requested)
     except EngineError as error:
         raise ValidationError(error.message, code=error.error_type) from error
 
 
-def _check_disk_space(request: Request) -> str:
+def check_disk_space(request: Request) -> str:
     """磁盘空间检查（规范 §五十七）：严重不足拒绝新任务。"""
     settings: Settings = request.app.state.settings
     usage = shutil.disk_usage(settings.storage.data_root)
@@ -54,15 +54,18 @@ def _check_disk_space(request: Request) -> str:
 def create_job(
     request: Request, body: JobCreateRequest, session: Session = Depends(get_session)
 ) -> JobResponse:
-    disk = _check_disk_space(request)
+    disk = check_disk_space(request)
     settings: Settings = request.app.state.settings
+    snapshot = body.snapshot.model_dump()
+    modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
     job, created = job_service.create_job(
         session,
         source=body.source,
         client_request_id=body.client_request_id,
-        snapshot=body.snapshot.model_dump(),
+        snapshot=snapshot,
         queue_mode=body.queue_mode,
-        module_identity=_module_identity(settings),
+        workflow_modules=modules,
+        job_kind="generate",
     )
     response = job_response(job)
     response.idempotent_replay = not created

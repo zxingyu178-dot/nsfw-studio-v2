@@ -1,62 +1,74 @@
-# RECOVERY_SPEC — 崩溃恢复规范（Phase 2，v0.3.0）
+# RECOVERY_SPEC — 崩溃恢复规范（Phase 2 + 3，v0.4.0）
 
-> 更新：2026-10-07。权威实现：`queue_worker.recover_interrupted()` 与
+> 更新：2026-10-08。权威实现：`queue_worker.recover_interrupted()` 与
 > `job_service.mark_interrupted_at_startup()`（应用启动时由 main.py 调用）。
+> Phase 3：恢复粒度从 JobItem 提升到 **JobStageItem**（§八），并新增文件级兜底（§九）。
 
 ## 1. 原则
 
 ```text
-后端启动 → 检测遗留 RUNNING Job / JobItem → 一律转 INTERRUPTED
+后端启动 → 检测遗留 RUNNING Job / Stage / StageItem / Item → 一律转 INTERRUPTED
 → 禁止直接重新排队（绝不自动重跑）
 → 用 engine_job_id + 引擎 history + 实际输出文件核对（§三十八）
 ```
 
-## 2. 启动流程（§三十七）
+## 2. 启动流程（§三十七；Phase 3 §八）
 
 ```text
 lifespan 启动：
   1. mark_interrupted_at_startup(session)
-       RUNNING Job   → INTERRUPTED（记录 JOB_INTERRUPTED 事件）
-       RUNNING Item  → INTERRUPTED
-  2. worker.recover_interrupted()
-       对每个有 engine_job_id 的 INTERRUPTED Item：
-         adapter.get_job_status(engine_job_id)
-           ├─ succeeded → get_job_outputs（必须非空）→ 导入 DataRoot（必须返回 image_id）
-           │              → 才落 Item COMPLETED（IMAGE_RECOVERED，job.completed_count 重算）
-           │              §一：无输出 / 导入失败 / image_ids 为空 → 保持 INTERRUPTED 可再核对
-           └─ 其他（running/failed/unknown/查询异常）→ 保持 INTERRUPTED
-       无 engine_job_id 的 Item → 保持 INTERRUPTED
-  3. 启动日志输出 recovered_items=N
+       RUNNING Job        → INTERRUPTED（记录 JOB_INTERRUPTED 事件）
+       RUNNING Stage      → INTERRUPTED
+       RUNNING StageItem  → INTERRUPTED
+       RUNNING Item       → INTERRUPTED
+  2. worker.recover_interrupted()   # 覆盖全部 INTERRUPTED Job（含上次 Worker 内部异常留下的现场）
+       对每个 INTERRUPTED StageItem：
+         ├─ 有 engine_job_id → adapter.get_job_status(engine_job_id)
+         │    └─ succeeded → get_job_outputs（必须非空）
+         │                  → 导入 DataRoot（必须返回 image_id）
+         │                  → 才落 StageItem COMPLETED（ITEM_RECOVERED，计数重算）
+         ├─ 无输出 / 引擎 unknown / 查询异常 / history 丢失
+         │    → §九 文件级兜底：按 Studio 自己的输出命名扫描该 StageItem 的输出目录
+         └─ 仍无法确认 → 保持 INTERRUPTED（可再核对，绝不自动重跑）
+       无 engine_job_id 的 StageItem → 保持 INTERRUPTED
+  3. 启动日志输出 recovered_items=N（= 恢复的 StageItem 数）
 ```
 
 恢复的 COMPLETED 与正常执行共享同一完成条件（Phase 2.1 §一）：拿到输出 **且** 成功导入
 Studio Image 才允许 COMPLETED，否则保持可恢复状态。
 
-### 2.1 恢复后的 Job 终态归并（Phase 2.2 §2，P0）
+### 2.0 文件级兜底（Phase 3 §九）
+
+- 输出命名包含 Studio 身份：`NSFWStudio/{job_short}/{stage}/{item_short}`（SaveImage 前缀，
+  模板在 provider binding）；
+- 只在 `comfyui.output_dir`（config.local.yaml，可选）之内扫描；目录不存在/未配置 → 空结果；
+- **绝不扫描/接管用户普通 ComfyUI 图片**（只处理绑定模板推导出的 Studio 目录）；
+- 即使 Studio 崩溃 + ComfyUI 重启 + `/history` 丢失，只要文件已写完仍可核对；
+- 文件未写完（崩溃在生成中途）→ 扫描为空 → 保持 INTERRUPTED。
+
+### 2.1 恢复后的 Job 终态归并（Phase 2.2 §2，P0；Phase 3 按 Stage 归并）
 
 每个 Job 核对完成后执行 `_finalize_recovery()`：
 
 ```text
-全部 JobItem = COMPLETED        → Job COMPLETED + completed_count + finished_at
-                                  + JOB_RECOVERED_COMPLETED 事件
+全部 Stage COMPLETED 且 completed_count == requested_count
+    → Job COMPLETED + finished_at + JOB_RECOVERED_COMPLETED 事件
 仍有 INTERRUPTED / QUEUED / FAILED → Job 保持 INTERRUPTED，completed_count 更新
 ```
 
-禁止状态：**全部 Item COMPLETED 但 Job 仍 INTERRUPTED**。
+禁止状态：**全部 Item COMPLETED 但 Job 仍 INTERRUPTED**；**已完成 Stage 被重新执行**。
 
-### 2.2 运行中的取消不得写终态（Phase 2.2 实测发现并修复）
+### 2.2 运行中的取消 / 内部异常（Phase 2.2 + Phase 3 §0.1）
 
-Worker 任务被取消（进程退出 / 停机超时）或发生意外异常时：
-
-```text
-process_job 不写 Job 终态 → 现场保持 RUNNING（Item 保持 RUNNING）
-→ 下次启动按上面 §2/§2.1 流程恢复（RUNNING → INTERRUPTED → 核对 → 归并）
-```
+| 触发 | 行为 |
+| --- | --- |
+| 进程退出 / 停机超时（CancelledError） | 不写终态 → 现场保持 RUNNING → 下次启动恢复 |
+| 代码级意外异常（非 EngineError） | Job/Stage/StageItem/Item 的 RUNNING → INTERRUPTED + queue_paused + WORKER_INTERNAL_ERROR |
 
 禁止：取消/异常路径经 `finally` 把仍有未完成 Item 的 Job 误标为 COMPLETED。
 
 注意：`get_job_status` 依赖 ComfyUI `/history`（只存已结束任务）——
-引擎重启后丢失的任务返回 `unknown`，按"无法确认成功"处理。
+引擎重启后丢失的任务返回 `unknown`，按"无法确认成功"处理（进入文件级兜底）。
 
 ## 3. 无法确认成功时的恢复路径（§三十八）
 
@@ -83,11 +95,13 @@ UI 侧：右栏"当前任务"卡片对 FAILED / CANCELLED / INTERRUPTED 且未�
 | Worker 被强杀，Item 停在 RUNNING | 启动转 INTERRUPTED（Seed 保留但不复用） |
 | 队列内存态暂停丢失 | 重启后队列自然恢复（Job 状态不受影响） |
 
-## 5. 测试覆盖（tests/backend/test_job_queue.py）
+## 5. 测试覆盖
 
-- `test_worker_restart_marks_interrupted`：模拟遗留 RUNNING → 启动转 INTERRUPTED；
-- `test_recover_imports_finished_item`：history 确认成功 → 导入图片 → Item COMPLETED；
-- 恢复后不自动重排（不给后续 Job 造成误伤）。
+- `tests/backend/test_job_queue.py`：遗留 RUNNING → 启动转 INTERRUPTED → 续跑子 Job；
+- `tests/backend/test_phase22_consistency.py`：恢复归并（Case A 全部完成 → Job COMPLETED /
+  Case B 无法确认 → Job INTERRUPTED + completed_count 正确）；
+- `tests/backend/test_phase3_pipeline.py::test_stage2_crash_recovery`：Stage 2 崩溃恢复
+  （按 StageItem 核对、高清正确挂回原图、已完成 Stage 不重跑）。
 
 ## 6. 不变量
 

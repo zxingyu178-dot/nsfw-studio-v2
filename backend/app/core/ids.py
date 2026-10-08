@@ -22,6 +22,8 @@ RECIPE_VERSION = "rcpv"
 JOB = "job"
 JOB_ITEM = "item"
 IMAGE = "img"
+JOB_STAGE = "stg"
+JOB_STAGE_ITEM = "sti"
 
 
 def new_id(prefix: str) -> str:

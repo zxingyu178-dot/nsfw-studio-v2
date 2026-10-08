@@ -9,6 +9,7 @@ import {
   shortJobId,
   type ImageDTO,
 } from '../../types/workbench'
+import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 
 /**
  * 中栏（规范 §五十）：当前生成图片 + 本 Job 已完成缩略图。
@@ -24,6 +25,9 @@ export function ResultPane() {
   const jobId = job?.id ?? null
   const parentId = job?.resume_of_job_id ?? null
   const completedCount = job?.completed_count ?? 0
+  // §十八：Stage 每完成一张立即刷新缩略图（多阶段下 completed_count 只在最后 Stage 增长）
+  const completedStageItems =
+    job?.stages?.reduce((total, stage) => total + stage.completed_count, 0) ?? 0
 
   useEffect(() => {
     if (!jobId) {
@@ -46,7 +50,7 @@ export function ResultPane() {
     return () => {
       cancelled = true
     }
-  }, [jobId, parentId, completedCount])
+  }, [jobId, parentId, completedCount, completedStageItems])
 
   useEffect(() => {
     setSelectedId(null)
@@ -54,12 +58,8 @@ export function ResultPane() {
 
   const shown = images.find((image) => image.id === selectedId) ?? images[images.length - 1] ?? null
   const runningItem = job?.items.find((item) => item.status === 'RUNNING') ?? null
-  const progress =
-    runningItem?.progress != null
-      ? Math.round(runningItem.progress * 100)
-      : job && job.requested_count > 0
-        ? Math.round((job.completed_count / job.requested_count) * 100)
-        : 0
+  const progress = job ? overallProgress(job) : 0
+  const stageLines = job ? stageProgressLines(job) : []
 
   return (
     <div className="pane pane--center">
@@ -86,16 +86,31 @@ export function ResultPane() {
             {shortJobId(job.id)}
             {job.resume_of_job_id ? `（续跑自 ${shortJobId(job.resume_of_job_id)}）` : ''}
             {' · '}
-            {job.status === 'RUNNING' && runningItem
-              ? `正在生成第 ${runningItem.item_index + 1} 张 · ${progress}%${
-                  runningItem.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''
-                }`
-              : `已完成 ${job.completed_count} / ${job.requested_count}`}
+            {stageLines.length > 0
+              ? `原图生成 + 高清放大 · 已完成 ${job.completed_count} / ${job.requested_count}`
+              : job.status === 'RUNNING' && runningItem
+                ? `正在生成第 ${runningItem.item_index + 1} 张 · ${progress}%${
+                    runningItem.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''
+                  }`
+                : `已完成 ${job.completed_count} / ${job.requested_count}`}
           </p>
+
+          {stageLines.length > 0 && (
+            <ul className="stage-progress" aria-label="分阶段进度">
+              {stageLines.map((line) => (
+                <li key={line.key} className={line.done ? 'stage-progress__done' : undefined}>
+                  {line.text}
+                </li>
+              ))}
+            </ul>
+          )}
 
           <div className="result-pane__stage">
             {shown ? (
-              <img src={imageContentUrl(shown.id)} alt="生成结果" />
+              <>
+                <img src={imageContentUrl(shown.id)} alt="生成结果" />
+                {shown.kind === 'upscaled' && <span className="result-pane__hd">HD</span>}
+              </>
             ) : (
               <div className="result-placeholder result-placeholder--inner">
                 <div className="empty-state__badge">
@@ -121,9 +136,10 @@ export function ResultPane() {
                     shown?.id === image.id ? ' thumb-strip__item--active' : ''
                   }`}
                   onClick={() => setSelectedId(image.id)}
-                  title={`Seed ${image.seed ?? '—'}`}
+                  title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
                   <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
+                  {image.kind === 'upscaled' && <span className="thumb-strip__hd">HD</span>}
                 </button>
               ))}
             </div>

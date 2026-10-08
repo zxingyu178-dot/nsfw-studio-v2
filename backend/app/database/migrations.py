@@ -274,6 +274,59 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_images_created ON images(created_at)",
         ),
     ),
+    Migration(
+        migration_id="0007_pipeline_stage",
+        version="0.4.0",
+        description="Phase 3：job_stages / job_stage_items + jobs.job_kind（多阶段管线）",
+        statements=(
+            "ALTER TABLE jobs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'generate'",
+            """
+            CREATE TABLE job_stages (
+                id               TEXT PRIMARY KEY,
+                job_id           TEXT NOT NULL REFERENCES jobs(id),
+                stage_index      INTEGER NOT NULL,
+                module_id        TEXT NOT NULL,
+                module_version   TEXT NOT NULL,
+                provider         TEXT,
+                binding_version  TEXT,
+                workflow_hash    TEXT,
+                status           TEXT NOT NULL DEFAULT 'QUEUED'
+                                 CHECK (status IN ('QUEUED','RUNNING','COMPLETED','FAILED','CANCELLED','INTERRUPTED')),
+                total_count      INTEGER NOT NULL DEFAULT 0,
+                completed_count  INTEGER NOT NULL DEFAULT 0,
+                config_json      TEXT NOT NULL DEFAULT '{}',
+                created_at       TEXT NOT NULL,
+                started_at       TEXT,
+                finished_at      TEXT,
+                updated_at       TEXT NOT NULL
+            )
+            """,
+            "CREATE UNIQUE INDEX uq_job_stages_index ON job_stages(job_id, stage_index)",
+            """
+            CREATE TABLE job_stage_items (
+                id               TEXT PRIMARY KEY,
+                job_stage_id     TEXT NOT NULL REFERENCES job_stages(id),
+                job_item_id      TEXT NOT NULL REFERENCES job_items(id),
+                item_index       INTEGER NOT NULL,
+                input_image_id   TEXT,
+                output_image_id  TEXT,
+                status           TEXT NOT NULL DEFAULT 'QUEUED'
+                                 CHECK (status IN ('QUEUED','RUNNING','COMPLETED','FAILED','CANCELLED','INTERRUPTED')),
+                engine_job_id    TEXT,
+                progress         REAL,
+                error_type       TEXT,
+                error_message    TEXT,
+                retry_count      INTEGER NOT NULL DEFAULT 0,
+                created_at       TEXT NOT NULL,
+                started_at       TEXT,
+                finished_at      TEXT,
+                updated_at       TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_stage_items_stage ON job_stage_items(job_stage_id)",
+            "CREATE INDEX idx_stage_items_item ON job_stage_items(job_item_id)",
+        ),
+    ),
 )
 
 

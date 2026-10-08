@@ -1,0 +1,26 @@
+# upscale v1 — ComfyUI Provider Binding（Phase 3 §十二）
+#
+# 来源：本机已验证可跑的高清链（用户工作流「千问-4x审核放大.json」的等价 API 化：
+# UpscaleModelLoader → ImageUpscaleWithModel → SaveImage，模型 4x-UltraSharp.pth 已在本机）。
+# 选择原因见 docs/UPSCALE_WORKFLOW_INVENTORY.md（优先复用本机已能稳定工作的链，
+# 不升级 ComfyUI / 不安装新节点 / 不下载新模型）。
+
+binding_version: v1
+module: upscale
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "4"
+# §九：输出命名包含 Studio 身份（job/stage/item），Studio 可据此做文件级恢复核对
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（LoadImage.image = 已上传的输入文件名）
+inputs:
+  input_image: {node: "1", field: "image"}
+
+# Seed 范围（upscale 不使用 seed，仅保持绑定层字段一致）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  scale: 4   # 4x-UltraSharp 固定 4 倍

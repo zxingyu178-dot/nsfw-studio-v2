@@ -11,7 +11,10 @@ workflow_file: workflow.json
 
 # 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot，ComfyUI output 仅作输出来源
 save_image_node: "8"
-save_image_prefix: "NSFWStudio/{date}"   # {date} 提交时替换为 YYYYMMDD
+# §九（Phase 3）：输出命名包含 Studio 身份（job/stage/item），Studio 崩溃 + ComfyUI /history 丢失时，
+# 仍可按自己的命名规则做文件级恢复核对。该字段是输出命名元数据，不属于 workflow.json 图结构，
+# 不改变 workflow_hash（§0.3 的 immutable 校验针对 workflow.json）。
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
 
 # 标准输入 → 节点注入位置
 inputs:
