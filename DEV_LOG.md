@@ -38,7 +38,7 @@
 - 前端 `npm run build` 通过（tsc + vite，60 modules，JS 259.7KB / gzip 78.3KB）；
 - 本阶段**零真实生图**（Gate B，合同 §29）；
 - 未执行：真实浏览器 GUI 验收（如实标注，建议验收方按清单检查 UI/快捷键）；
-- CI：develop run （待回填）；main run （待回填）。
+- CI：develop run 37747872243 success（sha be64144）；main run 37749969875 success（sha be64144）。
 
 ### 环境（如实记录）
 

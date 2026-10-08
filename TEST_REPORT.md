@@ -32,8 +32,8 @@ Task 0 调查确认本机无可用图片条件工作流（详见 docs/IMAGE_COND
 ### GitHub CI
 
 ```text
-develop: run （待回填）→（待回填）
-main:    run （待回填）→（待回填）
+develop: run 37747872243 → success（sha be64144，pytest + 前端构建两个 job 全绿）
+main:    run 37749969875 → success（sha be64144，pytest + 前端构建两个 job 全绿）
 ```
 
 ## Phase 4 测试（v0.5.0，History + Provenance + Generic Module I/O Contract）

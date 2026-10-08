@@ -128,8 +128,9 @@ Worker 正常执行（模块按能力忽略输入），无任何核心改动。
 - **真实图片条件生成：未执行**（Gate B，合同 §29 要求零真实生图）。
 - **真实浏览器 GUI 验收：未执行**（本阶段交付为代码 + 快速套件 + 构建；建议用户/验收方按
   验收清单在真实浏览器与模拟数据上检查 UI 交互与快捷键）。
-- 版本发布链（develop → CI → main → CI → tag v0.6.0）与交接 ZIP 邮件：**执行中**，
-  完成后在本文件与 CHANGELOG 更新实际 CI run 记录。
+- 交付链：develop run 37747872243 success → main run 37749969875 success → tag v0.6.0；
+  交接 ZIP（NSFW_Studio_Phase5_Handoff.zip）+ 源码 ZIP（NSFW_Studio_Phase5_Source.zip）
+  已发送 3056668080@qq.com 并经 IMAP 复核（附件齐全）。
 
 ## 5. 状态
 
