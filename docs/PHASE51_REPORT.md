@@ -228,10 +228,15 @@ history success）✅。
   （本阶段不调参、不引入第二模型）；
 - 本机全量 pytest 含 3 个真实 ComfyUI smoke（CI 环境自动跳过）；本机受共享 GPU 队列影响耗时较长。
 
-## 6. 发布流程小修正（执行记录）
+## 6. 发布流程（执行记录，含小修正）
 
-- 固定顺序：代码完成 → 文档最终回填 → CI GREEN → main/develop 同步 → **最后打 tag** →
-  从 tag 对应 commit 生成 Source / Handoff ZIP；
-- Source ZIP 排除 `.pytest_cache / __pycache__ / *.pyc`（Handoff 构建脚本本就排除）；
-- 不再出现"ZIP 早于最后文档 commit"的发布链不一致（v0.6.0 tag 少一个纯文档 commit 的历史问题
-  不再移动旧 tag，仅流程修正）。
+- 固定顺序（本阶段起严格执行）：代码完成 → 文档回填 → CI GREEN → main/develop 同步 →
+  **最后打 tag** → 从 tag 对应 commit 生成 Source / Handoff ZIP；
+- 本阶段执行链：
+  - feature/phase51-contract-img2img → commit `6c14535`；
+  - develop CI run **37768927233 success**（sha 6c14535）→ main CI run **37769363477 success**
+    （sha 6c14535）；
+  - 最终 docs commit（CI 记录回填）→ develop CI → main CI → **tag v0.7.0（含全部文档的最终 commit）**；
+- Source ZIP 排除 `.pytest_cache / __pycache__ / *.pyc`（由 `git archive` 从 tag 生成，
+  只含 tracked 文件，天然干净）；Handoff ZIP 由 `scripts/build_handoff.py` 生成（脚本本已排除缓存）；
+- v0.6.0 的"tag 少一个纯文档 commit"历史问题不移动旧 tag，仅流程修正（本阶段 tag 即为最终 commit）。

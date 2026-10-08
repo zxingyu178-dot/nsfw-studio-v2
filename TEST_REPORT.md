@@ -48,8 +48,9 @@
 ### GitHub CI
 
 ```text
-develop: _CI_DEVELOP_
-main:    _CI_MAIN_
+develop: run 37768927233 → success（sha 6c14535，pytest + 前端构建两个 job 全绿）
+main:    run 37769363477 → success（sha 6c14535，pytest + 前端构建两个 job 全绿）
+最终 docs commit（CI 记录回填）后按发布顺序重跑 develop / main CI（见 PHASE51_REPORT §6）。
 ```
 
 ## Phase 5 测试（v0.6.0，Image Input Foundation + Reference / Img2Img Capability Gate）

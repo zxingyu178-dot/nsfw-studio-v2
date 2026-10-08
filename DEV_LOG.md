@@ -47,6 +47,9 @@
   1 例按新契约反转（basic_generate+输入图 → 拒绝）；
 - 前端 `npm run build` 通过；前端 store 逻辑 9/9 断言通过；
 - 真实实验 3 次（d055 / d100 / d080），全部无 OOM、无缺节点；
+- 真实产品路径 img2img smoke 10/10（job COMPLETED；processed + parent=输入图 + seed + denoise config）；
+- CI：develop run 37768927233 success（sha 6c14535）；main run 37769363477 success（sha 6c14535）；
+  最终 docs commit 后按序重跑 develop/main CI 并打 tag v0.7.0；
 - 未执行：真实浏览器 GUI 验收（建议验收方按清单检查滑杆 / 图库入口）。
 
 ## 2026-10-08 — Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate（v0.6.0）
