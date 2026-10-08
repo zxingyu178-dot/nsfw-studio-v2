@@ -55,6 +55,7 @@ class BasicGenerateModule(WorkflowModule):
             # Task2 输入/输出语义（ImageService 判定 kind/parent/seed 的唯一依据）
             uses_seed=True,
             input_kind="none",
+            input_required=False,
             output_kind="original",
             parent_policy="none",
             output_cardinality=1,

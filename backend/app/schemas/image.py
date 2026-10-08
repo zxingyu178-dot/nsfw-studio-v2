@@ -56,6 +56,47 @@ class ImageListResponse(BaseModel):
     offset: int
 
 
+class ImageImportItem(BaseModel):
+    """成功导入的图片（含原始文件名）。"""
+
+    filename: str
+    image: ImageResponse
+
+
+class ImageImportDuplicate(BaseModel):
+    """重复文件（sha256 已存在）：不创建第二份，返回已存在的 image_id。"""
+
+    filename: str
+    image_id: str
+    sha256: str
+
+
+class ImageImportFailure(BaseModel):
+    """单张失败明细（§二十三：部分失败不影响整批）。"""
+
+    filename: str
+    error_code: str
+    message: str
+
+
+class ImageImportResponse(BaseModel):
+    imported: list[ImageImportItem]
+    duplicates: list[ImageImportDuplicate]
+    failed: list[ImageImportFailure]
+    imported_count: int
+    duplicate_count: int
+    failed_count: int
+
+
+class ImageReferencesResponse(BaseModel):
+    """图片引用保护检查（Task11/§十一：删除前知道仍被哪些对象引用）。"""
+
+    image_id: str
+    total: int
+    active_job_ids: list[str]
+    references: dict[str, list[str]]
+
+
 class ImageWorkbenchResponse(BaseModel):
     """Image → 生成工作台（规范 §四十七；Phase 4 Task7/9）。
 

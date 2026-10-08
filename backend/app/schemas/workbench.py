@@ -33,6 +33,16 @@ class SelectedAssetRef(BaseModel):
     name: str = ""
 
 
+class InputImageRefModel(BaseModel):
+    """工作台输入图片（Phase 5 §八：统一使用 image_id，禁止保存临时外部路径）。
+
+    第一版只支持一张（role=source，max_length=1）；未来 Reference 多图再扩展 Slots。
+    """
+
+    role: Literal["source"] = "source"
+    image_id: str
+
+
 class GenerationSettingsModel(BaseModel):
     """生成基础配置（model_ref 仅为未来模型引用槽位，禁止绑定具体模型）。"""
 
@@ -62,6 +72,8 @@ class WorkbenchSnapshotModel(BaseModel):
     full_prompt: str = ""
     negative_prompt: str = ""
     selected_assets: dict[str, SelectedAssetRef] = Field(default_factory=dict)
+    # Phase 5：输入图片（image_id 统一引用图库；第一版 max=1，role=source）
+    input_images: list[InputImageRefModel] = Field(default_factory=list, max_length=1)
     width: int = Field(default=1024, ge=64, le=4096)
     height: int = Field(default=1024, ge=64, le=4096)
     count: int = Field(default=1, ge=1, le=64)

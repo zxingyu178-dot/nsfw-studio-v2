@@ -1,6 +1,6 @@
 # API_PLAN — API 现状与规划
 
-> 更新：2026-10-08（Phase 4，v0.5.0）。错误格式统一为 `{"error": {"code", "message"}}`。
+> 更新：2026-10-08（Phase 5，v0.6.0）。错误格式统一为 `{"error": {"code", "message"}}`。
 
 ## 1. 约定
 
@@ -14,7 +14,7 @@
 
 ### 健康与服务信息
 
-- `GET /api/v1/health` → `{"status":"ok","version":"0.3.0"}`
+- `GET /api/v1/health` → `{"status":"ok","version":"0.6.0"}`
 - `GET /` → 服务基本信息
 
 ### Prompt（`app/api/v1/prompts.py`）
@@ -45,7 +45,9 @@ GET    /api/v1/assets/{id}/workbench         素材 → 工作台快照（prompt
 POST   /api/v1/assets/{id}/archive | /restore
 ```
 
-创建素材额外支持可选表单字段 `source_image_id`（图库 → 素材溯源，§四十八）。
+创建素材额外支持可选表单字段 `source_image_id`（图库 → 素材溯源，§四十八）与
+`reference_image_id`（Phase 5 §十二：Face Asset 参考图，仅 type=face，来源=图库 image_id；
+绑定/更换 = 新版本；响应 `current_version.reference_images` 来自 asset_reference_images 关系表）。
 
 ### Recipe（`app/api/v1/recipes.py`）
 
@@ -54,11 +56,15 @@ GET    /api/v1/recipes                       列表
 POST   /api/v1/recipes                       保存配方（body: {name, favorite, snapshot: WorkbenchSnapshot}）
 GET    /api/v1/recipes/{id}                  详情（含 current_version + asset_snapshots）
 PATCH  /api/v1/recipes/{id}                  元数据
-POST   /api/v1/recipes/{id}/versions         新版本（快照变化才创建）
+POST   /api/v1/recipes/{id}/versions         新版本（快照变化才创建；input_images 参与比较）
 GET    /api/v1/recipes/{id}/versions         版本历史
-POST   /api/v1/recipes/{id}/versions/{vid}/restore   恢复（快照原样复制）
+POST   /api/v1/recipes/{id}/versions/{vid}/restore   恢复（快照原样复制，含输入图关系）
 POST   /api/v1/recipes/{id}/archive | /restore
 ```
+
+Phase 5 §九：snapshot.input_images（[{role:"source", image_id}]，max=1）→ RecipeVersion
+`input_images_json`（[{role, image_id, sha256}]，file hash 由后端解析）；响应
+`current_version.input_images[].missing` 标记图片已丢失（前端显示"输入图片已丢失"，不静默清空）。
 
 ### Job / Queue / SSE（`app/api/v1/jobs.py`）
 
@@ -85,7 +91,7 @@ GET    /api/v1/events/jobs                 SSE 任务事件（只通知；事实
 
 ```
 GET    /api/v1/images                      列表（job_id/review_status/favorite/source/kind/
-                                           date_from/date_to/limit/offset）
+                                           search=导入文件名/date_from/date_to/limit/offset）
 GET    /api/v1/images/{id}                 详情
 GET    /api/v1/images/{id}/content         图片文件流
 GET    /api/v1/images/{id}/versions        父子关系 {image,parent,children}（§十九）
@@ -94,9 +100,25 @@ PATCH  /api/v1/images/{id}/favorite        收藏切换
 GET    /api/v1/images/{id}/workbench       Image → 工作台（Task7：追溯根生成 Job 的快照 +
                                            完整执行身份；返回根图 Seed）｜导入图 → 404 IMAGE_NO_GENERATION_CONTEXT
 GET    /api/v1/images/{id}/provenance      Provenance（Task10）：parent/root/job/stage/模块/双指纹/Seed（+scale）
+GET    /api/v1/images/{id}/references      Phase 5 §十一：引用保护检查（Recipe/StageItem/Asset 参考/
+                                           Asset 溯源/派生图 计数与明细 + active_job_ids）
 POST   /api/v1/images/upscale              图库已有图片高清放大（body: {image_ids:[…]}，§二十四）
                                            → 创建 job_kind=process 的普通 Job（仅 upscale Stage）
+POST   /api/v1/images/import               Phase 5 §三：外部图片导入（multipart files[] 多张，
+                                           PNG/JPG/JPEG/WEBP，≤10MB）
+                                           → {imported[], duplicates[], failed[], *_count}
+                                           sha256 去重（同内容不建第二份）；单张失败不影响整批；
+                                           source=import / kind=original / job_id=null；永久文件在 images/originals/
 GET    /api/v1/images/by-job/{id}/summary  按 Job 统计（§四十九）
+```
+
+### Modules（`app/api/v1/modules.py`，Phase 5 §十四）
+
+```
+GET    /api/v1/modules                     WorkflowModule 能力列表（module_id/version/title/
+                                           uses_seed/input_kind/input_required/input_role/
+                                           output_kind/parent_policy/output_cardinality）
+                                           → 前端"文生图/图片生成"Gate 判定（禁止硬编码模块列表）
 ```
 
 约定：状态机与暂停/取消/续跑语义见 docs/JOB_STATE_MACHINE.md；队列行为见 docs/QUEUE_SPEC.md；
@@ -113,6 +135,10 @@ snapshot 直接复用严格 WorkbenchSnapshotModel：
   prompt_mode     structured | full（Literal）
   selected_assets 结构化类型；workflow_modules 为对象数组
                    （[basic_generate] 或 [basic_generate, upscale]；process Job 必须 == [upscale]）
+  input_images    Phase 5 §八/§十：[{role:"source", image_id}]，max=1（>1 → 422）；
+                  创建期校验图片存在（404 IMAGE_NOT_FOUND）→ 冻结到 Stage0 全部
+                  JobStageItem.input_image_id；process Job 若携带则必须与 input_image_ids 一致
+                  （不一致 → 400 PIPELINE_INVALID）
 Prompt 长度上限：结构化单字段 ≤2000 / 正向 ≤10000 / 负向 ≤8000（400 PROMPT_TOO_LONG）
 workflow_snapshot.modules 由后端按实际模块身份写入（§四/§五），客户端无需传递
 未知 WorkflowModule → 400 WORKFLOW_ERROR（创建期拒绝，不是执行期才炸）

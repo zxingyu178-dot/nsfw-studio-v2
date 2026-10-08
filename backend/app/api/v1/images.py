@@ -1,20 +1,25 @@
-"""Images / Gallery API（Phase 2C，规范 §四十四、§四十七、§四十八；Phase 3 §十九/§二十四）。"""
+"""Images / Gallery API（Phase 2C，规范 §四十四、§四十七、§四十八；Phase 3 §十九/§二十四；Phase 5 导入/引用）。"""
 from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session, get_storage
 from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.errors import NotFoundError, ValidationError
-from app.core.filetypes import mime_for_suffix
+from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
 from app.schemas.image import (
     ImageFavoriteRequest,
+    ImageImportDuplicate,
+    ImageImportFailure,
+    ImageImportItem,
+    ImageImportResponse,
     ImageListResponse,
     ImageProvenanceResponse,
+    ImageReferencesResponse,
     ImageResponse,
     ImageReviewRequest,
     ImageUpscaleRequest,
@@ -23,7 +28,7 @@ from app.schemas.image import (
     image_response,
 )
 from app.schemas.job import JobResponse, job_response
-from app.services import image_service, job_service
+from app.services import image_reference_service, image_service, job_service
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/images", tags=["images"])
@@ -36,6 +41,7 @@ def list_images(
     favorite: bool | None = Query(default=None),
     source: str | None = Query(default=None),
     kind: str | None = Query(default=None),
+    search: str | None = Query(default=None, description="按导入文件名搜索"),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=200),
@@ -44,11 +50,47 @@ def list_images(
 ) -> ImageListResponse:
     items, total = image_service.list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
-        source=source, kind=kind, date_from=date_from, date_to=date_to, limit=limit, offset=offset,
+        source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
+        limit=limit, offset=offset,
     )
     return ImageListResponse(
         items=[image_response(image) for image in items], total=total, limit=limit, offset=offset
     )
+
+
+@router.post("/import", response_model=ImageImportResponse, status_code=201,
+             summary="导入外部图片（多张；sha256 去重；单张失败不影响整批）")
+async def import_images(
+    files: list[UploadFile] = File(...),
+    session: Session = Depends(get_session),
+    storage: StorageManager = Depends(get_storage),
+) -> ImageImportResponse:
+    """外部图片（PNG / JPG / JPEG / WEBP）→ 校验 → 复制进 DataRoot/images/originals/ → Gallery。
+
+    - **绝不引用用户原始文件路径**（§五）；source=import，job_id/job_item_id 为 null；
+    - sha256 去重（§六）：重复文件不创建第二份，返回已存在的 image_id；
+    - 单张失败（非法/超限/损坏）记入 failed 并继续（§二十三），不是生成 Job。
+    """
+    if not files:
+        raise ValidationError("未选择任何文件", code="IMPORT_EMPTY")
+    uploads: list[tuple[str | None, str | None, bytes]] = []
+    for upload in files:
+        data = upload.file.read(MAX_UPLOAD_BYTES + 1)
+        uploads.append((upload.filename, upload.content_type, data))
+    result = image_service.import_images_batch(session, storage, uploads)
+    return ImageImportResponse(
+        imported=[ImageImportItem(filename=_display_name(image.imported_filename), image=image_response(image))
+                  for image in result.imported],
+        duplicates=[ImageImportDuplicate(**item) for item in result.duplicates],
+        failed=[ImageImportFailure(**item) for item in result.failed],
+        imported_count=len(result.imported),
+        duplicate_count=len(result.duplicates),
+        failed_count=len(result.failed),
+    )
+
+
+def _display_name(filename: str | None) -> str:
+    return filename or "(未命名)"
 
 
 @router.get("/{image_id}", response_model=ImageResponse, summary="图片详情")
@@ -109,6 +151,12 @@ def image_to_workbench(image_id: str, session: Session = Depends(get_session)) -
             summary="Image Provenance（Task10）：来源任务 / Stage / 模块 / 双指纹 / Seed")
 def image_provenance(image_id: str, session: Session = Depends(get_session)) -> ImageProvenanceResponse:
     return ImageProvenanceResponse(**image_service.get_provenance(session, image_id))
+
+
+@router.get("/{image_id}/references", response_model=ImageReferencesResponse,
+            summary="图片引用检查（Phase 5 §十一）：删除前知道仍被哪些对象引用")
+def image_references(image_id: str, session: Session = Depends(get_session)) -> ImageReferencesResponse:
+    return ImageReferencesResponse(**image_reference_service.count_references(session, image_id))
 
 
 @router.post("/upscale", response_model=JobResponse, status_code=201,

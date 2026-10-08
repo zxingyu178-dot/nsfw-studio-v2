@@ -1,5 +1,53 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-08 — Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate（v0.6.0）
+
+**执行**：TRAE Code Agent（feature/phase5-image-input → develop → CI → main → CI → tag v0.6.0）。
+本阶段**未新增生成模型**：Task 0 调查确认 **Gate B**（无现成可用图片条件工作流），真实 Module 接入暂停，
+候选方案等待用户选择（Phase 5.1）；其余"图片作为输入"产品能力全部完成。
+
+### 交付
+
+- **Task 0（只读调查，Gate B）**：7 个工作流逐节点解析 + 模型磁盘清单 + ComfyUI `/object_info`
+  1169 节点核对（custom_nodes 与 Phase 2B 无新增）；结论 = 唯一 Img2Img 工作流缺 checkpoint+lora，
+  Reference/Face Reference/ControlNet/Qwen-Edit 均缺节点或模型 → docs/IMAGE_CONDITIONING_INVENTORY.md
+  （能力矩阵 + 候选方案 0-3，未执行任何下载/安装/升级）。
+- **导入（§三-§六/§二十三）**：`POST /api/v1/images/import`（PNG/JPG/JPEG/WEBP；校验 → temp →
+  原子导入 → images/originals → Image → Gallery）；sha256 去重（images.sha256 + imported_filename，
+  迁移 0010）；批量部分失败继续（成功/已存在/失败明细）；WEBP 尺寸解析（VP8/VP8L/VP8X 无依赖）；
+  Gallery"导入"UI（多选 + 进度 n/N + 摘要）。
+- **工作台输入图片（§七/§八）**：模式切换 [文生图]/[图片生成]；输入图片区（图库 Picker / 上传即导入）；
+  `WorkbenchSnapshot.input_images`（max=1, role=source）；上传即导入手写复用导入 API（去重命中直接引用）。
+- **Gallery Picker（§二十一）+ 快捷入口（§二十二）+ 快捷键（§二十四）**：筛选/搜索/缩略图/尺寸/收藏；
+  "用作输入图片"；←/→/K/R/F + Ctrl+Z 撤销（栈深 20）。
+- **Recipe 输入图快照（§九）**：recipe_versions.input_images_json（role/image_id/sha256）；
+  参与 signature；restore 原样复制；缺失 → missing=true（"输入图片已丢失"，不静默清空）。
+- **Job 冻结（§十）**：create_job 提取 snapshot.input_images → Stage0 全部 StageItem.input_image_id；
+  处理型快照不一致 → PIPELINE_INVALID；缺失 → 404；未改 Worker/Pipeline 核心。
+- **Face Asset 参考图（§十二/§十三）**：asset_reference_images 关系表（role=face_reference）；
+  创建/新增版本表单 reference_image_id；更换=新版本；非 face 400；前端绑定/更换 UI。
+- **能力与引用（§十四/§十一）**：ModuleCapabilities +input_required/input_role；`GET /api/v1/modules`；
+  ImageReferenceService + `GET /api/v1/images/{id}/references`（5 类来源 + active_job_ids）。
+- **文档**：新增 IMAGE_CONDITIONING_INVENTORY / PHASE5_REPORT；同步 API_PLAN / DATABASE_PLAN /
+  DATA_MODEL_V1 / WORKBENCH_STATE / IMAGE_MODEL / MODULE_IO_CONTRACT / CHANGELOG / TASKS /
+  README / AGENTS；版本 0.5.0 → 0.6.0（后端/前端/configs 同步）。
+
+### 验证
+
+- 快速套件 **186 passed**（168 基线 + 18 新增；--ignore 集成）；
+- 前端 `npm run build` 通过（tsc + vite，60 modules，JS 259.7KB / gzip 78.3KB）；
+- 本阶段**零真实生图**（Gate B，合同 §29）；
+- 未执行：真实浏览器 GUI 验收（如实标注，建议验收方按清单检查 UI/快捷键）；
+- CI：develop run （待回填）；main run （待回填）。
+
+### 环境（如实记录）
+
+- Task 0 为纯只读调查：未下载模型、未安装节点、未升级 ComfyUI、未更新 Manager、未移动模型、
+  未修改用户工作流；
+- 无新增长期运行对象（无 ControlHub 接入义务；仅应用内 API/前端改动）；
+- 导入/冻结/参考图测试全部使用临时 DataRoot（pytest fixture），不触碰正式数据目录；
+- 夜间批量（V1 / 千问外部批量）不受本阶段影响（未触碰 ComfyUI 队列）。
+
 ## 2026-10-08 — Phase 4：History + Provenance + Generic Module I/O Contract（v0.5.0）
 
 **执行**：TRAE Code Agent（feature/phase4-history-provenance → develop → CI → main → CI → tag v0.5.0）。

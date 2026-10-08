@@ -24,6 +24,7 @@ from app.models import (
     JOB_KINDS,
     JOB_SOURCES,
     JOB_STATUSES,
+    Image,
     Job,
     JobEvent,
     JobItem,
@@ -79,6 +80,24 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
         if module.get("module_id")
     ]
     return {"modules": normalized}
+
+
+def _snapshot_input_image_ids(snapshot: dict[str, Any]) -> list[str]:
+    """从 WorkbenchSnapshot 提取输入图片 image_id 列表（Phase 5 §十）。
+
+    第一版只支持一张（schema 已限 max_length=1）；结构非法直接拒绝，禁止静默忽略。
+    """
+    refs = snapshot.get("input_images") or []
+    if not isinstance(refs, list):
+        raise ValidationError("input_images 必须为数组", code="WORKBENCH_INPUT_INVALID")
+    image_ids: list[str] = []
+    for ref in refs:
+        if not isinstance(ref, dict) or not ref.get("image_id"):
+            raise ValidationError("input_images 结构非法", code="WORKBENCH_INPUT_INVALID")
+        image_ids.append(str(ref["image_id"]))
+    if len(image_ids) > 1:
+        raise ValidationError("Phase 5 输入图片最多 1 张", code="WORKBENCH_INPUT_INVALID")
+    return image_ids
 
 
 def _materialize_stages(
@@ -350,6 +369,14 @@ def create_job(
         module_id = str(module.get("module_id") or "")
         if not registry.has(module_id):
             raise ValidationError(f"WorkflowModule 未注册: {module_id}", code="WORKFLOW_ERROR")
+
+    # Phase 5 §十：从 WorkbenchSnapshot 冻结输入图片（Job 创建后切换工作台图片不影响本 Job）
+    snapshot_input_ids = _snapshot_input_image_ids(snapshot)
+    for image_id in snapshot_input_ids:
+        if session.get(Image, image_id) is None:
+            raise NotFoundError("输入图片不存在", code="IMAGE_NOT_FOUND")
+
+    stage0_input_ids: list[str] | None = None
     if job_kind == "process":
         # §二十/§二十一：处理型 Job 只跑处理模块，每个 JobItem 对应一张已有图片
         if [m.get("module_id") for m in modules] != ["upscale"]:
@@ -357,6 +384,13 @@ def create_job(
         image_ids = list(input_image_ids or [])
         if len(image_ids) != count:
             raise ValidationError("处理型 Job 的图片数量与 count 不一致", code="PIPELINE_INVALID")
+        # 快照携带输入图（如前端一并提交）时，必须与处理型输入一致，禁止两个事实源打架
+        if snapshot_input_ids and snapshot_input_ids != list(dict.fromkeys(image_ids)):
+            raise ValidationError("快照输入图片与处理型输入不一致", code="PIPELINE_INVALID")
+        stage0_input_ids = image_ids
+    elif snapshot_input_ids:
+        # 生成型 Job：输入图片冻结到 Stage0 全部槽位（Img2Img/Reference 就绪后直接生效）
+        stage0_input_ids = [snapshot_input_ids[0]] * count
     identity = modules[0]
     workflow_snapshot = _workflow_snapshot_from_modules(modules)
     generation_settings = {
@@ -411,11 +445,12 @@ def create_job(
         _materialize_stages(
             session, job, modules, item_ids,
             stage_configs=stage_configs,
-            input_image_ids=input_image_ids if job_kind == "process" else None,
+            input_image_ids=stage0_input_ids,
         )
         record_event(session, job.id, "JOB_CREATED", payload={
             "count": count, "queue_mode": queue_mode, "job_kind": job_kind,
             "modules": [m.get("module_id") for m in modules],
+            "input_images": snapshot_input_ids,
         })
         session.commit()
     except IntegrityError:

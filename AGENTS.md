@@ -14,7 +14,7 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 4 完成，v0.5.0）
+## 3. 阶段纪律（当前 Phase 5 完成，v0.6.0）
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
 2（Job Execution Core + ComfyUIAdapter + Gallery）/
@@ -23,11 +23,21 @@
 图库高清 process Job、Image 父子关系）/
 4（History + Provenance + Generic Module I/O Contract：0008 历史 Stage 回填、
 binding_hash 双指纹、能力驱动 I/O、StageItem Seed、输入图片正式契约、历史页、溯源、
-工作台追溯根生成 Job、执行身份固定恢复）。
+工作台追溯根生成 Job、执行身份固定恢复）/
+5（Image Input Foundation + Capability Gate：0010 迁移、外部图片导入 + sha256 去重、
+工作台输入图片 / 文生图-图片生成模式、Recipe 输入图快照、Job 冻结输入图、
+Face Asset Reference Image 关系表、ImageReferenceService、模块 input_required/input_role、
+Gallery Picker / 导入进度 / 审图快捷键 + Ctrl+Z 撤销；**真实图片条件工作流 = Gate B 暂停**）。
+
+**Phase 5 能力 Gate（当前生效）**：本机无现成可用图片条件工作流（见
+`docs/IMAGE_CONDITIONING_INVENTORY.md`）；真实 Img2Img / Reference Module 接入**等待用户选择方案**
+（Phase 5.1），禁止自行下载模型 / 安装节点 / 升级 ComfyUI；前端图片生成模式在无可用模块时
+显示"尚未配置可用工作流"并禁用提交（Gate 判定以 `GET /api/v1/modules` 为准，禁止前端硬编码）。
 
 本阶段仍禁止扩大范围实现：
 
-- 图生图 / 参考图 / ControlNet / FaceID / 视频；
+- 真实图生图 / 参考图模型接入（Gate B：待用户选定方案）/ ControlNet / FaceID / InstantID /
+  局部重绘 / 蒙版编辑器 / 视频；
 - 手机端 / 豆包正式接入 / Agent 正式接入 / 全局搜索；
 - 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 

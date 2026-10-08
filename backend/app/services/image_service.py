@@ -22,7 +22,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationError
-from app.core.filetypes import image_dimensions, mime_for_suffix, sniff_image_format
+from app.core.filetypes import (
+    image_dimensions,
+    mime_for_suffix,
+    sha256_hex,
+    sniff_image_format,
+    validate_image_upload,
+)
 from app.core.ids import IMAGE, new_id
 from app.engine.base import EngineOutputFile
 from app.models import Image, Job, JobItem, JobStage, JobStageItem
@@ -135,6 +141,9 @@ class PreparedImageOutput:
     relative_path: str
     width: int
     height: int
+    # Phase 5：外部导入来源哈希与原始文件名（引擎输出为 None）
+    sha256: str | None = None
+    imported_filename: str | None = None
 
 
 def prepare_image_output(data: bytes, *, kind: str = "original") -> PreparedImageOutput:
@@ -164,6 +173,100 @@ def prepare_image_output(data: bytes, *, kind: str = "original") -> PreparedImag
         width=width,
         height=height,
     )
+
+
+def prepare_import_image(data: bytes, *, filename: str | None, content_type: str | None) -> PreparedImageOutput:
+    """外部导入图片校验并生成 Image 身份（Phase 5 §三/§五）。
+
+    - 扩展名 + MIME + magic bytes + 大小（validate_image_upload）；
+    - 像素尺寸必须可解析（PNG/JPEG/WEBP），否则拒绝——避免图库出现 0x0 图片；
+    - 统一复制进 DataRoot/images/originals/，**绝不引用用户原始路径**；
+    - sha256 随 PreparedImageOutput 携带（§六：去重不以文件名为依据）。
+    """
+    suffix = validate_image_upload(filename, content_type, data)
+    dimensions = image_dimensions(data)
+    if dimensions is None:
+        raise ValidationError("无法解析图片尺寸", code="IMAGE_INVALID")
+    width, height = dimensions
+    image_id = new_id(IMAGE)
+    return PreparedImageOutput(
+        image_id=image_id,
+        data=data,
+        suffix=suffix,
+        relative_path=f"{IMAGE_KIND_DIRS['original']}/{image_id}/original{suffix}",
+        width=width,
+        height=height,
+        sha256=sha256_hex(data),
+        imported_filename=(filename or "").strip() or None,
+    )
+
+
+@dataclass
+class ImageImportBatchResult:
+    """外部导入批次结果（§二十三：单张失败不影响整批，返回可报告的明细）。"""
+
+    imported: list[Image]
+    duplicates: list[dict[str, str]]
+    failed: list[dict[str, str]]
+
+
+def find_image_by_sha256(session: Session, digest: str) -> Image | None:
+    return session.execute(select(Image).where(Image.sha256 == digest)).scalars().first()
+
+
+def import_images_batch(
+    session: Session,
+    storage: StorageManager,
+    uploads: list[tuple[str | None, str | None, bytes]],
+) -> ImageImportBatchResult:
+    """外部图片批量导入（Phase 5 §三/§六/§二十三）：逐张校验、hash 去重、部分失败继续。
+
+    - 重复文件（sha256 已存在）：不创建第二份，返回 duplicate + 已存在的 image_id；
+    - 单张失败（非法/超限/损坏）：记入 failed 继续处理下一张，绝不整批失败；
+    - 每张成功图片独立事务落库（单张校验失败不会留下半张图片）。
+    """
+    imported: list[Image] = []
+    duplicates: list[dict[str, str]] = []
+    failed: list[dict[str, str]] = []
+
+    for filename, content_type, data in uploads:
+        display_name = (filename or "").strip() or "(未命名)"
+        try:
+            prepared = prepare_import_image(data, filename=filename, content_type=content_type)
+            existing = find_image_by_sha256(session, prepared.sha256 or "")
+            if existing is not None:
+                duplicates.append({
+                    "filename": display_name,
+                    "image_id": existing.id,
+                    "sha256": prepared.sha256 or "",
+                })
+                continue
+            images = import_outputs_transaction(
+                session, storage, [prepared], source="import", kind="original",
+                metadata={"sha256": prepared.sha256, "imported_filename": prepared.imported_filename},
+            )
+            imported.append(images[0])
+        except Exception as error:  # noqa: BLE001 —— 单张失败必须继续处理其余文件
+            session.rollback()
+            failed.append({
+                "filename": display_name,
+                "error_code": getattr(error, "code", "IMPORT_FAILED"),
+                "message": getattr(error, "message", str(error)),
+            })
+    return ImageImportBatchResult(imported=imported, duplicates=duplicates, failed=failed)
+
+
+def file_sha256(session: Session, storage: StorageManager, image: Image) -> str | None:
+    """图片文件 hash（§九：Recipe 输入图快照必须带 file hash）。
+
+    优先使用导入时记录的 images.sha256；否则现算（引擎生成图）；文件缺失返回 None。
+    """
+    if image.sha256:
+        return image.sha256
+    path = storage.absolutize(image.file_path)
+    if not path.is_file():
+        return None
+    return sha256_hex(path.read_bytes())
 
 
 def import_outputs_transaction(
@@ -221,6 +324,8 @@ def import_outputs_transaction(
                 review_status="UNREVIEWED",
                 favorite=False,
                 source=source,
+                sha256=entry.sha256,
+                imported_filename=entry.imported_filename,
                 metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
             )
             for entry in prepared
@@ -352,6 +457,7 @@ def list_images(
     favorite: bool | None = None,
     source: str | None = None,
     kind: str | None = None,
+    search: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     limit: int = 100,
@@ -375,6 +481,9 @@ def list_images(
         query = query.where(Image.source == source)
     if kind is not None:
         query = query.where(Image.kind == kind)
+    if search:
+        # Phase 5：按导入文件名搜索（生成图没有文件名，自然不命中）
+        query = query.where(Image.imported_filename.like(f"%{search.strip()}%"))
     if date_from is not None:
         query = query.where(Image.created_at >= date_from)
     if date_to is not None:

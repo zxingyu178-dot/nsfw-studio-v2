@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError, assetApi } from '../../api/client'
+import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
 import { formatDateTime } from '../../utils/format'
 import {
   ASSET_TYPES,
   ASSET_TYPE_LABEL,
   assetPreviewUrl,
+  imageContentUrl,
   type AssetDTO,
   type AssetType,
   type AssetVersionDTO,
@@ -288,6 +290,7 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
   const [versions, setVersions] = useState<AssetVersionDTO[]>([])
   const [viewVersion, setViewVersion] = useState<number | null>(null)
   const [editOpen, setEditOpen] = useState(false)
+  const [refPickerOpen, setRefPickerOpen] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const loadRef = useRef<() => void>(() => undefined)
@@ -330,6 +333,16 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
       setBusy(false)
     }
   }
+
+  /** §十二：Face Asset 绑定 / 更换参考图（来源=图库；内容变化 → 新版本） */
+  async function bindReference(imageId: string): Promise<void> {
+    setRefPickerOpen(false)
+    const formData = new FormData()
+    formData.set('reference_image_id', imageId)
+    await run(() => assetApi.addVersion(assetId, formData), '已绑定参考图（创建新版本）')
+  }
+
+  const referenceImageId = shownVersion?.reference_images?.[0] ?? null
 
   return (
     <div className="drawer-backdrop" role="presentation" onClick={onClose}>
@@ -412,6 +425,42 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
           <dd>{shownVersion?.notes || '（无）'}</dd>
         </dl>
 
+        {/* ===== Face Asset 参考图（Phase 5 §十二：来源=图库，统一 image_id，不复制外部文件） ===== */}
+        {asset.type === 'face' && (
+          <section className="asset-edit">
+            <h4 className="version-history__title">参考图（Face Reference · 来源：图库）</h4>
+            {referenceImageId ? (
+              <div className="input-image__body">
+                <img
+                  className="input-image__thumb"
+                  src={imageContentUrl(referenceImageId)}
+                  alt="参考图"
+                />
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  disabled={busy}
+                  onClick={() => setRefPickerOpen(true)}
+                >
+                  更换参考图
+                </button>
+              </div>
+            ) : (
+              <div className="field__actions">
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  disabled={busy}
+                  onClick={() => setRefPickerOpen(true)}
+                >
+                  绑定参考图
+                </button>
+                <span className="muted">从图库选择 1 张图片（新版才生效，旧版本保留）</span>
+              </div>
+            )}
+          </section>
+        )}
+
         {editOpen && (
           <AssetEditForm
             asset={asset}
@@ -452,6 +501,14 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
             ))}
           </ul>
         </section>
+
+        {refPickerOpen && (
+          <ImagePickerDrawer
+            title="选择参考图"
+            onClose={() => setRefPickerOpen(false)}
+            onPicked={(image) => void bindReference(image.id)}
+          />
+        )}
       </aside>
     </div>
   )

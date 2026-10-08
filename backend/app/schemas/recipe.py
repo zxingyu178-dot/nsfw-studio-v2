@@ -36,6 +36,19 @@ class RecipeAssetSnapshotResponse(BaseModel):
     preview_path: str | None
 
 
+class RecipeInputImageResponse(BaseModel):
+    """RecipeVersion 输入图快照（Phase 5 §九）。
+
+    missing=true 表示该 image_id 对应的图库图片已不存在——前端必须明确显示
+    "输入图片已丢失"，绝不静默清空。
+    """
+
+    role: str
+    image_id: str
+    sha256: str | None
+    missing: bool = False
+
+
 class RecipeVersionResponse(BaseModel):
     id: str
     recipe_id: str
@@ -48,6 +61,7 @@ class RecipeVersionResponse(BaseModel):
     source_prompt_version_id: str | None
     generation_settings: GenerationSettingsModel
     workflow_snapshot: WorkflowSnapshotModel
+    input_images: list[RecipeInputImageResponse]
     default_count: int
     created_at: str
     asset_snapshots: list[RecipeAssetSnapshotResponse]
@@ -82,7 +96,20 @@ def recipe_asset_snapshot_response(snapshot: RecipeAssetSnapshot) -> RecipeAsset
     )
 
 
-def recipe_version_response(version: RecipeVersion) -> RecipeVersionResponse:
+def recipe_version_response(
+    version: RecipeVersion, missing_image_ids: set[str] | None = None
+) -> RecipeVersionResponse:
+    missing = missing_image_ids or set()
+    input_images = [
+        RecipeInputImageResponse(
+            role=str(ref.get("role", "source")),
+            image_id=str(ref.get("image_id", "")),
+            sha256=ref.get("sha256"),
+            missing=str(ref.get("image_id", "")) in missing,
+        )
+        for ref in json.loads(version.input_images_json or "[]")
+        if isinstance(ref, dict) and ref.get("image_id")
+    ]
     return RecipeVersionResponse(
         id=version.id,
         recipe_id=version.recipe_id,
@@ -95,6 +122,7 @@ def recipe_version_response(version: RecipeVersion) -> RecipeVersionResponse:
         source_prompt_version_id=version.source_prompt_version_id,
         generation_settings=GenerationSettingsModel(**json.loads(version.generation_settings_json)),
         workflow_snapshot=WorkflowSnapshotModel(**json.loads(version.workflow_snapshot_json)),
+        input_images=input_images,
         default_count=version.default_count,
         created_at=version.created_at,
         asset_snapshots=[
@@ -103,7 +131,11 @@ def recipe_version_response(version: RecipeVersion) -> RecipeVersionResponse:
     )
 
 
-def recipe_response(recipe: Recipe, current_version: RecipeVersion | None) -> RecipeResponse:
+def recipe_response(
+    recipe: Recipe,
+    current_version: RecipeVersion | None,
+    missing_image_ids: set[str] | None = None,
+) -> RecipeResponse:
     return RecipeResponse(
         id=recipe.id,
         name=recipe.name,
@@ -111,5 +143,7 @@ def recipe_response(recipe: Recipe, current_version: RecipeVersion | None) -> Re
         archived=recipe.archived,
         created_at=recipe.created_at,
         updated_at=recipe.updated_at,
-        current_version=recipe_version_response(current_version) if current_version else None,
+        current_version=(
+            recipe_version_response(current_version, missing_image_ids) if current_version else None
+        ),
     )

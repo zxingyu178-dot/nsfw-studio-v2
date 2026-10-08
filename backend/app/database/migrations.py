@@ -475,6 +475,36 @@ MIGRATIONS: tuple[Migration, ...] = (
             """,
         ),
     ),
+    Migration(
+        migration_id="0010_image_inputs",
+        version="0.6.0",
+        description=(
+            "Phase 5：images.sha256/imported_filename（导入去重）+ "
+            "recipe_versions.input_images_json（输入图快照）+ asset_reference_images（Face Asset 参考图关系表）"
+        ),
+        statements=(
+            # 外部导入图片来源哈希（Task6：禁止只按文件名去重）
+            "ALTER TABLE images ADD COLUMN sha256 TEXT",
+            "ALTER TABLE images ADD COLUMN imported_filename TEXT",
+            "CREATE INDEX idx_images_sha256 ON images(sha256)",
+            # RecipeVersion 输入图快照（Task9：image_id + file hash + role；旧版本为空数组）
+            "ALTER TABLE recipe_versions ADD COLUMN input_images_json TEXT NOT NULL DEFAULT '[]'",
+            # Face Asset Reference Image 正式关系表（Task12/13：不再把复杂关系长期塞 JSON）
+            """
+            CREATE TABLE asset_reference_images (
+                id               TEXT PRIMARY KEY,
+                asset_version_id TEXT NOT NULL REFERENCES asset_versions(id),
+                image_id         TEXT NOT NULL REFERENCES images(id),
+                role             TEXT NOT NULL,
+                sort_order       INTEGER NOT NULL DEFAULT 0,
+                created_at       TEXT NOT NULL,
+                UNIQUE (asset_version_id, role, sort_order)
+            )
+            """,
+            "CREATE INDEX idx_asset_reference_images_version ON asset_reference_images(asset_version_id)",
+            "CREATE INDEX idx_asset_reference_images_image ON asset_reference_images(image_id)",
+        ),
+    ),
 )
 
 

@@ -88,6 +88,35 @@ def _validate_workflow_snapshot(modules: list[dict] | None) -> dict[str, Any]:
     return {"modules": cleaned}
 
 
+RECIPE_INPUT_ROLES = ("source",)
+
+
+def _validate_input_images(refs: list[dict] | None) -> list[dict[str, Any]]:
+    """归一化输入图快照（Phase 5 §九）：至少保存 image_id + file hash + role。
+
+    第一版最多 1 张（role=source）；sha256 由 API 层在保存时解析（文件缺失可为 None，
+    但字段必须存在——历史版本据此判断"输入图片已丢失"而不是静默清空）。
+    """
+    if refs is None:
+        return []
+    if not isinstance(refs, list):
+        raise ValidationError("input_images 必须为数组", code="RECIPE_INPUT_INVALID")
+    if len(refs) > 1:
+        raise ValidationError("Phase 5 输入图片最多 1 张", code="RECIPE_INPUT_INVALID")
+    cleaned: list[dict[str, Any]] = []
+    for ref in refs:
+        if not isinstance(ref, dict) or not ref.get("image_id"):
+            raise ValidationError("input_images 结构非法", code="RECIPE_INPUT_INVALID")
+        role = ref.get("role", "source")
+        if role not in RECIPE_INPUT_ROLES:
+            raise ValidationError(f"非法输入图角色: {role}", code="RECIPE_INPUT_INVALID")
+        sha256 = ref.get("sha256")
+        if sha256 is not None and not isinstance(sha256, str):
+            raise ValidationError("sha256 必须为字符串或 null", code="RECIPE_INPUT_INVALID")
+        cleaned.append({"role": role, "image_id": str(ref["image_id"]), "sha256": sha256})
+    return cleaned
+
+
 def _validate_prompt_mode(mode: str) -> str:
     if mode not in RECIPE_PROMPT_MODES:
         raise ValidationError(f"非法 Prompt 模式: {mode}", code="PROMPT_MODE_INVALID")
@@ -153,6 +182,7 @@ def create_recipe(
     generation_settings: Mapping[str, Any] | None = None,
     workflow_modules: list[dict] | None = None,
     selected_assets: Mapping[str, Mapping[str, str]] | None = None,
+    input_images: list[dict] | None = None,
     favorite: bool = False,
 ) -> Recipe:
     """创建 Recipe + RecipeVersion + AssetSnapshots（单事务）。"""
@@ -161,6 +191,7 @@ def create_recipe(
     _validate_prompt_mode(prompt_mode)
     settings = _validate_generation_settings(generation_settings)
     workflow_snapshot = _validate_workflow_snapshot(workflow_modules)
+    input_image_refs = _validate_input_images(input_images)
 
     recipe = Recipe(id=new_id(RECIPE), name=name.strip(), favorite=favorite, archived=False)
     version = RecipeVersion(
@@ -175,6 +206,7 @@ def create_recipe(
         source_prompt_version_id=source_prompt_version_id,
         generation_settings_json=json.dumps(settings, ensure_ascii=False),
         workflow_snapshot_json=json.dumps(workflow_snapshot, ensure_ascii=False),
+        input_images_json=json.dumps(input_image_refs, ensure_ascii=False),
         default_count=settings["default_count"],
     )
     recipe.current_version_id = version.id
@@ -207,12 +239,14 @@ def add_recipe_version(
     generation_settings: Mapping[str, Any] | None = None,
     workflow_modules: list[dict] | None = None,
     selected_assets: Mapping[str, Mapping[str, str]] | None = None,
+    input_images: list[dict] | None = None,
 ) -> tuple[RecipeVersion, bool]:
     """工作台配置任何变化 → 新 RecipeVersion；与当前版本一致 → 不建新版本。"""
     recipe = get_recipe(session, recipe_id)
     _validate_prompt_mode(prompt_mode)
     settings = _validate_generation_settings(generation_settings)
     workflow_snapshot = _validate_workflow_snapshot(workflow_modules)
+    input_image_refs = _validate_input_images(input_images)
 
     current = get_current_version(session, recipe)
     structured_json = dumps_structured(structured)
@@ -224,6 +258,7 @@ def add_recipe_version(
         and current.structured_prompt_snapshot == structured_json
         and current.generation_settings_json == json.dumps(settings, ensure_ascii=False)
         and current.workflow_snapshot_json == json.dumps(workflow_snapshot, ensure_ascii=False)
+        and (current.input_images_json or "[]") == json.dumps(input_image_refs, ensure_ascii=False)
         and current.default_count == settings["default_count"]
         and _snapshots_signature(session, current) == _selected_signature(selected_assets)
     ):
@@ -241,6 +276,7 @@ def add_recipe_version(
         source_prompt_version_id=source_prompt_version_id,
         generation_settings_json=json.dumps(settings, ensure_ascii=False),
         workflow_snapshot_json=json.dumps(workflow_snapshot, ensure_ascii=False),
+        input_images_json=json.dumps(input_image_refs, ensure_ascii=False),
         default_count=settings["default_count"],
     )
     recipe.current_version_id = version.id
@@ -293,6 +329,8 @@ def restore_recipe_version(session: Session, recipe_id: str, version_id: str) ->
         source_prompt_version_id=old.source_prompt_version_id,
         generation_settings_json=old.generation_settings_json,
         workflow_snapshot_json=old.workflow_snapshot_json,
+        # §九：输入图快照原样保留（图片已丢失时仍保留引用，由响应标记"已丢失"，绝不静默清空）
+        input_images_json=old.input_images_json or "[]",
         default_count=old.default_count,
     )
     recipe.current_version_id = version.id

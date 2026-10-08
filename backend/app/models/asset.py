@@ -50,3 +50,24 @@ class AssetVersion(Base):
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
 
     asset: Mapped[Asset] = relationship(back_populates="versions")
+
+
+ASSET_REFERENCE_ROLES = ("face_reference",)
+
+
+class AssetReferenceImage(Base):
+    """素材参考图正式关系（Phase 5 §十二/§十三：不再把复杂关系长期塞 JSON）。
+
+    - 归属具体 asset_version（版本不可变：参考图变化 = 新版本）；
+    - image_id 指向图库 Image（不复制外部文件，统一走 image_id）；
+    - Phase 5 仅 role=face_reference 且每版本一张；未来多图按 sort_order 扩展。
+    """
+
+    __tablename__ = "asset_reference_images"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    asset_version_id: Mapped[str] = mapped_column(ForeignKey("asset_versions.id"), nullable=False)
+    image_id: Mapped[str] = mapped_column(ForeignKey("images.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="face_reference")
+    sort_order: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)

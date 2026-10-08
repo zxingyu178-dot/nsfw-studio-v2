@@ -57,6 +57,8 @@ class UpscaleModule(WorkflowModule):
             # Task2 输入/输出语义：放大链不使用随机 Seed；输出 kind=upscaled 且必须挂到输入图片下
             uses_seed=False,
             input_kind="image",
+            input_required=True,
+            input_role="source",
             output_kind="upscaled",
             parent_policy="input_image",
             output_cardinality=1,

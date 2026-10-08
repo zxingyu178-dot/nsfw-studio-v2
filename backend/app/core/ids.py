@@ -24,6 +24,7 @@ JOB_ITEM = "item"
 IMAGE = "img"
 JOB_STAGE = "stg"
 JOB_STAGE_ITEM = "sti"
+ASSET_REFERENCE_IMAGE = "arimg"
 
 
 def new_id(prefix: str) -> str:

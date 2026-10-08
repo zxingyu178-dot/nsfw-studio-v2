@@ -1,11 +1,14 @@
-import { useState } from 'react'
-import { ApiRequestError, promptApi, recipeApi } from '../../api/client'
+import { useRef, useState, type ChangeEvent } from 'react'
+import { ApiRequestError, imageApi, promptApi, recipeApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
-import { STRUCTURED_FIELDS, type StructuredPrompt } from '../../types/workbench'
+import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
+import { STRUCTURED_FIELDS, imageContentUrl, type StructuredPrompt } from '../../types/workbench'
 import {
   applyAssetToSlot,
   clearAssetFromSlot,
+  clearInputImage,
   setFullPrompt,
+  setInputImage,
   setNegativePrompt,
   setPromptMode,
   setStructuredField,
@@ -19,13 +22,42 @@ type SaveTarget = 'prompt' | 'recipe' | null
 export function PromptEditorPane() {
   const state = useWorkbench()
   const [pickerSlot, setPickerSlot] = useState<import('../../types/workbench').AssetType | null>(null)
+  const [imagePickerOpen, setImagePickerOpen] = useState(false)
   const [saveTarget, setSaveTarget] = useState<SaveTarget>(null)
   const [saveName, setSaveName] = useState('')
   const [saveFavorite, setSaveFavorite] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const structuredEditable = state.promptMode === 'structured'
+  const inputImage = state.inputImages[0] ?? null
+
+  /** §七：上传新图片 → 先正式导入 Gallery（hash 去重）→ 再选择该 Image（只使用 image_id） */
+  async function handleUploadFile(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0] ?? null
+    event.target.value = '' // 允许重复选择同一文件
+    if (!file || uploading) return
+    setUploading(true)
+    setMessage(null)
+    try {
+      const result = await imageApi.importFiles([file])
+      if (result.imported_count > 0) {
+        setInputImage(result.imported[0].image.id)
+        setMessage({ kind: 'ok', text: '已上传并导入图库，已设为输入图片' })
+      } else if (result.duplicate_count > 0) {
+        setInputImage(result.duplicates[0].image_id)
+        setMessage({ kind: 'ok', text: '该图片已经存在，已直接引用图库中的图片' })
+      } else {
+        setMessage({ kind: 'error', text: result.failed[0]?.message ?? '导入失败' })
+      }
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof ApiRequestError ? error.message : '导入失败' })
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function handleSaveConfirm(): Promise<void> {
     if (!saveName.trim() || saving) return
@@ -79,6 +111,58 @@ export function PromptEditorPane() {
           </button>
         </div>
       </header>
+
+      {/* ===== 输入图片（Phase 5 §七：独立区域，不塞进八栏 Prompt；仅"图片生成"模式） ===== */}
+      {state.mode === 'image' && (
+        <section className="input-image" aria-label="输入图片">
+          <div className="field__label-row">
+            <span className="field__label">输入图片</span>
+            <span className="muted">（{inputImage ? '1 / 1' : '0 / 1'}）</span>
+          </div>
+          {inputImage ? (
+            <div className="input-image__body">
+              {inputImage.missing ? (
+                <div className="input-image__missing">输入图片已丢失（请移除后重新选择）</div>
+              ) : (
+                <img
+                  className="input-image__thumb"
+                  src={imageContentUrl(inputImage.image_id)}
+                  alt="当前输入图片"
+                />
+              )}
+              <div className="field__actions">
+                <button type="button" className="btn btn--sm" onClick={() => setImagePickerOpen(true)}>
+                  更换
+                </button>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={clearInputImage}>
+                  移除
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="field__actions">
+              <button type="button" className="btn btn--sm" onClick={() => setImagePickerOpen(true)}>
+                从图库选择
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? '导入中…' : '上传新图片'}
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp"
+            hidden
+            onChange={(event) => void handleUploadFile(event)}
+          />
+        </section>
+      )}
 
       {structuredEditable ? (
         <div className="structured-editor">
@@ -211,6 +295,16 @@ export function PromptEditorPane() {
           onPicked={(promptText: string, ref) => {
             applyAssetToSlot(pickerSlot, promptText, ref)
             setPickerSlot(null)
+          }}
+        />
+      )}
+
+      {imagePickerOpen && (
+        <ImagePickerDrawer
+          onClose={() => setImagePickerOpen(false)}
+          onPicked={(image) => {
+            setInputImage(image.id)
+            setImagePickerOpen(false)
           }}
         />
       )}

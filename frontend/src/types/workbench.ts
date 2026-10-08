@@ -129,6 +129,8 @@ export interface RecipeVersionDTO {
   source_prompt_version_id: string | null
   generation_settings: GenerationSettingsDTO
   workflow_snapshot: WorkflowSnapshotDTO
+  /** Phase 5 §九：输入图快照（含 missing 丢失标记） */
+  input_images: RecipeInputImageDTO[]
   default_count: number
   created_at: string
   asset_snapshots: RecipeAssetSnapshotDTO[]
@@ -158,6 +160,16 @@ export interface WorkflowModuleRef {
   binding_hash?: string | null
 }
 
+/** 工作台输入图片（Phase 5 §八：统一 image_id，max=1，role=source）。
+ *
+ * missing 仅用于"配方恢复后图片已丢失"的显式标记（不进入提交体，后端模型忽略未知字段）。
+ */
+export interface InputImageRef {
+  role: 'source'
+  image_id: string
+  missing?: boolean
+}
+
 /** 统一工作台快照（规范 §五十二）：Prompt / Asset / Recipe（未来 Image / Agent）共用 */
 export interface WorkbenchSnapshot {
   prompt_mode: PromptMode
@@ -171,8 +183,50 @@ export interface WorkbenchSnapshot {
   seed_mode: string
   seed?: number | null
   workflow_modules: WorkflowModuleRef[]
+  input_images?: InputImageRef[]
   source_prompt_id?: string | null
   source_prompt_version_id?: string | null
+}
+
+/** RecipeVersion 输入图快照（Phase 5 §九：image_id + file hash + role；缺失必须显式提示） */
+export interface RecipeInputImageDTO {
+  role: string
+  image_id: string
+  sha256: string | null
+  missing: boolean
+}
+
+/** WorkflowModule 能力声明（Phase 5 §十四/§二十：图片生成 Gate 判定依据） */
+export interface ModuleCapabilitiesDTO {
+  module_id: string
+  module_version: string
+  title: string
+  description: string
+  uses_seed: boolean
+  input_kind: string
+  input_required: boolean
+  input_role: string
+  output_kind: string
+  parent_policy: string
+  output_cardinality: number
+}
+
+/** 外部图片导入结果（Phase 5 §二十三：成功 / 已存在 / 失败 三类明细） */
+export interface ImageImportResponseDTO {
+  imported: { filename: string; image: ImageDTO }[]
+  duplicates: { filename: string; image_id: string; sha256: string }[]
+  failed: { filename: string; error_code: string; message: string }[]
+  imported_count: number
+  duplicate_count: number
+  failed_count: number
+}
+
+/** 图片引用保护检查（Phase 5 §十一） */
+export interface ImageReferencesDTO {
+  image_id: string
+  total: number
+  active_job_ids: string[]
+  references: Record<string, string[]>
 }
 
 export interface ListResponse<T> {

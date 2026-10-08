@@ -5,7 +5,7 @@ Phase 1：Prompt / PromptVersion、Asset / AssetVersion、Recipe / RecipeVersion
 Phase 2：Job / JobItem / JobEvent、Image；
 Phase 3：JobStage / JobStageItem（多阶段管线）。详见 docs/DATA_MODEL_V1.md。
 """
-from app.models.asset import ASSET_TYPES, Asset, AssetVersion
+from app.models.asset import ASSET_REFERENCE_ROLES, ASSET_TYPES, Asset, AssetReferenceImage, AssetVersion
 from app.models.image import IMAGE_KINDS, REVIEW_STATUSES, Image
 from app.models.job import (
     JOB_ITEM_STATUSES,
@@ -24,8 +24,10 @@ from app.models.recipe import Recipe, RecipeAssetSnapshot, RecipeVersion
 from app.models.system import SystemInfo
 
 __all__ = [
+    "ASSET_REFERENCE_ROLES",
     "ASSET_TYPES",
     "Asset",
+    "AssetReferenceImage",
     "AssetVersion",
     "IMAGE_KINDS",
     "REVIEW_STATUSES",

@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react'
 import {
   emptyStructured,
   type AssetType,
+  type InputImageRef,
   type PromptMode,
   type SelectedAssetRef,
   type StructuredPrompt,
@@ -12,12 +13,19 @@ import {
   type WorkflowModuleRef,
 } from '../types/workbench'
 
+/** 生成模式（Phase 5 §二十）：文生图 / 图片生成（图片生成需要输入图片 + 可用 Module） */
+export type WorkbenchMode = 'text' | 'image'
+
 export interface WorkbenchState {
   promptMode: PromptMode
   structured: StructuredPrompt
   fullPrompt: string
   negativePrompt: string
   selectedAssets: Partial<Record<AssetType, SelectedAssetRef>>
+  /** 生成模式：text=文生图；image=图片生成（输入图片 + Prompt → 处理型 Module） */
+  mode: WorkbenchMode
+  /** 输入图片（§八：max=1，role=source；missing=true 表示配方恢复后图片已丢失） */
+  inputImages: InputImageRef[]
   width: number
   height: number
   count: number
@@ -41,6 +49,8 @@ function initialState(): WorkbenchState {
     fullPrompt: '',
     negativePrompt: '',
     selectedAssets: {},
+    mode: 'text',
+    inputImages: [],
     width: 1024,
     height: 1024,
     count: 1,
@@ -86,7 +96,7 @@ function normalizeModules(modules: WorkflowModuleRef[], upscale: boolean): Workf
   return upscale ? [...withBase, { module_id: 'upscale' }] : withBase
 }
 
-/** 当前状态 → 统一快照（保存 Prompt / 保存配方时使用；模块身份原样保留，Task9） */
+/** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份原样保留，Task9） */
 export function snapshotFromState(): WorkbenchSnapshot {
   return {
     prompt_mode: state.promptMode,
@@ -94,6 +104,11 @@ export function snapshotFromState(): WorkbenchSnapshot {
     full_prompt: state.promptMode === 'full' ? state.fullPrompt : '',
     negative_prompt: state.negativePrompt,
     selected_assets: { ...state.selectedAssets },
+    // §八/§十：输入图片只在"图片生成"模式下进入快照（文生图语义不携带输入图）
+    input_images:
+      state.mode === 'image'
+        ? state.inputImages.map(({ role, image_id }) => ({ role, image_id }))
+        : [],
     width: state.width,
     height: state.height,
     count: state.count,
@@ -108,12 +123,16 @@ export function snapshotFromState(): WorkbenchSnapshot {
 /** 整体注入快照（Prompt / Recipe / Image / History → 工作台，100% 恢复，含模块身份 §十六/Task9） */
 export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: string | null = null): void {
   const modules = (snapshot.workflow_modules ?? []) as WorkflowModuleRef[]
+  const inputImages = (snapshot.input_images ?? []).map((ref) => ({ ...ref }))
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
     fullPrompt: snapshot.full_prompt,
     negativePrompt: snapshot.negative_prompt,
     selectedAssets: { ...snapshot.selected_assets },
+    // 带输入图恢复（配方 / 图库"用作输入图片"）→ 自动进入图片生成模式
+    mode: inputImages.length > 0 ? 'image' : 'text',
+    inputImages,
     width: snapshot.width,
     height: snapshot.height,
     count: snapshot.count,
@@ -176,6 +195,21 @@ export function setSeed(seed: number | null): void {
 /** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
 export function setUpscaleEnabled(enabled: boolean): void {
   setState({ workflowModules: normalizeModules(state.workflowModules, enabled) })
+}
+
+/** 生成模式切换（§二十）：文生图 / 图片生成；切换保留输入图片（回到图片模式不丢选择） */
+export function setWorkbenchMode(mode: WorkbenchMode): void {
+  setState({ mode })
+}
+
+/** 设置输入图片（§七：max=1，选择新图即替换；来源必须是 Gallery image_id） */
+export function setInputImage(imageId: string): void {
+  setState({ inputImages: [{ role: 'source', image_id: imageId }], mode: 'image' })
+}
+
+/** 移除输入图片 */
+export function clearInputImage(): void {
+  setState({ inputImages: [] })
 }
 
 /**

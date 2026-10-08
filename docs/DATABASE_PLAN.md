@@ -1,6 +1,6 @@
 # DATABASE_PLAN — 数据库现状与规划
 
-> 更新：2026-10-08（Phase 4，v0.5.0）。完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
+> 更新：2026-10-08（Phase 5，v0.6.0）。完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
 
 ## 1. 现状
 
@@ -25,13 +25,16 @@
 | 0007_pipeline_stage | 0.4.0 | jobs.job_kind + job_stages / job_stage_items（Phase 3 多阶段管线） |
 | 0008_pipeline_backfill | 0.5.0 | 历史 Job 回填 Stage0/StageItem（Phase 4 Task0，数据迁移，见 MIGRATION_0008_BACKFILL.md） |
 | 0009_execution_fingerprint | 0.5.0 | jobs/job_stages.binding_hash + job_stage_items.seed + 历史假 Seed 修正（Phase 4 Task1/3） |
+| 0010_image_inputs | 0.6.0 | images.sha256/imported_filename（+idx_images_sha256）+ recipe_versions.input_images_json + asset_reference_images 关系表（Phase 5） |
 
 约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
 `type / mode / slot / favorite / default_count` 均有 CHECK；
 `jobs` 有 `UNIQUE(source, client_request_id)`（幂等）与 status CHECK；
 `images` 有 `kind / review_status` CHECK；
 `job_stages` 有 `UNIQUE(job_id, stage_index)` 与 status CHECK（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）；
-升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0，
+`asset_reference_images` 有 `UNIQUE(asset_version_id, role, sort_order)`（Phase 5 §十三：参考图关系表，
+不再把复杂关系长期塞 JSON）；
+升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 0.6.0，
 并含**真实 v0.3.2 库升级**（四种状态 Job 的 Stage 回填 + QUEUED Job 升级后可执行，
 见 tests/backend/test_phase4_backfill.py）。
 

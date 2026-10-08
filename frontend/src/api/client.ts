@@ -51,11 +51,14 @@ import type {
   HistoryBucket,
   HistoryResponseDTO,
   ImageDTO,
+  ImageImportResponseDTO,
   ImageProvenanceDTO,
+  ImageReferencesDTO,
   ImageVersionsDTO,
   JobDTO,
   JobEventDTO,
   ListResponse,
+  ModuleCapabilitiesDTO,
   PromptDTO,
   PromptMode,
   PromptVersionDTO,
@@ -263,6 +266,7 @@ export interface ImageListParams {
   review_status?: ReviewStatus | null
   favorite?: boolean | null
   source?: string | null
+  search?: string | null
   date_from?: string | null
   date_to?: string | null
   limit?: number
@@ -306,6 +310,23 @@ export const imageApi = {
   /** Image Provenance（Task10）：来源任务 / Stage / 模块 / 双指纹 / Seed */
   provenance(id: string): Promise<ImageProvenanceDTO> {
     return request(`/api/v1/images/${id}/provenance`)
+  },
+  /** 外部图片批量导入（Phase 5 §三/§六/§二十三）：sha256 去重、部分失败继续 */
+  importFiles(files: File[]): Promise<ImageImportResponseDTO> {
+    const formData = new FormData()
+    for (const file of files) formData.append('files', file)
+    return request('/api/v1/images/import', { method: 'POST', body: formData })
+  },
+  /** 图片引用保护检查（Phase 5 §十一） */
+  references(id: string): Promise<ImageReferencesDTO> {
+    return request(`/api/v1/images/${id}/references`)
+  },
+}
+
+// ===== WorkflowModule 能力（Phase 5 §二十：图片生成 Gate 判定） =====
+export const moduleApi = {
+  list(): Promise<ModuleCapabilitiesDTO[]> {
+    return request('/api/v1/modules')
   },
 }
 

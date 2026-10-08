@@ -59,7 +59,7 @@ def mime_for_suffix(suffix: str) -> str:
 
 
 def image_dimensions(data: bytes) -> tuple[int, int] | None:
-    """解析 PNG / JPEG 像素尺寸（不依赖第三方图像库）；无法解析返回 None。"""
+    """解析 PNG / JPEG / WEBP 像素尺寸（不依赖第三方图像库）；无法解析返回 None。"""
     if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
         import struct
 
@@ -67,7 +67,37 @@ def image_dimensions(data: bytes) -> tuple[int, int] | None:
         return int(width), int(height)
     if data[:3] == b"\xff\xd8\xff":
         return _jpeg_dimensions(data)
+    if data[:4] == b"RIFF" and len(data) >= 12 and data[8:12] == b"WEBP":
+        return _webp_dimensions(data)
     return None
+
+
+def _webp_dimensions(data: bytes) -> tuple[int, int] | None:
+    """WebP 三种容器格式（VP8 有损 / VP8L 无损 / VP8X 扩展）的尺寸解析。"""
+    if len(data) < 30:
+        return None
+    tag = data[12:16]
+    if tag == b"VP8 ":  # 有损：帧头内 14-bit 宽高
+        width = int.from_bytes(data[26:28], "little") & 0x3FFF
+        height = int.from_bytes(data[28:30], "little") & 0x3FFF
+        return (width, height) if width > 0 and height > 0 else None
+    if tag == b"VP8L":  # 无损：签名 0x2F + 14-bit 宽高（各减 1 存储）
+        if data[20] != 0x2F:
+            return None
+        bits = int.from_bytes(data[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if tag == b"VP8X":  # 扩展：24-bit canvas 宽高（各减 1 存储）
+        width = int.from_bytes(data[24:27], "little") + 1
+        height = int.from_bytes(data[27:30], "little") + 1
+        return width, height
+    return None
+
+
+def sha256_hex(data: bytes) -> str:
+    """文件内容 sha256（导入去重与 Recipe 输入图快照使用）。"""
+    import hashlib
+
+    return hashlib.sha256(data).hexdigest()
 
 
 def _jpeg_dimensions(data: bytes) -> tuple[int, int] | None:

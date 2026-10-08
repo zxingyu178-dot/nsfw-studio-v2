@@ -28,8 +28,11 @@ import {
 } from '../../types/workbench'
 import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 
-/** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。 */
-export function SettingsPane() {
+/** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。
+ *
+ * Phase 5 §二十：图片生成模式需要可用 Module（Gate）；不可用时明确提示并禁用提交。
+ */
+export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean }) {
   const state = useWorkbench()
   const store = useJobStore()
   const [widthText, setWidthText] = useState(String(state.width))
@@ -45,6 +48,22 @@ export function SettingsPane() {
       : Object.values(state.structured).some((value) => value.trim().length > 0)
   // Task8：开关是派生值；真实状态是 workflowModules 列表（含完整执行身份）
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
+  // Phase 5：图片生成模式的提交前置条件（Gate / 输入图片 / 丢失标记）
+  const inputImage = state.inputImages[0] ?? null
+  const imageGateBlocked = state.mode === 'image' && !imageGenAvailable
+  const generateHint = store.submitting
+    ? undefined
+    : engineOffline
+      ? 'Engine 离线，无法提交'
+      : !hasPrompt
+        ? '请先填写 Prompt'
+        : imageGateBlocked
+          ? '图片生成：尚未配置可用工作流'
+          : state.mode === 'image' && !inputImage
+            ? '请先选择输入图片'
+            : inputImage?.missing
+              ? '输入图片已丢失，请移除后重新选择'
+              : undefined
 
   function commitSize(): void {
     const width = clampDimension(widthText)
@@ -196,12 +215,17 @@ export function SettingsPane() {
       </div>
 
       {/* ===== 生成按钮（§五十三：只提交 Job，不直连引擎） ===== */}
+      {imageGateBlocked && (
+        <p className="notice notice--warn">
+          图片生成：尚未配置可用工作流（等待模型方案确认）。可先选择输入图片并保存配方。
+        </p>
+      )}
       <div className="generate-actions">
         <button
           type="button"
           className="btn btn--primary btn--lg generate-actions__main"
-          disabled={store.submitting || engineOffline || !hasPrompt}
-          title={engineOffline ? 'Engine 离线，无法提交' : !hasPrompt ? '请先填写 Prompt' : undefined}
+          disabled={store.submitting || generateHint !== undefined}
+          title={generateHint}
           onClick={() => void handleGenerate('normal')}
         >
           {store.submitting ? '提交中…' : '生成'}
@@ -209,7 +233,8 @@ export function SettingsPane() {
         <button
           type="button"
           className="btn btn--sm"
-          disabled={store.submitting || engineOffline || !hasPrompt}
+          disabled={store.submitting || generateHint !== undefined}
+          title={generateHint}
           onClick={() => void handleGenerate('next')}
         >
           优先生成（插队）

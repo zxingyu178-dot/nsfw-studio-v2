@@ -1,4 +1,4 @@
-# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4，v0.5.0）
+# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5，v0.6.0）
 
 > 更新：2026-10-08。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
 > Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md，
@@ -115,11 +115,18 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
   不允许"执行了模块但 modules=[]"；从历史恢复时该快照整体作为固定身份回传，提交时按原版本执行；
 - 状态机与事件清单见 docs/JOB_STATE_MACHINE.md / docs/QUEUE_SPEC.md。
 
-### 8.2 Image（0006_image）
+### 8.2 Image（0006_image；0010_image_inputs，Phase 5）
 
-`img_<uuid>`，挂 `job_id / job_item_id`，文件入
+`img_<uuid>`，挂 `job_id / job_item_id`（外部导入时为 NULL），文件入
 `images/originals/<img_id>/original.<ext>`（DataRoot 相对路径入库）；
 审核 `UNREVIEWED / KEPT / REJECTED` + 独立 `favorite`；详见 docs/IMAGE_MODEL.md。
+
+Phase 5 新增列（0010_image_inputs）：
+
+| 列 | 说明 |
+| --- | --- |
+| `images.sha256` | 外部导入文件内容哈希（去重依据；+`idx_images_sha256`）；引擎输出为 NULL |
+| `images.imported_filename` | 外部导入原始文件名（仅用于展示 / 搜索；**绝不作为文件引用**） |
 
 ### 8.3 预留列现状
 
@@ -128,9 +135,10 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
 | `assets.source_image_id` | ✅ Phase 2C 启用：从图库创建素材时回填 |
 | `images.parent_image_id` | ✅ Phase 3 启用：高清图（upscaled）指向来源原图 |
 | `recipes.cover_image_id` | 预留：Recipe 封面图（未启用） |
-| `asset_versions.reference_images_json` | 预留：多参考图（Phase 5 Reference 时启用） |
+| `asset_versions.reference_images_json` | 保持预留（历史兼容读回落）；**Phase 5 起参考图改用正式关系表** `asset_reference_images`（见 8.5） |
 | `job_stage_items.seed` | ✅ Phase 4 启用：StageItem 真实 Seed（溯源以它为准） |
-| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding）；Phase 3 多模块动态绑定；Phase 4 能力驱动 I/O + 输入图片正式契约 |
+| `recipe_versions.input_images_json` | ✅ Phase 5 启用：输入图快照 `[{role, image_id, sha256}]`（max=1） |
+| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding）；Phase 3 多模块动态绑定；Phase 4 能力驱动 I/O + 输入图片正式契约；Phase 5 能力声明补充 input_required/input_role |
 
 ### 8.4 JobStage / JobStageItem（0007_pipeline_stage，Phase 3；0008/0009，Phase 4）
 
@@ -153,3 +161,20 @@ JobStage（job_stages）           一个阶段（固化 module/binding/双指�
 - 历史 Job（v0.3.x）由 `0008_pipeline_backfill` 回填 Stage0（身份继承 Job 列），
   `0009_execution_fingerprint` 增加 binding_hash / StageItem.seed 并修正历史假 Seed；
 - 详见 `PIPELINE_V2.md`、`PIPELINE_STATE_MACHINE.md`、`MIGRATION_0008_BACKFILL.md`。
+
+### 8.5 AssetReferenceImage（0010_image_inputs，Phase 5 §十二/§十三）
+
+```text
+asset_reference_images
+  ├─ id（arimg_<uuid>）
+  ├─ asset_version_id → asset_versions.id（版本不可变：参考图变化 = 新版本）
+  ├─ image_id         → images.id（统一 image_id，不复制外部文件）
+  ├─ role             Phase 5 固定 face_reference（仅 Face Asset 可绑定）
+  ├─ sort_order       Phase 5 固定 0（单张；未来多图按 sort_order 扩展）
+  └─ UNIQUE(asset_version_id, role, sort_order) + 2 索引
+```
+
+- 绑定 / 更换参考图 = 创建新 AssetVersion（旧版本保留自己的参考图）；
+  不传 `reference_image_id` 时沿用当前版本参考图（与 preview 沿用语义一致）；
+- API 响应 `AssetVersionResponse.reference_images` 来自本关系表（图片 image_id 列表）；
+  非 face 类型绑定 → 400 `ASSET_REFERENCE_TYPE_INVALID`；图片不存在 → 404 `IMAGE_NOT_FOUND`。

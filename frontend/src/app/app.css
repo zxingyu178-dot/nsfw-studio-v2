@@ -428,8 +428,21 @@ body {
   flex: 1;
 }
 
-/* ===== 生成工作台三栏 ===== */
+/* ===== 生成工作台（Phase 5：模式栏 + 三栏） ===== */
 .workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workbench__modebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workbench__columns {
   display: grid;
   grid-template-columns: minmax(320px, 5fr) minmax(280px, 4fr) minmax(220px, 3fr);
   gap: 16px;
@@ -437,7 +450,7 @@ body {
 }
 
 @media (max-width: 1100px) {
-  .workbench {
+  .workbench__columns {
     grid-template-columns: 1fr;
   }
 }
@@ -801,6 +814,99 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===== 工作台输入图片（Phase 5 §七） ===== */
+.input-image {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-image__body {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.input-image__thumb {
+  width: 112px;
+  height: 112px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.input-image__missing {
+  flex: 1;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--danger, #d9534f);
+  font-size: 13px;
+}
+
+/* ===== 图库图片选择器（Phase 5 §二十一） ===== */
+.image-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.image-picker__item {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.image-picker__item:hover {
+  border-color: var(--accent);
+}
+
+.image-picker__item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg-soft);
+}
+
+.image-picker__meta {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+/* 配方版本中的输入图快照（Phase 5 §九：含"已丢失"显式标记） */
+.version-history__input-image {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.version-history__input-image img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.version-history__input-image strong {
+  color: var(--danger, #d9534f);
+  font-weight: 600;
 }
 
 .asset-detail__preview {

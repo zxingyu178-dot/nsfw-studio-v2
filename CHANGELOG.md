@@ -2,6 +2,80 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.6.0] — 2026-10-08
+
+### Added（Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate）
+
+- **外部图片导入正式产品化（§三/§四/§五）**：`POST /api/v1/images/import`（PNG / JPG / JPEG / WEBP，
+  单张 / 多张）；流程 = 选择本地文件 → 校验（扩展名 + MIME + magic bytes + 尺寸 + ≤10MB）→ Studio temp
+  → 原子导入 → `DataRoot/images/originals/` → Image 数据库 → Gallery。**绝不引用用户原始文件路径**；
+  来源统一 `kind=original / source=import / job_id=null`；外部导入的 Provenance 如实标记
+  "外部导入"，无生成 Job 时返回 `IMAGE_NO_GENERATION_CONTEXT`（不伪造生成历史）。
+- **sha256 去重（§六）**：新增 `images.sha256`（+索引）与 `images.imported_filename`；
+  重复文件不创建第二份（返回已存在 image_id）；批量导入单张失败不影响整批
+  （成功 / 已存在 / 失败 三类明细）；WEBP 尺寸解析（VP8 / VP8L / VP8X，无第三方依赖）。
+- **图库批量导入 UI（§二十三）**：Gallery"导入"（多选 + 进度 n / N + 结果摘要"成功 N · 已存在 N · 失败 N"）。
+- **工作台"输入图片"（§七/§八）**：生成页顶部模式切换 [文生图] / [图片生成]（不增加一级导航）；
+  图片生成模式显示独立"输入图片"区（[+ 从图库选择] / [上传新图片 → 先行导入 Gallery 再引用]）；
+  `WorkbenchSnapshot.input_images`（max=1，role=source，统一 `image_id`，禁止临时外部路径）。
+- **Gallery Picker（§二十一）**：筛选（最近 / 未审核 / 保留 / 收藏）+ 搜索导入文件名；
+  卡片 = 缩略图 / 尺寸 / 收藏；工作台与 Face Asset 参考图共用同一 Picker。
+- **Gallery 快捷入口（§二十二）**：图片详情 Drawer"用作输入图片"→ 打开生成工作台并设置 input_image
+  （当前工作台其它配置保留）。
+- **Recipe 输入图快照（§九）**：recipe_versions 新增 `input_images_json`
+  （image_id + file hash + role）；恢复配方原样恢复输入图关系；图片不存在 → 响应显式
+  `missing=true`（界面显示"输入图片已丢失"，**绝不静默清空**）；input_images 参与
+  "内容无变化不建新版本"的 signature 比较。
+- **Job 创建冻结图片输入（§十）**：创建 Job 时从 WorkbenchSnapshot 冻结输入图片 →
+  `JobStageItem.input_image_id`（Stage0 全部槽位）；**Job 创建后切换工作台图片不影响等待中的 Job**；
+  输入图片不存在 → 创建期 404 `IMAGE_NOT_FOUND`；处理型 Job 快照与 input_image_ids 不一致 → 拒绝。
+- **Face Asset Reference Image（§十二/§十三）**：新增正式关系表 `asset_reference_images`
+  （asset_version_id / image_id / role / sort_order）；Face Asset 可绑定 1 张图库参考图
+  （来源 = Gallery，不复制外部文件；绑定 / 更换 = 新版本，旧版本保留自己的参考图）。
+- **ModuleCapabilities 输入声明（§十四）**：新增 `input_required / input_role`；
+  `GET /api/v1/modules` 能力列表 → 前端图片生成 Gate 判定（无可用工作流时明确显示
+  "图片生成：尚未配置可用工作流"并禁用提交，不猜测、不硬编码）。
+- **ImageReferenceService（§十一）**：`GET /api/v1/images/{id}/references` 返回
+  Recipe / StageItem（含活跃 Job）/ Asset 参考图 / Asset 溯源 / 派生图 的引用计数与明细
+  （图片生命周期的删除前检查，Phase 5 不实现删除 UI）。
+- **审图快捷键（§二十四）**：← / → 上一张 / 下一张，K 保留，R 淘汰，F 收藏；
+  Ctrl+Z 或页面内"撤销"按钮撤销最近一次审核 / 收藏操作（栈深 20），不做复杂快捷键设置页。
+
+### 能力 Gate（§二：本机调查结论 = Gate B，真实 Module 接入暂停）
+
+- **Task 0 只读调查**（docs/IMAGE_CONDITIONING_INVENTORY.md；**未**下载模型 / 安装节点 /
+  升级 ComfyUI / 更新 Manager / 移动模型 / 修改用户工作流）：本机**不存在**"现成、稳定、
+  无需新增关键依赖"的参考图 / 图生图工作流 —— 唯一现成 Img2Img 工作流（`sdxl-图生图.json`，
+  LoadImage→VAEEncode→KSampler denoise 0.55→VAEDecode）依赖的 `RealVisXL_V5.0_fp16` 与
+  `add-detail-xl` 均不在磁盘；Reference / Face Reference / ControlNet / Qwen-Edit 均缺节点或模型
+  （IPAdapter / PuLID / InstantID 节点不存在；controlnet / clip_vision / photomaker 目录为空）。
+- **结论：需要新增模型/节点，已停止**；候选方案（方案 0 零下载 Qwen-2.1 latent Img2Img /
+  方案 1 恢复 SDXL 链 / 方案 2 Qwen-Edit / 方案 3 IPAdapter）含模型、体积、显存、节点与
+  ComfyUI 影响评估，见文档 §6，**等待用户选择**，未执行任何下载或安装。
+- **本阶段零真实生图**（Gate B，§二十九）；"输入图片 → 新 Module → 现有 Pipeline → ComfyUI →
+  Processed Image"链路待用户选定方案后接入（Phase 5.1）。
+
+### Changed
+
+- **架构验收（§二十五）**：未修改 QueueWorker / PipelineScheduler / ImageService 核心 /
+  Job 状态机；输入图片冻结复用既有通用机制（快照 → StageItem.input_image_id + `_materialize_stages`），
+  新增内容仅 = Module 能力字段（input_required/input_role）+ 通用图片输入层（导入/快照/引用检查）+ UI。
+- 迁移 **`0010_image_inputs`**：`images.sha256/imported_filename`（+idx_images_sha256）、
+  `recipe_versions.input_images_json`、`asset_reference_images` 关系表（+2 索引）。
+- 版本：0.5.0 → 0.6.0（后端 / 前端 / configs/app.yaml 同步）。
+- 文档：新增 IMAGE_CONDITIONING_INVENTORY（Task 0）与 PHASE5_REPORT；
+  同步 API_PLAN / DATABASE_PLAN / DATA_MODEL_V1 / WORKBENCH_STATE / IMAGE_MODEL /
+  MODULE_IO_CONTRACT / README / AGENTS / TASKS / DEV_LOG / TEST_REPORT。
+
+### Tests
+
+- 新增 `tests/backend/test_phase5_image_input.py` 18 例：导入（单张 / WEBP 尺寸 / 超限 / 非法类型）、
+  sha256 去重（按内容不按文件名）、批量部分失败、Job 输入冻结（多槽位 / 缺失 404 / 多图 422 /
+  处理型快照不一致）、Recipe 输入图快照（hash / 无变化不建版 / 恢复 / 丢失标记 / 未知图 404）、
+  Face Asset 参考图（绑定 / 更换 / 沿用 / 非 face 拒绝 / 缺失 404）、引用保护（5 类来源计数与 0 引用）、
+  Modules 能力（Gate B 判定）、迁移 0010 结构与幂等。
+- 快速套件 168 → **186 passed**（Phase 4 全部回归继续通过）；前端 `npm run build`（tsc + vite）通过。
+
 ## [0.5.0] — 2026-10-08
 
 ### Added（Phase 4：History + Provenance + Generic Module I/O Contract）

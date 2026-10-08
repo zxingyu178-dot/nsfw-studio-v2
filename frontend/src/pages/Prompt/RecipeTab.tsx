@@ -5,6 +5,7 @@ import { formatDateTime } from '../../utils/format'
 import {
   ASSET_TYPE_LABEL,
   emptyStructured,
+  imageContentUrl,
   type RecipeDTO,
   type RecipeVersionDTO,
   type WorkbenchSnapshot,
@@ -147,6 +148,12 @@ export function recipeToSnapshot(version: RecipeVersionDTO | null): WorkbenchSna
     count: version.default_count,
     seed_mode: 'random',
     workflow_modules: version.workflow_snapshot.modules,
+    // §九：输入图关系原样恢复（missing 标记随快照进入工作台，显式提示不静默清空）
+    input_images: (version.input_images ?? []).map((ref) => ({
+      role: 'source' as const,
+      image_id: ref.image_id,
+      missing: ref.missing,
+    })),
     source_prompt_id: version.source_prompt_id,
     source_prompt_version_id: version.source_prompt_version_id,
   }
@@ -313,6 +320,19 @@ function RecipeDrawer({ recipe, onClose, onChanged, onOpenInWorkbench }: RecipeD
                       {version.asset_snapshots.map((snapshot) => (
                         <li key={snapshot.id}>
                           {ASSET_TYPE_LABEL[snapshot.slot]} · {snapshot.asset_name} · prompt: {snapshot.prompt || '（空）'}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="muted">输入图片：</p>
+                    <ul className="muted">
+                      {(version.input_images ?? []).length === 0 && <li>无</li>}
+                      {(version.input_images ?? []).map((ref) => (
+                        <li key={ref.image_id} className="version-history__input-image">
+                          {!ref.missing && <img src={imageContentUrl(ref.image_id)} alt="" />}
+                          <span>
+                            {ref.role === 'source' ? '来源' : ref.role} · {ref.image_id}
+                            {ref.missing && <strong>（输入图片已丢失）</strong>}
+                          </span>
                         </li>
                       ))}
                     </ul>

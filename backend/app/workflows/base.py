@@ -47,6 +47,8 @@ class ModuleCapabilities:
 
     - uses_seed：本模块是否真正使用随机 Seed（false 的 Stage 绝不分配/展示 Seed）；
     - input_kind：none | image（模块是否需要输入图片）；
+    - input_required：本模块执行是否必须提供输入图片（Phase 5 §十四：模式判定与校验）；
+    - input_role：输入图片在模块语义中的角色（第一版固定 source）；
     - output_kind：产出物的 Image kind（original | upscaled | processed）；
     - parent_policy：none | input_image（产出物是否挂到输入图片下）；
     - output_cardinality：单次执行的输出个数（第一版固定 1）。
@@ -59,6 +61,8 @@ class ModuleCapabilities:
     parameters: tuple[ParameterSpec, ...] = ()
     uses_seed: bool = True
     input_kind: str = "none"
+    input_required: bool = False
+    input_role: str = "source"
     output_kind: str = "original"
     parent_policy: str = "none"
     output_cardinality: int = 1

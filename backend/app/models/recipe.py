@@ -50,6 +50,8 @@ class RecipeVersion(Base):
 
     generation_settings_json: Mapped[str] = mapped_column(Text, nullable=False)
     workflow_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False, default='{"modules":[]}')
+    # Phase 5：输入图片快照（image_id + file hash + role；旧版本为空数组，绝不静默清空）
+    input_images_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     default_count: Mapped[int] = mapped_column(nullable=False, default=1)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
 

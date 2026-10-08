@@ -51,6 +51,21 @@ def _parse_tags(tags: str | None) -> list[str] | None:
     return parsed
 
 
+def _asset_response(session: Session, asset) -> AssetResponse:
+    """素材响应（Phase 5：current_version 携带 asset_reference_images 关系表参考图）。"""
+    current = asset_service.get_current_version(session, asset)
+    reference_ids = (
+        asset_service.get_reference_image_ids(session, current.id) if current is not None else []
+    )
+    return asset_response(asset, current, reference_ids)
+
+
+def _version_response(session: Session, version) -> AssetVersionResponse:
+    return asset_version_response(
+        version, asset_service.get_reference_image_ids(session, version.id)
+    )
+
+
 @router.get("", response_model=AssetListResponse, summary="素材列表")
 def list_assets(
     type: str | None = Query(default=None),
@@ -65,14 +80,14 @@ def list_assets(
         session, asset_type=type, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset
     )
     return AssetListResponse(
-        items=[asset_response(asset, asset_service.get_current_version(session, asset)) for asset in items],
+        items=[_asset_response(session, asset) for asset in items],
         total=total,
         limit=limit,
         offset=offset,
     )
 
 
-@router.post("", response_model=AssetResponse, status_code=201, summary="创建素材（+v1，支持预览图上传 / 图库溯源）")
+@router.post("", response_model=AssetResponse, status_code=201, summary="创建素材（+v1，支持预览图上传 / 图库溯源 / Face 参考图）")
 async def create_asset(
     name: str = Form(...),
     type: str = Form(...),
@@ -81,6 +96,7 @@ async def create_asset(
     tags: str = Form("[]"),
     favorite: bool = Form(False),
     source_image_id: str | None = Form(default=None),
+    reference_image_id: str | None = Form(default=None),
     preview: UploadFile | None = File(default=None),
     session: Session = Depends(get_session),
     storage: StorageManager = Depends(get_storage),
@@ -98,14 +114,15 @@ async def create_asset(
         favorite=favorite,
         preview=upload,
         source_image_id=source_image_id,
+        reference_image_id=reference_image_id,
     )
-    return asset_response(asset, asset_service.get_current_version(session, asset))
+    return _asset_response(session, asset)
 
 
 @router.get("/{asset_id}", response_model=AssetResponse, summary="素材详情")
 def get_asset(asset_id: str, session: Session = Depends(get_session)) -> AssetResponse:
     asset = asset_service.get_asset(session, asset_id)
-    return asset_response(asset, asset_service.get_current_version(session, asset))
+    return _asset_response(session, asset)
 
 
 @router.patch("/{asset_id}", response_model=AssetResponse, summary="修改元数据（不产生内容版本）")
@@ -113,20 +130,21 @@ def update_asset_meta(
     asset_id: str, request: AssetMetaUpdateRequest, session: Session = Depends(get_session)
 ) -> AssetResponse:
     asset = asset_service.update_asset_meta(session, asset_id, name=request.name, favorite=request.favorite)
-    return asset_response(asset, asset_service.get_current_version(session, asset))
+    return _asset_response(session, asset)
 
 
 @router.post(
     "/{asset_id}/versions",
     response_model=AssetVersionResponse,
     status_code=201,
-    summary="新增素材版本（内容变化才创建；支持新预览图）",
+    summary="新增素材版本（内容变化才创建；支持新预览图 / Face 参考图）",
 )
 async def add_asset_version(
     asset_id: str,
     prompt_text: str | None = Form(default=None),
     notes: str | None = Form(default=None),
     tags: str | None = Form(default=None),
+    reference_image_id: str | None = Form(default=None),
     preview: UploadFile | None = File(default=None),
     session: Session = Depends(get_session),
     storage: StorageManager = Depends(get_storage),
@@ -134,14 +152,15 @@ async def add_asset_version(
     tag_list = _parse_tags(tags)
     upload = _read_upload(preview)
     version, _ = asset_service.add_asset_version(
-        session, storage, asset_id, prompt_text=prompt_text, notes=notes, tags=tag_list, preview=upload
+        session, storage, asset_id, prompt_text=prompt_text, notes=notes, tags=tag_list,
+        preview=upload, reference_image_id=reference_image_id,
     )
-    return asset_version_response(version)
+    return _version_response(session, version)
 
 
 @router.get("/{asset_id}/versions", response_model=list[AssetVersionResponse], summary="版本历史")
 def list_asset_versions(asset_id: str, session: Session = Depends(get_session)) -> list[AssetVersionResponse]:
-    return [asset_version_response(version) for version in asset_service.list_versions(session, asset_id)]
+    return [_version_response(session, version) for version in asset_service.list_versions(session, asset_id)]
 
 
 @router.get("/{asset_id}/preview", summary="预览图（?version= 指定版本，默认当前版本）")
@@ -185,16 +204,16 @@ def asset_to_workbench(asset_id: str, session: Session = Depends(get_session)) -
             )
         },
     )
-    return AssetWorkbenchResponse(slot=asset.type, asset=asset_response(asset, current), snapshot=snapshot)
+    return AssetWorkbenchResponse(slot=asset.type, asset=_asset_response(session, asset), snapshot=snapshot)
 
 
 @router.post("/{asset_id}/archive", response_model=AssetResponse, summary="归档（软删除）")
 def archive_asset(asset_id: str, session: Session = Depends(get_session)) -> AssetResponse:
     asset = asset_service.set_archived(session, asset_id, archived=True)
-    return asset_response(asset, asset_service.get_current_version(session, asset))
+    return _asset_response(session, asset)
 
 
 @router.post("/{asset_id}/restore", response_model=AssetResponse, summary="从归档恢复")
 def restore_asset(asset_id: str, session: Session = Depends(get_session)) -> AssetResponse:
     asset = asset_service.set_archived(session, asset_id, archived=False)
-    return asset_response(asset, asset_service.get_current_version(session, asset))
+    return _asset_response(session, asset)

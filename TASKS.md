@@ -1,5 +1,26 @@
 # TASKS — NSFW Studio V2
 
+## Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate ✅（2026-10-08，v0.6.0）
+
+- [x] Task 0：只读调查本机图片条件生成能力（工作流/模型/节点；未下载/未安装/未升级/未改用户工作流）→
+  **Gate B 确认**（无现成可用工作流）→ docs/IMAGE_CONDITIONING_INVENTORY.md（能力矩阵 + 候选方案，等用户选择）
+- [x] §三/§六/§二十三：外部图片导入（PNG/JPG/JPEG/WEBP；校验 → temp → 原子导入 → images/originals → Image 表 → Gallery）；
+  sha256 去重（不建第二份，返回已存在 image_id）；批量单张失败不整批失败；Gallery"导入"UI（多选 + 进度 n/N + 成功/已存在/失败）
+- [x] §七/§八：Workbench 输入图片区（图库选择 / 上传即导入）+ 模式切换 [文生图]/[图片生成]；
+  WorkbenchSnapshot.input_images（max=1，role=source，统一 image_id）
+- [x] §九：Recipe 输入图快照（image_id + file hash + role；参与 signature；恢复原样；图片不存在 → 显式"输入图片已丢失"）
+- [x] §十：Job 创建冻结输入图片（Stage0 全部槽位；切换工作台不影响等待 Job；缺失 404；处理型快照不一致拒绝）
+- [x] §十一：ImageReferenceService + GET /images/{id}/references（Recipe/StageItem/Asset 参考/Asset 溯源/派生图）
+- [x] §十二/§十三：Face Asset Reference Image（asset_reference_images 关系表；绑定/更换 = 新版本；仅 face；来源=图库）
+- [x] §十四：ModuleCapabilities 增加 input_required / input_role + GET /api/v1/modules（前端图片生成 Gate 判定）
+- [x] §二十/§二十一/§二十二/§二十四：模式栏与 Gate 提示、Gallery Picker（筛选/搜索/缩略图/尺寸/收藏）、
+  "用作输入图片"、快捷键 ←/→/K/R/F + Ctrl+Z 撤销
+- [x] §二十五 架构验收：未修改 QueueWorker / PipelineScheduler / ImageService 核心 / Job 状态机（仅新增能力字段 + 通用输入层 + UI）
+- [x] §二十八：新增 test_phase5_image_input.py 18 例；快速套件 168 → **186 passed**（Phase 4 全部回归通过）；前端 build 通过
+- [x] §二十九：Gate B → **零真实生图**；"Image conditioning backend: pending environment decision"
+- [x] §三十一/§三十二：版本 v0.6.0（基础图片输入 + 导入完整交付，不含真实 Img2Img）；feature/phase5-image-input → develop → main → tag
+- [ ] Phase 5.1（待用户选定模型方案）：Img2Img / Reference Module + provider binding + 1 次真实最小测试
+
 ## Phase 4：History + Provenance + Generic Module I/O Contract ✅（2026-10-08，v0.5.0）
 
 - [x] Task 0：迁移 0008_pipeline_backfill（不改 0007）——历史 Job 回填 Stage0/StageItem（身份继承 Job 列，

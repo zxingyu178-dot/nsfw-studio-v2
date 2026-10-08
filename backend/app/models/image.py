@@ -32,6 +32,9 @@ class Image(Base):
     review_status: Mapped[str] = mapped_column(String(16), nullable=False, default="UNREVIEWED")
     favorite: Mapped[bool] = mapped_column(nullable=False, default=False)
     source: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Phase 5：外部导入文件哈希（去重）与原始文件名（仅导入来源有值）
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    imported_filename: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)

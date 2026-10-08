@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, assetApi, imageApi, jobApi } from '../../api/client'
 import { formatDateTime } from '../../utils/format'
+import { snapshotFromState } from '../../stores/workbenchStore'
 import {
   ASSET_TYPES,
   IMAGE_KIND_LABEL,
@@ -15,16 +16,26 @@ import {
   type ImageProvenanceDTO,
   type ImageVersionsDTO,
   type JobDTO,
+  type ReviewStatus,
 } from '../../types/workbench'
 
 /**
- * 图库（Phase 2C 规范 §四十五-§四十九）：
+ * 图库（Phase 2C 规范 §四十五-§四十九；Phase 5 导入 / 用作输入图片 / 快捷键）。
  * 顶部筛选（未审核 / 保留 / 收藏 / 淘汰）+ 图片 Grid + 右侧 Detail Drawer，
- * 支持按 Job 查看、审核 / 收藏、Image → Workbench、从图库创建素材。
+ * 支持按 Job 查看、审核 / 收藏、Image → Workbench、从图库创建素材、外部图片批量导入。
+ * 快捷键（§二十四）：← / → 上一张 / 下一张，K 保留，R 淘汰，F 收藏，Ctrl+Z 撤销最近一次审核操作。
  */
 
 type Filter = 'ALL' | 'UNREVIEWED' | 'KEPT' | 'FAVORITE' | 'REJECTED'
 type ViewMode = 'flat' | 'group'
+
+/** 撤销记录（只支持最近一次审核 / 收藏操作的撤销，不做复杂设置页） */
+interface UndoEntry {
+  imageId: string
+  review?: ReviewStatus
+  favorite?: boolean
+  label: string
+}
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'ALL', label: '全部' },
@@ -45,6 +56,7 @@ interface JobSummary {
 
 export default function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const jobFilter = searchParams.get('job')
   const [filter, setFilter] = useState<Filter>('ALL')
   const [view, setView] = useState<ViewMode>('flat')
@@ -59,7 +71,13 @@ export default function GalleryPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [upscaling, setUpscaling] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  // Phase 5 §二十三：外部图片批量导入（逐张导入 → 进度 n / N；单张失败不整批失败）
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  // Phase 5 §二十四：审核快捷键 + 撤销最近一次审核操作
+  const [notice, setNotice] = useState<{ text: string; undoable?: boolean } | null>(null)
+  const [canUndo, setCanUndo] = useState(false)
+  const undoStack = useRef<UndoEntry[]>([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -139,7 +157,7 @@ export default function GalleryPage() {
     setNotice(null)
     try {
       const job = await imageApi.upscale(imageIds)
-      setNotice(`已创建高清任务 ${shortJobId(job.id)}（${imageIds.length} 张），完成后可在图库查看高清版本`)
+      setNotice({ text: `已创建高清任务 ${shortJobId(job.id)}（${imageIds.length} 张），完成后可在图库查看高清版本` })
       setSelectedIds([])
       setSelectMode(false)
       return job
@@ -149,6 +167,131 @@ export default function GalleryPage() {
     } finally {
       setUpscaling(false)
     }
+  }
+
+  /** §二十三：外部图片批量导入（多选；逐张导入可显示进度；单张失败不整批失败） */
+  async function handleImport(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (files.length === 0 || importProgress) return
+    setError(null)
+    setNotice(null)
+    setImportProgress({ done: 0, total: files.length })
+    let imported = 0
+    let duplicates = 0
+    let failed = 0
+    const failureMessages: string[] = []
+    for (let index = 0; index < files.length; index += 1) {
+      try {
+        const result = await imageApi.importFiles([files[index]])
+        imported += result.imported_count
+        duplicates += result.duplicate_count
+        failed += result.failed_count
+        if (result.failed.length > 0) {
+          failureMessages.push(`${result.failed[0].filename}：${result.failed[0].message}`)
+        }
+      } catch (err) {
+        failed += 1
+        failureMessages.push(`${files[index].name}：${err instanceof ApiRequestError ? err.message : '导入失败'}`)
+      }
+      setImportProgress({ done: index + 1, total: files.length })
+    }
+    setImportProgress(null)
+    setNotice({
+      text: `导入完成：成功 ${imported} · 已存在 ${duplicates} · 失败 ${failed}${
+        failureMessages.length > 0 ? `（${failureMessages.slice(0, 3).join('；')}）` : ''
+      }`,
+    })
+    load()
+  }
+
+  // ===== §二十四：快捷键（← / → / K / R / F / Ctrl+Z） =====
+
+  function recordUndo(entry: UndoEntry): void {
+    undoStack.current.push(entry)
+    if (undoStack.current.length > 20) undoStack.current.shift()
+    setCanUndo(true)
+  }
+
+  /** 撤销最近一次审核 / 收藏操作（页面内 Toast 按钮 或 Ctrl+Z） */
+  async function undoLast(): Promise<void> {
+    const entry = undoStack.current.pop()
+    setCanUndo(undoStack.current.length > 0)
+    if (!entry) return
+    try {
+      if (entry.review !== undefined) {
+        setDetail((current) =>
+          current && current.id === entry.imageId
+            ? { ...current, review_status: entry.review as ReviewStatus }
+            : current,
+        )
+        handleUpdated(await imageApi.review(entry.imageId, entry.review))
+      }
+      if (entry.favorite !== undefined) {
+        handleUpdated(await imageApi.favorite(entry.imageId, entry.favorite))
+      }
+      setNotice({ text: `已撤销${entry.label}` })
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '撤销失败')
+    }
+  }
+
+  async function quickReview(status: 'KEPT' | 'REJECTED'): Promise<void> {
+    if (!detail) return
+    recordUndo({ imageId: detail.id, review: detail.review_status, label: status === 'KEPT' ? '保留' : '淘汰' })
+    try {
+      handleUpdated(await imageApi.review(detail.id, status))
+      setNotice({ text: `已${status === 'KEPT' ? '保留' : '淘汰'}`, undoable: true })
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '操作失败')
+    }
+  }
+
+  async function quickFavorite(): Promise<void> {
+    if (!detail) return
+    const next = !detail.favorite
+    recordUndo({ imageId: detail.id, favorite: detail.favorite, label: next ? '收藏' : '取消收藏' })
+    try {
+      handleUpdated(await imageApi.favorite(detail.id, next))
+      setNotice({ text: next ? '已收藏' : '已取消收藏', undoable: true })
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '操作失败')
+    }
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        void undoLast()
+        return
+      }
+      if (!detail) return
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const index = items.findIndex((item) => item.id === detail.id)
+        if (index < 0) return
+        const next = event.key === 'ArrowLeft' ? index - 1 : index + 1
+        if (next >= 0 && next < items.length) setDetail(items[next])
+        return
+      }
+      if (event.key === 'k' || event.key === 'K') void quickReview('KEPT')
+      if (event.key === 'r' || event.key === 'R') void quickReview('REJECTED')
+      if (event.key === 'f' || event.key === 'F') void quickFavorite()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
+
+  /** §二十二：图片 → 用作输入图片 → 打开生成工作台并设置 input_image（只使用 image_id） */
+  function useAsInput(image: ImageDTO): void {
+    const snapshot = snapshotFromState()
+    snapshot.input_images = [{ role: 'source', image_id: image.id }]
+    setDetail(null)
+    navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
 
   return (
@@ -184,6 +327,22 @@ export default function GalleryPage() {
         >
           按任务查看
         </button>
+        <button
+          type="button"
+          className="tabs__item"
+          disabled={importProgress !== null}
+          onClick={() => importInputRef.current?.click()}
+        >
+          {importProgress ? `导入中 ${importProgress.done} / ${importProgress.total}` : '导入'}
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp"
+          multiple
+          hidden
+          onChange={(event) => void handleImport(event)}
+        />
       </div>
 
       {selectMode && (
@@ -201,7 +360,21 @@ export default function GalleryPage() {
         </div>
       )}
 
-      {notice && <p className="notice notice--ok" role="status">{notice}</p>}
+      {notice && (
+        <p className="notice notice--ok" role="status">
+          {notice.text}
+          {notice.undoable && canUndo && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--xs"
+              style={{ marginLeft: 8 }}
+              onClick={() => void undoLast()}
+            >
+              撤销 (Ctrl+Z)
+            </button>
+          )}
+        </p>
+      )}
 
       {jobFilter && (
         <div className="toolbar">
@@ -299,6 +472,9 @@ export default function GalleryPage() {
           }}
           onUpscale={(imageId) => void submitUpscale([imageId])}
           upscaling={upscaling}
+          onUseAsInput={useAsInput}
+          onReviewStart={(prev) => recordUndo({ imageId: detail.id, review: prev, label: '审核修改' })}
+          onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}
         />
       )}
     </section>
@@ -316,9 +492,17 @@ interface DetailDrawerProps {
   /** §二十：单张高清放大 */
   onUpscale: (imageId: string) => void
   upscaling: boolean
+  /** §二十二：用作输入图片 → 生成工作台 */
+  onUseAsInput: (image: ImageDTO) => void
+  /** §二十四：审核 / 收藏前记录撤销点（记录操作前的状态） */
+  onReviewStart: (previous: ReviewStatus) => void
+  onFavoriteStart: (previous: boolean) => void
 }
 
-function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpscale, upscaling }: DetailDrawerProps) {
+function GalleryDetailDrawer({
+  image, onClose, onUpdated, onSelectImage, onUpscale, upscaling,
+  onUseAsInput, onReviewStart, onFavoriteStart,
+}: DetailDrawerProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
   const [busy, setBusy] = useState(false)
@@ -504,24 +688,33 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
             type="button"
             className={`btn btn--sm${image.review_status === 'KEPT' ? ' btn--primary' : ''}`}
             disabled={busy}
-            onClick={() => void run(() => imageApi.review(image.id, 'KEPT'), '已保留')}
+            onClick={() => {
+              onReviewStart(image.review_status)
+              void run(() => imageApi.review(image.id, 'KEPT'), '已保留')
+            }}
           >
-            保留
+            保留 (K)
           </button>
           <button
             type="button"
             className={`btn btn--sm${image.review_status === 'REJECTED' ? ' btn--primary' : ''}`}
             disabled={busy}
-            onClick={() => void run(() => imageApi.review(image.id, 'REJECTED'), '已淘汰')}
+            onClick={() => {
+              onReviewStart(image.review_status)
+              void run(() => imageApi.review(image.id, 'REJECTED'), '已淘汰')
+            }}
           >
-            淘汰
+            淘汰 (R)
           </button>
           {image.review_status !== 'UNREVIEWED' && (
             <button
               type="button"
               className="btn btn--ghost btn--sm"
               disabled={busy}
-              onClick={() => void run(() => imageApi.review(image.id, 'UNREVIEWED'), '已恢复为未审核')}
+              onClick={() => {
+                onReviewStart(image.review_status)
+                void run(() => imageApi.review(image.id, 'UNREVIEWED'), '已恢复为未审核')
+              }}
             >
               取消审核
             </button>
@@ -530,9 +723,12 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
             type="button"
             className="btn btn--ghost btn--sm"
             disabled={busy}
-            onClick={() => void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏')}
+            onClick={() => {
+              onFavoriteStart(image.favorite)
+              void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏')
+            }}
           >
-            {image.favorite ? '★ 已收藏' : '☆ 收藏'}
+            {image.favorite ? '★ 已收藏' : '☆ 收藏 (F)'}
           </button>
         </div>
 
@@ -596,6 +792,15 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
             onClick={() => openInWorkbench(true)}
           >
             使用原图 Seed
+          </button>
+          {/* §二十二：外部导入图也能用作输入图片（整个系统统一 image_id） */}
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={() => onUseAsInput(image)}
+            title="把这张图设为生成工作台的输入图片"
+          >
+            用作输入图片
           </button>
           <button
             type="button"

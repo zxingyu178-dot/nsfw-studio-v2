@@ -1,4 +1,40 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4（2026-10-08）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5（2026-10-08）
+
+## Phase 5 测试（v0.6.0，Image Input Foundation + Reference / Img2Img Capability Gate）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：186 passed**（v0.5.0 的 168 例 + Phase 5 新增 18 例；Phase 4 全部回归全绿）。
+
+| 新增用例 | 覆盖点 |
+| --- | --- |
+| test_phase5_image_input.py 18 例 | ① **导入**：单张 PNG 全链路（source=import / kind=original / job_id=null / file_path 相对路径 / DB sha256=64hex / 文件落在 images/originals / source 过滤 / Provenance=外部导入 / workbench 404 IMAGE_NO_GENERATION_CONTEXT）；WEBP（VP8L）尺寸解析 200×100；超限 FILE_TOO_LARGE；伪造扩展名与非法内容单张失败；② **去重**：同内容不同文件名 → duplicate + 返回已存在 image_id，总数不增（API 级 + 服务级）；③ **Job 冻结**：count=2 的 Job 全部 Stage0 StageItem 冻结同一输入图、各槽位独立产出（Mock 引擎真实跑完 COMPLETED）；缺失输入图 404；>1 张输入图 422；处理型 Job 快照与 input_image_ids 不一致 → PIPELINE_INVALID；④ **Recipe**：input_images 快照（role/image_id/sha256=64hex/missing=false）；内容一致不建新版本；restore 复制输入图关系；删除图片行后 missing=true（引用保留不静默清空）；未知图 404；⑤ **Face Asset**：绑定参考图（reference_images 返回 image_id）；更换 = v2（旧版本各自保留）；不传沿用当前版本；非 face → ASSET_REFERENCE_TYPE_INVALID；缺失 → 404；关系行（role=face_reference, sort_order=0）落库；⑥ **引用保护**：5 类来源（Recipe/StageItem/Face 参考/Asset 溯源/派生图）全部识别 total=5 且 derived 精确；未引用图片 total=0；完成后 active_job_ids=[]；⑦ **Modules**：basic_generate input_required=false；upscale=true/source/upscaled；Gate B 判定断言（无 input_required+processed 模块）；⑧ **迁移 0010**：images.sha256/imported_filename、recipe_versions.input_images_json、asset_reference_images、idx_images_sha256 存在；重复启动 0 迁移 |
+
+### 本阶段零真实生图（合同 §29 Gate B）
+
+Task 0 调查确认本机无可用图片条件工作流（详见 docs/IMAGE_CONDITIONING_INVENTORY.md），
+真实 Img2Img / Reference 接入暂停；"输入图片 → Module → Pipeline → ComfyUI"链路待用户选定方案后
+在 Phase 5.1 执行 1 次真实最小测试。
+
+### 前端
+
+`npm run build`：tsc --noEmit 通过 + vite build 通过（v0.6.0，60 modules，JS 259.7KB / gzip 78.3KB）。
+
+### 未验证 / 限制（如实标注）
+
+- 真实浏览器 GUI 验收未执行：导入进度、模式切换、Picker、快捷键 / Ctrl+Z 撤销为构建级 +
+  代码级验证（后端 API 行为由 18 例离线测试覆盖）；建议验收方按 Phase 5 验收清单人工检查；
+- 图片引用保护只做"检查"（§十一 明确 Phase 5 不实现永久删除 UI）；
+- 撤销为前端会话内栈（刷新后清空），符合"不做复杂设置页"的合同约束。
+
+### GitHub CI
+
+```text
+develop: run （待回填）→（待回填）
+main:    run （待回填）→（待回填）
+```
 
 ## Phase 4 测试（v0.5.0，History + Provenance + Generic Module I/O Contract）
 
