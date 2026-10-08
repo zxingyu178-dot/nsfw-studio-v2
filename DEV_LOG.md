@@ -46,7 +46,8 @@
   （3072×4096，seed=null，parent 正确）→ History 任务族 → Gallery 父子 → 从高清图打开工作台
   （恢复原 Prompt + 双指纹身份）；两 Stage 双指纹/时间线见 docs/PHASE4_REPORT.md；
 - 未执行：真实集成测试套件（3 例）——合同 Task13 明确不做批量真实生图，
-  由上述最短 smoke 替代（如实标注）。
+  由上述最短 smoke 替代（如实标注）；
+- CI：develop run 37736554279 success；main run 37736733728 success（sha 0cce473）。
 
 ### 环境（如实记录）
 

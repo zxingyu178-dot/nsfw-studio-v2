@@ -47,6 +47,13 @@ smoke 脚本与日志：`temp/smoke_phase4.py`、`temp/smoke_phase4.log`（临�
 - Input Registry TTL 清理在真实运行中已验证"登记 + 不误删"（无到期文件可删），
   到期删除行为由离线单测覆盖。
 
+### GitHub CI
+
+```text
+develop: run 37736554279 → success（sha 0cce473，pytest + 前端构建两个 job 全绿）
+main:    run 37736733728 → success（sha 0cce473，pytest + 前端构建两个 job 全绿）
+```
+
 ## Phase 3 测试（v0.4.0，Multi-stage Pipeline + Upscale）
 
 ### 快速套件（CI 同口径，无 ComfyUI）

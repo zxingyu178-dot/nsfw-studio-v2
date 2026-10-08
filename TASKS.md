@@ -20,7 +20,7 @@
 - [x] Task 11：Studio Input Registry + TTL 清理（只清 NSFWStudio_inputs 下登记过、无活动引用文件；未配置 input_dir 安全跳过）
 - [x] Task 12：新增 21 例测试；快速套件 147 → **168 passed**（Phase 3 12 场景 + Phase 2.x 回归全绿）
 - [x] Task 13：最短真实 smoke（1 基础 768×1024 → 4x 3072×4096 → History → Gallery → 高清图打开工作台恢复原 Prompt+双指纹身份）
-- [x] Task 14：文档 5 新增 + 12 同步；phase4-history-provenance → develop → CI 绿 → main → CI 绿 → tag v0.5.0 + 交接 ZIP 邮件
+- [x] Task 14：文档 5 新增 + 12 同步；feature/phase4-history-provenance → develop → CI 绿（run 37736554279）→ main → CI 绿（run 37736733728）→ tag v0.5.0 + 交接 ZIP 邮件
 
 ## Phase 3：Multi-stage Pipeline + Upscale ✅（2026-10-08，v0.4.0）
 

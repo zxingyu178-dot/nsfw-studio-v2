@@ -96,11 +96,9 @@ npm run build → tsc --noEmit 通过 + vite build 通过（v0.5.0）
 ### CI（GitHub Actions）
 
 ```text
-develop: 见 TASKS.md / DEV_LOG.md 的最终记录
-main:    见 TASKS.md / DEV_LOG.md 的最终记录
+develop: run 37736554279 → success（sha 0cce473）
+main:    run 37736733728 → success（sha 0cce473）
 ```
-
-（最终 CI run id 在发布收尾提交中记录，与 Phase 3 的流程一致。）
 
 ## 3. 验收标准对照
 
