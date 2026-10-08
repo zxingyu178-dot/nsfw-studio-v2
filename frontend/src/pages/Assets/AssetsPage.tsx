@@ -339,7 +339,15 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
     setRefPickerOpen(false)
     const formData = new FormData()
     formData.set('reference_image_id', imageId)
+    formData.set('reference_action', 'set')
     await run(() => assetApi.addVersion(assetId, formData), '已绑定参考图（创建新版本）')
+  }
+
+  /** Task8（Phase 5.1）：清除参考图——新版本 reference=none，旧版本保持原参考图 */
+  async function clearReference(): Promise<void> {
+    const formData = new FormData()
+    formData.set('reference_action', 'clear')
+    await run(() => assetApi.addVersion(assetId, formData), '已移除参考图（创建新版本）')
   }
 
   const referenceImageId = shownVersion?.reference_images?.[0] ?? null
@@ -442,7 +450,16 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
                   disabled={busy}
                   onClick={() => setRefPickerOpen(true)}
                 >
-                  更换参考图
+                  更换
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  disabled={busy}
+                  onClick={() => void clearReference()}
+                  title="移除参考图（创建新版本，旧版本保留原参考图）"
+                >
+                  移除
                 </button>
               </div>
             ) : (

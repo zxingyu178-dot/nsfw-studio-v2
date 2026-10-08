@@ -163,20 +163,17 @@ def test_import_rejects_oversize(client, settings):
 
 # ===== §八/§十：Workbench 输入图片 → Job 冻结 =====
 
-def test_job_freezes_input_image_for_all_items(mock_client, png_bytes):
+def test_job_rejects_input_image_ignored_by_module(mock_client, png_bytes):
+    """Phase 5.1 Task4（P0）：输入图片不能被静默忽略。
+
+    Workbench 提供 input_image 但 Pipeline 首个模块 basic_generate 不消费输入图
+    → Job 创建必须被拒绝（UNUSED_INPUT_IMAGE），不允许"看似用了图，实际跑成文生图"。
+    """
     image = import_one(mock_client, "source.png", png_bytes)
     snapshot = make_snapshot(count=2, input_images=[{"role": "source", "image_id": image["id"]}])
     response = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot})
-    assert response.status_code == 201, response.text
-    job = response.json()
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-
-    # Stage0 全部槽位冻结同一张输入图；Stage0 用 basic_generate 时输入仅冻结不做推断
-    stage0 = final["stages"][0]
-    assert len(stage0["items"]) == 2
-    assert {item["input_image_id"] for item in stage0["items"]} == {image["id"]}
-    # 每个槽位各自产出一张图（输入冻结不改变输出数量）
-    assert sum(1 for item in stage0["items"] if item["output_image_id"]) == 2
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "UNUSED_INPUT_IMAGE"
 
 
 def test_job_creation_validates_input_image_exists(client):
@@ -367,12 +364,13 @@ def test_modules_api_declares_input_capabilities(client):
     assert modules["upscale"]["input_role"] == "source"
     assert modules["upscale"]["output_kind"] == "upscaled"
 
-    # Gate B：当前没有可用的图片条件生成模块（含 processed 输出的输入型模块）
-    # 用户选定方案并新增 Img2Img/Reference Module 后，更新此断言与前端模式提示
-    assert [
-        item for item in modules.values()
-        if item["input_required"] and item["output_kind"] == "processed"
-    ] == []
+    # Phase 5.1（Gate C）：img2img 已注册并可用，成为图片生成模式 Primary Module
+    # （Phase 5 时的"无可用图片条件模块"Gate B 已解除；Gate 判定依据 available=true）
+    img2img = modules["img2img"]
+    assert img2img["registered"] is True
+    assert img2img["available"] is True
+    assert img2img["input_required"] is True
+    assert img2img["output_kind"] == "processed"
 
 
 # ===== 迁移 0010 =====

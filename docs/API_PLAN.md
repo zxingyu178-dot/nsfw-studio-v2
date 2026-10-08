@@ -1,6 +1,6 @@
 # API_PLAN — API 现状与规划
 
-> 更新：2026-10-08（Phase 5，v0.6.0）。错误格式统一为 `{"error": {"code", "message"}}`。
+> 更新：2026-10-08（Phase 5.1，v0.7.0）。错误格式统一为 `{"error": {"code", "message"}}`。
 
 ## 1. 约定
 
@@ -14,7 +14,7 @@
 
 ### 健康与服务信息
 
-- `GET /api/v1/health` → `{"status":"ok","version":"0.6.0"}`
+- `GET /api/v1/health` → `{"status":"ok","version":"0.7.0"}`
 - `GET /` → 服务基本信息
 
 ### Prompt（`app/api/v1/prompts.py`）
@@ -48,6 +48,10 @@ POST   /api/v1/assets/{id}/archive | /restore
 创建素材额外支持可选表单字段 `source_image_id`（图库 → 素材溯源，§四十八）与
 `reference_image_id`（Phase 5 §十二：Face Asset 参考图，仅 type=face，来源=图库 image_id；
 绑定/更换 = 新版本；响应 `current_version.reference_images` 来自 asset_reference_images 关系表）。
+**Phase 5.1 Task8**：`POST /assets/{id}/versions` 新增 `reference_action: inherit | set | clear`
+（缺省兼容旧语义：传图 = set，不传 = inherit；clear = 新版本 reference=none，旧版本保留）；
+`set` 缺 reference_image_id → 400 `ASSET_REFERENCE_INVALID`；非法 action → 400
+`ASSET_REFERENCE_ACTION_INVALID`。
 
 ### Recipe（`app/api/v1/recipes.py`）
 
@@ -118,13 +122,18 @@ GET    /api/v1/images/by-job/{id}/summary  按 Job 统计（§四十九）
 GET    /api/v1/modules                     WorkflowModule 能力列表（module_id/version/title/
                                            uses_seed/input_kind/input_required/input_role/
                                            output_kind/parent_policy/output_cardinality）
-                                           → 前端"文生图/图片生成"Gate 判定（禁止硬编码模块列表）
+                                           + Phase 5.1 Task7 真实可用性：
+                                             registered（恒 true）
+                                             available（comfyui 下必须能加载 provider binding）
+                                             provider / binding_version / unavailable_reason
+                                           → 前端"文生图/图片生成"Gate 判定（禁止硬编码模块列表；
+                                             Gate 唯一依据 available=true，registered ≠ available）
 ```
 
 约定：状态机与暂停/取消/续跑语义见 docs/JOB_STATE_MACHINE.md；队列行为见 docs/QUEUE_SPEC.md；
 崩溃恢复见 docs/RECOVERY_SPEC.md。
 
-创建 Job 的输入校验（Phase 2.1 §八 + Phase 3 §0.4/§五，固定）：
+创建 Job 的输入校验（Phase 2.1 §八 + Phase 3 §0.4/§五 + Phase 5.1 Task1-5，固定）：
 
 ```
 snapshot 直接复用严格 WorkbenchSnapshotModel：
@@ -133,8 +142,11 @@ snapshot 直接复用严格 WorkbenchSnapshotModel：
   seed            0..2147483647（seed_mode=fixed 时必须提供，且 count 必须 = 1，
                   §0.4 固定 Seed 仅用于单张精确复现：fixed + count>1 → 400 FIXED_SEED_SINGLE_ONLY）
   prompt_mode     structured | full（Literal）
-  selected_assets 结构化类型；workflow_modules 为对象数组
-                   （[basic_generate] 或 [basic_generate, upscale]；process Job 必须 == [upscale]）
+  selected_assets 结构化类型
+  workflow_modules Phase 5.1 正式类型 WorkflowModuleRef：
+                  [basic_generate]（文生图）｜[img2img]（图生图，必须携带输入图）｜
+                  [basic_generate|img2img, upscale]；process Job 必须 == [upscale]；
+                  每项 = module_id + 可选 module_version/provider/binding_version/双指纹 + config{}
   input_images    Phase 5 §八/§十：[{role:"source", image_id}]，max=1（>1 → 422）；
                   创建期校验图片存在（404 IMAGE_NOT_FOUND）→ 冻结到 Stage0 全部
                   JobStageItem.input_image_id；process Job 若携带则必须与 input_image_ids 一致
@@ -142,6 +154,12 @@ snapshot 直接复用严格 WorkbenchSnapshotModel：
 Prompt 长度上限：结构化单字段 ≤2000 / 正向 ≤10000 / 负向 ≤8000（400 PROMPT_TOO_LONG）
 workflow_snapshot.modules 由后端按实际模块身份写入（§四/§五），客户端无需传递
 未知 WorkflowModule → 400 WORKFLOW_ERROR（创建期拒绝，不是执行期才炸）
+Phase 5.1 PipelineValidator（Job 创建前，依据 ModuleCapabilities）：
+  输入图没人消费（Stage0 input_required=false）→ 400 UNUSED_INPUT_IMAGE
+  需要输入图却没给（Stage0 input_required=true）→ 400 INPUT_IMAGE_REQUIRED
+  Stage N 不消费 Stage N-1 输出 / 上游输出非图片 → 400 PIPELINE_INVALID
+  模块 config 非法（validate_config）→ 400 MODULE_CONFIG_INVALID
+  config 单链：Workbench → Recipe → Job.workflow_snapshot → JobStage.config_json（唯一事实源）
 ```
 
 Phase 4 Task9（创建期身份解析，固定）：
@@ -157,7 +175,7 @@ workflow_modules 请求项：
 
 ## 3. 规划（Phase 5+，按需实现）
 
-| 方法与路径 | 用途 |
+| 方法与方法路径 | 用途 |
 | --- | --- |
-| 图生图 / 参考图 / 人脸修复 | 新增 WorkflowModule（声明 I/O 能力，见 MODULE_IO_CONTRACT.md）+ provider binding 目录即可复用同一 Job API |
+| 参考图 / 人脸修复 / 局部重绘 | 新增 WorkflowModule（声明 I/O 能力，见 MODULE_IO_CONTRACT.md）+ provider binding 目录即可复用同一 Job API（img2img 已于 Phase 5.1 验证该路径；Reference 等待模型方案） |
 | Agent / 豆包 / 手机端接入 | 复用同一 Job API（source=agent/doubao 已预留） |

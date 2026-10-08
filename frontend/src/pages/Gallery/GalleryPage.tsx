@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, assetApi, imageApi, jobApi } from '../../api/client'
 import { formatDateTime } from '../../utils/format'
-import { snapshotFromState } from '../../stores/workbenchStore'
+import { emptyWorkbenchSnapshot, snapshotFromState } from '../../stores/workbenchStore'
 import {
   ASSET_TYPES,
   IMAGE_KIND_LABEL,
@@ -17,6 +17,7 @@ import {
   type ImageVersionsDTO,
   type JobDTO,
   type ReviewStatus,
+  type WorkbenchSnapshot,
 } from '../../types/workbench'
 
 /**
@@ -598,6 +599,34 @@ function GalleryDetailDrawer({
       )
   }
 
+  /**
+   * Phase 5.1：以此图进行图生图。
+   * - 有生成上下文 → 追溯根生成 Job 恢复原 Prompt + 完整身份；
+   * - 外部导入 → Prompt 为空（第一版语义，绝不伪造 Prompt）；
+   * 输入图统一 image_id；模式与 Primary Module 由工作台按可用模块校正（Task6）。
+   */
+  function startImg2Img(): void {
+    setError(null)
+    const go = (base: WorkbenchSnapshot): void => {
+      const snapshot: WorkbenchSnapshot = {
+        ...base,
+        input_images: [{ role: 'source', image_id: image.id }],
+      }
+      onClose()
+      navigate('/generate', { state: { workbench: snapshot } })
+    }
+    if (!image.job_id) {
+      go(emptyWorkbenchSnapshot())
+      return
+    }
+    imageApi
+      .workbench(image.id)
+      .then((result) => go(result.snapshot))
+      .catch((err: unknown) =>
+        setError(err instanceof ApiRequestError ? err.message : '无法恢复原图生成配置'),
+      )
+  }
+
   async function createAsset(): Promise<void> {
     if (busy || !assetName.trim()) return
     setBusy(true)
@@ -801,6 +830,15 @@ function GalleryDetailDrawer({
             title="把这张图设为生成工作台的输入图片"
           >
             用作输入图片
+          </button>
+          {/* Phase 5.1：以此图进行图生图（生成上下文恢复原 Prompt；外部导入 Prompt 为空） */}
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={startImg2Img}
+            title="打开图片生成工作台：mode=image、input_image=当前图、Primary Module=可用图生图模块"
+          >
+            以此图进行图生图
           </button>
           <button
             type="button"

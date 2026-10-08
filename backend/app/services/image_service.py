@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationError
@@ -223,7 +224,9 @@ def import_images_batch(
 
     - 重复文件（sha256 已存在）：不创建第二份，返回 duplicate + 已存在的 image_id；
     - 单张失败（非法/超限/损坏）：记入 failed 继续处理下一张，绝不整批失败；
-    - 每张成功图片独立事务落库（单张校验失败不会留下半张图片）。
+    - 每张成功图片独立事务落库（单张校验失败不会留下半张图片）；
+    - Phase 5.1 Task9：DB 部分唯一索引兜底并发竞态——IntegrityError 时重新查询
+      并返回已存在图片（duplicate），而不是 500。
     """
     imported: list[Image] = []
     duplicates: list[dict[str, str]] = []
@@ -231,6 +234,7 @@ def import_images_batch(
 
     for filename, content_type, data in uploads:
         display_name = (filename or "").strip() or "(未命名)"
+        prepared: PreparedImageOutput | None = None
         try:
             prepared = prepare_import_image(data, filename=filename, content_type=content_type)
             existing = find_image_by_sha256(session, prepared.sha256 or "")
@@ -246,6 +250,26 @@ def import_images_batch(
                 metadata={"sha256": prepared.sha256, "imported_filename": prepared.imported_filename},
             )
             imported.append(images[0])
+        except IntegrityError:
+            # Task9：并发导入竞态——另一请求先落库，唯一索引拒绝本行；
+            # 回滚后返回已存在图片，绝不把并发当 500 处理
+            session.rollback()
+            existing = (
+                find_image_by_sha256(session, prepared.sha256 or "")
+                if prepared is not None else None
+            )
+            if existing is not None:
+                duplicates.append({
+                    "filename": display_name,
+                    "image_id": existing.id,
+                    "sha256": prepared.sha256 or "",
+                })
+            else:
+                failed.append({
+                    "filename": display_name,
+                    "error_code": "IMPORT_CONFLICT",
+                    "message": "并发导入冲突，请重试",
+                })
         except Exception as error:  # noqa: BLE001 —— 单张失败必须继续处理其余文件
             session.rollback()
             failed.append({

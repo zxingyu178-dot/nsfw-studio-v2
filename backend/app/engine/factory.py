@@ -17,8 +17,8 @@ from app.core.config import Settings
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError
 from app.engine.input_registry import REGISTRY_FILENAME, EngineInputRegistry
 
-# 已知模块的固定执行顺序（基础生成 → 高清 → 未来模块按请求顺序追加）
-MODULE_ORDER = ("basic_generate", "upscale")
+# 已知模块的固定执行顺序（主生成 → 高清 → 未来模块按请求顺序追加）
+MODULE_ORDER = ("basic_generate", "img2img", "upscale")
 
 # 执行身份字段（EngineBindingRef 等价）：任何一项存在即视为"携带身份"
 _IDENTITY_KEYS = ("module_version", "provider", "binding_version", "workflow_hash", "binding_hash")
@@ -148,3 +148,69 @@ def module_identity(settings: Settings) -> dict[str, str | None]:
     """兼容入口：默认（单模块）身份 = resolve_workflow_modules 的第一项。"""
     identities = resolve_workflow_modules(settings, None)
     return identities[0]
+
+
+def _binding_unavailable_reason(error_type: str) -> str:
+    if error_type == "BINDING_NOT_FOUND":
+        return "binding_not_configured"
+    if error_type in ("WORKFLOW_HASH_MISMATCH", "BINDING_HASH_MISMATCH", "BINDING_IDENTITY_MISMATCH"):
+        return "binding_invalid"
+    return "binding_unavailable"
+
+
+def module_availability(settings: Settings) -> list[dict]:
+    """Task7（Phase 5.1）：每个已注册模块的**真实可执行性**（registered ≠ available）。
+
+    - comfyui：provider binding 能加载（目录 / 自描述 / 指纹一致）才视为 available；
+    - mock：测试引擎可执行任何已注册模块 → available；
+    - unbound：无引擎 → available=false（engine_not_configured）。
+
+    前端"图片生成 Gate"只能依据 available=true 判断，禁止因为代码里注册了模块就显示可用。
+    """
+    from app.workflows.registry import default_registry
+
+    engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
+    provider = str(engine_cfg.get("provider", "unbound"))
+    modules_cfg = engine_cfg.get("modules") or {}
+    default_module = str(engine_cfg.get("module_id", "basic_generate"))
+    registry = default_registry()
+
+    adapter = None
+    result: list[dict] = []
+    for module_id in registry.ids():
+        per_module = modules_cfg.get(module_id) or {}
+        fallback_version = (
+            str(engine_cfg.get("module_version", "v1")) if module_id == default_module else "v1"
+        )
+        binding_version = str(per_module.get("binding_version") or fallback_version)
+        entry: dict = {
+            "module_id": module_id,
+            "provider": provider,
+            "binding_version": binding_version,
+            "available": False,
+            "unavailable_reason": None,
+        }
+        if provider == "comfyui":
+            if adapter is None:
+                from app.engine.comfyui import ComfyUIAdapter
+
+                adapter = ComfyUIAdapter(
+                    engine_cfg.get("options") or {}, comfyui_config=settings.comfyui
+                )
+            try:
+                actual_version, _workflow_hash, _binding_hash = adapter.binding_identity(
+                    module_id, binding_version
+                )
+            except EngineError as error:
+                entry["unavailable_reason"] = _binding_unavailable_reason(error.error_type)
+            except Exception:  # noqa: BLE001 —— 任何加载异常都只能导致"不可用"，绝不 500
+                entry["unavailable_reason"] = "binding_unavailable"
+            else:
+                entry["binding_version"] = actual_version
+                entry["available"] = True
+        elif provider == "mock":
+            entry["available"] = True
+        else:
+            entry["unavailable_reason"] = "engine_not_configured"
+        result.append(entry)
+    return result

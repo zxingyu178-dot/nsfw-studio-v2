@@ -2,6 +2,84 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.7.0] — 2026-10-08
+
+### Added（Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img）
+
+- **WorkflowModuleRef 正式类型化（Task1）**：核心工作流契约从 `list[dict]` 升级为正式模型
+  `WorkflowModuleRefModel`（module_id / module_version / provider / binding_version /
+  workflow_hash / binding_hash / config），前后端（`frontend/src/types/workbench.ts`）双侧镜像；
+  Job 响应 `workflow_snapshot` 同步使用正式类型。
+- **Recipe 完整 Workflow 身份（Task2，P0 修复）**：`RecipeService._validate_workflow_snapshot`
+  不再丢弃 provider / binding_version / 双 hash——历史 Job → 工作台 → 保存 Recipe → 重新打开，
+  身份 100% 一致；**旧配方不会偷偷升级到新版 Workflow**；普通新建工作台保存配方时
+  尽可能固化当前真实身份（与 Job 创建同一解析器；模块暂不可用时不阻塞保存）。
+- **模块 config 单链（Task3）**：`Workbench.workflow_modules[].config` → `Recipe.workflow_snapshot`
+  → `Job.workflow_snapshot` → `JobStage.config_json` 唯一事实源；`PipelineExecutor` 把
+  `JobStage.config_json` 注入 `JobRequestContext.module_config`；Resume 完整保留 config；
+  `stage_configs` 参数仅保留为内部/测试直调路径。
+- **PipelineValidator（Task4/Task5，P0 修复）**：Job 创建前依据 ModuleCapabilities 统一校验
+  Pipeline——`input_required=false` 携带输入图 → `UNUSED_INPUT_IMAGE`（输入图片不得被静默忽略）；
+  需要输入图却没给 → `INPUT_IMAGE_REQUIRED`；Stage N 必须能接收 Stage N-1 输出（链式检查）；
+  处理型 Job 仅 upscale；未知模块创建期拒绝；模块 `validate_config` 钩子（默认无约束）。
+  判断不在 QueueWorker；`resume_remaining` 同样复核并重新冻结生成型输入图。
+- **Img2ImgModule + img2img/v1 binding（Gate C 成功）**：第三套 WorkflowModule
+  （uses_seed=true / input_kind=image / input_required=true / output_kind=processed /
+  parent_policy=input_image），参数仅 `denoise`（0.05–1.0）；provider binding
+  `workflows/providers/comfyui/img2img/v1/`（LoadImage → VAEEncode → KSampler denoise →
+  VAEDecode → SaveImage，复用现有 Qwen-Image 2.1 三件套）。输出 = `kind=processed` +
+  `parent_image_id=输入图` + StageItem 真实 Seed；**QueueWorker / PipelineScheduler /
+  ImageService 核心零改动**。
+- **工作台模式 ↔ Primary Module 绑定（Task6）**：文生图自动确保 `basic_generate`；
+  图片生成自动切换到**可用**的图片条件模块（img2img）；禁止"图片生成 + basic_generate +
+  输入图"自相矛盾状态；历史矛盾数据（Phase 5 旧配方）在模块可用时自动校正；
+  图片生成 UI 新增"变化强度"滑杆（0.05–1.0）。
+- **`/modules` 真实可用性（Task7）**：响应新增 `registered / available / provider /
+  binding_version / unavailable_reason`；comfyui 下必须能加载 provider binding 才
+  `available=true`（`binding_not_configured` / `binding_invalid`）；前端 Gate 只依据
+  `available=true`（不因"代码里注册了模块"就显示可用）。
+- **Face Asset 参考图清除（Task8）**：`POST /assets/{id}/versions` 新增
+  `reference_action: inherit | set | clear`（缺省兼容旧语义）；UI [更换] / [移除]；
+  clear = 新版本 reference=none，旧版本保留原参考图。
+- **导入去重 DB 兜底（Task9）**：迁移 `0011_image_import_dedup_unique`——
+  `images(sha256)` 部分唯一索引（source='import'）；并发 IntegrityError → 重新查询并返回
+  已存在图片（duplicate），不是 500；迁移前防御性去重历史重复行（保留最早，不删数据）。
+- **图库"以此图进行图生图"**：图片详情新增入口 → 打开图片生成工作台
+  （mode=image、input_image=当前图、Primary Module=可用图生图模块）；
+  有生成上下文恢复原 Prompt，外部导入 Prompt 为空（不伪造）。
+
+### 实验（零下载 Qwen Img2Img，Gate C 成功）
+
+- `temp/experimental/qwen_img2img/`：实验 Workflow（**不进入正式 providers 目录**）+
+  spike 脚本 + 输入/输出/元数据。**未下载模型、未安装节点、未升级 ComfyUI、
+  未修改用户工作流**。
+- 实测（ComfyUI 0.37.0 / RTX 3060 Laptop 6GB / 768×768 / steps 25 / seed 20261008）：
+  denoise 0.55 → 输出结构 ≈ 输入（像素 MAE 2.25/255，粗结构相关 0.9993）；
+  denoise 1.0（同 seed/同 Prompt 对照）→ 完全由 Prompt 驱动的新图（结构相关 0.16）；
+  无缺节点 / 无缺模型 / 无 OOM；输出尺寸正确、Seed 与 denoise 确实进入 KSampler。
+  **结论：输入图对输出有决定性影响，未退化为文生图。**
+- 详见 `docs/PHASE51_REPORT.md`。
+
+### Changed
+
+- **架构验收**：新增第三种 Module 仅需 `Img2ImgModule` + `img2img/v1` binding + 参数/UI——
+  QueueWorker / PipelineScheduler / ImageService / Job 状态机零改动（与 Phase 5 §二十五 结论一致）。
+- 迁移 `0011_image_import_dedup_unique`；版本 0.6.0 → 0.7.0（后端 / 前端 / configs/app.yaml 同步）。
+- 文档：新增 PHASE51_REPORT；同步 README / AGENTS / CHANGELOG / TASKS / DEV_LOG /
+  TEST_REPORT / WORKBENCH_STATE / MODULE_IO_CONTRACT / IMAGE_MODEL / API_PLAN /
+  DATABASE_PLAN / DATA_MODEL_V1 / IMAGE_CONDITIONING_INVENTORY。
+
+### Tests
+
+- 新增 `tests/backend/test_phase51_contract.py`（15 用例：身份/配置单链/输入校验/
+  /modules 可用性/参考图 clear/唯一索引与并发兜底）与
+  `tests/backend/test_phase51_img2img.py`（7 用例：能力/config/processed 输出/
+  parent/Seed/链式/Resume//modules）；
+- Phase 5 专项测试更新：`basic_generate + 输入图 → UNUSED_INPUT_IMAGE`（原"允许"行为纠正）、
+  `/modules` Gate C 断言（img2img registered + available）；
+- 前端：`npm run build`（tsc + vite）通过；工作台 store 逻辑经
+  `temp/experimental/frontend_store_check/`（esbuild 打包 + node 断言，9/9 PASS）。
+
 ## [0.6.0] — 2026-10-08
 
 ### Added（Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate）

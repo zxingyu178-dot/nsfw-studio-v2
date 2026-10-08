@@ -4,15 +4,23 @@ import { moduleApi } from '../../api/client'
 import { PromptEditorPane } from './PromptEditorPane'
 import { ResultPane } from './ResultPane'
 import { SettingsPane } from './SettingsPane'
-import { hydrateWorkbench, resetWorkbench, setWorkbenchMode, useWorkbench } from '../../stores/workbenchStore'
+import {
+  availableImageModuleIds,
+  hydrateWorkbench,
+  resetWorkbench,
+  setModuleCatalog,
+  setWorkbenchMode,
+  useWorkbench,
+} from '../../stores/workbenchStore'
 import type { WorkbenchNavigationState } from './workbenchNavigation'
 
 export default function GeneratePage() {
   const location = useLocation()
   const state = useWorkbench()
   /**
-   * 图片生成 Gate（Phase 5 §二十）：需要存在 input_required=true 且 output_kind=processed 的模块。
-   * Gate B（无可用工作流）→ 图片生成模式显示"尚未配置可用工作流"，提交按钮禁用。
+   * 图片生成 Gate（Phase 5 §二十；Phase 5.1 Task7）：
+   * 目录中存在 **available=true** 且 input_required=true / output_kind=processed 的模块才算可用。
+   * 只注册、未配置 provider binding 的模块 → registered=true / available=false → Gate 关闭。
    */
   const [imageGenAvailable, setImageGenAvailable] = useState<boolean | null>(null)
 
@@ -27,12 +35,15 @@ export default function GeneratePage() {
   useEffect(() => {
     moduleApi
       .list()
-      .then((modules) =>
-        setImageGenAvailable(
-          modules.some((module) => module.input_required && module.output_kind === 'processed'),
-        ),
-      )
-      .catch(() => setImageGenAvailable(false))
+      .then((modules) => {
+        // Task6/Task7：目录进 store（校正 Primary Module + 作为 Gate 唯一依据）
+        setModuleCatalog(modules)
+        setImageGenAvailable(availableImageModuleIds(modules).length > 0)
+      })
+      .catch(() => {
+        setModuleCatalog([])
+        setImageGenAvailable(false)
+      })
   }, [])
 
   return (
@@ -76,7 +87,7 @@ export default function GeneratePage() {
           <ResultPane />
         </div>
         <div className="workbench__col workbench__col--settings">
-          <SettingsPane imageGenAvailable={imageGenAvailable === true} />
+          <SettingsPane imageGenAvailable={imageGenAvailable} />
         </div>
       </div>
     </section>

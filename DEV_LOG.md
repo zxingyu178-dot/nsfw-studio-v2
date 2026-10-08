@@ -1,5 +1,54 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-08 — Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img（v0.7.0）
+
+**执行**：TRAE Code Agent（feature/phase51-contract-img2img → develop → CI → main → CI → tag v0.7.0）。
+本阶段分两部分：A. 图片 Pipeline 契约收口（Task1-9，含两个 P0 修复）；B. 现有 Qwen-Image 2.1
+**零下载** Img2Img 实验（Task10-12）→ **Gate C 成功** → 正式落地 Img2ImgModule。
+
+### 交付
+
+- **Task1 WorkflowModuleRef 正式类型化**：`WorkflowModuleRefModel`（module_id/module_version/
+  provider/binding_version/双 hash/config）进入 WorkbenchSnapshot / WorkflowSnapshot / Job 响应；
+  前端 types 镜像；核心契约不再用 `list[dict]`。
+- **Task2 Recipe 完整身份（P0）**：`_validate_workflow_snapshot` 保留全部身份字段（修复丢
+  provider/双 hash）；保存配方时尽量固化真实身份（同一解析器）；旧配方不偷偷升级（测试覆盖
+  v1 保存 → 系统 v2 → 重开仍 v1 + 原双 hash）。
+- **Task3 config 单链**：config 唯一事实源 = Workbench → Recipe → Job → JobStage.config_json；
+  PipelineExecutor 注入 `JobRequestContext.module_config`；Resume 保留 config；`stage_configs`
+  仅内部/测试直调路径。JobStage.config_json 物化有专项测试。
+- **Task4/5 PipelineValidator（P0）**：Job 创建前按 ModuleCapabilities 校验——UNUSED_INPUT_IMAGE /
+  INPUT_IMAGE_REQUIRED / 链式 output→input / 处理型仅 upscale / 未知模块创建期拒绝；
+  模块 `validate_config` 钩子；resume_remaining 复核 + 生成型输入图重新冻结；未写进 QueueWorker。
+- **Task6 工作台模式绑定 Primary Module**：文生图=basic_generate；图片生成=可用图片模块；
+  历史矛盾数据校正；store 逻辑 9/9 自动断言通过（esbuild+node，见 temp/experimental/frontend_store_check）。
+- **Task7 /modules 真实可用性**：+registered/available/provider/binding_version/unavailable_reason；
+  comfyui 必须能加载 binding（binding_not_configured / binding_invalid）；前端 Gate 仅依据 available。
+- **Task8 Face 参考图 clear**：reference_action inherit/set/clear；UI [更换]/[移除]；旧版本保留。
+- **Task9 导入去重兜底**：迁移 0011 部分唯一索引（source='import'）+ IntegrityError → duplicate；
+  迁移前防御性去重（保留最早行，不删数据）。
+- **Task10-12 零下载实验**：temp/experimental/qwen_img2img/（workflow + spike + 输入/输出/元数据）；
+  ComfyUI 0.37.0 / 3060 6GB / 768×768 / 25 步 / seed 20261008：
+  d055（MAE 2.25，结构相关 0.9993）≈ 保留输入结构；d100 同 seed/prompt 对照 = 完全重绘（0.16）；
+  无缺节点/模型、无 OOM；输出尺寸正确；seed/denoise 确实进入 KSampler。未下载模型/未装节点/
+  未升级 ComfyUI/未改用户工作流。
+- **Gate C → 正式 Img2Img**：`Img2ImgModule`（denoise 0.05–1.0，默认 0.55）+ `img2img/v1`
+  binding（LoadImage→VAEEncode→KSampler→VAEDecode→SaveImage）；kind=processed + parent=输入图；
+  工作台"变化强度"滑杆；图库"以此图进行图生图"（有上下文恢复原 Prompt / 导入为空）；
+  **QueueWorker / PipelineScheduler / ImageService 核心零改动**。
+- **文档**：新增 PHASE51_REPORT；同步 README / AGENTS / CHANGELOG / TASKS / TEST_REPORT /
+  WORKBENCH_STATE / MODULE_IO_CONTRACT / IMAGE_MODEL / API_PLAN / DATABASE_PLAN / DATA_MODEL_V1 /
+  IMAGE_CONDITIONING_INVENTORY；版本 0.6.0 → 0.7.0（后端/前端/configs 同步）。
+
+### 验证
+
+- 后端全量 `.venv\Scripts\python -m pytest` （本机 ComfyUI 在线时含 3 个真实 smoke；CI 环境跳过）；
+- 新增 22 用例（test_phase51_contract 15 + test_phase51_img2img 7）；Phase 5 原 18 用例中
+  1 例按新契约反转（basic_generate+输入图 → 拒绝）；
+- 前端 `npm run build` 通过；前端 store 逻辑 9/9 断言通过；
+- 真实实验 3 次（d055 / d100 / d080），全部无 OOM、无缺节点；
+- 未执行：真实浏览器 GUI 验收（建议验收方按清单检查滑杆 / 图库入口）。
+
 ## 2026-10-08 — Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate（v0.6.0）
 
 **执行**：TRAE Code Agent（feature/phase5-image-input → develop → CI → main → CI → tag v0.6.0）。

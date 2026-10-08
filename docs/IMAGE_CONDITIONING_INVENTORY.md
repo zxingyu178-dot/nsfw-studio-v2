@@ -102,6 +102,10 @@ C:/ComfyUI_models/          diffusion_models/qwen-image-2.1-UC-Q4_0.gguf
 
 ### 方案 0（零下载 / 零安装，最优先验证）— 现有 Qwen-Image 2.1 链构造 latent Img2Img
 
+> **✅ Phase 5.1 已验证通过（2026-10-08）**：1 张 768×768 真实实验 + denoise 1.0 对照，
+> 无缺节点/缺模型/无 OOM，输入图对输出有决定性影响（详见 docs/PHASE51_REPORT.md），
+> 已正式落地 `Img2ImgModule` + `img2img/v1` binding（v0.7.0）。
+
 | 项 | 内容 |
 | --- | --- |
 | 模型 | 无需下载（qwen-image-2.1-UC-Q4_0.gguf + qwen3vl_8b_w4a8 + qwen vae；nightbatch 已真实批量跑通） |

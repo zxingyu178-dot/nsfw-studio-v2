@@ -4,18 +4,31 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 5 — Image Input Foundation + Reference / Img2Img Capability Gate（已完成，v0.6.0）。**
-Phase 5 新增：外部图片导入正式产品化（`POST /api/v1/images/import`，PNG/JPG/JPEG/WEBP，
+**当前阶段：Phase 5.1 — Image Pipeline Contract Closure + Qwen Img2Img（已完成，v0.7.0）。**
+Phase 5.1 第一部分（契约收口）：WorkflowModuleRef 正式类型化（module_id / module_version /
+provider / binding_version / 双 hash / config，前后端镜像）、Recipe 保存完整 Workflow 身份
+（不再丢失 provider / 双 hash，旧配方不会偷偷升级到新版 Workflow）、模块 config 单链
+（Workbench → Recipe → Job.workflow_snapshot → JobStage.config_json 唯一事实源）、
+PipelineValidator 统一校验（输入图片不得被静默忽略：`UNUSED_INPUT_IMAGE` /
+`INPUT_IMAGE_REQUIRED` / 链式 output→input 检查，Job 创建期拒绝）、工作台模式与 Primary Module
+真正绑定（文生图 = basic_generate；图片生成 = 可用图片条件模块）、`GET /api/v1/modules`
+返回真实可用性（registered / available / unavailable_reason，Gate 依据 available=true）、
+Face Asset 参考图可清除（`reference_action: inherit/set/clear`）、导入 sha256 部分唯一索引
+（迁移 `0011`，并发 IntegrityError → 返回已存在图片而不是 500）。
+第二部分（零下载实验 → Gate C 成功）：复用现有 Qwen-Image 2.1 三件套完成 latent Img2Img
+真实实验（denoise 0.55 ≈ 保留输入结构 / 1.0 完全由 Prompt 驱动，无 OOM），正式落地
+**Img2ImgModule**（第三套 WorkflowModule）+ provider binding `img2img/v1`
+（LoadImage → VAEEncode → KSampler denoise → VAEDecode → SaveImage），输出
+`kind=processed` + `parent_image_id=输入图`；核心调度（QueueWorker / PipelineScheduler /
+ImageService）**零改动**。工作台图片生成模式：变化强度滑杆（0.05–1.0）；图库详情新增
+"以此图进行图生图"（有生成上下文恢复原 Prompt；外部导入 Prompt 为空）。
+Phase 5 已完成：外部图片导入正式产品化（`POST /api/v1/images/import`，PNG/JPG/JPEG/WEBP，
 sha256 去重，批量部分失败继续，来源统一 `source=import`）、工作台"输入图片"（模式切换
 [文生图]/[图片生成] + 图库 Picker / 上传即导入，`WorkbenchSnapshot.input_images` max=1）、
 Recipe 输入图快照（image_id + hash + role；丢失显式标记）、Job 创建冻结输入图
 （Stage0 StageItem.input_image_id）、Face Asset Reference Image（`asset_reference_images` 关系表，
 仅人脸，来源=图库）、ImageReferenceService（删除前引用检查）、ModuleCapabilities
-`input_required/input_role` + `GET /api/v1/modules`、图库导入进度 / "用作输入图片" /
-审图快捷键（←→/K/R/F + Ctrl+Z 撤销）。
-**能力 Gate 结论（本机调查，Gate B）：没有现成、稳定、无需新增关键依赖的图片条件工作流
-（真实 Module 接入暂停；候选方案见 `docs/IMAGE_CONDITIONING_INVENTORY.md`，等待选择；
-本阶段零真实生图）——Image conditioning backend: pending environment decision。**
+`input_required/input_role`、图库导入进度 / "用作输入图片" / 审图快捷键（←→/K/R/F + Ctrl+Z 撤销）。
 Phase 4 已完成：历史正式可用（`GET /api/v1/history` + 历史 Tab：任务族归组 / 筛选 / Drawer）、
 Image Provenance API（来源任务/Stage/模块/双指纹/Seed）、派生图 → 工作台追溯根生成 Job、
 恢复路径携带完整执行身份并固定原版本、前端 WorkflowModuleRef[] 列表、
@@ -37,8 +50,9 @@ Image 导入 DataRoot + 图库（审核 / 收藏 / 按任务查看 / Image → �
 ComfyUI → Image → Gallery。
 本机 ComfyUI 环境事实见 `docs/COMFY_ENV_INVENTORY.md` / `docs/WORKFLOW_INVENTORY.md` /
 `docs/UPSCALE_WORKFLOW_INVENTORY.md` / `docs/IMAGE_CONDITIONING_INVENTORY.md`；
-仍禁止（Phase 5.1 待用户选定方案后解锁）：真实 Img2Img / Reference 模型接入 / ControlNet /
-FaceID / InstantID / 局部重绘 / 视频 / 手机端 / Agent。
+Phase 5.1 起 Img2Img 已接入（Qwen-Image 2.1 latent Img2Img，见 `docs/PHASE51_REPORT.md`）；
+仍禁止（后续阶段评估）：Reference（IPAdapter 类）/ ControlNet / FaceID / InstantID /
+局部重绘 / 蒙版编辑器 / 视频 / 手机端 / 豆包正式接入 / Agent 正式接入。
 
 ## 技术栈
 
@@ -64,7 +78,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.6.0"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.7.0"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）

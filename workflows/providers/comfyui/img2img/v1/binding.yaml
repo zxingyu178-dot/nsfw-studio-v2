@@ -1,0 +1,40 @@
+# img2img v1 — ComfyUI Provider Binding（Phase 5.1 Gate C）
+#
+# 来源：Phase 5.1 零下载实验（temp/experimental/qwen_img2img/，2026-10-08 实测通过）。
+# 复用现有 Qwen-Image 2.1 三件套（nightbatch 已批量跑通），不下载模型 / 不安装节点 / 不升级 ComfyUI：
+#
+#   LoadImage → VAEEncode → KSampler(denoise) → VAEDecode → SaveImage
+#
+# 与 basic_generate/v1 的唯一差异：latent 来自输入图（VAEEncode），KSampler.denoise 由模块
+# config（img2img.denoise）注入；Prompt/Negative/Seed 注入位置与文生图链一致。
+
+binding_version: v1
+module: img2img
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+# §九：输出命名包含 Studio 身份（job/stage/item），Studio 可据此做文件级恢复核对
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（input_image = 已上传的引擎侧引用名）
+inputs:
+  input_image:     {node: "4", field: "image"}
+  positive_prompt: {node: "6", field: "prompt"}
+  negative_prompt: {node: "6", field: "negative_prompt"}
+  seed:            {node: "7", field: "seed"}
+  denoise:         {node: "7", field: "denoise"}
+
+# 固定默认（实验实测值；denoise 不在 defaults 中——由模块 config 注入，defaults 会覆盖 inputs）
+defaults:
+  "6": {resolution: 1024}
+  "7": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple}
+
+# Seed 范围（KSampler 惯例，与 basic_generate 一致）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
+  denoise_range: {min: 0.05, max: 1.0, default: 0.55}
+  output_size: input_image          # 输出尺寸 = 输入尺寸（VAEEncode 决定，不接受 width/height 注入）

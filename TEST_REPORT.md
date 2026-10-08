@@ -1,4 +1,56 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5（2026-10-08）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1（2026-10-08）
+
+## Phase 5.1 测试（v0.7.0，Image Pipeline Contract Closure + Qwen Img2Img）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：208 passed**（v0.6.0 的 186 例 + Phase 5.1 新增 22 例；Phase 4 / 5 全部回归全绿）。
+
+| 新增/更新用例 | 覆盖点 |
+| --- | --- |
+| test_phase51_contract.py 15 例 | ① **Recipe 完整身份**：7 字段（含双 hash）保存/恢复 100% 一致；v1 保存 → 系统默认切 v2 → 重开仍 v1 + 原双 hash + 提交 Job 固定 v1；module_id-only 保存时固化当前身份；② **config 单链**：Recipe 保存/恢复/新版本（config 改变才建版本）；Job.workflow_snapshot → JobStage.config_json 逐 Stage 物化（含 marker a/b）；③ **输入消费校验**（P0）：basic_generate+输入图 → 400 UNUSED_INPUT_IMAGE；upscale 缺输入 → 400 INPUT_IMAGE_REQUIRED；PipelineValidator 9 条规则（链式/process/未知模块/合法链）；④ **/modules 可用性**：comfyui binding 在盘 → available=true + provider/binding_version；PROVIDERS_DIR 清空 → available=false + binding_not_configured；unbound → engine_not_configured；⑤ **Face 参考图 clear**：新版本 reference=none + 旧版本保留 + 无变化不建版本 + set 缺图/非法 action 400；⑥ **导入唯一约束**：0011 索引存在 + 重复启动 0 迁移；直接 INSERT 重复 sha256 → IntegrityError；应用层查重被绕过的并发窗口 → duplicate 返回已存在 image_id（非 500） |
+| test_phase51_img2img.py 7 例 | ① 能力与 config 校验（denoise 边界 0.05/1.0 合法、1.5/0.01/"hot"/bool/未知键非法）；② **processed 输出链**：img2img Job → StageItem.input=输入图 / output≠输入 / Seed 记录 / JobStage.config_json=denoise 0.55 / Image.kind=processed / parent=输入图 / Image.seed=StageItem.seed；③ **img2img→upscale 链**：Stage1 输入=Stage0 输出、upscaled+parent、upscale seed=null；④ 缺输入 → 400；非法 denoise → 400 MODULE_CONFIG_INVALID；⑤ **Resume**：继承 img2img 身份+config、输入图重新冻结到全部剩余槽位、续跑完成；⑥ /modules img2img registered+available |
+| test_phase5_image_input.py（更新） | 原"basic_generate+输入图仅冻结不推断"测试按新契约**反转为 400 UNUSED_INPUT_IMAGE**（P0 行为纠正）；/modules 断言更新为 Gate C（img2img registered+available+processed） |
+| test_migration_upgrade.py / test_phase4_backfill.py（更新） | 升级路径断言补 `0011_image_import_dedup_unique` |
+
+### 前端
+
+- `npm run build`：tsc --noEmit 通过 + vite build 通过（60 modules，JS 262.6KB / gzip 79.1KB）；
+- 工作台 store 逻辑自动断言（`temp/experimental/frontend_store_check/`，esbuild 打包 + node 执行）
+  **9/9 PASS**：初始文生图 basic_generate / 图片模式 img2img / 切回 / 选输入图自动图片模式 /
+  denoise 入快照 / 恢复完整身份不丢 / available=false Gate 关闭且不选中 / 历史矛盾数据校正。
+
+### 真实 ComfyUI（Gate C 实验 + 产品路径 smoke）
+
+| 项目 | 结果 |
+| --- | --- |
+| 零下载实验 d055（denoise 0.55，768×768，seed 20261008） | ✅ 执行成功 / 无 OOM / 输出 768×768 / seed+denoise 进入 KSampler；结构相关 0.9993（≈保留输入） |
+| 实验对照 d100（同 seed/prompt，denoise 1.0） | ✅ 完全由 Prompt 驱动（结构相关 0.1620）→ 采样器真实执行、denoise 生效 |
+| 实验中间点 d080（denoise 0.8） | ✅ 结构保留 + 可见语义变形（0.9886）；曲线 0.55/0.8/1.0 见 PHASE51_REPORT §2.4 |
+| 产品路径真实 smoke（1 张 img2img，走 JobService + Worker + 真实 ComfyUIAdapter） | ✅ Job COMPLETED；身份 img2img@v1/comfyui（wf=92132d53229d9bea, bh=ca978ab11e07ca4a）；StageItem 输入冻结=源图、seed=1182450547；输出 kind=processed、parent=输入图、768×768、落盘 images/processed/；config=denoise 0.55；10/10 检查通过（见 temp/smoke_phase51_report.json） |
+
+> 实验资产：`temp/experimental/qwen_img2img/`（workflow / spike / refetch / 输入输出与元数据，随仓库提交）。
+> **未下载模型、未安装节点、未升级 ComfyUI、未改用户工作流。**
+
+### 未验证 / 限制（如实标注）
+
+- 真实集成套件 `test_comfyui_integration.py`（3 例真实 basic/upscale）本阶段**未重跑**
+  （沿用 Phase 4 惯例：快速套件 + 最短真实 smoke 证据；其间一次探索性运行被中止并清理孤儿队列任务，
+  未纳入结果）；
+- 真实实验输入为合成几何图；真实写真照片在 0.55 下的观感未做人工评估；
+- 未执行浏览器 GUI 人工验收（模式切换 / 滑杆 / 图库入口 / [更换][移除] 按钮），
+  前端为构建级 + store 断言级验证，建议验收方按清单人工检查；
+- 真实 smoke 执行时发现用户 DataRoot 数据库处于 0.2.0，随 smoke 完成 **0.2.0 → 0.7.0** 的
+  真实升级路径（0005-0011 全部 applied、system_info 更新、旧数据保留），已如实记录。
+
+### GitHub CI
+
+```text
+develop: _CI_DEVELOP_
+main:    _CI_MAIN_
+```
 
 ## Phase 5 测试（v0.6.0，Image Input Foundation + Reference / Img2Img Capability Gate）
 

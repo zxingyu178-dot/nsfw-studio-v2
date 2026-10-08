@@ -1,0 +1,209 @@
+{
+  "started_at": "2026-10-08T10:29:04.177224+00:00",
+  "input": {
+    "path": "temp\\experimental\\qwen_img2img\\inputs\\structure_test_768.png",
+    "sha256": "a704969d0ec00b293d5f2069f0f9327fc58d22cb5d620bbe5259f179754d2c90",
+    "bytes": 6032,
+    "dimensions": [
+      768,
+      768
+    ]
+  },
+  "parameters": {
+    "prompt": "a serene zen garden with stones and soft morning light, watercolor style",
+    "negative": "blurry, low quality, text, watermark",
+    "seed": 20261008,
+    "denoise": 0.8,
+    "steps": 25
+  },
+  "workflow_template": "D:\\AIHome_2.0_L1_L2\\projects\\nsfw-studio-v2\\temp\\experimental\\qwen_img2img\\workflow.json",
+  "preflight": {
+    "comfyui_version": "0.37.0",
+    "device": "cuda:0 NVIDIA GeForce RTX 3060 Laptop GPU : cudaMallocAsync",
+    "vram_total_mb": 6144,
+    "vram_free_mb": 4384,
+    "queue_running": 1,
+    "queue_pending": 2
+  },
+  "upload": {
+    "engine_ref": "NSFWStudio_experiment/structure_test_768.png",
+    "response": {
+      "name": "structure_test_768.png",
+      "subfolder": "NSFWStudio_experiment",
+      "type": "input"
+    }
+  },
+  "patched_workflow": {
+    "1": {
+      "class_type": "UnetLoaderGGUF",
+      "inputs": {
+        "unet_name": "qwen-image-2.1-UC-Q4_0.gguf"
+      }
+    },
+    "2": {
+      "class_type": "CLIPLoader",
+      "inputs": {
+        "clip_name": "qwen3vl_8b_w4a8.safetensors",
+        "type": "qwen_image",
+        "device": "cpu"
+      }
+    },
+    "3": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+      }
+    },
+    "4": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": "NSFWStudio_experiment/structure_test_768.png"
+      }
+    },
+    "5": {
+      "class_type": "VAEEncode",
+      "inputs": {
+        "pixels": [
+          "4",
+          0
+        ],
+        "vae": [
+          "3",
+          0
+        ]
+      }
+    },
+    "6": {
+      "class_type": "TextEncodeQwenImage21",
+      "inputs": {
+        "clip": [
+          "2",
+          0
+        ],
+        "prompt": "a serene zen garden with stones and soft morning light, watercolor style",
+        "negative_prompt": "blurry, low quality, text, watermark",
+        "resolution": 768
+      }
+    },
+    "7": {
+      "class_type": "KSampler",
+      "inputs": {
+        "model": [
+          "1",
+          0
+        ],
+        "seed": 20261008,
+        "steps": 25,
+        "cfg": 1.0,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "positive": [
+          "6",
+          0
+        ],
+        "negative": [
+          "6",
+          1
+        ],
+        "latent_image": [
+          "5",
+          0
+        ],
+        "denoise": 0.8
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": [
+          "7",
+          0
+        ],
+        "vae": [
+          "3",
+          0
+        ]
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "images": [
+          "8",
+          0
+        ],
+        "filename_prefix": "NSFWStudio_experiment/qwen_img2img/d080"
+      }
+    }
+  },
+  "submit": {
+    "prompt_id": "ee546091-7f52-45bd-87b7-db4d1eaa1c6c"
+  },
+  "elapsed_seconds": 1202.27,
+  "history": null,
+  "outcome": "OK",
+  "refetched_at": "2026-10-08T10:53:49.353411+00:00",
+  "history_status": {
+    "status_str": "success",
+    "completed": true,
+    "messages": [
+      [
+        "execution_start",
+        {
+          "prompt_id": "ee546091-7f52-45bd-87b7-db4d1eaa1c6c",
+          "timestamp": 1791456329715
+        }
+      ],
+      [
+        "execution_cached",
+        {
+          "nodes": [
+            "3"
+          ],
+          "prompt_id": "ee546091-7f52-45bd-87b7-db4d1eaa1c6c",
+          "timestamp": 1791456330553
+        }
+      ],
+      [
+        "execution_success",
+        {
+          "prompt_id": "ee546091-7f52-45bd-87b7-db4d1eaa1c6c",
+          "timestamp": 1791456825398
+        }
+      ]
+    ]
+  },
+  "history_outputs": {
+    "9": {
+      "images": [
+        {
+          "filename": "d080_00001_.png",
+          "subfolder": "NSFWStudio_experiment\\qwen_img2img",
+          "type": "output"
+        }
+      ]
+    }
+  },
+  "output": {
+    "path": "D:\\AIHome_2.0_L1_L2\\projects\\nsfw-studio-v2\\temp\\experimental\\qwen_img2img\\outputs\\d080_output.png",
+    "sha256": "896f406668cc1a7bd3971890faa79f051f7920f1d16fa6e7274f6b765fae4846",
+    "bytes": 456146,
+    "dimensions": [
+      768,
+      768
+    ],
+    "comfyui_file": {
+      "filename": "d080_00001_.png",
+      "subfolder": "NSFWStudio_experiment\\qwen_img2img",
+      "type": "output"
+    }
+  },
+  "checks": {
+    "refetched_after_queue_timeout": true,
+    "execution_success": true,
+    "output_valid_png": true,
+    "output_dimensions_match_input": true,
+    "no_oom": true
+  },
+  "gpu_sampling_seconds": 495.7
+}

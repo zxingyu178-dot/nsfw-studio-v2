@@ -7,6 +7,7 @@ from app.models import Job, JobItem, JobStage, JobStageItem
 from app.schemas.workbench import (
     StructuredPromptModel,
     WorkbenchSnapshotModel,
+    WorkflowSnapshotModel,
     structured_model_from_json,
 )
 import json
@@ -97,7 +98,8 @@ class JobResponse(BaseModel):
     structured_prompt: StructuredPromptModel
     workbench_snapshot: dict[str, Any]
     generation_settings: dict[str, Any]
-    workflow_snapshot: dict[str, Any]
+    # Phase 5.1 Task1：workflow_snapshot 使用正式模块契约（WorkflowModuleRefModel 列表）
+    workflow_snapshot: WorkflowSnapshotModel
     module_id: str | None
     module_version: str | None
     provider: str | None

@@ -14,7 +14,7 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 5 完成，v0.6.0）
+## 3. 阶段纪律（当前 Phase 5.1 完成，v0.7.0）
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
 2（Job Execution Core + ComfyUIAdapter + Gallery）/
@@ -27,34 +27,46 @@ binding_hash 双指纹、能力驱动 I/O、StageItem Seed、输入图片正式�
 5（Image Input Foundation + Capability Gate：0010 迁移、外部图片导入 + sha256 去重、
 工作台输入图片 / 文生图-图片生成模式、Recipe 输入图快照、Job 冻结输入图、
 Face Asset Reference Image 关系表、ImageReferenceService、模块 input_required/input_role、
-Gallery Picker / 导入进度 / 审图快捷键 + Ctrl+Z 撤销；**真实图片条件工作流 = Gate B 暂停**）。
+Gallery Picker / 导入进度 / 审图快捷键 + Ctrl+Z 撤销）/
+5.1（Image Pipeline Contract Closure + Qwen Img2Img：WorkflowModuleRef 正式类型化、
+Recipe 完整 Workflow 身份（不丢 provider/双 hash）、config 单链唯一事实源、
+PipelineValidator（UNUSED_INPUT_IMAGE / INPUT_IMAGE_REQUIRED / 链式校验）、
+工作台模式绑定 Primary Module、`/modules` 真实可用性（registered ≠ available）、
+Face 参考图 clear 语义、0011 导入 sha256 部分唯一索引；**Img2ImgModule 正式落地**
+（Qwen-Image 2.1 零下载 latent Img2Img，img2img/v1 binding，Gate C 成功，v0.7.0））。
 
-**Phase 5 能力 Gate（当前生效）**：本机无现成可用图片条件工作流（见
-`docs/IMAGE_CONDITIONING_INVENTORY.md`）；真实 Img2Img / Reference Module 接入**等待用户选择方案**
-（Phase 5.1），禁止自行下载模型 / 安装节点 / 升级 ComfyUI；前端图片生成模式在无可用模块时
-显示"尚未配置可用工作流"并禁用提交（Gate 判定以 `GET /api/v1/modules` 为准，禁止前端硬编码）。
+**Phase 5.1 后当前能力**：图片生成模式 Primary Module = `img2img`（denoise 0.05–1.0，
+默认见 binding；输出 kind=processed + parent=输入图）；`GET /api/v1/modules` 的
+`available=true` 是前端 Gate 唯一依据；文生图 / 图片生成 / 高清可任意组合为合法链
+（basic_generate→upscale、img2img→upscale）。
 
 本阶段仍禁止扩大范围实现：
 
-- 真实图生图 / 参考图模型接入（Gate B：待用户选定方案）/ ControlNet / FaceID / InstantID /
-  局部重绘 / 蒙版编辑器 / 视频；
+- Reference（IPAdapter 类）/ ControlNet / FaceID / InstantID / 局部重绘 / 蒙版编辑器 / 视频；
 - 手机端 / 豆包正式接入 / Agent 正式接入 / 全局搜索；
 - 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 
 生成链路约束：
 
-- 执行链路：Workbench → `POST /api/v1/jobs`（JobService 固化快照并物化 JobStage）→
-  单队列 Worker → Stage 顺序执行（Stage Gate：前一 Stage 全部完成才进下一 Stage）→
+- 执行链路：Workbench → `POST /api/v1/jobs`（JobService 固化快照 + PipelineValidator 校验 +
+  物化 JobStage）→ 单队列 Worker → Stage 顺序执行（Stage Gate：前一 Stage 全部完成才进下一 Stage）→
   WorkflowModule → EngineAdapter → ComfyUI → Image（导入 DataRoot）→ Gallery；
 - 前端绝不直连 ComfyUI；Job 创建只发生在 `JobService`，Worker 只消费已持久化 Job；
 - **执行真源 = JobStage + workflow_snapshot**（§二十三）：Job 创建后当前配置变化不影响该 Job，
   Resume 完整继承原 Stage/Binding，禁止静默升级；
+- **模块 config 单链（Phase 5.1）**：`Workbench.workflow_modules[].config` →
+  `Recipe.workflow_snapshot` → `Job.workflow_snapshot` → `JobStage.config_json`；
+  禁止另建第二事实源（`stage_configs` 仅保留为内部/测试直调路径）；
+- **输入图片不得被静默忽略（Phase 5.1）**：Job 创建前由 `PipelineValidator` 依据
+  ModuleCapabilities 校验（`input_required=false` 携带输入图 → UNUSED_INPUT_IMAGE；
+  需要输入图却没给 → INPUT_IMAGE_REQUIRED；Stage N 必须能接收 Stage N-1 输出）；
+  **禁止把这些判断写进 QueueWorker**；
 - ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/<module>/<binding>/` 层，
   禁止污染引擎无关层；**已投入使用的 binding 目录视为 immutable**（workflow.json / binding.yaml 改动
   必须新建 v2；workflow_hash / binding_hash 双指纹不一致会被拒绝执行）；
   处理型模块的输入图片只走 `EngineAdapter.upload_input_image()` 正式契约（禁止 getattr duck typing）；
 - 绑定属于每次请求：QueueWorker / ComfyUIAdapter 不得固化单一模块身份（§0.2/§二十二），
-  新增模块（img2img 等）只注册 WorkflowModule + 新增 binding 目录，核心执行逻辑零改动；
+  新增模块（reference 等）只注册 WorkflowModule + 新增 binding 目录，核心执行逻辑零改动；
 - 机器信息（ComfyUI URL / 安装路径 / 输出路径）只进 `configs/config.local.yaml`（gitignore）
   或环境变量；公共配置不得出现 `127.0.0.1` / `localhost`（守卫测试会失败）；
 - 错误分类 / 重试 / 恢复语义见 `docs/JOB_STATE_MACHINE.md`、`PIPELINE_STATE_MACHINE.md`、

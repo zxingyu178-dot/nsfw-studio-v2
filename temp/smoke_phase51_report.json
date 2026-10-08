@@ -1,0 +1,60 @@
+{
+  "started_at": "2026-10-08T18:53:26",
+  "data_root": "D:\\NSFW-Studio-Data",
+  "input_path": "D:\\AIHome_2.0_L1_L2\\projects\\nsfw-studio-v2\\temp\\experimental\\qwen_img2img\\inputs\\structure_test_768.png",
+  "input_image_id": "img_ff9e1385-1ced-4fcf-888b-7ee6c15668a8",
+  "identity": {
+    "module_id": "img2img",
+    "module_version": "v1",
+    "provider": "comfyui",
+    "binding_version": "v1",
+    "workflow_hash": "92132d53229d9bea",
+    "binding_hash": "ca978ab11e07ca4a"
+  },
+  "job_id": "job_b6eaead2-b990-4041-8548-33e8f8f20a98",
+  "job_created": true,
+  "finished_at": "2026-10-08T19:10:37",
+  "job_status": "COMPLETED",
+  "error_type": null,
+  "error_message": null,
+  "stage": {
+    "module_id": "img2img",
+    "provider": "comfyui",
+    "binding_version": "v1",
+    "workflow_hash": "92132d53229d9bea",
+    "binding_hash": "ca978ab11e07ca4a",
+    "config": {
+      "denoise": 0.55,
+      "execution_timeout": 7200
+    }
+  },
+  "stage_item": {
+    "input_image_id": "img_ff9e1385-1ced-4fcf-888b-7ee6c15668a8",
+    "output_image_id": "img_a9c8709e-70dc-403a-90a4-b9c97c8e5e13",
+    "seed": 1182450547
+  },
+  "output_image": {
+    "id": "img_a9c8709e-70dc-403a-90a4-b9c97c8e5e13",
+    "kind": "processed",
+    "parent_image_id": "img_ff9e1385-1ced-4fcf-888b-7ee6c15668a8",
+    "file_path": "images/processed/img_a9c8709e-70dc-403a-90a4-b9c97c8e5e13/processed.png",
+    "exists": true,
+    "dimensions": [
+      768,
+      768
+    ],
+    "seed": 1182450547
+  },
+  "checks": {
+    "job_completed": true,
+    "stage_module_img2img": true,
+    "stage_completed": true,
+    "stage_config_denoise": true,
+    "input_frozen": true,
+    "output_exists": true,
+    "output_kind_processed": true,
+    "parent_is_input": true,
+    "stage_item_seed_recorded": true,
+    "output_seed_matches": true
+  }
+}

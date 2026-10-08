@@ -26,15 +26,18 @@
 | 0008_pipeline_backfill | 0.5.0 | 历史 Job 回填 Stage0/StageItem（Phase 4 Task0，数据迁移，见 MIGRATION_0008_BACKFILL.md） |
 | 0009_execution_fingerprint | 0.5.0 | jobs/job_stages.binding_hash + job_stage_items.seed + 历史假 Seed 修正（Phase 4 Task1/3） |
 | 0010_image_inputs | 0.6.0 | images.sha256/imported_filename（+idx_images_sha256）+ recipe_versions.input_images_json + asset_reference_images 关系表（Phase 5） |
+| 0011_image_import_dedup_unique | 0.7.0 | images(sha256) 部分唯一索引（source='import'；Phase 5.1 Task9 并发导入兜底，含防御性去重） |
 
 约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
 `type / mode / slot / favorite / default_count` 均有 CHECK；
 `jobs` 有 `UNIQUE(source, client_request_id)`（幂等）与 status CHECK；
 `images` 有 `kind / review_status` CHECK；
+`uq_images_import_sha256` 为**部分唯一索引**（`WHERE source='import' AND sha256 IS NOT NULL`；
+引擎生成图 sha256 可为 NULL，不参与约束）；
 `job_stages` 有 `UNIQUE(job_id, stage_index)` 与 status CHECK（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）；
 `asset_reference_images` 有 `UNIQUE(asset_version_id, role, sort_order)`（Phase 5 §十三：参考图关系表，
 不再把复杂关系长期塞 JSON）；
-升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 0.6.0，
+升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 0.6.0 → 0.7.0，
 并含**真实 v0.3.2 库升级**（四种状态 Job 的 Stage 回填 + QUEUED Job 升级后可执行，
 见 tests/backend/test_phase4_backfill.py）。
 

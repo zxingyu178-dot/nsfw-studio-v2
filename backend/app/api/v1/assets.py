@@ -137,7 +137,7 @@ def update_asset_meta(
     "/{asset_id}/versions",
     response_model=AssetVersionResponse,
     status_code=201,
-    summary="新增素材版本（内容变化才创建；支持新预览图 / Face 参考图）",
+    summary="新增素材版本（内容变化才创建；支持新预览图 / Face 参考图 set/clear）",
 )
 async def add_asset_version(
     asset_id: str,
@@ -145,15 +145,22 @@ async def add_asset_version(
     notes: str | None = Form(default=None),
     tags: str | None = Form(default=None),
     reference_image_id: str | None = Form(default=None),
+    reference_action: str | None = Form(default=None),
     preview: UploadFile | None = File(default=None),
     session: Session = Depends(get_session),
     storage: StorageManager = Depends(get_storage),
 ) -> AssetVersionResponse:
+    """reference_action（Phase 5.1 Task8）：inherit / set / clear。
+
+    缺省（None）时保持历史语义：传 reference_image_id = set，否则 inherit。
+    clear = 新版本参考图置空（旧版本保持原参考图）。
+    """
     tag_list = _parse_tags(tags)
     upload = _read_upload(preview)
+    action = reference_action or ("set" if reference_image_id else "inherit")
     version, _ = asset_service.add_asset_version(
         session, storage, asset_id, prompt_text=prompt_text, notes=notes, tags=tag_list,
-        preview=upload, reference_image_id=reference_image_id,
+        preview=upload, reference_image_id=reference_image_id, reference_action=action,
     )
     return _version_response(session, version)
 

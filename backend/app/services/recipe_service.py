@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -69,20 +70,34 @@ def _validate_generation_settings(raw: Mapping[str, Any] | None) -> dict[str, An
 
 
 def _validate_workflow_snapshot(modules: list[dict] | None) -> dict[str, Any]:
-    """第一版允许 {"modules": []}；结构上预留 module_id/module_version/config。"""
+    """归一化 workflow_snapshot（Phase 5.1 Task1/Task2）：保留**完整执行身份**。
+
+    每个模块必须包含（缺失字段留 None，但结构固定）：
+        module_id / module_version / provider / binding_version
+        workflow_hash / binding_hash / config
+    **禁止静默丢弃身份**——否则旧 Recipe 可能偷偷使用新版 Workflow，破坏可复现性；
+    历史 Job → 打开工作台 → 保存 Recipe → 关闭 → 重新打开，身份必须完全一致。
+    """
     if modules is None:
         return {"modules": []}
     if not isinstance(modules, list):
         raise ValidationError("workflow modules 必须为数组", code="WORKFLOW_SNAPSHOT_INVALID")
     cleaned = []
     for module in modules:
-        if not isinstance(module, dict) or not isinstance(module.get("module_id"), str):
+        data = module.model_dump() if isinstance(module, BaseModel) else module
+        if not isinstance(data, dict) or not isinstance(data.get("module_id"), str):
             raise ValidationError("workflow module 缺少 module_id", code="WORKFLOW_SNAPSHOT_INVALID")
+        config = data.get("config")
+        module_version = data.get("module_version")
         cleaned.append(
             {
-                "module_id": module["module_id"],
-                "module_version": str(module.get("module_version", "0.0.0")),
-                "config": module.get("config") if isinstance(module.get("config"), dict) else {},
+                "module_id": data["module_id"],
+                "module_version": str(module_version) if module_version else None,
+                "provider": data.get("provider"),
+                "binding_version": data.get("binding_version"),
+                "workflow_hash": data.get("workflow_hash"),
+                "binding_hash": data.get("binding_hash"),
+                "config": config if isinstance(config, dict) else {},
             }
         )
     return {"modules": cleaned}

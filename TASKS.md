@@ -1,5 +1,38 @@
 # TASKS — NSFW Studio V2
 
+## Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img ✅（2026-10-08，v0.7.0）
+
+### A. 图片 Pipeline 契约收口
+
+- [x] Task 1：WorkflowModuleRef 正式类型化（module_id/module_version/provider/binding_version/双 hash/config；
+  前后端镜像；WorkbenchSnapshot/WorkflowSnapshot/Job 响应全部使用正式类型，不再用 list[dict]）
+- [x] Task 2：Recipe 完整 Workflow 身份（P0 修复——不再丢失 provider/双 hash；旧配方不偷偷升级；
+  新建工作台保存配方时尽量固化真实身份）
+- [x] Task 3：config 单链唯一事实源（Workbench → Recipe → Job.workflow_snapshot → JobStage.config_json；
+  PipelineExecutor 注入 module_config；Resume 保留 config；stage_configs 仅内部/测试路径）
+- [x] Task 4：输入图消费校验（P0——basic_generate + 输入图 → UNUSED_INPUT_IMAGE；需要输入图却没给 →
+  INPUT_IMAGE_REQUIRED；Job 创建期拒绝）
+- [x] Task 5：PipelineValidator 统一合法性（Stage0 输入需求 / Stage N 链式 output→input / 处理型仅 upscale /
+  未知模块创建期拒绝 / 模块 validate_config 钩子；不在 QueueWorker）
+- [x] Task 6：工作台模式真正绑定 Primary Module（文生图=basic_generate；图片生成=可用图片模块；
+  历史矛盾数据校正；store 9/9 断言通过）
+- [x] Task 7：/modules 返回真实可用性（registered/available/provider/binding_version/unavailable_reason；
+  comfyui 必须能加载 binding；前端 Gate 仅依据 available=true）
+- [x] Task 8：Face Asset 参考图 clear（reference_action inherit/set/clear；UI [更换]/[移除]；旧版本保留）
+- [x] Task 9：导入去重 DB 兜底（迁移 0011 images(sha256) 部分唯一索引；并发 IntegrityError → duplicate 而非 500）
+
+### B. Qwen Img2Img 零下载实验 → Gate C
+
+- [x] Task 10：实验 Workflow（temp/experimental/qwen_img2img/，不进入正式 providers 目录；
+  未下载模型/未装节点/未升级 ComfyUI/未改用户工作流）
+- [x] Task 11：最小真实实验（1 张输入 768×768 → 输出；seed/denoise/耗时/显存/错误全记录；
+  另做 denoise=1.0 同 seed/prompt 对照 + 0.8 中间点）
+- [x] Task 12：成功标准（上传/执行/无缺节点缺模型/无 OOM/输出有效且尺寸正确/seed 与 denoise 进入 KSampler）
+  + 人工确认输入图对输出有决定性影响（0.55 结构相关 0.9993 vs 对照 0.16）
+- [x] Gate C 成功 → Img2ImgModule + img2img/v1 binding + 参数/UI（图库"以此图进行图生图"+ 变化强度滑杆）
+- [x] 架构验收：新增第三种 Module 未改动 QueueWorker / PipelineScheduler / ImageService 核心
+- [x] 版本：v0.7.0；feature/phase51-contract-img2img → develop → main → tag
+
 ## Phase 5：Image Input Foundation + Reference / Img2Img Capability Gate ✅（2026-10-08，v0.6.0）
 
 - [x] Task 0：只读调查本机图片条件生成能力（工作流/模型/节点；未下载/未安装/未升级/未改用户工作流）→
@@ -19,7 +52,7 @@
 - [x] §二十八：新增 test_phase5_image_input.py 18 例；快速套件 168 → **186 passed**（Phase 4 全部回归通过）；前端 build 通过
 - [x] §二十九：Gate B → **零真实生图**；"Image conditioning backend: pending environment decision"
 - [x] §三十一/§三十二：版本 v0.6.0（基础图片输入 + 导入完整交付，不含真实 Img2Img）；feature/phase5-image-input → develop → main → tag
-- [ ] Phase 5.1（待用户选定模型方案）：Img2Img / Reference Module + provider binding + 1 次真实最小测试
+- [x] Phase 5.1 已完成（见顶部）：Img2Img Module + provider binding + 真实最小实验（Gate C 成功，v0.7.0）
 
 ## Phase 4：History + Provenance + Generic Module I/O Contract ✅（2026-10-08，v0.5.0）
 

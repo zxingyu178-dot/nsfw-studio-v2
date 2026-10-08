@@ -1,7 +1,9 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
 import {
   hasUpscaleModule,
+  isImageCapablePrimary,
   setCount,
+  setPrimaryModuleConfig,
   setSeed,
   setSize,
   setUpscaleEnabled,
@@ -30,9 +32,10 @@ import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 
 /** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。
  *
- * Phase 5 §二十：图片生成模式需要可用 Module（Gate）；不可用时明确提示并禁用提交。
+ * Phase 5 §二十 + Phase 5.1 Task6/Task7：图片生成模式需要**可用** Module（available=true），
+ * 且 Primary Module 必须真的消费输入图；否则明确提示并禁用提交（禁止自相矛盾状态提交）。
  */
-export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean }) {
+export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean | null }) {
   const state = useWorkbench()
   const store = useJobStore()
   const [widthText, setWidthText] = useState(String(state.width))
@@ -48,9 +51,18 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
       : Object.values(state.structured).some((value) => value.trim().length > 0)
   // Task8：开关是派生值；真实状态是 workflowModules 列表（含完整执行身份）
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
+  // Phase 5.1 Task6：Primary Module 必须与模式一致（图片生成 = 可用图片条件模块）
+  const primaryModule = state.workflowModules[0]?.module_id ?? 'basic_generate'
+  const primaryTitle =
+    state.moduleCatalog.find((module) => module.module_id === primaryModule)?.title ??
+    MODULE_LABEL[primaryModule] ??
+    primaryModule
+  // 图生图：变化强度来自模块 config（唯一事实源，随快照进入 JobStage.config_json）
+  const denoise = Number(state.workflowModules[0]?.config?.denoise ?? 0.55)
+  const primaryImageCapable = state.mode !== 'image' || isImageCapablePrimary(state)
   // Phase 5：图片生成模式的提交前置条件（Gate / 输入图片 / 丢失标记）
   const inputImage = state.inputImages[0] ?? null
-  const imageGateBlocked = state.mode === 'image' && !imageGenAvailable
+  const imageGateBlocked = state.mode === 'image' && (imageGenAvailable !== true || !primaryImageCapable)
   const generateHint = store.submitting
     ? undefined
     : engineOffline
@@ -58,7 +70,9 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
       : !hasPrompt
         ? '请先填写 Prompt'
         : imageGateBlocked
-          ? '图片生成：尚未配置可用工作流'
+          ? imageGenAvailable !== true
+            ? '图片生成：尚未配置可用工作流'
+            : '图片生成：当前工作流不接受输入图片'
           : state.mode === 'image' && !inputImage
             ? '请先选择输入图片'
             : inputImage?.missing
@@ -137,7 +151,7 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
       <div className="field">
         <span className="field__label">工作流</span>
         <div className="workflow-modules">
-          <p className="field__static">① 基础生成</p>
+          <p className="field__static">① {primaryTitle}</p>
           <label className="field__check">
             <input
               type="checkbox"
@@ -152,34 +166,59 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
         </div>
       </div>
 
-      <div className="field">
-        <label className="field__label" htmlFor="size-width">宽度 (px)</label>
-        <input
-          id="size-width"
-          className="input"
-          type="number"
-          min={64}
-          max={4096}
-          step={64}
-          value={widthText}
-          onChange={(event) => setWidthText(event.target.value)}
-          onBlur={commitSize}
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="size-height">高度 (px)</label>
-        <input
-          id="size-height"
-          className="input"
-          type="number"
-          min={64}
-          max={4096}
-          step={64}
-          value={heightText}
-          onChange={(event) => setHeightText(event.target.value)}
-          onBlur={commitSize}
-        />
-      </div>
+      {/* ===== 图生图：变化强度（Phase 5.1；仅当 Primary Module = img2img 时显示） ===== */}
+      {primaryModule === 'img2img' && (
+        <div className="field">
+          <div className="field__label-row">
+            <label className="field__label" htmlFor="img2img-denoise">变化强度</label>
+            <span className="muted">{denoise.toFixed(2)}</span>
+          </div>
+          <input
+            id="img2img-denoise"
+            className="input"
+            type="range"
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={denoise}
+            onChange={(event) => setPrimaryModuleConfig({ denoise: Number(event.target.value) })}
+          />
+          <p className="muted">越低越接近原图；输出尺寸 = 输入图尺寸。</p>
+        </div>
+      )}
+
+      {primaryModule !== 'img2img' && (
+        <>
+          <div className="field">
+            <label className="field__label" htmlFor="size-width">宽度 (px)</label>
+            <input
+              id="size-width"
+              className="input"
+              type="number"
+              min={64}
+              max={4096}
+              step={64}
+              value={widthText}
+              onChange={(event) => setWidthText(event.target.value)}
+              onBlur={commitSize}
+            />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="size-height">高度 (px)</label>
+            <input
+              id="size-height"
+              className="input"
+              type="number"
+              min={64}
+              max={4096}
+              step={64}
+              value={heightText}
+              onChange={(event) => setHeightText(event.target.value)}
+              onBlur={commitSize}
+            />
+          </div>
+        </>
+      )}
 
       <div className="field">
         <label className="field__label" htmlFor="gen-count">数量</label>
@@ -217,7 +256,9 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
       {/* ===== 生成按钮（§五十三：只提交 Job，不直连引擎） ===== */}
       {imageGateBlocked && (
         <p className="notice notice--warn">
-          图片生成：尚未配置可用工作流（等待模型方案确认）。可先选择输入图片并保存配方。
+          {imageGenAvailable !== true
+            ? '图片生成：尚未配置可用工作流（等待模型方案确认）。可先选择输入图片并保存配方。'
+            : '图片生成：当前工作流不接受输入图片，请切换到可用的图片生成工作流（如"图生图"）。'}
         </p>
       )}
       <div className="generate-actions">

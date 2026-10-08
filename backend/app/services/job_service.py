@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.ids import JOB, JOB_ITEM, JOB_STAGE, JOB_STAGE_ITEM, new_id
@@ -31,8 +32,8 @@ from app.models import (
     JobStage,
     JobStageItem,
 )
+from app.services.pipeline_validator import PipelineValidator
 from app.services.prompt_composer import compose_structured, dumps_structured
-from app.workflows.registry import default_registry
 
 TERMINAL_JOB_STATUSES = ("COMPLETED", "FAILED", "CANCELLED")
 ACTIVE_JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED")
@@ -66,6 +67,8 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
 
     Phase 4 Task1/Task9：身份包含 workflow_hash + binding_hash 两个执行指纹，
     从历史恢复（打开工作台 / 配方）时携带完整身份即可固定原版本执行。
+    Phase 5.1 Task1/Task3：config 进入快照（Workbench → Recipe → Job → JobStage.config_json 单链），
+    禁止再经第二事实源传递模块参数。
     """
     normalized = [
         {
@@ -75,11 +78,41 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
             "binding_version": module.get("binding_version"),
             "workflow_hash": module.get("workflow_hash"),
             "binding_hash": module.get("binding_hash"),
+            "config": module.get("config") if isinstance(module.get("config"), dict) else {},
         }
         for module in modules
         if module.get("module_id")
     ]
     return {"modules": normalized}
+
+
+def _merge_module_configs(
+    modules: list[dict[str, Any]], workflow_modules: list[Any]
+) -> list[dict[str, Any]]:
+    """Task3：把工作台快照 workflow_modules[].config 合并进已解析的模块身份列表。
+
+    模块参数只认 ``config`` 一个字段（正式契约 WorkflowModuleRefModel），
+    resolved 身份（含双指纹）来自 API 层 resolve_workflow_modules；两处按 module_id 对齐。
+    """
+    requested: dict[str, dict[str, Any]] = {}
+    for entry in workflow_modules or []:
+        data = entry.model_dump() if isinstance(entry, BaseModel) else entry
+        if not isinstance(data, dict):
+            continue
+        module_id = str(data.get("module_id") or "")
+        config = data.get("config")
+        if module_id and isinstance(config, dict):
+            requested[module_id] = config
+    merged: list[dict[str, Any]] = []
+    for module in modules:
+        module_id = str(module.get("module_id") or "")
+        config = module.get("config")
+        if not isinstance(config, dict):
+            config = {}
+        if module_id in requested:
+            config = requested[module_id]
+        merged.append({**module, "config": config})
+    return merged
 
 
 def _snapshot_input_image_ids(snapshot: dict[str, Any]) -> list[str]:
@@ -113,10 +146,16 @@ def _materialize_stages(
 
     - 每个模块 = 一个 Stage（stage_index = 顺序）；
     - 每个 Stage 为全部逻辑槽位创建 StageItem；
-    - 处理型 Job（process）：第一（唯一）个 Stage 的 StageItem 预置 input_image_id（§二十一）。
+    - 处理型 Job（process）：第一（唯一）个 Stage 的 StageItem 预置 input_image_id（§二十一）；
+    - config_json（Task3，Phase 5.1）：默认来自 module.config（唯一事实源）；
+      stage_configs（内部/测试直调路径）与之合并（显式键优先，不丢模块参数）。
     """
     configs = list(stage_configs or [])
     for stage_index, module in enumerate(modules):
+        module_config = module.get("config") if isinstance(module.get("config"), dict) else {}
+        # 内部直调路径的 stage_configs 与模块 config 合并（不丢模块参数；显式键优先）
+        override = configs[stage_index] if stage_index < len(configs) else {}
+        stage_config = {**module_config, **(override if isinstance(override, dict) else {})}
         stage = JobStage(
             id=new_id(JOB_STAGE),
             job_id=job.id,
@@ -130,7 +169,7 @@ def _materialize_stages(
             status="QUEUED",
             total_count=len(item_ids),
             completed_count=0,
-            config_json=json.dumps(configs[stage_index] if stage_index < len(configs) else {}, ensure_ascii=False),
+            config_json=json.dumps(stage_config, ensure_ascii=False),
         )
         session.add(stage)
         session.flush()
@@ -363,12 +402,8 @@ def create_job(
             "provider": "unbound", "binding_version": "v1", "workflow_hash": None,
             "binding_hash": None,
         }]
-    # §三：Pipeline 的模块必须已注册（未知模块在创建期就被拒绝，而不是执行期才炸）
-    registry = default_registry()
-    for module in modules:
-        module_id = str(module.get("module_id") or "")
-        if not registry.has(module_id):
-            raise ValidationError(f"WorkflowModule 未注册: {module_id}", code="WORKFLOW_ERROR")
+    # Task3（Phase 5.1）：模块 config 从工作台快照合并进已解析身份（唯一事实源）
+    modules = _merge_module_configs(modules, snapshot.get("workflow_modules") or [])
 
     # Phase 5 §十：从 WorkbenchSnapshot 冻结输入图片（Job 创建后切换工作台图片不影响本 Job）
     snapshot_input_ids = _snapshot_input_image_ids(snapshot)
@@ -378,9 +413,7 @@ def create_job(
 
     stage0_input_ids: list[str] | None = None
     if job_kind == "process":
-        # §二十/§二十一：处理型 Job 只跑处理模块，每个 JobItem 对应一张已有图片
-        if [m.get("module_id") for m in modules] != ["upscale"]:
-            raise ValidationError("处理型 Job 的 Pipeline 必须且只能是 upscale", code="PIPELINE_INVALID")
+        # §二十/§二十一：处理型 Job 的输入 = 每 JobItem 一张已有图片（Pipeline 校验在 Validator）
         image_ids = list(input_image_ids or [])
         if len(image_ids) != count:
             raise ValidationError("处理型 Job 的图片数量与 count 不一致", code="PIPELINE_INVALID")
@@ -389,8 +422,14 @@ def create_job(
             raise ValidationError("快照输入图片与处理型输入不一致", code="PIPELINE_INVALID")
         stage0_input_ids = image_ids
     elif snapshot_input_ids:
-        # 生成型 Job：输入图片冻结到 Stage0 全部槽位（Img2Img/Reference 就绪后直接生效）
+        # 生成型 Job：输入图片冻结到 Stage0 全部槽位（由模块 input_required 决定是否合法）
         stage0_input_ids = [snapshot_input_ids[0]] * count
+
+    # Task4/Task5（Phase 5.1）：Pipeline 输入合法性统一验证（Job 创建前，禁止静默忽略输入图）
+    PipelineValidator().validate(
+        modules, job_kind=job_kind, has_input_image=bool(stage0_input_ids)
+    )
+
     identity = modules[0]
     workflow_snapshot = _workflow_snapshot_from_modules(modules)
     generation_settings = {
@@ -568,6 +607,22 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
         ]
         inputs_by_index = {item.item_index: item.input_image_id for item in parent_stage_items}
         remaining_inputs = [inputs_by_index.get(index) for index in sorted(incomplete_indexes)]
+    else:
+        # 生成型 Job（Phase 5.1）：输入图必须从 Parent 快照重新冻结到全部剩余槽位，
+        # 否则 img2img 续跑会静默丢失输入图（执行时才会炸）
+        parent_input_ids = _snapshot_input_image_ids(original_snapshot)
+        if parent_input_ids:
+            for image_id in parent_input_ids:
+                if session.get(Image, image_id) is None:
+                    raise NotFoundError("输入图片不存在，无法续跑", code="IMAGE_NOT_FOUND")
+            remaining_inputs = [parent_input_ids[0]] * remaining
+
+    # Task4/Task5（Phase 5.1）：续跑同样在创建前验证 Pipeline（继承原身份的合法性复核）
+    PipelineValidator().validate(
+        resume_module_ids,
+        job_kind=original.job_kind,
+        has_input_image=bool(remaining_inputs),
+    )
 
     job = Job(
         id=new_id(JOB),

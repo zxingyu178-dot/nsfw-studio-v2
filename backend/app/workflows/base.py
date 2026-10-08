@@ -125,6 +125,9 @@ class JobRequestContext:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     binding: EngineBindingRef | None = None
     input_image: InputImageRef | None = None
+    # Task3（Phase 5.1）：本 Stage 的模块 config（来自 JobStage.config_json，唯一事实源）。
+    # 模块参数（如 img2img.denoise）只从这里读取；执行时不再依赖第二事实源。
+    module_config: Mapping[str, Any] = field(default_factory=dict)
 
 
 class WorkflowModule(ABC):
@@ -140,6 +143,14 @@ class WorkflowModule(ABC):
     @abstractmethod
     def validate_input(self, payload: WorkflowInput) -> WorkflowValidation:
         """校验输入；不合法时返回 ok=False 与错误列表。"""
+
+    def validate_config(self, config: Mapping[str, Any]) -> WorkflowValidation:
+        """校验模块 config（Phase 5.1 Task5）：Job 创建前由 PipelineValidator 调用。
+
+        config 是模块参数的唯一事实源（Workflow → Recipe → Job → JobStage.config_json 单链）；
+        默认无约束；带参数的模块（如 img2img.denoise）覆写本方法。
+        """
+        return WorkflowValidation(ok=True)
 
     async def prepare_inputs(self, context: JobRequestContext, engine: EngineAdapter) -> Mapping[str, Any]:
         """可选钩子：执行前准备引擎侧输入（如上传待处理图片，§十三）。

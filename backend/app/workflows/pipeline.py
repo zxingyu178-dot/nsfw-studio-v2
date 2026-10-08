@@ -100,6 +100,14 @@ class PipelineExecutor:
                 metadata["stage_item_id"] = stage_item.id
                 item_id = getattr(stage_item, "job_item_id", None) or getattr(stage_item, "id", None)
                 metadata["item_id"] = item_id
+        module_config: dict[str, Any] = {}
+        if stage is not None:
+            try:
+                parsed = json.loads(stage.config_json or "{}")
+            except ValueError:
+                parsed = {}
+            if isinstance(parsed, dict):
+                module_config = parsed
         return JobRequestContext(
             positive_prompt=job.positive_prompt_snapshot,
             negative_prompt=job.negative_prompt_snapshot,
@@ -108,6 +116,7 @@ class PipelineExecutor:
             metadata=metadata,
             binding=self.binding_ref_for(stage) if stage is not None else None,
             input_image=input_image,
+            module_config=module_config,
         )
 
     # ===== Worker 细粒度路径：只构造引擎请求（提交/轮询/取消语义留在 Worker） =====

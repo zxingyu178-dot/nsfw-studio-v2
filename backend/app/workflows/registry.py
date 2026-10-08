@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from app.engine.base import EngineError
 from app.workflows.base import WorkflowModule
 from app.workflows.basic_generate import BasicGenerateModule
+from app.workflows.img2img import Img2ImgModule
 from app.workflows.upscale import UpscaleModule
 
 
@@ -50,5 +51,5 @@ class ModuleRegistry:
 
 
 def default_registry() -> ModuleRegistry:
-    """产品默认注册表：基础生图 + 高清放大（Phase 3）。"""
-    return ModuleRegistry([BasicGenerateModule(), UpscaleModule()])
+    """产品默认注册表：基础生图 + 图生图 + 高清放大（Phase 3 / Phase 5.1）。"""
+    return ModuleRegistry([BasicGenerateModule(), Img2ImgModule(), UpscaleModule()])

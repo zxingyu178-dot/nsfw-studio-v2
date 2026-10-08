@@ -6,6 +6,7 @@ import {
   emptyStructured,
   type AssetType,
   type InputImageRef,
+  type ModuleCapabilitiesDTO,
   type PromptMode,
   type SelectedAssetRef,
   type StructuredPrompt,
@@ -33,10 +34,13 @@ export interface WorkbenchState {
   seed: number | null
   /**
    * 工作流模块列表（Phase 4 Task8）：真实状态是模块列表，不是 upscaleEnabled 布尔。
-   * Phase 5 增加 Reference 时只需在列表里多一个 Module（状态层不需要改）。
+   * Phase 5.1 Task6：Primary Module 与生成模式必须一致——
+   * 文生图 = basic_generate；图片生成 = 可用的图片条件模块（如 img2img）；
    * 普通新建：只携带 module_id；历史恢复（Task9）：携带完整执行身份。
    */
   workflowModules: WorkflowModuleRef[]
+  /** /modules 能力目录（Phase 5.1 Task7）：Gate 判定唯一依据（available=true） */
+  moduleCatalog: ModuleCapabilitiesDTO[]
   sourcePromptId: string | null
   sourcePromptVersionId: string | null
   sourceRecipeId: string | null
@@ -57,6 +61,7 @@ function initialState(): WorkbenchState {
     seedMode: 'random',
     seed: null,
     workflowModules: [{ module_id: 'basic_generate' }],
+    moduleCatalog: [],
     sourcePromptId: null,
     sourcePromptVersionId: null,
     sourceRecipeId: null,
@@ -89,14 +94,51 @@ export function hasUpscaleModule(modules: WorkflowModuleRef[]): boolean {
   return modules.some((module) => module.module_id === 'upscale')
 }
 
-/** 保证模块列表始终包含基础生成，并按 Pipeline 固定顺序排列（基础生成 → 高清） */
-function normalizeModules(modules: WorkflowModuleRef[], upscale: boolean): WorkflowModuleRef[] {
-  const base = modules.filter((module) => module.module_id !== 'upscale')
-  const withBase = base.length > 0 ? base : [{ module_id: 'basic_generate' } as WorkflowModuleRef]
-  return upscale ? [...withBase, { module_id: 'upscale' }] : withBase
+/** Task7：可用的图片条件模块（input_required=true + output_kind=processed + available=true） */
+export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
+  return catalog
+    .filter((module) => module.available && module.input_required && module.output_kind === 'processed')
+    .map((module) => module.module_id)
 }
 
-/** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份原样保留，Task9） */
+/** Task6：primary module 是否消费输入图（图片生成模式提交前置条件） */
+export function isImageCapablePrimary(state: WorkbenchState): boolean {
+  const primary = state.workflowModules[0]?.module_id
+  return primary !== undefined && availableImageModuleIds(state.moduleCatalog).includes(primary)
+}
+
+/**
+ * Task6：按模式保证 Primary Module 一致性（禁止自相矛盾状态）。
+ *
+ * - 文生图：primary 必须是 basic_generate（保留完整身份；换模块时丢弃旧身份）；
+ * - 图片生成：primary 必须是**可用**的图片条件模块；恢复出的完整身份在可用时原样保留，
+ *   不可用 / 是 basic_generate（历史矛盾数据）时切换到目录中的可用模块（丢弃旧身份）；
+ * - 高清永远排在后面；切换模式不影响输入图片（回到图片模式不丢选择）。
+ */
+function normalizeModules(
+  modules: WorkflowModuleRef[],
+  mode: WorkbenchMode,
+  catalog: ModuleCapabilitiesDTO[],
+): WorkflowModuleRef[] {
+  const upscale = hasUpscaleModule(modules)
+  const primary = modules[0] ?? null
+  const imageModules = availableImageModuleIds(catalog)
+  let nextPrimary: WorkflowModuleRef
+  if (mode === 'text') {
+    nextPrimary = primary?.module_id === 'basic_generate' ? primary : { module_id: 'basic_generate' }
+  } else if (primary && imageModules.includes(primary.module_id)) {
+    nextPrimary = primary // 完整身份（含双指纹）在模块可用时原样保留
+  } else if (imageModules.length > 0) {
+    nextPrimary = { module_id: imageModules[0] }
+  } else {
+    // 目录尚未加载或没有可用图片模块：保留现状（由 Gate 阻止提交，绝不静默降级）
+    nextPrimary = primary ?? { module_id: 'basic_generate' }
+  }
+  const result = upscale ? [nextPrimary, { module_id: 'upscale' }] : [nextPrimary]
+  return result.map((module) => ({ ...module }))
+}
+
+/** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份与 config 原样保留，Task9/Task3） */
 export function snapshotFromState(): WorkbenchSnapshot {
   return {
     prompt_mode: state.promptMode,
@@ -114,7 +156,10 @@ export function snapshotFromState(): WorkbenchSnapshot {
     count: state.count,
     seed_mode: state.seedMode,
     seed: state.seedMode === 'fixed' ? state.seed : null,
-    workflow_modules: state.workflowModules.map((module) => ({ ...module })),
+    workflow_modules: state.workflowModules.map((module) => ({
+      ...module,
+      config: { ...(module.config ?? {}) },
+    })),
     source_prompt_id: state.sourcePromptId,
     source_prompt_version_id: state.sourcePromptVersionId,
   }
@@ -124,6 +169,7 @@ export function snapshotFromState(): WorkbenchSnapshot {
 export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: string | null = null): void {
   const modules = (snapshot.workflow_modules ?? []) as WorkflowModuleRef[]
   const inputImages = (snapshot.input_images ?? []).map((ref) => ({ ...ref }))
+  const mode: WorkbenchMode = inputImages.length > 0 ? 'image' : 'text'
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
@@ -131,7 +177,7 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     negativePrompt: snapshot.negative_prompt,
     selectedAssets: { ...snapshot.selected_assets },
     // 带输入图恢复（配方 / 图库"用作输入图片"）→ 自动进入图片生成模式
-    mode: inputImages.length > 0 ? 'image' : 'text',
+    mode,
     inputImages,
     width: snapshot.width,
     height: snapshot.height,
@@ -139,7 +185,7 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     // Seed 默认 random；仅"使用此图 Seed"等显式固定时才恢复固定值（规范 §四十七）
     seedMode: typeof snapshot.seed === 'number' ? 'fixed' : 'random',
     seed: typeof snapshot.seed === 'number' ? snapshot.seed : null,
-    workflowModules: normalizeModules(modules, hasUpscaleModule(modules)).map((module) => ({ ...module })),
+    workflowModules: normalizeModules(modules, mode, state.moduleCatalog),
     sourcePromptId: snapshot.source_prompt_id ?? null,
     sourcePromptVersionId: snapshot.source_prompt_version_id ?? null,
     sourceRecipeId,
@@ -148,8 +194,30 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
 
 /** 清空工作台（新建） */
 export function resetWorkbench(): void {
-  state = initialState()
+  state = { ...initialState(), moduleCatalog: state.moduleCatalog }
   listeners.forEach((listener) => listener())
+}
+
+/** 空工作台快照（Phase 5.1：外部导入图 → 图生图，Prompt 为空的第一版语义） */
+export function emptyWorkbenchSnapshot(): WorkbenchSnapshot {
+  const initial = initialState()
+  return {
+    prompt_mode: initial.promptMode,
+    structured_prompt: { ...initial.structured },
+    full_prompt: '',
+    negative_prompt: '',
+    selected_assets: {},
+    input_images: [],
+    width: initial.width,
+    height: initial.height,
+    count: initial.count,
+    seed_mode: initial.seedMode,
+    seed: null,
+    // 由 hydrate → normalize 按图片生成模式校正为可用图片模块（Task6）
+    workflow_modules: [{ module_id: 'basic_generate' }],
+    source_prompt_id: null,
+    source_prompt_version_id: null,
+  }
 }
 
 // ===== 细粒度操作 =====
@@ -194,17 +262,47 @@ export function setSeed(seed: number | null): void {
 
 /** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
 export function setUpscaleEnabled(enabled: boolean): void {
-  setState({ workflowModules: normalizeModules(state.workflowModules, enabled) })
+  const base = state.workflowModules.filter((module) => module.module_id !== 'upscale')
+  const kept = base.length > 0 ? base : [{ module_id: 'basic_generate' } as WorkflowModuleRef]
+  setState({
+    workflowModules: (enabled ? [...kept, { module_id: 'upscale' }] : kept).map((module) => ({ ...module })),
+  })
 }
 
-/** 生成模式切换（§二十）：文生图 / 图片生成；切换保留输入图片（回到图片模式不丢选择） */
+/** 生成模式切换（§二十 + Phase 5.1 Task6）：Primary Module 同步切换，禁止模式与模块自相矛盾 */
 export function setWorkbenchMode(mode: WorkbenchMode): void {
-  setState({ mode })
+  setState({
+    mode,
+    workflowModules: normalizeModules(state.workflowModules, mode, state.moduleCatalog),
+  })
+}
+
+/** /modules 能力目录注入（Task7：Gate 判定唯一依据 available=true；同时校正 Primary Module） */
+export function setModuleCatalog(catalog: ModuleCapabilitiesDTO[]): void {
+  setState({
+    moduleCatalog: catalog,
+    // Task6：目录到达后重新校正（历史矛盾数据 → 可用图片模块）
+    workflowModules: normalizeModules(state.workflowModules, state.mode, catalog),
+  })
+}
+
+/** 设置 Primary Module 的 config（Task3：模块参数唯一入口，如 img2img 的 denoise） */
+export function setPrimaryModuleConfig(patch: Record<string, unknown>): void {
+  const [primary, ...rest] = state.workflowModules
+  if (!primary) return
+  setState({
+    workflowModules: [{ ...primary, config: { ...(primary.config ?? {}), ...patch } }, ...rest],
+  })
 }
 
 /** 设置输入图片（§七：max=1，选择新图即替换；来源必须是 Gallery image_id） */
 export function setInputImage(imageId: string): void {
-  setState({ inputImages: [{ role: 'source', image_id: imageId }], mode: 'image' })
+  setState({
+    inputImages: [{ role: 'source', image_id: imageId }],
+    mode: 'image',
+    // 切到图片生成 → Primary Module 同步为可用图片模块（Task6）
+    workflowModules: normalizeModules(state.workflowModules, 'image', state.moduleCatalog),
+  })
 }
 
 /** 移除输入图片 */

@@ -505,6 +505,29 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_asset_reference_images_image ON asset_reference_images(image_id)",
         ),
     ),
+    Migration(
+        migration_id="0011_image_import_dedup_unique",
+        version="0.7.0",
+        description=(
+            "Phase 5.1 Task9：images(sha256) 部分唯一索引（source='import'）兜底并发导入竞态"
+        ),
+        statements=(
+            # 防御性去重：唯一索引创建前，把历史重复导入行的 sha256 置空
+            # （保留最早一行；不改文件、不删数据——重复行的图片本体仍可正常使用）
+            """
+            UPDATE images SET sha256 = NULL
+            WHERE source = 'import' AND sha256 IS NOT NULL
+              AND rowid NOT IN (
+                  SELECT MIN(rowid) FROM images
+                  WHERE source = 'import' AND sha256 IS NOT NULL
+                  GROUP BY sha256
+              )
+            """,
+            # 部分唯一索引：只约束外部导入且非空 hash 的行（引擎生成图 sha256 可为 NULL）
+            "CREATE UNIQUE INDEX uq_images_import_sha256 "
+            "ON images(sha256) WHERE source = 'import' AND sha256 IS NOT NULL",
+        ),
+    ),
 )
 
 

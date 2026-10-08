@@ -53,10 +53,31 @@ class GenerationSettingsModel(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
-class WorkflowSnapshotModel(BaseModel):
-    """工作流快照：Phase 1 为空列表，结构预留 module_id / module_version / config。"""
+class WorkflowModuleRefModel(BaseModel):
+    """正式工作流模块引用（Phase 5.1 Task1）：执行身份 + 模块配置的唯一核心契约。
 
-    modules: list[dict[str, Any]] = Field(default_factory=list)
+    禁止再把无约束 ``dict[str, Any]`` 当作核心工作流契约；字段与
+    ``frontend/src/types/workbench.ts`` 的 WorkflowModuleRef 双侧镜像。
+
+    - 普通新建工作台只携带 module_id（+ 可选 config），由后端解析当前默认身份；
+    - 从历史 Job / 配方 / 图片恢复时携带完整身份（含双指纹），提交时固定原版本精确重现；
+    - config：模块参数（如 img2img 的 denoise），经
+      Workbench → Recipe → Job.workflow_snapshot → JobStage.config_json 单链传递。
+    """
+
+    module_id: str = Field(min_length=1, max_length=64)
+    module_version: str | None = None
+    provider: str | None = None
+    binding_version: str | None = None
+    workflow_hash: str | None = None
+    binding_hash: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowSnapshotModel(BaseModel):
+    """工作流快照（执行真源）：模块执行身份列表（Phase 5.1 Task1 正式类型化）。"""
+
+    modules: list[WorkflowModuleRefModel] = Field(default_factory=list)
 
 
 class WorkbenchSnapshotModel(BaseModel):
@@ -79,7 +100,8 @@ class WorkbenchSnapshotModel(BaseModel):
     count: int = Field(default=1, ge=1, le=64)
     seed_mode: str = "random"
     seed: int | None = Field(default=None, ge=0, le=2147483647)  # "使用此图 Seed"（§四十七）；None=随机
-    workflow_modules: list[dict[str, Any]] = Field(default_factory=list)
+    # Phase 5.1 Task1：工作流模块正式契约（module_id + 可选执行身份 + 模块 config）
+    workflow_modules: list[WorkflowModuleRefModel] = Field(default_factory=list)
     source_prompt_id: str | None = None
     source_prompt_version_id: str | None = None
 

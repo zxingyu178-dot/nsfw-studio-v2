@@ -1,4 +1,4 @@
-# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5，v0.6.0）
+# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 5.1，v0.7.0）
 
 > 更新：2026-10-08。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
 > Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md，
@@ -125,7 +125,7 @@ Phase 5 新增列（0010_image_inputs）：
 
 | 列 | 说明 |
 | --- | --- |
-| `images.sha256` | 外部导入文件内容哈希（去重依据；+`idx_images_sha256`）；引擎输出为 NULL |
+| `images.sha256` | 外部导入文件内容哈希（去重依据；+`idx_images_sha256`；**Phase 5.1 起 `uq_images_import_sha256` 部分唯一索引兜底并发**——`source='import' AND sha256 IS NOT NULL`）；引擎输出为 NULL |
 | `images.imported_filename` | 外部导入原始文件名（仅用于展示 / 搜索；**绝不作为文件引用**） |
 
 ### 8.3 预留列现状

@@ -146,10 +146,11 @@ export interface RecipeDTO {
   current_version: RecipeVersionDTO | null
 }
 
-/** 工作流模块执行身份（Phase 4 Task8/9）。
+/** 工作流模块执行身份（Phase 4 Task8/9；Phase 5.1 Task1 正式类型化）。
  *
- * - 普通新建工作台只携带 module_id，提交时由后端解析当前默认版本；
- * - 从历史 Job / Image / 配方恢复时携带**完整身份**（含双指纹），提交时固定原版本精确重现。
+ * - 普通新建工作台只携带 module_id（+ 可选 config），提交时由后端解析当前默认版本；
+ * - 从历史 Job / Image / 配方恢复时携带**完整身份**（含双指纹），提交时固定原版本精确重现；
+ * - config：模块参数唯一入口（如 img2img 的 denoise），经 Recipe → Job → JobStage.config_json 单链。
  */
 export interface WorkflowModuleRef {
   module_id: string
@@ -158,6 +159,7 @@ export interface WorkflowModuleRef {
   binding_version?: string
   workflow_hash?: string | null
   binding_hash?: string | null
+  config?: Record<string, unknown>
 }
 
 /** 工作台输入图片（Phase 5 §八：统一 image_id，max=1，role=source）。
@@ -196,7 +198,11 @@ export interface RecipeInputImageDTO {
   missing: boolean
 }
 
-/** WorkflowModule 能力声明（Phase 5 §十四/§二十：图片生成 Gate 判定依据） */
+/** WorkflowModule 能力声明 + 真实可用性（Phase 5 §十四/§二十；Phase 5.1 Task7）。
+ *
+ * Gate 判定唯一依据 = ``available``（registered ≠ available：
+ * 未配置 provider binding 的模块 registered=true 但 available=false）。
+ */
 export interface ModuleCapabilitiesDTO {
   module_id: string
   module_version: string
@@ -209,6 +215,11 @@ export interface ModuleCapabilitiesDTO {
   output_kind: string
   parent_policy: string
   output_cardinality: number
+  registered: boolean
+  available: boolean
+  provider: string | null
+  binding_version: string | null
+  unavailable_reason: string | null
 }
 
 /** 外部图片导入结果（Phase 5 §二十三：成功 / 已存在 / 失败 三类明细） */
@@ -470,6 +481,7 @@ export const IMAGE_SOURCE_LABEL: Record<string, string> = {
 
 export const MODULE_LABEL: Record<string, string> = {
   basic_generate: '基础生成',
+  img2img: '图生图',
   upscale: '高清放大',
 }
 

@@ -24,6 +24,9 @@ from app.core.ids import ASSET, ASSET_REFERENCE_IMAGE, ASSET_VERSION, new_id
 from app.models import ASSET_TYPES, Asset, AssetReferenceImage, AssetVersion, Image
 from app.storage.manager import StorageManager
 
+# Phase 5.1 Task8：素材版本新增时参考图的明确语义（inherit 不传图 = 沿用旧参考图）
+REFERENCE_ACTIONS = ("inherit", "set", "clear")
+
 
 @dataclass(frozen=True)
 class PreviewUpload:
@@ -215,12 +218,21 @@ def add_asset_version(
     tags: list[str] | None = None,
     preview: PreviewUpload | None = None,
     reference_image_id: str | None = None,
+    reference_action: str = "inherit",
 ) -> tuple[AssetVersion, bool]:
     """内容变化（Prompt/预览图/参考图/tags/notes 任一）→ 新 AssetVersion（旧版本永远保留）。
 
-    reference_image_id：传入即设置参考图（§十二）；不传则沿用当前版本参考图
-    （与 preview 的沿用语义一致）。
+    reference_action（Phase 5.1 Task8）明确参考图语义：
+    - ``inherit``：沿用当前版本参考图（不传图的默认行为）；
+    - ``set``：设置参考图（必须提供 reference_image_id）；
+    - ``clear``：清除参考图（新版本 reference=none，旧版本保持原参考图）。
+    历史兼容：reference_action 缺省（inherit）且传入 reference_image_id 时按 set 处理。
     """
+    if reference_action not in REFERENCE_ACTIONS:
+        raise ValidationError(
+            f"非法参考图操作: {reference_action}（仅允许 {'/'.join(REFERENCE_ACTIONS)}）",
+            code="ASSET_REFERENCE_ACTION_INVALID",
+        )
     asset = get_asset(session, asset_id)
     current = get_current_version(session, asset)
     current_reference_ids = get_reference_image_ids(session, current.id) if current else []
@@ -231,9 +243,18 @@ def add_asset_version(
     new_tags = _normalize_tags(tags) if tags is not None else (
         json.loads(current.tags_json) if current else []
     )
-    if reference_image_id is not None:
+
+    if reference_action == "clear":
+        new_reference_id = None
+    elif reference_action == "set" or reference_image_id is not None:
+        if reference_image_id is None:
+            raise ValidationError(
+                "reference_action=set 必须提供 reference_image_id", code="ASSET_REFERENCE_INVALID"
+            )
         _validate_reference_image(session, asset.type, reference_image_id)
-    new_reference_id = reference_image_id if reference_image_id is not None else current_reference_id
+        new_reference_id = reference_image_id
+    else:
+        new_reference_id = current_reference_id
 
     if current is not None and (
         new_prompt == current.prompt_text
