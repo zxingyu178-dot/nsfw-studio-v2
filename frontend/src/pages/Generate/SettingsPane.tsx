@@ -1,5 +1,6 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
 import {
+  hasUpscaleModule,
   setCount,
   setSeed,
   setSize,
@@ -42,6 +43,8 @@ export function SettingsPane() {
     state.promptMode === 'full'
       ? state.fullPrompt.trim().length > 0
       : Object.values(state.structured).some((value) => value.trim().length > 0)
+  // Task8：开关是派生值；真实状态是 workflowModules 列表（含完整执行身份）
+  const upscaleEnabled = hasUpscaleModule(state.workflowModules)
 
   function commitSize(): void {
     const width = clampDimension(widthText)
@@ -119,12 +122,12 @@ export function SettingsPane() {
           <label className="field__check">
             <input
               type="checkbox"
-              checked={state.upscaleEnabled}
+              checked={upscaleEnabled}
               onChange={(event) => setUpscaleEnabled(event.target.checked)}
             />
             ② 高清放大
           </label>
-          {state.upscaleEnabled && (
+          {upscaleEnabled && (
             <p className="muted">原图全部完成后，依次生成高清图（原图与高清保持父子关系）。</p>
           )}
         </div>

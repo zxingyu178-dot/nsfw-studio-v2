@@ -48,7 +48,10 @@ import type {
   AssetVersionDTO,
   ComposeResult,
   EngineStatusDTO,
+  HistoryBucket,
+  HistoryResponseDTO,
   ImageDTO,
+  ImageProvenanceDTO,
   ImageVersionsDTO,
   JobDTO,
   JobEventDTO,
@@ -240,6 +243,20 @@ export const jobApi = {
   },
 }
 
+// ===== History（Phase 4 Task5/6）：来源=jobs；按任务族两级归组 =====
+export interface HistoryListParams {
+  bucket?: HistoryBucket
+  source?: string | null
+  limit?: number
+  offset?: number
+}
+
+export const historyApi = {
+  list(params: HistoryListParams = {}): Promise<HistoryResponseDTO> {
+    return request(`/api/v1/history${buildQuery(params)}`)
+  },
+}
+
 // ===== Image / Gallery（Phase 2C） =====
 export interface ImageListParams {
   job_id?: string | null
@@ -285,6 +302,10 @@ export const imageApi = {
   /** 父子关系（§十九）：派生版本 / 来源原图 */
   versions(id: string): Promise<ImageVersionsDTO> {
     return request(`/api/v1/images/${id}/versions`)
+  },
+  /** Image Provenance（Task10）：来源任务 / Stage / 模块 / 双指纹 / Seed */
+  provenance(id: string): Promise<ImageProvenanceDTO> {
+    return request(`/api/v1/images/${id}/provenance`)
   },
 }
 

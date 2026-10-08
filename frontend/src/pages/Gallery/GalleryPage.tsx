@@ -6,11 +6,13 @@ import {
   ASSET_TYPES,
   IMAGE_KIND_LABEL,
   IMAGE_SOURCE_LABEL,
+  MODULE_LABEL,
   REVIEW_STATUS_LABEL,
   imageContentUrl,
   shortJobId,
   type AssetType,
   type ImageDTO,
+  type ImageProvenanceDTO,
   type ImageVersionsDTO,
   type JobDTO,
 } from '../../types/workbench'
@@ -323,6 +325,7 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [versions, setVersions] = useState<ImageVersionsDTO | null>(null)
+  const [provenance, setProvenance] = useState<ImageProvenanceDTO | null>(null)
   const [assetType, setAssetType] = useState<AssetType>('face')
   const [assetName, setAssetName] = useState(`图库-${image.id.replace(/^img_/, '').slice(0, 8)}`)
 
@@ -359,6 +362,23 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
     }
   }, [image.id])
 
+  // Task10：溯源信息（来源任务 / Seed / 管线 / 高级字段）
+  useEffect(() => {
+    let cancelled = false
+    setProvenance(null)
+    imageApi
+      .provenance(image.id)
+      .then((result) => {
+        if (!cancelled) setProvenance(result)
+      })
+      .catch(() => {
+        // 溯源信息缺失不阻塞图片查看
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [image.id])
+
   async function run(action: () => Promise<ImageDTO>, okText: string): Promise<void> {
     setBusy(true)
     setError(null)
@@ -379,8 +399,10 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
       .workbench(image.id)
       .then((result) => {
         const snapshot = { ...result.snapshot }
-        if (useSeed && image.seed !== null) {
-          snapshot.seed = image.seed
+        // Task7：seed 来自**根生成图**（result.seed），不是高清图自己的空 seed；
+        // 后端已按"追溯根生成 Job + 完整执行身份"返回快照（Task9）
+        if (useSeed && result.seed !== null) {
+          snapshot.seed = result.seed
           snapshot.seed_mode = 'fixed'
           snapshot.count = 1 // §0.4：固定 Seed 仅用于单张精确复现
         }
@@ -514,6 +536,49 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
           </button>
         </div>
 
+        {/* ===== 溯源（Task10）：默认简洁展示，高级信息折叠 ===== */}
+        {provenance && (
+          <div className="provenance">
+            <dl className="asset-detail__fields">
+              <dt>来源任务</dt>
+              <dd>{provenance.job_id ? shortJobId(provenance.job_id) : '外部导入'}</dd>
+              <dt>Seed</dt>
+              <dd>{provenance.seed ?? '—'}</dd>
+              <dt>管线</dt>
+              <dd>
+                {!provenance.job_id
+                  ? '外部导入'
+                  : provenance.kind === 'upscaled'
+                    ? `基础生成 → 高清${provenance.scale && provenance.scale > 1 ? ` ×${provenance.scale}` : ''}`
+                    : MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id ?? '—'}
+              </dd>
+            </dl>
+            <details className="provenance__advanced">
+              <summary className="muted">高级信息（来源原图 / Stage / Workflow 版本）</summary>
+              <dl className="asset-detail__fields">
+                <dt>来源原图</dt>
+                <dd>{provenance.parent_image_id ?? '（本身为原图）'}</dd>
+                <dt>Stage</dt>
+                <dd>{provenance.stage_index ?? '—'}</dd>
+                <dt>模块</dt>
+                <dd>
+                  {provenance.module_id ?? '—'}
+                  {provenance.module_version ? ` ${provenance.module_version}` : ''}
+                </dd>
+                <dt>引擎 / Binding</dt>
+                <dd>
+                  {provenance.provider ?? '—'}
+                  {provenance.binding_version ? ` ${provenance.binding_version}` : ''}
+                </dd>
+                <dt>workflow_hash</dt>
+                <dd>{provenance.workflow_hash ?? '—'}</dd>
+                <dt>binding_hash</dt>
+                <dd>{provenance.binding_hash ?? '—'}</dd>
+              </dl>
+            </details>
+          </div>
+        )}
+
         <div className="drawer__meta-actions">
           <button
             type="button"
@@ -526,10 +591,11 @@ function GalleryDetailDrawer({ image, onClose, onUpdated, onSelectImage, onUpsca
           <button
             type="button"
             className="btn btn--sm"
-            disabled={!image.job_id || image.seed === null}
+            // Task7：Seed 取根生成图（result.seed），高清图/派生图自身可能为 null
+            disabled={!image.job_id}
             onClick={() => openInWorkbench(true)}
           >
-            使用此图 Seed
+            使用原图 Seed
           </button>
           <button
             type="button"

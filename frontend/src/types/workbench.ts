@@ -104,7 +104,7 @@ export interface GenerationSettingsDTO {
 }
 
 export interface WorkflowSnapshotDTO {
-  modules: Record<string, unknown>[]
+  modules: WorkflowModuleRef[]
 }
 
 export interface RecipeAssetSnapshotDTO {
@@ -144,6 +144,20 @@ export interface RecipeDTO {
   current_version: RecipeVersionDTO | null
 }
 
+/** 工作流模块执行身份（Phase 4 Task8/9）。
+ *
+ * - 普通新建工作台只携带 module_id，提交时由后端解析当前默认版本；
+ * - 从历史 Job / Image / 配方恢复时携带**完整身份**（含双指纹），提交时固定原版本精确重现。
+ */
+export interface WorkflowModuleRef {
+  module_id: string
+  module_version?: string
+  provider?: string
+  binding_version?: string
+  workflow_hash?: string | null
+  binding_hash?: string | null
+}
+
 /** 统一工作台快照（规范 §五十二）：Prompt / Asset / Recipe（未来 Image / Agent）共用 */
 export interface WorkbenchSnapshot {
   prompt_mode: PromptMode
@@ -156,7 +170,7 @@ export interface WorkbenchSnapshot {
   count: number
   seed_mode: string
   seed?: number | null
-  workflow_modules: Record<string, unknown>[]
+  workflow_modules: WorkflowModuleRef[]
   source_prompt_id?: string | null
   source_prompt_version_id?: string | null
 }
@@ -211,6 +225,8 @@ export interface JobStageItemDTO {
   item_index: number
   input_image_id: string | null
   output_image_id: string | null
+  /** Phase 4 Task3：本 StageItem 实际使用的 Seed（uses_seed=false 的 Stage 为 null） */
+  seed: number | null
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
   engine_job_id: string | null
   progress: number | null
@@ -230,6 +246,7 @@ export interface JobStageDTO {
   provider: string | null
   binding_version: string | null
   workflow_hash: string | null
+  binding_hash: string | null
   status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
   total_count: number
   completed_count: number
@@ -253,12 +270,13 @@ export interface JobDTO {
   structured_prompt: StructuredPrompt
   workbench_snapshot: WorkbenchSnapshot
   generation_settings: Record<string, unknown>
-  workflow_snapshot: Record<string, unknown>
+  workflow_snapshot: WorkflowSnapshotDTO
   module_id: string | null
   module_version: string | null
   provider: string | null
   binding_version: string | null
   workflow_hash: string | null
+  binding_hash: string | null
   requested_count: number
   completed_count: number
   queue_position: number | null
@@ -324,6 +342,46 @@ export interface JobEventDTO {
   time: string
 }
 
+// ===== Phase 4：History（Task5/6） =====
+
+export type HistoryBucket = 'all' | 'active' | 'completed' | 'failed' | 'cancelled'
+
+/** 历史任务族：原任务 + 其续跑任务（两级归组，Task6） */
+export interface HistoryEntryDTO {
+  root_job_id: string
+  root: JobDTO
+  resumes: JobDTO[]
+}
+
+export interface HistoryResponseDTO {
+  items: HistoryEntryDTO[]
+  total: number
+  limit: number
+  offset: number
+}
+
+// ===== Phase 4：Image Provenance（Task10） =====
+
+export interface ImageProvenanceDTO {
+  image_id: string
+  kind: string
+  parent_image_id: string | null
+  root_image_id: string
+  scale: number | null
+  job_id: string | null
+  job_item_id: string | null
+  stage_id: string | null
+  stage_index: number | null
+  stage_item_id: string | null
+  module_id: string | null
+  module_version: string | null
+  provider: string | null
+  binding_version: string | null
+  workflow_hash: string | null
+  binding_hash: string | null
+  seed: number | null
+}
+
 // ===== Phase 2 展示标签 =====
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   QUEUED: '排队中',
@@ -359,6 +417,21 @@ export const IMAGE_SOURCE_LABEL: Record<string, string> = {
 export const MODULE_LABEL: Record<string, string> = {
   basic_generate: '基础生成',
   upscale: '高清放大',
+}
+
+export const JOB_SOURCE_LABEL: Record<string, string> = {
+  web: 'Web',
+  resume: '续跑',
+  agent: 'Agent',
+  doubao: 'Doubao',
+}
+
+export const HISTORY_BUCKET_LABEL: Record<HistoryBucket, string> = {
+  all: '全部',
+  active: '进行中',
+  completed: '完成',
+  failed: '失败',
+  cancelled: '取消',
 }
 
 export const IMAGE_KIND_LABEL: Record<string, string> = {

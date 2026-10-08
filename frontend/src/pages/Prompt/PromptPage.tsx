@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { HistoryTab } from './HistoryTab'
 import { PromptTab } from './PromptTab'
 import { RecipeTab } from './RecipeTab'
 
 type PromptPageTab = 'prompts' | 'recipes' | 'history'
 
-/** 提示词页（规范 §三十七）：[我的 Prompt] [配方] [历史] */
+/** 提示词页（规范 §三十七）：[我的 Prompt] [配方] [历史]（Phase 4 Task5：历史正式接 Job） */
 export default function PromptPage() {
   const [tab, setTab] = useState<PromptPageTab>('prompts')
 
@@ -42,12 +43,7 @@ export default function PromptPage() {
 
       {tab === 'prompts' && <PromptTab />}
       {tab === 'recipes' && <RecipeTab />}
-      {tab === 'history' && (
-        <div className="empty-state">
-          <h1 className="empty-state__title">暂无生成历史</h1>
-          <p className="empty-state__desc">任务系统接入后自动记录。</p>
-        </div>
-      )}
+      {tab === 'history' && <HistoryTab />}
     </section>
   )
 }

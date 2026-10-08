@@ -9,6 +9,7 @@ import {
   type SelectedAssetRef,
   type StructuredPrompt,
   type WorkbenchSnapshot,
+  type WorkflowModuleRef,
 } from '../types/workbench'
 
 export interface WorkbenchState {
@@ -22,8 +23,12 @@ export interface WorkbenchState {
   count: number
   seedMode: 'random' | 'fixed'
   seed: number | null
-  /** 工作流开关（§十五）：开启后 Pipeline = basic_generate → upscale */
-  upscaleEnabled: boolean
+  /**
+   * 工作流模块列表（Phase 4 Task8）：真实状态是模块列表，不是 upscaleEnabled 布尔。
+   * Phase 5 增加 Reference 时只需在列表里多一个 Module（状态层不需要改）。
+   * 普通新建：只携带 module_id；历史恢复（Task9）：携带完整执行身份。
+   */
+  workflowModules: WorkflowModuleRef[]
   sourcePromptId: string | null
   sourcePromptVersionId: string | null
   sourceRecipeId: string | null
@@ -41,7 +46,7 @@ function initialState(): WorkbenchState {
     count: 1,
     seedMode: 'random',
     seed: null,
-    upscaleEnabled: false,
+    workflowModules: [{ module_id: 'basic_generate' }],
     sourcePromptId: null,
     sourcePromptVersionId: null,
     sourceRecipeId: null,
@@ -69,14 +74,19 @@ export function useWorkbench(): WorkbenchState {
   return useSyncExternalStore(subscribeWorkbench, getWorkbenchState)
 }
 
-/** 工作流模块列表（§五/§十五）：开关决定 Pipeline，而不是前端任意拼结构 */
-export function workflowModulesFor(upscaleEnabled: boolean): Record<string, unknown>[] {
-  return upscaleEnabled
-    ? [{ module_id: 'basic_generate' }, { module_id: 'upscale' }]
-    : []
+/** 派生值：高清放大是否开启（Task8：供 UI/进度展示，不再作为唯一状态） */
+export function hasUpscaleModule(modules: WorkflowModuleRef[]): boolean {
+  return modules.some((module) => module.module_id === 'upscale')
 }
 
-/** 当前状态 → 统一快照（保存 Prompt / 保存配方时使用） */
+/** 保证模块列表始终包含基础生成，并按 Pipeline 固定顺序排列（基础生成 → 高清） */
+function normalizeModules(modules: WorkflowModuleRef[], upscale: boolean): WorkflowModuleRef[] {
+  const base = modules.filter((module) => module.module_id !== 'upscale')
+  const withBase = base.length > 0 ? base : [{ module_id: 'basic_generate' } as WorkflowModuleRef]
+  return upscale ? [...withBase, { module_id: 'upscale' }] : withBase
+}
+
+/** 当前状态 → 统一快照（保存 Prompt / 保存配方时使用；模块身份原样保留，Task9） */
 export function snapshotFromState(): WorkbenchSnapshot {
   return {
     prompt_mode: state.promptMode,
@@ -89,18 +99,15 @@ export function snapshotFromState(): WorkbenchSnapshot {
     count: state.count,
     seed_mode: state.seedMode,
     seed: state.seedMode === 'fixed' ? state.seed : null,
-    workflow_modules: workflowModulesFor(state.upscaleEnabled),
+    workflow_modules: state.workflowModules.map((module) => ({ ...module })),
     source_prompt_id: state.sourcePromptId,
     source_prompt_version_id: state.sourcePromptVersionId,
   }
 }
 
-/** 整体注入快照（Prompt / Recipe → 工作台，100% 恢复，含高清开关 §十六） */
+/** 整体注入快照（Prompt / Recipe / Image / History → 工作台，100% 恢复，含模块身份 §十六/Task9） */
 export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: string | null = null): void {
-  const modules = snapshot.workflow_modules ?? []
-  const upscaleEnabled = modules.some(
-    (module) => (module as { module_id?: string }).module_id === 'upscale',
-  )
+  const modules = (snapshot.workflow_modules ?? []) as WorkflowModuleRef[]
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
@@ -113,7 +120,7 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     // Seed 默认 random；仅"使用此图 Seed"等显式固定时才恢复固定值（规范 §四十七）
     seedMode: typeof snapshot.seed === 'number' ? 'fixed' : 'random',
     seed: typeof snapshot.seed === 'number' ? snapshot.seed : null,
-    upscaleEnabled,
+    workflowModules: normalizeModules(modules, hasUpscaleModule(modules)).map((module) => ({ ...module })),
     sourcePromptId: snapshot.source_prompt_id ?? null,
     sourcePromptVersionId: snapshot.source_prompt_version_id ?? null,
     sourceRecipeId,
@@ -166,9 +173,9 @@ export function setSeed(seed: number | null): void {
   setState({ seedMode: 'random', seed: null })
 }
 
-/** 工作流开关（§十五）：② 高清放大 */
+/** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
 export function setUpscaleEnabled(enabled: boolean): void {
-  setState({ upscaleEnabled: enabled })
+  setState({ workflowModules: normalizeModules(state.workflowModules, enabled) })
 }
 
 /**
