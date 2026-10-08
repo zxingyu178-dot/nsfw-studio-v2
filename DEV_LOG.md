@@ -1,5 +1,61 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-08 — Phase 4：History + Provenance + Generic Module I/O Contract（v0.5.0）
+
+**执行**：TRAE Code Agent（feature/phase4-history-provenance → develop → CI → main → CI → tag v0.5.0）。
+本阶段不增加新的生成模型能力（Img2Img / Reference / FaceID / ControlNet / 视频 / Agent / 手机端
+全部留待 Phase 5）。
+
+### 交付
+
+- **Task 0（P0 修复）**：复现"v0.3.2 QUEUED Job 经 0007 升级后 job_stages=0 → Worker 领取即 FAILED"；
+  新增 `0008_pipeline_backfill`（`jobs WHERE NOT EXISTS job_stages` → Stage0/StageItem 回填，
+  身份继承 Job 列、状态映射、output_image_id=JobItem.image_id、**不改历史 Job 状态**）+
+  `0009_execution_fingerprint`（jobs/job_stages.binding_hash + job_stage_items.seed + 历史假 Seed 修正）；
+  迁移框架支持 callable statement（单事务数据迁移）。
+- **Task 1**：binding_hash（sha256(binding.yaml)[:16]）进入 EngineBindingRef / Job / JobStage /
+  workflow_snapshot / Job & Stage API / Image metadata；双指纹校验（WORKFLOW_HASH_MISMATCH /
+  BINDING_HASH_MISMATCH）+ binding 自描述校验（BINDING_IDENTITY_MISMATCH）；老 Job binding_hash=null 兼容。
+- **Task 2/3**：ModuleCapabilities 新增 uses_seed / input_kind / output_kind / parent_policy /
+  output_cardinality；ImageService 按能力判定 kind/parent；删除"input_image 推断 upscaled"；
+  JobStageItem.seed 正式化（basic 真实 Seed、upscale NULL、manual upscale Image.seed=null）。
+- **Task 4**：EngineAdapter `upload_input_image()` 正式契约（默认 ENGINE_INPUT_UNSUPPORTED，系统性）；
+  ComfyUI/Mock 实现（同名登记）；UpscaleModule 删除 getattr；构建请求阶段的系统性错误与提交阶段一致。
+- **Task 5/6**：`GET /api/v1/history`（来源=jobs，bucket/source 筛选，resume 族归组 root_job_id）；
+  前端 HistoryTab（任务卡 / 筛选 / Drawer：完整 Prompt/结构化/尺寸/Seed/Workflow stages/错误/图片 +
+  打开工作台 / 看图库 / 继续剩余图片）。
+- **Task 7/9**：派生图 → 沿 parent_image_id 追溯根生成 Job 恢复工作台配置（导入图 → 404
+  IMAGE_NO_GENERATION_CONTEXT）；"使用原图 Seed"；恢复快照携带完整执行身份，提交时固定原版本
+  （resolve_workflow_modules 支持 pinned identity，指纹/provider 不一致拒绝）。
+- **Task 8**：前端状态 `workflowModules: WorkflowModuleRef[]`（upscaleEnabled 变派生值）。
+- **Task 10**：`GET /api/v1/images/{id}/provenance`（parent/root/scale/job/stage/module/双指纹/seed）；
+  图库详情默认简洁（来源任务 / Seed / 管线）+ 高级信息折叠。
+- **Task 11**：Studio Input Registry（DataRoot/engine_inputs.json）+ 启动 TTL 清理
+  （只处理 NSFWStudio_inputs 下、已登记、无 RUNNING/INTERRUPTED 引用、超过 TTL 的文件；
+  未配置 comfyui.input_dir 安全跳过）；本机 config.local.yaml 补 output_dir/input_dir/input_ttl_seconds。
+- **文档**：新增 PROVENANCE_SPEC / HISTORY_SPEC / MODULE_IO_CONTRACT / MIGRATION_0008_BACKFILL /
+  PHASE4_REPORT；同步 PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_MODULE / COMFY_ADAPTER /
+  IMAGE_MODEL / WORKBENCH_STATE / DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN / JOB_STATE_MACHINE /
+  RECOVERY_SPEC / README / AGENTS；版本 0.4.0 → 0.5.0（后端/前端/configs 同步）。
+
+### 验证
+
+- 快速套件 **168 passed**（147 基线 + 21 新增；--ignore 集成）；
+- 前端 `npm run build` 通过（tsc + vite，v0.5.0）；
+- 真实 ComfyUI 最短 smoke（Task13）：1 张基础（768×1024，seed=1501957504）→ 4x 高清
+  （3072×4096，seed=null，parent 正确）→ History 任务族 → Gallery 父子 → 从高清图打开工作台
+  （恢复原 Prompt + 双指纹身份）；两 Stage 双指纹/时间线见 docs/PHASE4_REPORT.md；
+- 未执行：真实集成测试套件（3 例）——合同 Task13 明确不做批量真实生图，
+  由上述最短 smoke 替代（如实标注）。
+
+### 环境（如实记录）
+
+- 本阶段真实验收时 ComfyUI 队列为空、V1 批量任务处于取消状态（用户侧 13:05 取消），
+  smoke 直接使用空闲 ComfyUI；未触碰用户手工任务与其它 AIHome 服务；
+- smoke 使用独立临时 DataRoot（temp/nsfw-studio-v2-p4-smoke-data），不触碰正式数据目录；
+- 发布完成后按既定方针恢复夜间批量（V1 重提交 + 千问外部批量），步骤沿用
+  temp/nightbatch_restore_notes.md。
+
 ## 2026-10-08 — Phase 3：Multi-stage Pipeline + Upscale（v0.4.0）
 
 **执行**：TRAE Code Agent（feature/phase3-pipeline-upscale → develop → CI → main → CI → tag v0.4.0）

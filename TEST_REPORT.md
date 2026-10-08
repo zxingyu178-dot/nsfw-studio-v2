@@ -1,4 +1,51 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3（2026-10-08）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4（2026-10-08）
+
+## Phase 4 测试（v0.5.0，History + Provenance + Generic Module I/O Contract）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：168 passed**（v0.4.0 的 147 例 + Phase 4 新增 21 例；Phase 3 12 场景与 Phase 2.x 回归全绿）。
+
+| 新增用例 | 覆盖点 |
+| --- | --- |
+| test_phase4_backfill.py 1 例 | **真实 v0.3.2 库**（0001~0006）含 COMPLETED / QUEUED / PAUSED / INTERRUPTED 四种 Job：升级 0007+0008+0009 后每个 Job 有 1 个 Stage（身份继承 job 列）+ 对应 StageItem；状态/图片关系/engine_job_id 映射正确；StageItem.seed 回填；**历史 Job 状态不被改变**；启动应用后 QUEUED Job 被同一 Worker 真实执行 → COMPLETED |
+| test_phase4_contract.py 12 例 | ① 能力声明（basic/upscale 的 uses_seed/input_kind/output_kind/parent_policy/output_cardinality）；② StageItem 上有 input_image_id 也按能力落 original（回归删除推断）；③ basic StageItem 真实 Seed / upscale StageItem 与 manual upscale Image.seed 为 NULL；④ EngineAdapter 正式输入契约（Mock 上传 + 登记；Unbound → ENGINE_INPUT_UNSUPPORTED 且系统性；执行路径 Job FAILED + 队列暂停）；⑤ binding_hash 进入 Job/Stage/快照/API；⑥ BINDING_HASH_MISMATCH 执行期系统性；⑦ resolve_workflow_modules：普通新建解析当前身份 / 完整身份固定原版本 / 指纹被改拒绝 / 老 Job null 兼容 / provider 不匹配拒绝 / mock 下 pinned 透传；⑧ Input Registry：TTL 清理只删登记过且无 RUNNING 引用的 Studio 文件、非 Studio 路径与未到期文件保留、未配置 input_dir 跳过、Mock 上传登记 |
+| test_phase4_history_provenance.py 8 例 | ① History：Web+两级续跑链（A→B→C）归组为同一任务族；bucket（all/active/completed/failed/cancelled）与 source（web/resume/agent）筛选；非法筛选 4xx；② 续跑操作聚合仍归族；③ 派生图（高清）打开工作台 → 恢复根生成 Job 的 Prompt + 完整模块身份 + 根图 Seed；④ 图库手动高清（process Job）→ 追溯原生成配置而非空 Prompt；⑤ 外部导入图 → 404 IMAGE_NO_GENERATION_CONTEXT；⑥ Provenance 全链路（高清：stage_index=1/upscale/seed=null；原图：stage_index=0/basic/真实 seed；导入图：全空） |
+| test_comfyui_binding.py（更新 + 新增 3 例） | 双指纹溯源（binding_identity 返回 3 元组）；BINDING_HASH_MISMATCH；binding 自描述不一致拒绝；**只改 binding.yaml（workflow.json 不动）→ binding_hash 必变且老 Job 拒绝**；一个 Adapter 动态加载 |
+| test_comfyui_resilience.py / test_migration_upgrade.py（更新） | load_binding 返回 4 元组（v2 fixture 含 binding_hash）；升级路径补 0008/0009 |
+
+### 全量套件
+
+本阶段**未重跑**真实集成套件（test_comfyui_integration.py 3 例）——合同 Task13 明确"不再跑批量
+3/8 张"，真实链路由下述最短 smoke 覆盖（如实标注）。
+
+### 真实 ComfyUI 最短 smoke（Task13：1 基础 → 1 真实高清 → History → Gallery → 高清图打开工作台）
+
+| 检查点 | 结果 |
+| --- | --- |
+| 1 张基础生成（768×1024） | ✅ 真实 Qwen-Image 2.1 UC（冷启动约 10.7 分钟）；seed=1501957504；StageItem.seed 落库 |
+| 4x 高清 | ✅ 3072×4096（15.4MB）；StageItem.seed=null；Image.seed=null；parent 指向原图 |
+| Stage 双指纹 | ✅ basic f45c54cbd48ab058/a7911ab7a6c1d1be；upscale 8232a833dc049803/6a7a21944d428ef6 |
+| History | ✅ completed 筛选命中任务族（root=job_80aa15cb…） |
+| Gallery 父子 | ✅ versions.children=[高清]；高清入 images/upscaled/ |
+| 高清图 → 工作台 | ✅ 恢复原 full_prompt + 根图 Seed + 完整执行身份（双指纹）；seed_mode=random |
+| Provenance | ✅ stage_index=1 / module=upscale / provider=comfyui / seed=null |
+| 输入登记 | ✅ DataRoot/engine_inputs.json 记录 NSFWStudio_inputs/<img_id>.png（Task11 真实生效） |
+
+smoke 脚本与日志：`temp/smoke_phase4.py`、`temp/smoke_phase4.log`（临时证据，不进仓库）。
+
+### 前端
+
+`npm run build`：tsc --noEmit 通过 + vite build 通过（v0.5.0）。
+
+### 未验证 / 限制（如实标注）
+
+- 真实集成套件 3 例未重跑（见上；smoke 已覆盖真实生成+高清主链路）；
+- History 页面 / 图库溯源 UI 为前端构建级验证 + API 级断言，未做浏览器逐步点击验收；
+- Input Registry TTL 清理在真实运行中已验证"登记 + 不误删"（无到期文件可删），
+  到期删除行为由离线单测覆盖。
 
 ## Phase 3 测试（v0.4.0，Multi-stage Pipeline + Upscale）
 

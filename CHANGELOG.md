@@ -2,6 +2,77 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.5.0] — 2026-10-08
+
+### Added（Phase 4：History + Provenance + Generic Module I/O Contract）
+
+- **历史正式可用**：`GET /api/v1/history`（来源 = jobs 表，不另建 History 表）+
+  提示词页"历史"Tab：任务卡（时间/来源/Prompt 摘要/状态/数量/Pipeline/续跑标记）、
+  基础筛选（全部/进行中/完成/失败/取消 + 来源）、右侧 Drawer（完整 Prompt / Negative /
+  结构化字段 / 尺寸 / Seed / Workflow stages 与版本 / 错误 / 生成图片缩略图 +
+  在生成工作台打开 / 在图库查看 / 继续剩余图片）。
+- **续跑归组（Task6）**：沿 `resume_of_job_id` 归组为任务族（`root_job_id` 计算字段），
+  A → B → C 续跑链在历史中显示为一个任务族（两级展示，不建复杂树）。
+- **Image Provenance（Task10）**：`GET /api/v1/images/{id}/provenance` 返回
+  parent/root/scale/job/stage/module/版本/双指纹/Seed；图库详情简洁展示 + 高级信息折叠。
+- **派生图 → 工作台追溯根生成 Job（Task7）**：任何派生图（原图/高清/未来处理图）都恢复
+  **根生成图所属 generate Job** 的配置；图库手动高清后的高清图不再恢复到 process Job 的空 Prompt；
+  外部导入图明确返回 `IMAGE_NO_GENERATION_CONTEXT`（"没有可恢复的生成配置"）；
+  "使用此图 Seed"改为"使用原图 Seed"（根图 Seed，高清图自身 seed 为 null）。
+- **执行身份恢复（Task9）**：Image / History / 配方恢复出的 `workflow_modules` 携带完整身份
+  （module/version/provider/binding_version/双指纹）；提交时按**原版本固定执行**，
+  指纹不一致或 provider 不匹配直接拒绝（400），绝不静默升级到当前默认 Workflow。
+- **前端 WorkflowModuleRef[] 列表化（Task8）**：工作台状态由 `upscaleEnabled` 布尔升级为
+  `workflowModules: WorkflowModuleRef[]`（开关为派生值）；Phase 5 增加 Reference 只需列表加一项。
+- **Module I/O 正式契约（Task2）**：ModuleCapabilities 新增
+  `uses_seed / input_kind / output_kind / parent_policy / output_cardinality`；
+  basic_generate `uses_seed=true, none→original, 无 parent`；upscale `uses_seed=false,
+  image→upscaled, parent=input_image`；ImageService 按能力落库，**删除"有 input_image 就推断
+  upscaled"的规则**（docs/MODULE_IO_CONTRACT.md）。
+- **StageItem.seed（Task3）**：JobStageItem 新增真实 Seed（执行前落库；uses_seed=false 的 Stage
+  为 NULL）；`JobItem.seed` 保留为基础生成快捷字段；图库手动高清不再产生"假 Seed"。
+- **EngineAdapter 输入图片正式契约（Task4）**：`upload_input_image()` 进入基类契约
+  （默认 `ENGINE_INPUT_UNSUPPORTED`，系统性）；ComfyUI / Mock 实现；UpscaleModule 删除 getattr
+  duck typing；"构造引擎请求"阶段的系统性错误与提交阶段一致触发队列暂停。
+- **binding_hash 执行指纹（Task1）**：`sha256(binding.yaml)[:16]` 与 workflow_hash 并列，
+  进入 EngineBindingRef / Job / JobStage / workflow_snapshot / API / Image metadata；
+  binding.yaml 改动（inputs/defaults/save_image_node/save_image_prefix 等）→
+  `BINDING_HASH_MISMATCH` 拒绝执行；binding 自描述（module/provider/binding_version）一致性校验。
+- **Studio Input Registry + TTL 清理（Task11）**：输入上传登记 `DataRoot/engine_inputs.json`；
+  启动时只清理 NSFWStudio_inputs 下、已登记、无 RUNNING/INTERRUPTED 引用、超过 TTL（默认 24h）
+  的文件；未配置 `comfyui.input_dir` 时安全跳过；绝不触碰其他 input 文件。
+
+### Fixed
+
+- **P0 历史 Job 无 Stage（Task0）**：v0.3.x 库执行 0007 后历史 Job 没有 Stage，
+  Worker 领取后直接 FAILED（已复现）。新增 **`0008_pipeline_backfill`**：
+  扫描 `jobs WHERE NOT EXISTS job_stages`，为每个旧 Job 回填 Stage0（basic_generate，身份继承
+  Job 列）+ 对应 StageItem（状态/engine_job_id/图片关系从 JobItem 映射），**不改变历史 Job 本身状态**；
+  并新增 **`0009_execution_fingerprint`**（jobs/job_stages.binding_hash + job_stage_items.seed +
+  历史假 Seed 修正）。升级测试使用真实 v0.3.2 数据库（COMPLETED/QUEUED/PAUSED/INTERRUPTED），
+  并验证 QUEUED Job 升级后仍可被同一 Worker 真实执行。
+- **P1/P0 workflow_hash 覆盖不全（Task1）**：此前只校验 workflow.json，
+  修改 binding.yaml（inputs/defaults/save_image_* 等）不会触发 hash 变化 → 已由 binding_hash 补齐。
+- **P1 历史页面假空态（Task5）**："任务系统接入后自动记录"占位删除，历史正式接 Job 系统。
+- **P1 派生图工作台恢复错误（Task7）**：高清处理 Job 的空 Prompt 不再被当作恢复源。
+
+### Tests
+
+- 新增 21 例：真实 v0.3.2 升级（含 QUEUED 可执行）、双指纹/自描述拒绝、能力驱动 kind/parent/seed、
+  StageItem/manual Seed、EngineAdapter 输入契约（含不支持→系统性）、History 筛选与归组、
+  派生图追溯、导入图无上下文、Provenance 全链路、Input Registry TTL 清理；
+  快速套件 147 → **168 passed**；Phase 3 的 12 场景与 Phase 2.x 回归全部继续通过。
+- 真实 ComfyUI 最短 smoke（Task13）：1 张基础图（768×1024，seed=1501957504）
+  → 4x 高清（3072×4096，seed=null，parent 正确）→ History 任务族 → Gallery 父子 →
+  从高清图打开工作台（恢复原 Prompt + 完整双指纹身份）；证据见 docs/PHASE4_REPORT.md。
+
+### Changed
+
+- 版本：0.4.0 → 0.5.0（后端 / 前端 / configs/app.yaml 同步）。
+- 文档新增 PROVENANCE_SPEC / HISTORY_SPEC / MODULE_IO_CONTRACT / MIGRATION_0008_BACKFILL / PHASE4_REPORT；
+  同步 PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_MODULE / COMFY_ADAPTER / IMAGE_MODEL /
+  WORKBENCH_STATE / DATA_MODEL_V1 / DATABASE_PLAN / API_PLAN / JOB_STATE_MACHINE / RECOVERY_SPEC。
+
 ## [0.4.0] — 2026-10-08
 
 ### Added（Phase 3：Multi-stage Pipeline + Upscale）

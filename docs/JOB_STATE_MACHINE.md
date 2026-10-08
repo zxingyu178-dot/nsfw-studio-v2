@@ -2,7 +2,9 @@
 
 > 更新：2026-10-08。权威实现在 `backend/app/services/job_service.py` 与
 > `backend/app/workers/queue_worker.py`；数据库状态是唯一事实源（SSE 只是通知）。
-> Phase 3 新增 JobStage / JobStageItem，见 `PIPELINE_STATE_MACHINE.md` 与 `PIPELINE_V2.md`。
+> Phase 3 新增 JobStage / JobStageItem，见 `PIPELINE_STATE_MACHINE.md` 与 `PIPELINE_V2.md`；
+> Phase 4 起 `JobItem.seed` 仅为"基础生成的主要 Seed / UI 快捷字段"，
+> **真实溯源以 `StageItem.seed` 为准**（uses_seed=false 的 Stage 为 NULL，见 MODULE_IO_CONTRACT.md）。
 
 ## 1. Job 状态（固定 7 个，禁止扩展）
 
@@ -67,7 +69,8 @@ POST /jobs/{id}/cancel
 - `seed_mode=fixed`（"使用此图 Seed"）：**仅用于单张精确复现**——后端要求 `count == 1`
   （fixed + count>1 → 400 `FIXED_SEED_SINGLE_ONLY`）；前端选"使用此图 Seed"自动收敛 count=1，
   用户把数量改成 >1 自动切回随机；
-- 固定 Seed 只作用于第一个（生成）Stage；后续 Stage 使用新随机数（放大链实际不使用 Seed）；
+- 固定 Seed 只作用于第一个（生成）Stage；后续 Stage 仅在模块 `uses_seed=true` 时分配新随机数，
+  放大链不使用 Seed（`StageItem.seed = NULL`，Phase 4 Task3）；
 - 禁止 `base_seed + item_index`（旧行为已删除）；
 - 范围校验在 EngineAdapter / binding（`seed_range`）侧完成；
 - 已成功 Item 的 Seed 永远保留；未完成 Item 重跑（续跑子 Job）生成新随机 Seed。

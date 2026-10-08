@@ -1,6 +1,6 @@
 # API_PLAN — API 现状与规划
 
-> 更新：2026-10-07（Phase 2，v0.3.0）。错误格式统一为 `{"error": {"code", "message"}}`。
+> 更新：2026-10-08（Phase 4，v0.5.0）。错误格式统一为 `{"error": {"code", "message"}}`。
 
 ## 1. 约定
 
@@ -70,7 +70,10 @@ GET    /api/v1/jobs/{id}                   详情（含 items 子项 + stages �
 POST   /api/v1/jobs/{id}/pause             安全暂停（当前图完成后暂停）
 POST   /api/v1/jobs/{id}/resume            继续暂停任务（已完成 Item 不重跑）
 POST   /api/v1/jobs/{id}/cancel            取消（终态；已完成图片保留）
-POST   /api/v1/jobs/{id}/resume-remaining  继续剩余图片（创建子 Job）
+POST   /api/v1/jobs/{id}/resume-remaining  继续剩余图片（创建子 Job，继承原 Workflow 身份）
+GET    /api/v1/history                     历史任务（Phase 4 Task5/6：来源=jobs；
+                                           bucket=all|active|completed|failed|cancelled + source 筛选；
+                                           按 resume_of_job_id 归组为任务族 [{root_job_id, root, resumes}]）
 GET    /api/v1/queue                       当前队列（worker/running/queued/paused）
 POST   /api/v1/queue/reorder               拖拽排序（仅等待任务，全量一一对应）
 POST   /api/v1/queue/resume                恢复队列（系统性失败自动暂停后）
@@ -88,7 +91,9 @@ GET    /api/v1/images/{id}/content         图片文件流
 GET    /api/v1/images/{id}/versions        父子关系 {image,parent,children}（§十九）
 PATCH  /api/v1/images/{id}/review          审核：KEPT / REJECTED / UNREVIEWED
 PATCH  /api/v1/images/{id}/favorite        收藏切换
-GET    /api/v1/images/{id}/workbench       Image → 工作台快照 + 该图 Seed（§四十七）
+GET    /api/v1/images/{id}/workbench       Image → 工作台（Task7：追溯根生成 Job 的快照 +
+                                           完整执行身份；返回根图 Seed）｜导入图 → 404 IMAGE_NO_GENERATION_CONTEXT
+GET    /api/v1/images/{id}/provenance      Provenance（Task10）：parent/root/job/stage/模块/双指纹/Seed（+scale）
 POST   /api/v1/images/upscale              图库已有图片高清放大（body: {image_ids:[…]}，§二十四）
                                            → 创建 job_kind=process 的普通 Job（仅 upscale Stage）
 GET    /api/v1/images/by-job/{id}/summary  按 Job 统计（§四十九）
@@ -113,9 +118,20 @@ workflow_snapshot.modules 由后端按实际模块身份写入（§四/§五）�
 未知 WorkflowModule → 400 WORKFLOW_ERROR（创建期拒绝，不是执行期才炸）
 ```
 
-## 3. 规划（Phase 4+，按需实现）
+Phase 4 Task9（创建期身份解析，固定）：
+
+```
+workflow_modules 请求项：
+  只有 module_id（普通新建）            → 解析当前默认版本（含 workflow_hash/binding_hash）
+  携带完整身份（module_version/provider/binding_version/双指纹，从历史/Image/配方恢复）
+                                        → 固定原身份；指纹不一致 → 400 BINDING_HASH_MISMATCH /
+                                          WORKFLOW_HASH_MISMATCH；provider 不匹配 → 400 BINDING_IDENTITY_MISMATCH
+  老 Job 的 binding_hash=null           → 兼容；comfyui 下采纳磁盘当前指纹
+```
+
+## 3. 规划（Phase 5+，按需实现）
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| 图生图 / 参考图 / 人脸修复 | 新增 WorkflowModule + provider binding 目录即可复用同一 Job API |
+| 图生图 / 参考图 / 人脸修复 | 新增 WorkflowModule（声明 I/O 能力，见 MODULE_IO_CONTRACT.md）+ provider binding 目录即可复用同一 Job API |
 | Agent / 豆包 / 手机端接入 | 复用同一 Job API（source=agent/doubao 已预留） |

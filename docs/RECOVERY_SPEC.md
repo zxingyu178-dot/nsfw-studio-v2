@@ -1,8 +1,10 @@
-# RECOVERY_SPEC — 崩溃恢复规范（Phase 2 + 3，v0.4.0）
+# RECOVERY_SPEC — 崩溃恢复规范（Phase 2 + 3 + 4，v0.5.0）
 
 > 更新：2026-10-08。权威实现：`queue_worker.recover_interrupted()` 与
 > `job_service.mark_interrupted_at_startup()`（应用启动时由 main.py 调用）。
 > Phase 3：恢复粒度从 JobItem 提升到 **JobStageItem**（§八），并新增文件级兜底（§九）。
+> Phase 4：v0.3.x 历史 Job 由 `0008_pipeline_backfill` 回填 StageItem 后进入同一恢复流程
+> （旧 INTERRUPTED / RUNNING 现场同样按 engine_job_id 核对）。
 
 ## 1. 原则
 
@@ -101,7 +103,9 @@ UI 侧：右栏"当前任务"卡片对 FAILED / CANCELLED / INTERRUPTED 且未�
 - `tests/backend/test_phase22_consistency.py`：恢复归并（Case A 全部完成 → Job COMPLETED /
   Case B 无法确认 → Job INTERRUPTED + completed_count 正确）；
 - `tests/backend/test_phase3_pipeline.py::test_stage2_crash_recovery`：Stage 2 崩溃恢复
-  （按 StageItem 核对、高清正确挂回原图、已完成 Stage 不重跑）。
+  （按 StageItem 核对、高清正确挂回原图、已完成 Stage 不重跑）；
+- `tests/backend/test_phase4_backfill.py`：真实 v0.3.2 库升级后
+  INTERRUPTED / RUNNING 现场按回填 StageItem 进入同一恢复流程（不被破坏、可核对）。
 
 ## 6. 不变量
 

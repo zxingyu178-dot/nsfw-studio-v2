@@ -1,5 +1,27 @@
 # TASKS — NSFW Studio V2
 
+## Phase 4：History + Provenance + Generic Module I/O Contract ✅（2026-10-08，v0.5.0）
+
+- [x] Task 0：迁移 0008_pipeline_backfill（不改 0007）——历史 Job 回填 Stage0/StageItem（身份继承 Job 列，
+  状态映射，output_image_id=JobItem.image_id，不改历史 Job 状态）；0009_execution_fingerprint（binding_hash/StageItem.seed/历史假 Seed 修正）；
+  真实 v0.3.2 库升级测试（COMPLETED/QUEUED/PAUSED/INTERRUPTED + QUEUED 升级后仍可执行）
+- [x] Task 1：binding_hash 全链路（EngineBindingRef/Job/JobStage/快照/API/Image metadata）+ BINDING_HASH_MISMATCH +
+  binding 自描述校验（module/provider/binding_version）+ 老 Job null 兼容
+- [x] Task 2：ModuleCapabilities I/O 契约（uses_seed/input_kind/output_kind/parent_policy/output_cardinality）；
+  ImageService 按能力判定 kind/parent（删除"input_image 推断 upscaled"）
+- [x] Task 3：JobStageItem.seed 正式化（basic 真实 Seed / upscale NULL / manual upscale Image.seed=null）
+- [x] Task 4：EngineAdapter upload_input_image 正式契约（默认 ENGINE_INPUT_UNSUPPORTED，系统性；ComfyUI/Mock 实现；去 getattr）
+- [x] Task 5：历史正式接 Job（GET /history + 历史 Tab：任务卡/筛选/Drawer/三操作）
+- [x] Task 6：Resume 归组（root_job_id 计算字段，A→B→C 一个任务族，两级展示）
+- [x] Task 7：派生图 → 工作台追溯根生成 Job（图库高清不再恢复空 Prompt；导入图 404 IMAGE_NO_GENERATION_CONTEXT；"使用原图 Seed"）
+- [x] Task 8：前端 workflowModules: WorkflowModuleRef[]（upscaleEnabled 变派生值）
+- [x] Task 9：Image/History/配方恢复携带完整执行身份，提交时固定原版本（指纹不一致/provider 不匹配拒绝）
+- [x] Task 10：Image Provenance API + 图库详情溯源展示（默认简洁/高级折叠）
+- [x] Task 11：Studio Input Registry + TTL 清理（只清 NSFWStudio_inputs 下登记过、无活动引用文件；未配置 input_dir 安全跳过）
+- [x] Task 12：新增 21 例测试；快速套件 147 → **168 passed**（Phase 3 12 场景 + Phase 2.x 回归全绿）
+- [x] Task 13：最短真实 smoke（1 基础 768×1024 → 4x 3072×4096 → History → Gallery → 高清图打开工作台恢复原 Prompt+双指纹身份）
+- [x] Task 14：文档 5 新增 + 12 同步；phase4-history-provenance → develop → CI 绿 → main → CI 绿 → tag v0.5.0 + 交接 ZIP 邮件
+
 ## Phase 3：Multi-stage Pipeline + Upscale ✅（2026-10-08，v0.4.0）
 
 - [x] Task 0.1：Worker 代码级意外异常 → 当前 Job/Stage INTERRUPTED + queue_paused + WORKER_INTERNAL_ERROR（CancelledError 保持原恢复逻辑）

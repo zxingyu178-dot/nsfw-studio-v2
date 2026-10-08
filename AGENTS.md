@@ -14,13 +14,16 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 3 完成，v0.4.0）
+## 3. 阶段纪律（当前 Phase 4 完成，v0.5.0）
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
 2（Job Execution Core + ComfyUIAdapter + Gallery）/
 2.1 / 2.2（执行稳定性与数据一致性收口）/
 3（Multi-stage Pipeline + Upscale：JobStage/JobStageItem、Stage Gate、UpscaleModule、
-图库高清 process Job、Image 父子关系）。
+图库高清 process Job、Image 父子关系）/
+4（History + Provenance + Generic Module I/O Contract：0008 历史 Stage 回填、
+binding_hash 双指纹、能力驱动 I/O、StageItem Seed、输入图片正式契约、历史页、溯源、
+工作台追溯根生成 Job、执行身份固定恢复）。
 
 本阶段仍禁止扩大范围实现：
 
@@ -37,8 +40,9 @@
 - **执行真源 = JobStage + workflow_snapshot**（§二十三）：Job 创建后当前配置变化不影响该 Job，
   Resume 完整继承原 Stage/Binding，禁止静默升级；
 - ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/<module>/<binding>/` 层，
-  禁止污染引擎无关层；**已投入使用的 binding 目录视为 immutable**（workflow.json 改动必须新建 v2，
-  workflow_hash 不一致会被拒绝执行）；
+  禁止污染引擎无关层；**已投入使用的 binding 目录视为 immutable**（workflow.json / binding.yaml 改动
+  必须新建 v2；workflow_hash / binding_hash 双指纹不一致会被拒绝执行）；
+  处理型模块的输入图片只走 `EngineAdapter.upload_input_image()` 正式契约（禁止 getattr duck typing）；
 - 绑定属于每次请求：QueueWorker / ComfyUIAdapter 不得固化单一模块身份（§0.2/§二十二），
   新增模块（img2img 等）只注册 WorkflowModule + 新增 binding 目录，核心执行逻辑零改动；
 - 机器信息（ComfyUI URL / 安装路径 / 输出路径）只进 `configs/config.local.yaml`（gitignore）

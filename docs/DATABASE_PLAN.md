@@ -1,6 +1,6 @@
 # DATABASE_PLAN — 数据库现状与规划
 
-> 更新：2026-10-07（Phase 2，v0.3.0）。完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
+> 更新：2026-10-08（Phase 4，v0.5.0）。完整模型见 **docs/DATA_MODEL_V1.md**（权威文档）。
 
 ## 1. 现状
 
@@ -23,13 +23,17 @@
 | 0005_job | 0.3.0 | jobs / job_items / job_events（Phase 2A） |
 | 0006_image | 0.3.0 | images（Phase 2C；文件在 DataRoot/images/originals） |
 | 0007_pipeline_stage | 0.4.0 | jobs.job_kind + job_stages / job_stage_items（Phase 3 多阶段管线） |
+| 0008_pipeline_backfill | 0.5.0 | 历史 Job 回填 Stage0/StageItem（Phase 4 Task0，数据迁移，见 MIGRATION_0008_BACKFILL.md） |
+| 0009_execution_fingerprint | 0.5.0 | jobs/job_stages.binding_hash + job_stage_items.seed + 历史假 Seed 修正（Phase 4 Task1/3） |
 
 约束：FK 全局开启；`UNIQUE(parent_id, version_no)` ×3；`UNIQUE(recipe_version_id, slot)`；
 `type / mode / slot / favorite / default_count` 均有 CHECK；
 `jobs` 有 `UNIQUE(source, client_request_id)`（幂等）与 status CHECK；
 `images` 有 `kind / review_status` CHECK；
 `job_stages` 有 `UNIQUE(job_id, stage_index)` 与 status CHECK（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）；
-升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0。
+升级路径测试覆盖 v0.1.2 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0，
+并含**真实 v0.3.2 库升级**（四种状态 Job 的 Stage 回填 + QUEUED Job 升级后可执行，
+见 tests/backend/test_phase4_backfill.py）。
 
 ### migration 状态机（Phase 0.1 修正）
 
@@ -62,10 +66,12 @@
 
 | 表 | 用途 | 关键字段 |
 | --- | --- | --- |
-| jobs | 生成任务 | id, source, client_request_id, status, prompt 快照, workbench_snapshot_json, module/provider/binding/workflow_hash, requested/completed_count, queue_position, priority, resume_of_job_id, pause/cancel_requested |
+| jobs | 生成任务 | id, source, client_request_id, status, prompt 快照, workbench_snapshot_json, module/provider/binding/workflow_hash/binding_hash, requested/completed_count, queue_position, priority, resume_of_job_id, pause/cancel_requested |
 | job_items | 每张输出 | id, job_id, item_index, status, seed, engine_job_id, current_stage, progress, image_id, error_type/message, retry_count |
 | job_events | 追加型审计 | id, job_id, job_item_id, event_type, payload_json, created_at |
 | images | 图库正式资产 | id, job_id, job_item_id, parent_image_id, kind, file_path, width/height, seed, review_status, favorite, source, metadata_json |
+| job_stages | 多阶段管线阶段 | id, job_id, stage_index, module/version/provider/binding/workflow_hash/binding_hash, status, total/completed_count, config_json |
+| job_stage_items | Stage 执行记录 | id, job_stage_id, job_item_id, item_index, input/output_image_id, seed, status, engine_job_id, progress, error/retry |
 
 设计原则：所有表带 `created_at`；图片/素材表存**相对 DataRoot 的路径**，不存绝对路径；
 JSON 字段存结构化扩展参数，为 WorkflowModule 留自由度。
@@ -73,6 +79,7 @@ Job 状态机 / 队列 / 恢复语义见 docs/JOB_STATE_MACHINE.md、QUEUE_SPEC.
 
 ## 3. 迁移策略
 
-- Phase 1 继续用内置框架：每个迁移一个 `Migration(migration_id, version, description, statements)`，只增不改。
+- Phase 1 继续用内置框架：每个迁移一个 `Migration(migration_id, version, description, statements)`，只增不改；
+  Phase 4 起 `statements` 支持 callable（`(conn) -> None`，如 0008 的数据回填），同一事务内执行、失败整体回滚。
 - 若出现需要交互/回滚的复杂迁移，再评估引入 Alembic（届时保留 `migration` 表做兼容视图）。
 - 禁止手改 `studio.db`；结构变更必须走迁移。

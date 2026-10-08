@@ -1,7 +1,8 @@
-# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2，v0.3.0）
+# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4，v0.5.0）
 
-> 更新：2026-10-07。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
-> Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md。
+> 更新：2026-10-08。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
+> Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md，
+> 多阶段管线见 docs/PIPELINE_V2.md，迁移见 docs/DATABASE_PLAN.md 与 docs/MIGRATION_0008_BACKFILL.md。
 
 ## 1. ER 图
 
@@ -96,7 +97,7 @@ jobs 1 ──── * job_items
   ├── workbench_snapshot_json     提交时固化的 WorkbenchSnapshot
   ├── positive/negative_prompt_snapshot + structured_prompt_snapshot
   ├── generation_settings_json    尺寸 / 数量 / seed_mode / seed
-  ├── module_id / module_version / provider / binding_version / workflow_hash（§五十五）
+  ├── module_id / module_version / provider / binding_version / workflow_hash / binding_hash（§五十五；Task1）
   ├── requested_count / completed_count / queue_position / priority
   ├── resume_of_job_id   → 续跑父子关系（§二十）
   ├── pause_requested / cancel_requested / error_type / error_message
@@ -109,9 +110,9 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
 - **快照纪律（§十）**：Job 提交后，Prompt / Recipe / Asset 的后续修改都不影响该 Job；
 - **Seed（§九）**：Item 执行时分配；成功 Item 的 Seed 永远保留；
   **续跑子 Job 一律新随机 Seed**（`count=remaining, seed_mode=random, seed=null`，Phase 2.1 §五）；
-- **Workflow 快照（Phase 2.1 §四）**：`workflow_snapshot_json.modules` 由后端按实际执行的模块
-  身份写入（module_id / module_version / provider / binding_version / workflow_hash），
-  不允许"执行了模块但 modules=[]"；
+- **Workflow 快照（Phase 2.1 §四；Phase 4 Task1/9）**：`workflow_snapshot_json.modules` 由后端按实际执行的
+  模块身份写入（module_id / module_version / provider / binding_version / workflow_hash / binding_hash），
+  不允许"执行了模块但 modules=[]"；从历史恢复时该快照整体作为固定身份回传，提交时按原版本执行；
 - 状态机与事件清单见 docs/JOB_STATE_MACHINE.md / docs/QUEUE_SPEC.md。
 
 ### 8.2 Image（0006_image）
@@ -127,23 +128,28 @@ images 1 ──── * parent_image_id 自引用（派生图溯源）
 | `assets.source_image_id` | ✅ Phase 2C 启用：从图库创建素材时回填 |
 | `images.parent_image_id` | ✅ Phase 3 启用：高清图（upscaled）指向来源原图 |
 | `recipes.cover_image_id` | 预留：Recipe 封面图（未启用） |
-| `asset_versions.reference_images_json` | 预留：多参考图（未启用） |
-| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding）；Phase 3 多模块动态绑定 |
+| `asset_versions.reference_images_json` | 预留：多参考图（Phase 5 Reference 时启用） |
+| `job_stage_items.seed` | ✅ Phase 4 启用：StageItem 真实 Seed（溯源以它为准） |
+| EngineAdapter / WorkflowModule | ✅ Phase 2 真实接入（ComfyUIAdapter + provider binding）；Phase 3 多模块动态绑定；Phase 4 能力驱动 I/O + 输入图片正式契约 |
 
-### 8.4 JobStage / JobStageItem（0007_pipeline_stage，Phase 3）
+### 8.4 JobStage / JobStageItem（0007_pipeline_stage，Phase 3；0008/0009，Phase 4）
 
 ```text
-JobStage（job_stages）           一个阶段（固化 module/binding/workflow_hash）
-  ├─ stage_index / module_id / module_version / provider / binding_version / workflow_hash
+JobStage（job_stages）           一个阶段（固化 module/binding/双指纹）
+  ├─ stage_index / module_id / module_version / provider / binding_version /
+  │  workflow_hash / binding_hash（Phase 4 Task1）
   ├─ status（QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED/INTERRUPTED）
   ├─ total_count / completed_count / config_json（如 execution_timeout）
   └─ JobStageItem（job_stage_items）
        ├─ job_item_id / item_index（一个逻辑槽位）
        ├─ input_image_id / output_image_id（图片流转）
+       ├─ seed（Phase 4 Task3：uses_seed=false 的 Stage 为 NULL）
        ├─ status / engine_job_id / progress / error_* / retry_count
        └─ 崩溃恢复粒度（§八）
 ```
 
 - 执行真源 = JobStage + workflow_snapshot（Job 创建后当前配置不再影响该 Job）；
 - `UNIQUE(job_id, stage_index)`；`jobs.job_kind`：generate / process；
-- 详见 `PIPELINE_V2.md` 与 `PIPELINE_STATE_MACHINE.md`。
+- 历史 Job（v0.3.x）由 `0008_pipeline_backfill` 回填 Stage0（身份继承 Job 列），
+  `0009_execution_fingerprint` 增加 binding_hash / StageItem.seed 并修正历史假 Seed；
+- 详见 `PIPELINE_V2.md`、`PIPELINE_STATE_MACHINE.md`、`MIGRATION_0008_BACKFILL.md`。

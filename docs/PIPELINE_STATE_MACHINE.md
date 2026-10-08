@@ -1,4 +1,4 @@
-# PIPELINE_STATE_MACHINE — Stage / StageItem 状态机（Phase 3 / v0.4.0）
+# PIPELINE_STATE_MACHINE — Stage / StageItem 状态机（Phase 3 + Phase 4 / v0.5.0）
 
 > Job / JobItem 状态机见 `JOB_STATE_MACHINE.md`；本文档只描述 Phase 3 新增的
 > JobStage / JobStageItem，以及它们与 Job 的归并关系。
@@ -36,6 +36,8 @@ QUEUED ──► RUNNING ──► COMPLETED      （引擎成功 + 取回输出
   禁止 `COMPLETED + output_image_id=null`。
 - `FAILED` 的 StageItem 不允许自动重试（ENGINE_TIMEOUT / OUTPUT_MISSING / STORAGE_ERROR 等）；
   仅瞬态网络错误（ENGINE_NETWORK, transient=true）在轮询/提交路径自动重试 ≤ 2 次。
+- **StageItem.seed（Phase 4 Task3）**：进入 RUNNING 前落库真实 Seed
+  （uses_seed=false 的 Stage 恒为 NULL；按 Stage 模块能力判定，见 MODULE_IO_CONTRACT.md）。
 
 ## 3. 与 Job / JobItem 的归并规则
 
@@ -67,6 +69,9 @@ JOB_RECOVERED_COMPLETED              # 恢复归并完成
 ## 5. 队列暂停（queue_paused）触发条件
 
 - 系统性引擎失败（`ENGINE_OFFLINE / OUT_OF_MEMORY / WORKFLOW_ERROR / BINDING_NOT_FOUND /
-  WORKFLOW_HASH_MISMATCH / MODEL_MISSING / NODE_MISSING`）；
+  WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH / BINDING_IDENTITY_MISMATCH /
+  ENGINE_INPUT_UNSUPPORTED / MODEL_MISSING / NODE_MISSING`）；
+  Phase 4 起"构造引擎请求"阶段的系统性错误（如上传输入图片失败/不支持）同样触发队列暂停，
+  与提交阶段行为一致；
 - Worker / 循环级代码异常（`WORKER_INTERNAL_ERROR`，§0.1）；
 - 用户处理后经 `POST /api/v1/queue/resume` 恢复。

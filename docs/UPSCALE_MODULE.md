@@ -1,11 +1,18 @@
-# UPSCALE_MODULE — 高清放大模块契约（Phase 3 §十一）
+# UPSCALE_MODULE — 高清放大模块契约（Phase 3 §十一；Phase 4 Task2/3/4 收口）
 
-## 1. 模块身份
+## 1. 模块身份与能力
 
 ```text
 module_id      = "upscale"
 module_version = "v1"
 provider       = "comfyui"（由 Job/Stage 固化身份决定）
+
+ModuleCapabilities（Phase 4 Task2）：
+  uses_seed = false        （放大链不使用随机 Seed → StageItem.seed 恒为 NULL）
+  input_kind = image       （需要输入图片）
+  output_kind = upscaled   （ImageService 据此落 kind + 存储目录）
+  parent_policy = input_image（产出物挂在输入图片下）
+  output_cardinality = 1
 ```
 
 实现：`backend/app/workflows/upscale.py`（`UpscaleModule`）。
@@ -25,11 +32,12 @@ provider       = "comfyui"（由 Job/Stage 固化身份决定）
 
 ```text
 PipelineExecutor.build_engine_request(job, stage, stage_item, seed, adapter, input_image)
-  → UpscaleModule.prepare_inputs(context, adapter)      # 上传输入图片（§十三）
-      adapter.upload_image("<image_id>.png", bytes) → 引擎侧引用名
+  → UpscaleModule.prepare_inputs(context, adapter)      # Task4 正式契约（不再是 getattr）
+      adapter.upload_input_image(image_id=…, file_name=…, data=…) → 引擎侧引用名
+      （不支持输入图片的引擎 → 基类默认实现抛 ENGINE_INPUT_UNSUPPORTED，系统性）
   → UpscaleModule.build_engine_request(context, prepared)
       parameters = {"input_image": <引擎侧引用名>}
-      binding    = context.binding（来自 JobStage 固化身份，§0.2）
+      binding    = context.binding（来自 JobStage 固化身份 + 双指纹，§0.2/Task1）
   → 提交 / 轮询 / 取输出（语义留在 QueueWorker，模块不实现队列语义）
 ```
 
