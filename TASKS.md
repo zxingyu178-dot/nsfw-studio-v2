@@ -16,7 +16,7 @@
 - [x] §二十五：多阶段测试 15 场景（顺序/Gate/暂停取消恢复/父子/process Job/内部异常/hash/超时/配方）——快速套件 144 passed；全量 147 passed（含 3 真实链路）
 - [x] §二十六：真实 ComfyUI 验收（1 张基础 640×960 → 1 张真实高清 2560×3840；图库 64×64 → 256×256）
 - [x] §二十七：文档（PIPELINE_V2 / PIPELINE_STATE_MACHINE / UPSCALE_WORKFLOW_INVENTORY / UPSCALE_MODULE / PHASE3_REPORT 新增 + 既有同步）
-- [ ] feature/phase3-pipeline-upscale → develop → CI 绿 → main → CI 绿 → tag v0.4.0 + 交接 ZIP 邮件——执行中
+- [x] feature/phase3-pipeline-upscale → develop → CI 绿（run 37724675927）→ main → CI 绿（run 37725594175）→ tag v0.4.0 + 交接 ZIP 邮件
 
 ## Phase 2.2：Data Consistency & Recovery Closure ✅（2026-10-07，v0.3.2）
 

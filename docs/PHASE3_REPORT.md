@@ -86,6 +86,13 @@
 npm run build → tsc --noEmit 通过 + vite build 通过（v0.4.0）
 ```
 
+### CI（GitHub Actions）
+
+```text
+develop: run 37724675927 → success（sha 9357891）
+main:    run 37725594175 → success（sha 9357891）
+```
+
 ## 3. 验收标准对照
 
 | 要求 | 结果 |

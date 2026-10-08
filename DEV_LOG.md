@@ -30,7 +30,8 @@
 - 全量套件 **147 passed**（含 3 条真实 ComfyUI 链路），退出码 0；
 - 真实验收：1 张基础（640×960）→ 1 张高清（**2560×3840**，4 倍，父子正确）；
   图库 64×64 → **256×256**；ComfyUI history success；输出命名 `NSFWStudio/<job>/<stage>/<item>`；
-- 前端 `npm run build` 通过（tsc + vite，v0.4.0）。
+- 前端 `npm run build` 通过（tsc + vite，v0.4.0）；
+- CI：develop run 37724675927 success；main run 37725594175 success（sha 9357891）。
 
 ### 环境（如实记录）
 
