@@ -44,7 +44,7 @@ class JobItemResponse(BaseModel):
 
 
 class JobStageItemResponse(BaseModel):
-    """StageItem：一个逻辑图片槽位在某 Stage 的实际执行记录（§二十四）。"""
+    """StageItem：一个逻辑图片槽位在某 Stage 的实际执行记录（§二十四；Phase 4 Task3 seed）。"""
 
     id: str
     job_stage_id: str
@@ -52,6 +52,7 @@ class JobStageItemResponse(BaseModel):
     item_index: int
     input_image_id: str | None
     output_image_id: str | None
+    seed: int | None
     status: str
     engine_job_id: str | None
     progress: float | None
@@ -72,6 +73,7 @@ class JobStageResponse(BaseModel):
     provider: str | None
     binding_version: str | None
     workflow_hash: str | None
+    binding_hash: str | None
     status: str
     total_count: int
     completed_count: int
@@ -101,6 +103,7 @@ class JobResponse(BaseModel):
     provider: str | None
     binding_version: str | None
     workflow_hash: str | None
+    binding_hash: str | None
     requested_count: int
     completed_count: int
     queue_position: int | None
@@ -134,6 +137,23 @@ class QueueResponse(BaseModel):
     paused: list[JobResponse]
 
 
+# ===== History（Phase 4 Task5/6：历史来源 = jobs，不另建 History 表；两级归组） =====
+
+class HistoryEntryResponse(BaseModel):
+    """历史任务族：原任务 + 其续跑任务（Task6 两级归组，不实现复杂树）。"""
+
+    root_job_id: str
+    root: JobResponse
+    resumes: list[JobResponse]
+
+
+class HistoryResponse(BaseModel):
+    items: list[HistoryEntryResponse]
+    total: int  # 命中筛选的任务族数量
+    limit: int
+    offset: int
+
+
 def job_item_response(item: JobItem) -> JobItemResponse:
     return JobItemResponse(
         id=item.id, job_id=item.job_id, item_index=item.item_index, status=item.status,
@@ -148,7 +168,7 @@ def _stage_item_response(stage_item: JobStageItem) -> JobStageItemResponse:
     return JobStageItemResponse(
         id=stage_item.id, job_stage_id=stage_item.job_stage_id, job_item_id=stage_item.job_item_id,
         item_index=stage_item.item_index, input_image_id=stage_item.input_image_id,
-        output_image_id=stage_item.output_image_id, status=stage_item.status,
+        output_image_id=stage_item.output_image_id, seed=stage_item.seed, status=stage_item.status,
         engine_job_id=stage_item.engine_job_id, progress=stage_item.progress,
         error_type=stage_item.error_type, error_message=stage_item.error_message,
         retry_count=stage_item.retry_count, started_at=stage_item.started_at,
@@ -170,6 +190,7 @@ def job_stage_response(stage: JobStage) -> JobStageResponse:
         id=stage.id, stage_index=stage.stage_index, module_id=stage.module_id,
         module_version=stage.module_version, provider=stage.provider,
         binding_version=stage.binding_version, workflow_hash=stage.workflow_hash,
+        binding_hash=stage.binding_hash,
         status=stage.status, total_count=stage.total_count, completed_count=stage.completed_count,
         current_item=running.item_index if running is not None else None, progress=progress,
         created_at=stage.created_at, started_at=stage.started_at, finished_at=stage.finished_at,
@@ -190,6 +211,7 @@ def job_response(job: Job, items: list[JobItem] | None = None) -> JobResponse:
         workflow_snapshot=json.loads(job.workflow_snapshot_json),
         module_id=job.module_id, module_version=job.module_version, provider=job.provider,
         binding_version=job.binding_version, workflow_hash=job.workflow_hash,
+        binding_hash=job.binding_hash,
         requested_count=job.requested_count, completed_count=job.completed_count,
         queue_position=job.queue_position, priority=job.priority,
         resume_of_job_id=job.resume_of_job_id,

@@ -61,6 +61,70 @@ def get_versions(session: Session, image_id: str) -> dict[str, Any]:
     return {"image": image, "parent": parent, "children": children}
 
 
+def root_image_of(session: Session, image: Image) -> Image:
+    """沿 parent_image_id 向上找到根图（original / 外部导入），带环保护。"""
+    root = image
+    visited: set[str] = {image.id}
+    while root.parent_image_id:
+        if root.parent_image_id in visited:
+            break  # 环保护（防御性；正常数据不可能）
+        parent = session.get(Image, root.parent_image_id)
+        if parent is None:
+            break
+        visited.add(parent.id)
+        root = parent
+    return root
+
+
+def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
+    """Image Provenance（Task10）：返回图片的完整溯源信息（含 module/binding/双指纹/seed）。
+
+    直接执行来源（job/stage）优先于 metadata 快照；老图片（无 StageItem）回落 metadata。
+    """
+    image = get_image(session, image_id)
+    root = root_image_of(session, image)
+    parent = session.get(Image, image.parent_image_id) if image.parent_image_id else None
+    metadata = json.loads(image.metadata_json or "{}")
+
+    stage_item = None
+    if image.job_item_id:
+        stage_item = session.execute(
+            select(JobStageItem).where(JobStageItem.output_image_id == image.id)
+        ).scalars().first()
+        if stage_item is None:
+            # 兜底：取该 JobItem 最后一个 StageItem（历史上唯一的产出 Stage）
+            stage_item = session.execute(
+                select(JobStageItem)
+                .join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+                .where(JobStageItem.job_item_id == image.job_item_id)
+                .order_by(JobStage.stage_index.desc())
+            ).scalars().first()
+    stage = session.get(JobStage, stage_item.job_stage_id) if stage_item is not None else None
+
+    scale = None
+    if parent is not None and parent.width > 0 and image.width > 0 and parent.width != image.width:
+        scale = max(1, round(image.width / parent.width))
+    return {
+        "image_id": image.id,
+        "kind": image.kind,
+        "parent_image_id": image.parent_image_id,
+        "root_image_id": root.id,
+        "scale": scale,
+        "job_id": image.job_id,
+        "job_item_id": image.job_item_id,
+        "stage_id": stage.id if stage is not None else metadata.get("stage_id"),
+        "stage_index": stage.stage_index if stage is not None else metadata.get("stage_index"),
+        "stage_item_id": stage_item.id if stage_item is not None else metadata.get("stage_item_id"),
+        "module_id": stage.module_id if stage is not None else metadata.get("module_id"),
+        "module_version": stage.module_version if stage is not None else metadata.get("module_version"),
+        "provider": stage.provider if stage is not None else metadata.get("provider"),
+        "binding_version": stage.binding_version if stage is not None else metadata.get("binding_version"),
+        "workflow_hash": stage.workflow_hash if stage is not None else metadata.get("workflow_hash"),
+        "binding_hash": stage.binding_hash if stage is not None else metadata.get("binding_hash"),
+        "seed": image.seed,
+    }
+
+
 @dataclass(frozen=True)
 class PreparedImageOutput:
     """已校验、已分配身份的待导入输出（尚未落盘/入库）。"""
@@ -200,18 +264,32 @@ def import_engine_output(
     return images[0]
 
 
+def _stage_capabilities(stage: JobStage):
+    """取 Stage 模块的 ModuleCapabilities（Task2：kind/parent/seed 的唯一判定依据）。"""
+    from app.workflows.registry import default_registry
+
+    return default_registry().get(stage.module_id, stage.module_version).capabilities()
+
+
 def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
                            stage_item: JobStageItem, outputs: list[EngineOutputFile]) -> list[str]:
     """Worker 的 output_importer 回调：把 Adapter 取回的输出登记为 Image（Phase 3 §十四）。
 
-    kind 由 StageItem 判定：有 input_image_id（处理/放大阶段）→ upscaled + parent_image_id；
-    否则 → original。Phase 2.2 §1：先全部校验（prepare）→ 整批事务导入。
+    Phase 4 Task2/3：kind / parent_image_id / seed **全部来自 Stage 模块的 ModuleCapabilities**，
+    禁止再用"有 input_image_id 就推断为 upscaled"（未来 Img2Img / Reference 会立刻出错）：
+    - output_kind → Image.kind（含存储目录）；
+    - parent_policy=input_image → parent_image_id = StageItem.input_image_id；
+    - seed → StageItem.seed（uses_seed=false 的 Stage 导入的图为 NULL，绝不带假 Seed）。
+    Phase 2.2 §1：先全部校验（prepare）→ 整批事务导入。
     """
     stage = session.get(JobStage, stage_item.job_stage_id) if stage_item is not None else None
     job_item = session.get(JobItem, stage_item.job_item_id) if stage_item is not None else None
-    has_input = bool(stage_item is not None and stage_item.input_image_id)
-    kind = "upscaled" if has_input else "original"
-    parent_image_id = stage_item.input_image_id if has_input else None
+    capabilities = _stage_capabilities(stage) if stage is not None else None
+    kind = capabilities.output_kind if capabilities is not None else "original"
+    parent_image_id = None
+    if capabilities is not None and capabilities.parent_policy == "input_image":
+        parent_image_id = stage_item.input_image_id if stage_item is not None else None
+    seed = stage_item.seed if stage_item is not None else None
     source = "comfyui" if job.provider == "comfyui" else ("mock" if job.provider == "mock" else "import")
     metadata = {
         "module_id": stage.module_id if stage is not None else job.module_id,
@@ -219,6 +297,7 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
         "provider": stage.provider if stage is not None else job.provider,
         "binding_version": stage.binding_version if stage is not None else job.binding_version,
         "workflow_hash": stage.workflow_hash if stage is not None else job.workflow_hash,
+        "binding_hash": stage.binding_hash if stage is not None else job.binding_hash,
         "stage_id": stage.id if stage is not None else None,
         "stage_index": stage.stage_index if stage is not None else None,
         "stage_item_id": stage_item.id if stage_item is not None else None,
@@ -228,10 +307,26 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
     prepared = [prepare_image_output(output.data, kind=kind) for output in outputs]
     images = import_outputs_transaction(
         session, storage, prepared,
-        job=job, item=job_item, seed=job_item.seed if job_item is not None else None,
+        job=job, item=job_item, seed=seed,
         source=source, kind=kind, parent_image_id=parent_image_id, metadata=metadata,
     )
     return [image.id for image in images]
+
+
+def resolve_generation_context(session: Session, image: Image) -> tuple[Image, Job]:
+    """派生图 → 根生成上下文（Phase 4 Task7）：沿 parent_image_id 找到根图与其生成 Job。
+
+    - 根图（original）来自 generate Job → 返回 (root_image, generate_job)；
+    - 根图是外部导入（无 job / job_kind != generate）→ NotFoundError
+      （IMAGE_NO_GENERATION_CONTEXT："没有可恢复的生成配置"，绝不伪造 Prompt）。
+    """
+    root = root_image_of(session, image)
+    if root.job_id is None:
+        raise NotFoundError("没有可恢复的生成配置", code="IMAGE_NO_GENERATION_CONTEXT")
+    job = session.get(Job, root.job_id)
+    if job is None or job.job_kind != "generate":
+        raise NotFoundError("没有可恢复的生成配置", code="IMAGE_NO_GENERATION_CONTEXT")
+    return root, job
 
 
 def load_input_image_ref(session: Session, storage: StorageManager, image_id: str) -> InputImageRef:

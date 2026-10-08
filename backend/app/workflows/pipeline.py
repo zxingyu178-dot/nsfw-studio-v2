@@ -74,13 +74,14 @@ class PipelineExecutor:
             provider=stage.provider or "unbound",
             binding_version=stage.binding_version or "v1",
             workflow_hash=stage.workflow_hash,
+            binding_hash=stage.binding_hash,
         )
 
     # ===== 上下文 =====
     def build_context(
         self,
         job: Job,
-        seed: int,
+        seed: int | None,
         *,
         stage: JobStage | None = None,
         stage_item: JobStageItem | JobItem | None = None,
@@ -115,7 +116,7 @@ class PipelineExecutor:
         job: Job,
         stage: JobStage,
         stage_item: JobStageItem,
-        seed: int,
+        seed: int | None,
         adapter: EngineAdapter,
         *,
         input_image: InputImageRef | None = None,
@@ -127,7 +128,7 @@ class PipelineExecutor:
         return module.build_engine_request(context, prepared)
 
     # ===== Pipeline 直跑路径：模块完整执行（提交 → 等待 → 取回引用） =====
-    async def execute(self, job: Job, seed: int, adapter: EngineAdapter,
+    async def execute(self, job: Job, seed: int | None, adapter: EngineAdapter,
                       *, stage: JobStage | None = None) -> WorkflowOutput:
         module = self.resolve_stage_module(stage) if stage is not None else self.resolve_module(job)
         context = self.build_context(job, seed, stage=stage)

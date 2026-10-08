@@ -52,12 +52,21 @@ class BasicGenerateModule(WorkflowModule):
                 ParameterSpec("height", "int", default=1024, description=f"{SIZE_MIN}~{SIZE_MAX}"),
                 ParameterSpec("seed", "int", required=True, description=f"0~{SEED_MAX}（每张独立）"),
             ),
+            # Task2 输入/输出语义（ImageService 判定 kind/parent/seed 的唯一依据）
+            uses_seed=True,
+            input_kind="none",
+            output_kind="original",
+            parent_policy="none",
+            output_cardinality=1,
         )
 
     # ===== 标准输入 =====
     def build_input(self, context: JobRequestContext) -> WorkflowInput:
         """通用 Job 上下文 → 模块标准输入（模块独占的参数映射）。"""
         settings: dict[str, Any] = dict(context.generation_settings or {})
+        if context.seed is None:
+            # uses_seed=true 的 Stage 必须由 Worker 分配 Seed（Task3）；缺失属于契约违约
+            raise EngineError("WORKFLOW_ERROR", "basic_generate 需要 Seed（uses_seed=true）")
         return WorkflowInput(values={
             "positive_prompt": context.positive_prompt,
             "negative_prompt": context.negative_prompt,

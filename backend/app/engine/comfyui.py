@@ -70,6 +70,8 @@ class ComfyUIAdapter(EngineAdapter):
         self,
         options: dict | None = None,
         comfyui_config: dict | None = None,
+        *,
+        input_registry=None,
     ) -> None:
         options = options or {}
         comfyui_config = comfyui_config or {}
@@ -80,25 +82,53 @@ class ComfyUIAdapter(EngineAdapter):
         # §九：可选的 ComfyUI output 目录（仅 config.local.yaml），用于文件级恢复兜底
         output_dir = comfyui_config.get("output_dir")
         self.output_dir = Path(output_dir) if output_dir else None
+        # Task11：Studio Input Registry（只登记自己上传的输入文件，供 TTL 清理）
+        self.input_registry = input_registry
         # Phase 3 §0.2：binding 属于每次请求；缓存 key = (module_id, binding_version)
-        self._bindings: dict[tuple[str, str], tuple[dict, dict, str]] = {}
+        # 缓存值 = (workflow, binding, workflow_hash, binding_hash)
+        self._bindings: dict[tuple[str, str], tuple[dict, dict, str, str]] = {}
         # prompt_id → {"stage","progress","state","error","updated"}（WebSocket 实时层）
         self._live: dict[str, dict] = {}
         self._missing_polls: dict[str, int] = {}
         self._ws_task: asyncio.Task | None = None
 
-    # ===== Binding（按请求动态加载；Phase 3 §0.2/§0.3） =====
+    # ===== Binding（按请求动态加载；Phase 3 §0.2/§0.3；Phase 4 Task1 完整指纹） =====
     @staticmethod
     def binding_dir(module_id: str, binding_version: str) -> Path:
         """provider binding 目录：workflows/providers/comfyui/<module_id>/<binding_version>/"""
         return PROVIDERS_DIR / module_id / binding_version
 
-    def load_binding(self, ref) -> tuple[dict, dict, str]:
-        """按请求身份加载 (workflow, binding, workflow_hash)。
+    @staticmethod
+    def _validate_binding_self_description(ref, binding: dict, directory: Path) -> None:
+        """Task1：provider binding 自描述必须与请求身份一致，否则直接拒绝。
+
+        binding.module == request.module_id；binding.provider == request.provider；
+        binding.binding_version == 目录版本（即 request.binding_version）。
+        """
+        problems: list[str] = []
+        declared_module = binding.get("module")
+        declared_provider = binding.get("provider")
+        declared_version = binding.get("binding_version")
+        if declared_module != ref.module_id:
+            problems.append(f"module: 声明={declared_module!r} 请求={ref.module_id!r}")
+        if declared_provider != ref.provider:
+            problems.append(f"provider: 声明={declared_provider!r} 请求={ref.provider!r}")
+        if declared_version != ref.binding_version:
+            problems.append(f"binding_version: 声明={declared_version!r} 目录={ref.binding_version!r}")
+        if problems:
+            raise EngineError(
+                "BINDING_IDENTITY_MISMATCH",
+                f"provider binding 自描述与请求身份不一致（{directory}）: {'; '.join(problems)}",
+            )
+
+    def load_binding(self, ref) -> tuple[dict, dict, str, str]:
+        """按请求身份加载 (workflow, binding, workflow_hash, binding_hash)。
 
         - 缓存 key = (module_id, binding_version)，一个 Adapter 服务所有模块；
-        - 已投入使用的 binding 目录视为 **immutable**：请求携带的 workflow_hash
-          与磁盘不一致 → WORKFLOW_HASH_MISMATCH，禁止静默执行（§0.3）。
+        - 已投入使用的 binding 目录视为 **immutable**：请求携带的 workflow_hash /
+          binding_hash 与磁盘不一致 → WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH，
+          禁止静默执行（§0.3 / Task1）；
+        - 首次加载同时校验 binding 自描述（Task1）。
         """
         key = (ref.module_id, ref.binding_version)
         cached = self._bindings.get(key)
@@ -110,26 +140,34 @@ class ComfyUIAdapter(EngineAdapter):
                 raise EngineError("BINDING_NOT_FOUND", f"provider binding 不存在: {directory}")
             workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
             binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
+            self._validate_binding_self_description(ref, binding, directory)
             workflow_hash = hashlib.sha256(workflow_path.read_bytes()).hexdigest()[:16]
-            cached = (workflow, binding, workflow_hash)
+            binding_hash = hashlib.sha256(binding_path.read_bytes()).hexdigest()[:16]
+            cached = (workflow, binding, workflow_hash, binding_hash)
             self._bindings[key] = cached
-        workflow, binding, workflow_hash = cached
+        workflow, binding, workflow_hash, binding_hash = cached
         if ref.workflow_hash and ref.workflow_hash != workflow_hash:
             raise EngineError(
                 "WORKFLOW_HASH_MISMATCH",
                 f"workflow_hash 不一致（binding 视为 immutable，修改请新建版本）: "
                 f"job={ref.workflow_hash} 磁盘={workflow_hash} ({key[0]}/{key[1]})",
             )
+        if ref.binding_hash and ref.binding_hash != binding_hash:
+            raise EngineError(
+                "BINDING_HASH_MISMATCH",
+                f"binding_hash 不一致（binding.yaml 视为 immutable，修改请新建版本）: "
+                f"job={ref.binding_hash} 磁盘={binding_hash} ({key[0]}/{key[1]})",
+            )
         return cached
 
-    def binding_identity(self, module_id: str, binding_version: str) -> tuple[str, str]:
-        """返回 (实际 binding_version, workflow_hash)，供 Job 创建时记录真实身份。"""
+    def binding_identity(self, module_id: str, binding_version: str) -> tuple[str, str, str]:
+        """返回 (实际 binding_version, workflow_hash, binding_hash)，供 Job 创建时记录真实身份。"""
         from app.engine.base import EngineBindingRef
 
-        _workflow, binding, workflow_hash = self.load_binding(
+        _workflow, binding, workflow_hash, binding_hash = self.load_binding(
             EngineBindingRef(module_id=module_id, provider="comfyui", binding_version=binding_version)
         )
-        return str(binding.get("binding_version", binding_version)), workflow_hash
+        return str(binding.get("binding_version", binding_version)), workflow_hash, binding_hash
 
     def _build_prompt(self, request: EngineJobRequest, workflow: dict, binding: dict) -> dict:
         prompt = json.loads(json.dumps(workflow))  # deep copy
@@ -173,9 +211,15 @@ class ComfyUIAdapter(EngineAdapter):
         except Exception as error:
             return EngineStatus(online=False, detail=f"ComfyUI 不可达: {error}", engine_name=self.name)
 
-    # ===== 上传输入图片（§十三：仅使用 Studio 唯一命名，便于只清理自己的文件） =====
-    async def upload_image(self, filename: str, data: bytes) -> str:
-        """上传待处理图片到 ComfyUI input（/upload/image），返回引擎侧引用名。"""
+    # ===== 上传输入图片（Task4 正式契约；§十三：仅使用 Studio 唯一命名，便于只清理自己的文件） =====
+    async def upload_input_image(self, *, image_id: str, file_name: str, data: bytes) -> str:
+        """上传待处理图片到 ComfyUI input（/upload/image），返回引擎侧引用名。
+
+        命名由 Studio 决定（{image_id}{suffix}，subfolder=NSFWStudio_inputs），
+        同时登记到 Studio Input Registry（Task11：TTL 清理只处理登记过的文件）。
+        """
+        suffix = Path(file_name).suffix or ".png"
+        filename = f"{image_id}{suffix}"
         try:
             async with httpx.AsyncClient(trust_env=False, timeout=60) as client:
                 response = await client.post(
@@ -193,7 +237,10 @@ class ComfyUIAdapter(EngineAdapter):
         if not name:
             raise EngineError("UNKNOWN_ENGINE_ERROR", f"上传图片未返回文件名: {payload}")
         subfolder = payload.get("subfolder") or ""
-        return f"{subfolder}/{name}" if subfolder else str(name)
+        engine_file = f"{subfolder}/{name}" if subfolder else str(name)
+        if self.input_registry is not None:
+            self.input_registry.record(engine_file=engine_file, image_id=image_id)
+        return engine_file
 
     # ===== 文件级恢复兜底（§九：只扫描 Studio 自己命名的输出） =====
     def scan_stage_outputs(self, ref, *, job_id: str, stage_index: int,
@@ -206,7 +253,7 @@ class ComfyUIAdapter(EngineAdapter):
         """
         if self.output_dir is None:
             return []
-        _workflow, binding, _hash = self.load_binding(ref)
+        _workflow, binding, _hash, _binding_hash = self.load_binding(ref)
         template = str(binding.get("save_image_prefix", "NSFWStudio"))
         marker = _format_prefix(template, {
             "date": _dt.date.today().strftime("%Y%m%d"),
@@ -230,7 +277,7 @@ class ComfyUIAdapter(EngineAdapter):
 
     # ===== 提交 =====
     async def submit_job(self, request: EngineJobRequest) -> str:
-        workflow, binding, _hash = self.load_binding(request.binding)
+        workflow, binding, _hash, _binding_hash = self.load_binding(request.binding)
         prompt = self._build_prompt(request, workflow, binding)
         payload = {"prompt": prompt, "client_id": self.client_id}
         try:

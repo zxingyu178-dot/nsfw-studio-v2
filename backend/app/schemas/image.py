@@ -57,11 +57,38 @@ class ImageListResponse(BaseModel):
 
 
 class ImageWorkbenchResponse(BaseModel):
-    """Image → 生成工作台（规范 §四十七）：恢复 Job 当时的 WorkbenchSnapshot。"""
+    """Image → 生成工作台（规范 §四十七；Phase 4 Task7/9）。
+
+    追溯规则（Task7）：任何派生图都恢复到**根生成图所属 generate Job** 的 WorkbenchSnapshot；
+    seed 为根图的 Seed（"使用原图 Seed" 由前端显式固定；默认 random）。
+    快照中的 workflow_modules 携带**完整执行身份**（Task9），提交时按原版本精确重现。
+    """
 
     image_id: str
     seed: int | None
     snapshot: dict[str, Any]
+
+
+class ImageProvenanceResponse(BaseModel):
+    """Image Provenance（Task10）：图片完整溯源（前端默认简洁展示，高级信息折叠）。"""
+
+    image_id: str
+    kind: str
+    parent_image_id: str | None
+    root_image_id: str
+    scale: int | None  # 相对来源原图的倍率（如高清 ×4）
+    job_id: str | None
+    job_item_id: str | None
+    stage_id: str | None
+    stage_index: int | None
+    stage_item_id: str | None
+    module_id: str | None
+    module_version: str | None
+    provider: str | None
+    binding_version: str | None
+    workflow_hash: str | None
+    binding_hash: str | None
+    seed: int | None
 
 
 def image_response(image: Image) -> ImageResponse:

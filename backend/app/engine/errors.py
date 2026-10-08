@@ -17,6 +17,9 @@ ERROR_TYPES = (
     "WORKFLOW_ERROR",
     "BINDING_NOT_FOUND",  # Phase 2.1 §七：provider binding 目录/文件缺失（系统性，不可重试）
     "WORKFLOW_HASH_MISMATCH",  # Phase 3 §0.3：binding 被改动（immutable 违约，系统性）
+    "BINDING_HASH_MISMATCH",  # Phase 4 Task1：binding.yaml 被改动（执行指纹不一致，系统性）
+    "BINDING_IDENTITY_MISMATCH",  # Phase 4 Task1：binding 自描述与请求身份不符（系统性）
+    "ENGINE_INPUT_UNSUPPORTED",  # Phase 4 Task4：引擎不支持输入图片资产契约（系统性）
     "WORKER_INTERNAL_ERROR",  # Phase 3 §0.1：Worker 代码级异常（Job INTERRUPTED + 队列暂停）
     "MODEL_MISSING",
     "NODE_MISSING",
@@ -32,6 +35,9 @@ _SYSTEMIC_TYPES = {
     "WORKFLOW_ERROR",
     "BINDING_NOT_FOUND",
     "WORKFLOW_HASH_MISMATCH",
+    "BINDING_HASH_MISMATCH",
+    "BINDING_IDENTITY_MISMATCH",
+    "ENGINE_INPUT_UNSUPPORTED",
     "MODEL_MISSING",
     "NODE_MISSING",
 }

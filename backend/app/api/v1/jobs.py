@@ -15,6 +15,8 @@ from app.core.errors import ValidationError
 from app.engine.base import EngineError
 from app.engine.factory import resolve_workflow_modules
 from app.schemas.job import (
+    HistoryEntryResponse,
+    HistoryResponse,
     JobCreateRequest,
     JobListResponse,
     JobResponse,
@@ -83,6 +85,31 @@ def list_jobs(
     items, total = job_service.list_jobs(session, status=status, limit=limit, offset=offset)
     return JobListResponse(
         items=[job_response(job) for job in items], total=total, limit=limit, offset=offset
+    )
+
+
+@router.get("/history", response_model=HistoryResponse,
+            summary="历史任务（Task5：来源=jobs；Task6：原任务+续跑两级归组）")
+def list_history(
+    bucket: str = Query(default="all", description="all|active|completed|failed|cancelled"),
+    source: str | None = Query(default=None, description="web|resume|agent|doubao"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+) -> HistoryResponse:
+    families, total = job_service.list_history(
+        session, bucket=bucket, source=source, limit=limit, offset=offset
+    )
+    return HistoryResponse(
+        items=[
+            HistoryEntryResponse(
+                root_job_id=family["root"].id,
+                root=job_response(family["root"]),
+                resumes=[job_response(job) for job in family["resumes"]],
+            )
+            for family in families
+        ],
+        total=total, limit=limit, offset=offset,
     )
 
 

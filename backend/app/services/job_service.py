@@ -61,7 +61,11 @@ def _publish(event_type: str, job_id: str, *, item_id: str | None = None, payloa
 
 
 def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
-    """§四/§二十三：由真实模块身份列表构造 workflow_snapshot（唯一执行真源）。"""
+    """§四/§二十三：由真实模块身份列表构造 workflow_snapshot（唯一执行真源）。
+
+    Phase 4 Task1/Task9：身份包含 workflow_hash + binding_hash 两个执行指纹，
+    从历史恢复（打开工作台 / 配方）时携带完整身份即可固定原版本执行。
+    """
     normalized = [
         {
             "module_id": module.get("module_id"),
@@ -69,6 +73,7 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
             "provider": module.get("provider"),
             "binding_version": module.get("binding_version"),
             "workflow_hash": module.get("workflow_hash"),
+            "binding_hash": module.get("binding_hash"),
         }
         for module in modules
         if module.get("module_id")
@@ -102,6 +107,7 @@ def _materialize_stages(
             provider=module.get("provider"),
             binding_version=module.get("binding_version"),
             workflow_hash=module.get("workflow_hash"),
+            binding_hash=module.get("binding_hash"),
             status="QUEUED",
             total_count=len(item_ids),
             completed_count=0,
@@ -155,6 +161,85 @@ def list_jobs(session: Session, *, status: str | None = None, limit: int = 50, o
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     items = list(session.execute(query.order_by(Job.created_at.desc()).limit(limit).offset(offset)).scalars())
     return items, int(total)
+
+
+# ===== History（Phase 4 Task5/6：来源 = jobs；两级任务族归组） =====
+
+HISTORY_BUCKETS: dict[str, tuple[str, ...] | None] = {
+    "all": None,
+    "active": ("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED"),
+    "completed": ("COMPLETED",),
+    "failed": ("FAILED",),
+    "cancelled": ("CANCELLED",),
+}
+MAX_HISTORY_WINDOW = 2000  # 本地工具规模上限；按创建时间倒序取窗口后归组
+
+
+def list_history(
+    session: Session,
+    *,
+    bucket: str = "all",
+    source: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """历史任务列表（Task5/6）：返回任务族列表 [(root_job, [resume_jobs...])] + 总族数。
+
+    - 归组：沿 resume_of_job_id 向上找到最初 Job（root_job_id 为计算字段，不额外入库）；
+    - 筛选：族内任一 Job 命中 bucket/source 即保留整族（避免续跑任务被显示成无关任务）；
+    - 排序：族按族内最新 created_at 倒序；续跑任务族内按创建时间升序。
+    """
+    if bucket not in HISTORY_BUCKETS:
+        raise ValidationError(f"非法历史筛选: {bucket}", code="HISTORY_BUCKET_INVALID")
+    if source is not None and source not in JOB_SOURCES:
+        raise ValidationError(f"非法任务来源: {source}", code="JOB_SOURCE_INVALID")
+    if limit < 1 or limit > 200:
+        raise ValidationError("limit 取值范围为 1-200")
+
+    window = list(session.execute(
+        select(Job).order_by(Job.created_at.desc()).limit(MAX_HISTORY_WINDOW)
+    ).scalars())
+    by_id = {job.id: job for job in window}
+
+    def root_of(job: Job) -> Job:
+        current = job
+        seen: set[str] = set()
+        while current.resume_of_job_id and current.resume_of_job_id not in seen:
+            seen.add(current.id)
+            parent = by_id.get(current.resume_of_job_id) or session.get(Job, current.resume_of_job_id)
+            if parent is None:
+                break
+            current = parent
+        return current
+
+    families: dict[str, dict] = {}
+    for job in window:
+        root = root_of(job)
+        family = families.setdefault(root.id, {"root": root, "resumes": []})
+        if job.id != root.id:
+            family["resumes"].append(job)
+
+    statuses = HISTORY_BUCKETS[bucket]
+
+    def matches(job: Job) -> bool:
+        if source is not None and job.source != source:
+            return False
+        return statuses is None or job.status in statuses
+
+    entries = [
+        family for family in families.values()
+        if matches(family["root"]) or any(matches(resume) for resume in family["resumes"])
+    ]
+    entries.sort(
+        key=lambda family: max(
+            [family["root"].created_at] + [r.created_at for r in family["resumes"]]
+        ),
+        reverse=True,
+    )
+    for family in entries:
+        family["resumes"].sort(key=lambda job: job.created_at)
+    total = len(entries)
+    return entries[offset:offset + limit], total
 
 
 def get_queue(session: Session) -> dict:
@@ -257,6 +342,7 @@ def create_job(
         modules = [{
             "module_id": "basic_generate", "module_version": "v1",
             "provider": "unbound", "binding_version": "v1", "workflow_hash": None,
+            "binding_hash": None,
         }]
     # §三：Pipeline 的模块必须已注册（未知模块在创建期就被拒绝，而不是执行期才炸）
     registry = default_registry()
@@ -301,6 +387,7 @@ def create_job(
         provider=identity.get("provider"),
         binding_version=identity.get("binding_version"),
         workflow_hash=identity.get("workflow_hash"),
+        binding_hash=identity.get("binding_hash"),
         requested_count=count,
         priority=1 if queue_mode == "next" else 0,
     )
@@ -464,6 +551,7 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
         provider=original.provider,
         binding_version=original.binding_version,
         workflow_hash=original.workflow_hash,
+        binding_hash=original.binding_hash,
         requested_count=remaining,
         priority=original.priority,
         resume_of_job_id=original.id,

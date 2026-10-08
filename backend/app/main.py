@@ -92,6 +92,16 @@ async def lifespan(application: FastAPI):
 
     # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
     recovered = await worker.recover_interrupted()
+
+    # Task11：引擎输入缓存治理（只清理 Studio 自己上传、无活动引用且超过 TTL 的输入文件）
+    try:
+        from app.services.engine_input_service import cleanup_engine_inputs
+
+        stats = cleanup_engine_inputs(settings, session_factory)
+        logger.info("引擎输入缓存清理: %s", stats)
+    except Exception:
+        logger.warning("引擎输入缓存清理失败（忽略）", exc_info=True)
+
     worker.start()
 
     logging.getLogger(__name__).info(

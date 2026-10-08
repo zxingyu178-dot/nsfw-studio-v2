@@ -308,13 +308,24 @@ class SingleQueueWorker:
     # ===== StageItem 执行 =====
     async def _run_stage_item(self, job_id: str, stage_id: str, stage_item_id: str) -> str:
         """返回：COMPLETED / FAILED / CANCELLED / SYSTEMIC。"""
+        # Task3：Seed 分配依据 = Stage 模块的 ModuleCapabilities（uses_seed），不是猜测
+        with self._session_factory() as session:
+            stage = session.get(JobStage, stage_id)
+            if stage is None:
+                return "FAILED"
+        try:
+            uses_seed = self._pipeline.resolve_stage_module(stage).capabilities().uses_seed
+        except EngineError as error:
+            return self._stage_item_failed(job_id, stage_item_id, error.error_type, error.message)
+
         with self._session_factory() as session:
             job = session.get(Job, job_id)
             stage = session.get(JobStage, stage_id)
             stage_item = session.get(JobStageItem, stage_item_id)
             if job is None or stage is None or stage_item is None:
                 return "FAILED"
-            seed = self._seed_for(job, stage)
+            # uses_seed=false 的 Stage 绝不分配"假 Seed"（Task3：upscale StageItem.seed 必须为 NULL）
+            seed = self._seed_for(job, stage) if uses_seed else None
             timeout_seconds = self._stage_timeout_for(stage)
             if stage_item.input_image_id is None and stage.stage_index > 0:
                 # 图片流转：上一 Stage 同槽位的输出即本 Stage 的输入
@@ -325,12 +336,14 @@ class SingleQueueWorker:
             stage_item.status = "RUNNING"
             stage_item.started_at = utc_now_iso()
             stage_item.progress = 0.0
+            stage_item.seed = seed  # Task3：真实溯源以 StageItem.seed 为准
             job_item = session.get(JobItem, stage_item.job_item_id)
             if job_item is not None:
                 job_item.status = "RUNNING"
                 job_item.started_at = job_item.started_at or stage_item.started_at
                 job_item.current_stage = stage.module_id
-                if stage.stage_index == 0:
+                if uses_seed and stage.stage_index == 0:
+                    # JobItem.seed 保留为"基础生成的主要 Seed / UI 快捷字段"（Task3）
                     job_item.seed = seed
             job_service.record_event(session, job_id, "STAGE_ITEM_STARTED", item_id=stage_item.job_item_id, payload={
                 "stage_index": stage.stage_index, "module_id": stage.module_id, "seed": seed,
@@ -339,13 +352,16 @@ class SingleQueueWorker:
             # 会话关闭后仅使用已加载的标量字段（expire_on_commit=False）
 
         # 构造引擎请求（模块知识在 WorkflowModule；Worker 只提供通用上下文，§三/§二十二）
-        # 只有可分类的 EngineError 落 Item FAILED；其余代码级异常向上抛（§0.1 → 队列暂停）
+        # 只有可分类的 EngineError 落 Item FAILED；系统性错误（§二十一：离线/绑定缺失/输入不支持等）
+        # 走 _systemic_failure → Job FAILED + 队列暂停；其余代码级异常向上抛（§0.1 → 队列暂停）
         try:
             input_image = self._load_input_image(input_image_id) if input_image_id else None
             request = await self._pipeline.build_engine_request(
                 job, stage, stage_item, seed, self._adapter, input_image=input_image,
             )
         except EngineError as error:
+            if is_systemic(error.error_type):
+                return self._systemic_failure(job_id, stage_item_id, error)
             return self._stage_item_failed(job_id, stage_item_id, error.error_type, error.message)
 
         # 提交（瞬态网络错误重试 ≤2，规范 §三十六）
@@ -823,6 +839,7 @@ class SingleQueueWorker:
             provider=stage.provider or "unbound",
             binding_version=stage.binding_version or "v1",
             workflow_hash=stage.workflow_hash,
+            binding_hash=stage.binding_hash,
         )
         try:
             return list(scanner(ref, job_id=job_id, stage_index=stage.stage_index,

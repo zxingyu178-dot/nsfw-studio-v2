@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any, Mapping
 
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError, EngineJobRequest
@@ -55,6 +54,12 @@ class UpscaleModule(WorkflowModule):
             parameters=(
                 ParameterSpec("input_image", "image", required=True, description="待放大的输入图片"),
             ),
+            # Task2 输入/输出语义：放大链不使用随机 Seed；输出 kind=upscaled 且必须挂到输入图片下
+            uses_seed=False,
+            input_kind="image",
+            output_kind="upscaled",
+            parent_policy="input_image",
+            output_cardinality=1,
         )
 
     # ===== 标准输入 =====
@@ -74,12 +79,11 @@ class UpscaleModule(WorkflowModule):
         image = context.input_image
         if image is None:
             raise EngineError("WORKFLOW_ERROR", "upscale 需要输入图片（input_image）")
-        uploader = getattr(engine, "upload_image", None)
-        if uploader is None:
-            raise EngineError("WORKFLOW_ERROR", "当前引擎不支持输入图片上传（upload_image）")
-        suffix = Path(image.file_name).suffix or ".png"
-        filename = f"{image.image_id}{suffix}"  # 唯一命名：便于日后只清理 Studio 自己的输入
-        engine_name = await uploader(filename, image.data)
+        # Task4：输入图片走 EngineAdapter 正式契约（绝不是 getattr duck typing）；
+        # 不支持的引擎由基类默认实现返回 ENGINE_INPUT_UNSUPPORTED（系统性、不重试）。
+        engine_name = await engine.upload_input_image(
+            image_id=image.image_id, file_name=image.file_name, data=image.data,
+        )
         return {"input_image_name": engine_name}
 
     # ===== 引擎请求 =====

@@ -40,13 +40,28 @@ class ParameterSpec:
 
 @dataclass(frozen=True)
 class ModuleCapabilities:
-    """模块能力声明：身份 + 版本 + 参数定义。"""
+    """模块能力声明：身份 + 版本 + 参数定义 + 输入/输出语义（Phase 4 Task2）。
+
+    输入/输出语义是 ImageService / Worker 判定 kind / parent / seed 的**唯一依据**，
+    禁止再用"有 input_image 就认为是 upscaled"之类的推断。
+
+    - uses_seed：本模块是否真正使用随机 Seed（false 的 Stage 绝不分配/展示 Seed）；
+    - input_kind：none | image（模块是否需要输入图片）；
+    - output_kind：产出物的 Image kind（original | upscaled | processed）；
+    - parent_policy：none | input_image（产出物是否挂到输入图片下）；
+    - output_cardinality：单次执行的输出个数（第一版固定 1）。
+    """
 
     module_id: str
     module_version: str
     title: str = ""
     description: str = ""
     parameters: tuple[ParameterSpec, ...] = ()
+    uses_seed: bool = True
+    input_kind: str = "none"
+    output_kind: str = "original"
+    parent_policy: str = "none"
+    output_cardinality: int = 1
 
 
 @dataclass(frozen=True)
@@ -95,12 +110,14 @@ class JobRequestContext:
     由具体 WorkflowModule 解释并映射为自己的标准输入 / EngineJobRequest。
     binding：本次请求要使用的 provider binding 身份（§0.2，来自 Job/Stage 固化身份）。
     input_image：处理型模块的输入图片（生成型模块为 None）。
+    seed：仅当模块 capabilities().uses_seed == true 时由 Worker 分配；否则为 None
+    （Phase 4 Task3：不使用随机性的 Stage 绝不携带"假 Seed"）。
     """
 
     positive_prompt: str = ""
     negative_prompt: str = ""
     generation_settings: Mapping[str, Any] = field(default_factory=dict)
-    seed: int = 0
+    seed: int | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     binding: EngineBindingRef | None = None
     input_image: InputImageRef | None = None

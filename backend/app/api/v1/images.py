@@ -14,6 +14,7 @@ from app.core.filetypes import mime_for_suffix
 from app.schemas.image import (
     ImageFavoriteRequest,
     ImageListResponse,
+    ImageProvenanceResponse,
     ImageResponse,
     ImageReviewRequest,
     ImageUpscaleRequest,
@@ -77,17 +78,37 @@ def favorite_image(image_id: str, body: ImageFavoriteRequest, session: Session =
 
 
 @router.get("/{image_id}/workbench", response_model=ImageWorkbenchResponse,
-            summary="Image → 生成工作台（复用 Job 当时的 WorkbenchSnapshot，规范 §四十七）")
+            summary="Image → 生成工作台（Task7 追溯根生成 Job；Task9 携带完整执行身份）")
 def image_to_workbench(image_id: str, session: Session = Depends(get_session)) -> ImageWorkbenchResponse:
-    image = image_service.get_image(session, image_id)
-    if image.job_id is None:
-        raise NotFoundError("该图片不来自生成任务", code="IMAGE_HAS_NO_JOB")
-    from app.services import job_service
+    """任何派生图（原图/高清/未来处理图）都恢复到**根生成图所属 generate Job** 的配置。
 
-    job = job_service.get_job(session, image.job_id)
-    snapshot = json.loads(job.workbench_snapshot_json)
-    # Seed 默认 random；"使用此图 Seed" 由前端把 seed 写入快照后提交
-    return ImageWorkbenchResponse(image_id=image.id, seed=image.seed, snapshot=snapshot)
+    - 禁止恢复 process Job（图库高清）的空 Prompt——沿 parent_image_id 一直找到根图（Task7）；
+    - 外部导入图（无生成 Job）→ IMAGE_NO_GENERATION_CONTEXT（"没有可恢复的生成配置"）；
+    - seed 返回根图 Seed（"使用原图 Seed"）；快照 Seed 默认 random（Task7）；
+    - workflow_modules 覆盖为根 Job 的完整执行身份（Task9：module/version/provider/binding/双指纹），
+      提交时按原版本精确重现，绝不偷偷升级到当前默认 Workflow。
+    """
+    image = image_service.get_image(session, image_id)
+    root, job = image_service.resolve_generation_context(session, image)
+    snapshot = json.loads(job.workbench_snapshot_json or "{}")
+    modules = json.loads(job.workflow_snapshot_json or "{}").get("modules") or []
+    if not modules and job.module_id:
+        # 极老 Job 的 workflow_snapshot 为空：回落到 Job 列上的执行身份
+        modules = [{
+            "module_id": job.module_id, "module_version": job.module_version,
+            "provider": job.provider, "binding_version": job.binding_version,
+            "workflow_hash": job.workflow_hash, "binding_hash": job.binding_hash,
+        }]
+    snapshot["workflow_modules"] = modules
+    snapshot["seed_mode"] = "random"
+    snapshot["seed"] = None
+    return ImageWorkbenchResponse(image_id=image.id, seed=root.seed, snapshot=snapshot)
+
+
+@router.get("/{image_id}/provenance", response_model=ImageProvenanceResponse,
+            summary="Image Provenance（Task10）：来源任务 / Stage / 模块 / 双指纹 / Seed")
+def image_provenance(image_id: str, session: Session = Depends(get_session)) -> ImageProvenanceResponse:
+    return ImageProvenanceResponse(**image_service.get_provenance(session, image_id))
 
 
 @router.post("/upscale", response_model=JobResponse, status_code=201,

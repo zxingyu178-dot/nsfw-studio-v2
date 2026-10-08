@@ -24,10 +24,12 @@ class EngineStatus:
 
 @dataclass(frozen=True)
 class EngineBindingRef:
-    """引擎任务要使用的 provider binding 身份（Phase 3 §0.2）。
+    """引擎任务要使用的 provider binding 身份（Phase 3 §0.2；Phase 4 Task1 增加 binding_hash）。
 
     绑定属于**每次请求**，不属于 Adapter 实例——同一个 Adapter 可以交替执行
     basic_generate/v1、upscale/v1、basic_generate/v1 而不需要多套 Adapter。
+    执行指纹 = workflow_hash（workflow.json）+ binding_hash（binding.yaml，覆盖
+    inputs/defaults/save_image_node/save_image_prefix 等一切执行相关配置）。
     """
 
     module_id: str
@@ -35,6 +37,7 @@ class EngineBindingRef:
     provider: str = "unbound"
     binding_version: str = "v1"
     workflow_hash: str | None = None
+    binding_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,3 +108,16 @@ class EngineAdapter(ABC):
     @abstractmethod
     async def cancel_job(self, engine_job_id: str) -> bool:
         """取消引擎侧任务（仅在安全支持时实现；返回是否已请求）。"""
+
+    async def upload_input_image(self, *, image_id: str, file_name: str, data: bytes) -> str:
+        """输入图片资产契约（Phase 4 Task4）：把待处理图片上传到引擎侧，返回引擎侧引用名。
+
+        处理型模块（upscale / 未来 img2img / reference / inpaint）统一通过本方法上传输入图片，
+        禁止再依赖 ``getattr(engine, "upload_image")`` 之类的 duck typing。
+        默认实现明确拒绝（ENGINE_INPUT_UNSUPPORTED）——不支持输入图片的 Adapter 无需覆写；
+        支持处理型模块的 Adapter（ComfyUI / Mock）必须覆写。
+        """
+        raise EngineError(
+            "ENGINE_INPUT_UNSUPPORTED",
+            f"{self.name} 引擎不支持输入图片（upload_input_image）",
+        )

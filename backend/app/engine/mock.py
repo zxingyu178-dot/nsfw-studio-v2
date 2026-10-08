@@ -34,7 +34,7 @@ class MockEngineAdapter(EngineAdapter):
     name = "mock"
     version = "0.1.0"
 
-    def __init__(self, options: dict | None = None) -> None:
+    def __init__(self, options: dict | None = None, *, input_registry=None) -> None:
         options = options or {}
         self.mode = options.get("mode", "success")  # success|fail|offline|oom|workflow_error
         self.delay_per_item_ms: int = int(options.get("delay_per_item_ms", 50))
@@ -53,6 +53,9 @@ class MockEngineAdapter(EngineAdapter):
         self._submitted = 0
         # 测试辅助：记录全部 EngineJobRequest（用于断言模块顺序与 binding 身份，Phase 3 §二十五）
         self.submitted_requests: list[EngineJobRequest] = []
+        # Task11：Studio Input Registry（与 ComfyUIAdapter 同一契约）
+        self.input_registry = input_registry
+        self.uploaded_inputs: list[tuple[str, str]] = []  # (file_name, image_id)
         self.online = True
 
     async def health(self) -> EngineStatus:
@@ -115,9 +118,19 @@ class MockEngineAdapter(EngineAdapter):
         self._canceled.add(engine_job_id)
         return True
 
-    async def upload_image(self, filename: str, data: bytes) -> str:
-        """处理型 Stage（如高清放大）的输入图片上传（测试用替身命名）。"""
-        return f"mock_inputs/{filename}"
+    async def upload_input_image(self, *, image_id: str, file_name: str, data: bytes) -> str:
+        """处理型 Stage（如高清放大）的输入图片上传（Task4 正式契约的测试替身）。
+
+        命名与 ComfyUIAdapter 一致（{image_id}{suffix}），并按同一契约登记 Input Registry。
+        """
+        from pathlib import Path
+
+        suffix = Path(file_name).suffix or ".png"
+        engine_file = f"mock_inputs/{image_id}{suffix}"
+        self.uploaded_inputs.append((file_name, image_id))
+        if self.input_registry is not None:
+            self.input_registry.record(engine_file=engine_file, image_id=image_id)
+        return engine_file
 
     # ===== 测试辅助 =====
     def set_offline(self, offline: bool) -> None:
