@@ -4,7 +4,7 @@
 走产品同路径（真实 DataRoot + 真实 ComfyUIAdapter + 生产同款 Worker）。
 
 用法（项目根目录）：
-    .venv/Scripts/python temp/probe_engine_upscale.py <小图路径>
+    .venv/Scripts/python tests/manual/probe_engine_upscale.py <小图路径>
 """
 from __future__ import annotations
 

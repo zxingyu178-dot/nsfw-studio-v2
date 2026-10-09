@@ -8,7 +8,7 @@
  * 每步截图存 docs/evidence/phase6-img2img/screenshots/，结果汇总到 acceptance_browser.json
  *
  * 用法（项目根目录；需后端 8000 + 前端 5173 已运行）：
- *   node temp/acceptance_phase6_browser.js
+ *   node tests/manual/acceptance_phase6_browser.js
  */
 const fs = require('fs')
 const path = require('path')

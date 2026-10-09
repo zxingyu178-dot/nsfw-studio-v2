@@ -8,7 +8,7 @@
 输出：docs/evidence/phase6-img2img/acceptance_task11.json（逐步骤证据）
 
 用法（项目根目录；需后端已在 127.0.0.1:8000 运行）：
-    .venv/Scripts/python temp/acceptance_phase6.py [--run-generations]
+    .venv/Scripts/python tests/manual/acceptance_phase6.py [--run-generations]
 """
 from __future__ import annotations
 

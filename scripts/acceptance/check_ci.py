@@ -1,7 +1,7 @@
 """CI 状态查询（直连 api.github.com，绕系统代理；只读）。
 
 用法：
-    .venv/Scripts/python temp/check_ci.py <branch> [wait_seconds]
+    .venv/Scripts/python scripts/acceptance/check_ci.py <branch> [wait_seconds]
 """
 from __future__ import annotations
 

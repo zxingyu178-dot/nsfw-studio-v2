@@ -1,13 +1,17 @@
-"""Phase 6 交付邮件：Source/Handoff ZIP + 验收证据摘要，发送并 IMAP 复核（SHA-256 比对）。
+"""阶段交付邮件：Source/Handoff ZIP 附件发送 + IMAP SHA-256 复核（长期工具，Phase 7 Task1 迁移）。
 
 - 凭据只在运行时从 hermes secrets.env 读取，禁止输出原文；
 - 附件用 MIMEApplication + Content-Disposition: attachment（hermes send_mail.py 的 MIMEImage
   对 zip 会静默丢附件——禁止复用）；
 - 发送后用 IMAP 重新下载附件并比对 SHA-256，确证投递。
 
-用法：
-    .venv/Scripts/python temp/send_phase6_mail.py --dry-run
-    .venv/Scripts/python temp/send_phase6_mail.py
+用法（项目根目录）：
+    .venv/Scripts/python scripts/acceptance/send_handoff_mail.py \
+        --phase Phase7 \
+        --source handoff/NSFW_Studio_Phase7_Source.zip \
+        --handoff handoff/NSFW_Studio_Phase7_Handoff.zip \
+        --subject-file temp/phase7_mail_subject.txt \
+        --body-file temp/phase7_mail_body.txt [--dry-run]
 """
 from __future__ import annotations
 
@@ -24,7 +28,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SECRETS = Path(r"D:\AIHome_2.0_L1_L2\projects\hermes\config\secrets.env")
 
 
@@ -55,10 +59,37 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def read_text_argument(*, inline: str | None, file_path: str | None, label: str) -> str:
+    if inline:
+        return inline
+    if file_path:
+        path = Path(file_path)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path.read_text(encoding="utf-8")
+    raise SystemExit(f"[FAIL] 必须提供 --{label} 或 --{label}-file")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--phase", required=True, help="阶段标识（同时用于 IMAP 复核过滤，如 Phase7）")
+    parser.add_argument("--source", required=True, help="Source ZIP 路径（相对项目根目录或绝对路径）")
+    parser.add_argument("--handoff", required=True, help="Handoff ZIP 路径（相对项目根目录或绝对路径）")
+    parser.add_argument("--subject", default=None, help="邮件主题（与 --subject-file 二选一）")
+    parser.add_argument("--subject-file", default=None, help="邮件主题文件（UTF-8）")
+    parser.add_argument("--body-file", default=None, help="邮件正文文件（UTF-8）")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    def resolve(path_text: str) -> Path:
+        path = Path(path_text)
+        return path if path.is_absolute() else PROJECT_ROOT / path
+
+    attachments = [resolve(args.source), resolve(args.handoff)]
+    for path in attachments:
+        if not path.is_file():
+            print(f"[FAIL] 附件不存在: {path}")
+            return 2
 
     secrets = load_secrets()
     sender = secrets["QQ_SENDER"]
@@ -67,35 +98,10 @@ def main() -> int:
     smtp_server = secrets.get("QQ_SMTP_SERVER", "smtp.qq.com")
     smtp_port = int(secrets.get("QQ_SMTP_PORT", "465"))
 
-    attachments = [
-        PROJECT_ROOT / "handoff" / "NSFW_Studio_Phase6_Source.zip",
-        PROJECT_ROOT / "handoff" / "NSFW_Studio_Phase6_Handoff.zip",
-    ]
-    for path in attachments:
-        if not path.is_file():
-            print(f"[FAIL] 附件不存在: {path}")
-            return 2
-
-    subject = "【NSFW Studio V2】Phase 6 交付：Pipeline 可靠性收口（v0.8.0）"
-    body = (
-        "Phase 6 完成（不扩模型，收口「能生成之后如何可靠继续编辑/复现/扩模块」）：\n\n"
-        "A. Task1-9 全部落地（含 4 个真实缺陷修复）\n"
-        "   - Image→Workbench 取「最近的生成上下文」（import→img2img→upscale 恢复 Img2Img；Seed 用该图真实 Seed）\n"
-        "   - 前端工作流身份完整保留（不重建裸 upscale；双 hash + config 不丢）\n"
-        "   - Recipe 固定 Seed 归一化（「使用此图 Seed」可保存配方）\n"
-        "   - 移除执行重排 + PIPELINE_DUPLICATE_MODULE + 未注册 module_version 创建期拒绝\n"
-        "   - availability 版本域修正；Img2Img execute Prompt 契约；generation_mode 显式化\n"
-        "   - /modules 参数 Schema（ParameterSpec）+ size_mode；前端按 schema 渲染控件\n\n"
-        "B. Task10 真实照片验收（4 次运行 11/11 通过）→ 默认 denoise 0.55 → 0.8\n"
-        "   - 0.55 即使换场景 Prompt 也「几乎没变化」（精修档）；0.7 轻度；0.8 人物保留良好且场景级 Prompt 生效\n"
-        "   - 证据 docs/evidence/phase6-img2img/（report_*.json + outputs/ + screenshots/）\n\n"
-        "C. Task11 浏览器全链路（Playwright + 系统 Edge）\n"
-        "   文生图 → 图库导入 → 图片生成（从图库选择）→ Img2Img+高清 → Gallery → History →\n"
-        "   从 processed/upscaled 恢复工作台 → Recipe 保存/重开 → 切回文生图（截图见 Source ZIP docs/evidence/）\n\n"
-        "测试：快速套件 227 passed（208 基线 + 19 新增）；前端 store 断言 11（CI test:store）；\n"
-        "npm run build 通过；版本 0.8.0；tag v0.8.0。\n"
-        "报告：docs/PHASE6_REPORT.md、TEST_REPORT.md、CHANGELOG/DEV_LOG/TASKS。\n"
-    )
+    subject = read_text_argument(
+        inline=args.subject, file_path=args.subject_file, label="subject"
+    ).strip()
+    body = read_text_argument(inline=None, file_path=args.body_file, label="body")
 
     message = MIMEMultipart()
     message["From"] = sender
@@ -107,6 +113,7 @@ def main() -> int:
         part.add_header("Content-Disposition", "attachment", filename=path.name)
         message.attach(part)
 
+    print(f"[..] 阶段: {args.phase}  主题: {subject}")
     print(f"[..] 附件: {[p.name for p in attachments]}")
     for path in attachments:
         print(f"     {path.name}: {path.stat().st_size} bytes, sha256={sha256_file(path)[:16]}…")
@@ -135,7 +142,7 @@ def main() -> int:
                         continue
                     msg = email.message_from_bytes(fetched[0][1])
                     subject_text = decode_mime(str(msg.get("Subject", "")))
-                    if "Phase 6" not in subject_text:
+                    if args.phase not in subject_text:
                         continue
                     for part in msg.walk():
                         filename = part.get_filename()

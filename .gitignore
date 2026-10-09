@@ -25,6 +25,19 @@ backend/app/logs/*.log*
 # ===== 交接包 =====
 handoff/
 
+# ===== 验收证据（Phase 7 Task1）=====
+# 完整验收图片（真实照片 / 生成图 / Gallery 截图）只进 Handoff ZIP，禁止入库；
+# 仓库只保留文本/JSON 证据与小型无隐私 fixture。已在库中的合成图继续保留；
+# 今后新增小型 fixture 需要显式 `git add -f`。
+docs/evidence/**/*.png
+docs/evidence/**/*.jpg
+docs/evidence/**/*.jpeg
+docs/evidence/**/*.webp
+docs/evidence/**/*.gif
+
+# ===== 临时目录（scratch；长期脚本必须迁移到 scripts/ 或 tests/manual/）=====
+temp/
+
 # ===== 环境变量 / 秘密 / 本机配置 =====
 .env
 .env.*

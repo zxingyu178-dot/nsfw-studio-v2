@@ -20,7 +20,7 @@
 | seed | INTEGER | 该图实际 Seed（Phase 4 起来自 **StageItem.seed**；uses_seed=false 的 Stage 产出为 NULL） |
 | review_status | TEXT | `UNREVIEWED（默认）/ KEPT / REJECTED` |
 | favorite | INTEGER | 独立收藏位（0/1），与审核状态互不影响 |
-| source | TEXT | `comfyui / mock / import` |
+| source | TEXT | `comfyui / mock / import / engine`（Phase 7 Task8：非 comfyui/mock 的未来引擎产出记 `engine`，**绝不错标成 import**；`import` 只表示外部导入） |
 | sha256 | TEXT | Phase 5：外部导入文件内容哈希（去重依据 + `idx_images_sha256`；**Phase 5.1：`uq_images_import_sha256` 部分唯一索引，并发导入 IntegrityError → 返回已存在图片**）；引擎输出为 NULL |
 | imported_filename | TEXT | Phase 5：外部导入原始文件名（展示 / 搜索用，绝不作为文件引用） |
 | metadata_json | TEXT | module/binding/workflow_hash/binding_hash + stage_id/stage_index/stage_item_id/parent 等溯源 |
