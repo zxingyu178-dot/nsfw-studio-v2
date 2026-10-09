@@ -44,3 +44,7 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: frontend
+
+      - name: Store regression (workbench identity / mode)
+        run: npm run test:store
+        working-directory: frontend

@@ -133,6 +133,8 @@ export function promptToSnapshot(prompt: PromptDTO): WorkbenchSnapshot {
     full_prompt: version?.mode === 'full' ? version.positive_prompt : '',
     negative_prompt: version?.negative_prompt ?? '',
     selected_assets: {},
+    // Task7：Prompt → 工作台是文生图语义（显式模式）
+    generation_mode: 'text',
     width: 1024,
     height: 1024,
     count: 1,

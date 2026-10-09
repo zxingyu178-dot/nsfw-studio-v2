@@ -189,3 +189,67 @@ def test_workbench_pure_import_still_has_no_context(mock_client, png_bytes):
     response = mock_client.get(f"/api/v1/images/{imported['id']}/workbench")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "IMAGE_NO_GENERATION_CONTEXT"
+
+
+# ===== Task7：generation_mode 显式往返（Job / History / Image / Recipe） =====
+
+def test_generation_mode_roundtrip_job_history_image(mock_client, png_bytes):
+    """image 模式（img2img）Job：Job 快照 / History / Image restore 都恢复 generation_mode=image。"""
+    source = import_one(mock_client, "p6_mode_src.png", png_bytes)
+    final = run_generate(mock_client, make_snapshot(
+        generation_mode="image",
+        input_images=[{"role": "source", "image_id": source["id"]}],
+        workflow_modules=[{"module_id": "img2img", "config": {"denoise": 0.55}}],
+    ))
+    assert final["workbench_snapshot"]["generation_mode"] == "image"
+    assert final["generation_settings"]["generation_mode"] == "image"
+
+    processed_id = final["stages"][0]["items"][0]["output_image_id"]
+    body = workbench_of(mock_client, processed_id)
+    assert body["snapshot"]["generation_mode"] == "image", "Image → 工作台必须显式恢复模式"
+
+    history = mock_client.get("/api/v1/history", params={"bucket": "completed"}).json()
+    entry = next(item for item in history["items"] if item["root_job_id"] == final["id"])
+    assert entry["root"]["workbench_snapshot"]["generation_mode"] == "image"
+
+
+def test_generation_mode_recipe_roundtrip_without_image(mock_client):
+    """image 模式就算暂时没有选择图片，也要随 Recipe 保留（未来 Reference 不会退回文生图）。"""
+    response = mock_client.post("/api/v1/recipes", json={
+        "name": "P6 图片模式",
+        "snapshot": make_snapshot(generation_mode="image"),
+    })
+    assert response.status_code == 201, response.text
+    recipe_id = response.json()["id"]
+    version = mock_client.get(f"/api/v1/recipes/{recipe_id}").json()["current_version"]
+    assert version["generation_settings"]["generation_mode"] == "image"
+
+    # 旧契约（无 generation_mode 的配方）→ 返回 null（前端按输入图推断，向后兼容）
+    legacy = mock_client.post("/api/v1/recipes", json={
+        "name": "P6 旧快照",
+        "snapshot": make_snapshot(),
+    }).json()
+    legacy_version = mock_client.get(f"/api/v1/recipes/{legacy['id']}").json()["current_version"]
+    assert legacy_version["generation_settings"]["generation_mode"] is None
+
+
+def test_generation_mode_null_for_text_job(mock_client):
+    """旧调用方（无 generation_mode）提交 → 保存 null，绝不伪造模式。"""
+    final = run_generate(mock_client, make_snapshot(count=1))
+    assert final["workbench_snapshot"].get("generation_mode") is None
+    assert final["generation_settings"]["generation_mode"] is None
+
+
+# ===== Task3：Recipe 不保存固定 Seed（fixed → random 归一化，不报错） =====
+
+def test_recipe_save_normalizes_fixed_seed_to_random(mock_client):
+    """fixed Seed 工作台 → 保存 Recipe 201（不再 400）→ reopen 为 random。"""
+    response = mock_client.post("/api/v1/recipes", json={
+        "name": "P6 固定 Seed",
+        "snapshot": make_snapshot(seed_mode="fixed", seed=12345),
+    })
+    assert response.status_code == 201, response.text
+    recipe = response.json()
+    assert recipe["current_version"]["generation_settings"]["seed_mode"] == "random"
+    reopened = mock_client.get(f"/api/v1/recipes/{recipe['id']}").json()
+    assert reopened["current_version"]["generation_settings"]["seed_mode"] == "random"

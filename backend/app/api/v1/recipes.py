@@ -95,6 +95,8 @@ def _snapshot_to_version_args(
             "height": snapshot.height,
             "default_count": snapshot.count,
             "seed_mode": snapshot.seed_mode,
+            # Phase 6 Task7：生成模式随 Recipe 往返（旧版本无该字段 → 前端按输入图推断）
+            "generation_mode": snapshot.generation_mode,
             "params": {},
         },
         workflow_modules=_pin_workflow_modules(settings, snapshot.workflow_modules),

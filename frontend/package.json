@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:store": "node ../tests/frontend/workbench_store.phase6.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

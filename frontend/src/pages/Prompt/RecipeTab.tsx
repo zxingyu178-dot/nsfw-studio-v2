@@ -122,6 +122,8 @@ export function recipeToSnapshot(version: RecipeVersionDTO | null): WorkbenchSna
       full_prompt: '',
       negative_prompt: '',
       selected_assets: {},
+      // Task7：无版本 = 空工作台（文生图）；有版本时恢复保存时的显式模式
+      generation_mode: 'text',
       width: 1024,
       height: 1024,
       count: 1,
@@ -147,6 +149,8 @@ export function recipeToSnapshot(version: RecipeVersionDTO | null): WorkbenchSna
     height: version.generation_settings.height,
     count: version.default_count,
     seed_mode: 'random',
+    // Task7：生成模式随版本恢复（旧版本无该字段 → null，由 hydrate 按输入图推断）
+    generation_mode: version.generation_settings?.generation_mode ?? null,
     workflow_modules: version.workflow_snapshot.modules,
     // §九：输入图关系原样恢复（missing 标记随快照进入工作台，显式提示不静默清空）
     input_images: (version.input_images ?? []).map((ref) => ({

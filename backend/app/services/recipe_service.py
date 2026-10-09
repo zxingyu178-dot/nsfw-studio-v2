@@ -3,8 +3,10 @@
 - Recipe = 完整工作台配置快照；Prompt 快照 + 来源 FK 同时保存（§二十四）；
 - 素材快照锁定具体 asset_version_id + 当时的 prompt/preview 快照（§二十五、§二十六）；
 - 一个 RecipeVersion 一个 slot 最多一个素材（UNIQUE 约束 + Service 校验）；
-- seed_mode 固定 random（§二十九）；generation_settings.model_ref 只是占位槽位，
-  禁止出现具体模型名（§二十七）；workflow_snapshot 第一版 {"modules": []}（§二十八）。
+- seed_mode 固定 random（§二十九；Phase 6 Task3）：Recipe 产品规则不保存固定 Seed，
+  "使用此图 Seed"的工作台保存时归一化为 random（不报错，也不强制改 Workbench 状态）；
+  generation_settings.model_ref 只是占位槽位，禁止出现具体模型名（§二十七）；
+  workflow_snapshot 第一版 {"modules": []}（§二十八）。
 """
 from __future__ import annotations
 
@@ -53,9 +55,13 @@ def _validate_generation_settings(raw: Mapping[str, Any] | None) -> dict[str, An
         raise ValidationError("尺寸必须为正整数", code="GENERATION_SETTINGS_INVALID")
     if default_count < 1 or default_count > 64:
         raise ValidationError("数量取值范围为 1-64", code="GENERATION_SETTINGS_INVALID")
-    seed_mode = raw.get("seed_mode", "random")
-    if seed_mode != "random":
-        raise ValidationError("Phase 1 仅支持 seed_mode=random", code="SEED_MODE_INVALID")
+    seed_mode = str(raw.get("seed_mode", "random"))
+    if seed_mode not in ("random", "fixed"):
+        raise ValidationError("seed_mode 必须为 random 或 fixed", code="SEED_MODE_INVALID")
+    # Phase 6 Task7：生成模式随 Recipe 版本往返（旧版本无该字段 → None → 前端按输入图推断）
+    generation_mode = raw.get("generation_mode")
+    if generation_mode not in (None, "text", "image"):
+        raise ValidationError("generation_mode 必须为 text / image", code="GENERATION_SETTINGS_INVALID")
     params = raw.get("params", {})
     if not isinstance(params, dict):
         raise ValidationError("params 必须为对象", code="GENERATION_SETTINGS_INVALID")
@@ -64,7 +70,10 @@ def _validate_generation_settings(raw: Mapping[str, Any] | None) -> dict[str, An
         "width": width,
         "height": height,
         "default_count": default_count,
+        # Phase 6 Task3：固定 Seed 归一化为 random / seed=null——
+        # "使用此图 Seed"的工作台可以直接保存 Recipe（201），重新打开后是 random。
         "seed_mode": "random",
+        "generation_mode": generation_mode,
         "params": params,
     }
 

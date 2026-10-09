@@ -432,12 +432,15 @@ def create_job(
 
     identity = modules[0]
     workflow_snapshot = _workflow_snapshot_from_modules(modules)
+    # Phase 6 Task7：生成模式显式保存（text/image；旧调用方缺省 → None，由快照 input_images 语义兜底）
+    generation_mode = snapshot.get("generation_mode")
     generation_settings = {
         "model_ref": None,
         "width": width,
         "height": height,
         "seed_mode": seed_mode,
         "seed": seed_value,
+        "generation_mode": generation_mode if generation_mode in ("text", "image") else None,
         "params": {},
     }
 

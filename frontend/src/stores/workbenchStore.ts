@@ -108,20 +108,22 @@ export function isImageCapablePrimary(state: WorkbenchState): boolean {
 }
 
 /**
- * Task6：按模式保证 Primary Module 一致性（禁止自相矛盾状态）。
+ * Task6/Task2：按模式保证 Primary Module 一致性（禁止自相矛盾状态）。
  *
  * - 文生图：primary 必须是 basic_generate（保留完整身份；换模块时丢弃旧身份）；
  * - 图片生成：primary 必须是**可用**的图片条件模块；恢复出的完整身份在可用时原样保留，
  *   不可用 / 是 basic_generate（历史矛盾数据）时切换到目录中的可用模块（丢弃旧身份）；
- * - 高清永远排在后面；切换模式不影响输入图片（回到图片模式不丢选择）。
+ * - 非 Primary 模块（高清 / 未来 Reference 后处理…）**保持原有顺序与完整身份**：
+ *   禁止重建裸 {module_id:'upscale'}，从 History / Recipe / Image 恢复出的
+ *   module_version / provider / binding_version / 双 hash / config 必须原样保留；
+ * - 切换模式不影响输入图片（回到图片模式不丢选择）。
  */
 function normalizeModules(
   modules: WorkflowModuleRef[],
   mode: WorkbenchMode,
   catalog: ModuleCapabilitiesDTO[],
 ): WorkflowModuleRef[] {
-  const upscale = hasUpscaleModule(modules)
-  const primary = modules[0] ?? null
+  const [primary = null, ...rest] = modules
   const imageModules = availableImageModuleIds(catalog)
   let nextPrimary: WorkflowModuleRef
   if (mode === 'text') {
@@ -134,11 +136,13 @@ function normalizeModules(
     // 目录尚未加载或没有可用图片模块：保留现状（由 Gate 阻止提交，绝不静默降级）
     nextPrimary = primary ?? { module_id: 'basic_generate' }
   }
-  const result = upscale ? [nextPrimary, { module_id: 'upscale' }] : [nextPrimary]
-  return result.map((module) => ({ ...module }))
+  return [nextPrimary, ...rest].map((module) => ({
+    ...module,
+    config: { ...(module.config ?? {}) },
+  }))
 }
 
-/** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份与 config 原样保留，Task9/Task3） */
+/** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份与 config 原样保留，Task9/Task3/Task7） */
 export function snapshotFromState(): WorkbenchSnapshot {
   return {
     prompt_mode: state.promptMode,
@@ -146,6 +150,8 @@ export function snapshotFromState(): WorkbenchSnapshot {
     full_prompt: state.promptMode === 'full' ? state.fullPrompt : '',
     negative_prompt: state.negativePrompt,
     selected_assets: { ...state.selectedAssets },
+    // Task7：生成模式显式进入快照（不靠 input_images 反推；Reference 等未来模式不会丢）
+    generation_mode: state.mode,
     // §八/§十：输入图片只在"图片生成"模式下进入快照（文生图语义不携带输入图）
     input_images:
       state.mode === 'image'
@@ -165,11 +171,13 @@ export function snapshotFromState(): WorkbenchSnapshot {
   }
 }
 
-/** 整体注入快照（Prompt / Recipe / Image / History → 工作台，100% 恢复，含模块身份 §十六/Task9） */
+/** 整体注入快照（Prompt / Recipe / Image / History → 工作台，100% 恢复，含模块身份 §十六/Task9/Task7） */
 export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: string | null = null): void {
   const modules = (snapshot.workflow_modules ?? []) as WorkflowModuleRef[]
   const inputImages = (snapshot.input_images ?? []).map((ref) => ({ ...ref }))
-  const mode: WorkbenchMode = inputImages.length > 0 ? 'image' : 'text'
+  // Task7：显式 generation_mode 优先；旧快照（无该字段）才按输入图推断（向后兼容）
+  const mode: WorkbenchMode =
+    snapshot.generation_mode ?? (inputImages.length > 0 ? 'image' : 'text')
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
@@ -207,6 +215,8 @@ export function emptyWorkbenchSnapshot(): WorkbenchSnapshot {
     full_prompt: '',
     negative_prompt: '',
     selected_assets: {},
+    // Task7：空工作台 = 文生图（显式模式；"用作输入图 / 图生图"入口会显式覆盖为 image）
+    generation_mode: 'text',
     input_images: [],
     width: initial.width,
     height: initial.height,

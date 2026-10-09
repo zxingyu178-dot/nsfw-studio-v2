@@ -1,6 +1,8 @@
 """RecipeService：CRUD / Prompt 快照 / 素材版本快照 / 恢复（Phase 1 规范 §二十一-§二十九）。"""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.core.errors import NotFoundError, ValidationError
@@ -117,12 +119,20 @@ def test_recipe_content_change_creates_version_unchanged_skips(session, clothing
 
 
 def test_generation_settings_validation(session):
+    # Phase 6 Task3：Recipe 不保存固定 Seed——fixed 不再报错，归一化为 random
+    recipe = recipe_service.create_recipe(
+        session, name="R", prompt_mode="full", positive_prompt="x",
+        generation_settings={"seed_mode": "fixed"},
+    )
+    version = recipe_service.get_current_version(session, recipe)
+    assert json.loads(version.generation_settings_json)["seed_mode"] == "random"
+
     with pytest.raises(ValidationError) as exc:
         recipe_service.create_recipe(
             session, name="R", prompt_mode="full", positive_prompt="x",
-            generation_settings={"seed_mode": "fixed"},
+            generation_settings={"seed_mode": "sometimes"},
         )
-    assert exc.value.code == "SEED_MODE_INVALID"  # Phase 1 固定 random（规范 §二十九）
+    assert exc.value.code == "SEED_MODE_INVALID"
 
     with pytest.raises(ValidationError):
         recipe_service.create_recipe(

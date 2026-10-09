@@ -210,6 +210,8 @@ def asset_to_workbench(asset_id: str, session: Session = Depends(get_session)) -
                 asset_id=asset.id, asset_version_id=current.id, name=asset.name
             )
         },
+        # Phase 6 Task7：素材 → 工作台是文生图语义（显式模式，不靠输入图反推）
+        generation_mode="text",
     )
     return AssetWorkbenchResponse(slot=asset.type, asset=_asset_response(session, asset), snapshot=snapshot)
 

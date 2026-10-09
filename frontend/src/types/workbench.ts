@@ -1,6 +1,8 @@
 // 前后端共享契约类型（与 backend/app/schemas 双侧镜像，字段名不得另起）
 export type PromptMode = 'structured' | 'full'
 export type AssetType = 'face' | 'clothing' | 'pose' | 'scene'
+/** Phase 6 Task7：生成模式（文生图 / 图片生成）——显式字段，禁止靠 input_images 反推 */
+export type GenerationMode = 'text' | 'image'
 
 /** 结构化 Prompt 八部分（顺序永久固定，规范 §八） */
 export interface StructuredPrompt {
@@ -100,6 +102,8 @@ export interface GenerationSettingsDTO {
   width: number
   height: number
   seed_mode: string
+  /** Phase 6 Task7：Recipe / Job 往返携带生成模式（旧数据无该字段 → null，前端按输入图推断） */
+  generation_mode?: GenerationMode | null
   params: Record<string, unknown>
 }
 
@@ -186,6 +190,11 @@ export interface WorkbenchSnapshot {
   seed?: number | null
   workflow_modules: WorkflowModuleRef[]
   input_images?: InputImageRef[]
+  /**
+   * Phase 6 Task7：生成模式显式保存与恢复。
+   * 向后兼容：null / undefined = 旧快照，按 input_images / Primary Module 推断。
+   */
+  generation_mode?: GenerationMode | null
   source_prompt_id?: string | null
   source_prompt_version_id?: string | null
 }

@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from app.services.prompt_composer import loads_structured
 
 PromptMode = Literal["structured", "full"]
+# Phase 6 Task7：生成模式（文生图 / 图片生成）——显式字段，禁止长期靠"有没有 input_images"反推
+GenerationMode = Literal["text", "image"]
 
 
 class StructuredPromptModel(BaseModel):
@@ -50,6 +52,8 @@ class GenerationSettingsModel(BaseModel):
     width: int = 1024
     height: int = 1024
     seed_mode: str = "random"
+    # Phase 6 Task7：Recipe / Job 快照往返携带生成模式（旧数据无该字段 → None，前端按输入图推断）
+    generation_mode: GenerationMode | None = None
     params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -95,6 +99,9 @@ class WorkbenchSnapshotModel(BaseModel):
     selected_assets: dict[str, SelectedAssetRef] = Field(default_factory=dict)
     # Phase 5：输入图片（image_id 统一引用图库；第一版 max=1，role=source）
     input_images: list[InputImageRefModel] = Field(default_factory=list, max_length=1)
+    # Phase 6 Task7：生成模式显式字段（向后兼容：None = 旧快照，按 input_images / Primary Module 推断）。
+    # 图片生成（含未来 Reference）不会因为"暂时没有选择图片"被自动改回文生图。
+    generation_mode: GenerationMode | None = None
     width: int = Field(default=1024, ge=64, le=4096)
     height: int = Field(default=1024, ge=64, le=4096)
     count: int = Field(default=1, ge=1, le=64)

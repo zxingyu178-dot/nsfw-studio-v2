@@ -291,6 +291,7 @@ export default function GalleryPage() {
   function useAsInput(image: ImageDTO): void {
     const snapshot = snapshotFromState()
     snapshot.input_images = [{ role: 'source', image_id: image.id }]
+    snapshot.generation_mode = 'image' // Task7：显式图片生成模式（不靠输入图反推）
     setDetail(null)
     navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
@@ -584,8 +585,9 @@ function GalleryDetailDrawer({
       .workbench(image.id)
       .then((result) => {
         const snapshot = { ...result.snapshot }
-        // Task7：seed 来自**根生成图**（result.seed），不是高清图自己的空 seed；
-        // 后端已按"追溯根生成 Job + 完整执行身份"返回快照（Task9）
+        // Phase 6 Task1：seed 来自**最近的生成上下文图**（result.seed，如 img2img 输出），
+        // 不是派生高清图自己的空 seed；
+        // 后端已按"最近生成上下文 Job + 完整执行身份"返回快照（Task9）
         if (useSeed && result.seed !== null) {
           snapshot.seed = result.seed
           snapshot.seed_mode = 'fixed'
@@ -610,6 +612,7 @@ function GalleryDetailDrawer({
     const go = (base: WorkbenchSnapshot): void => {
       const snapshot: WorkbenchSnapshot = {
         ...base,
+        generation_mode: 'image', // Task7：图生图必须显式进入图片生成模式
         input_images: [{ role: 'source', image_id: image.id }],
       }
       onClose()
