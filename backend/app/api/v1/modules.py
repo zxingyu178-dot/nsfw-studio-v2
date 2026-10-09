@@ -20,10 +20,11 @@ router = APIRouter(prefix="/modules", tags=["modules"])
 def list_modules(request: Request) -> list[dict]:
     """返回全部已注册模块的能力声明与可用性。
 
-    响应字段（Phase 5.1 Task7）：
-        module_id / module_version / title / description / 能力字段…
-        registered（恒为 true——来自注册表）
-        available（真实可执行：comfyui 下必须能加载 provider binding）
+    响应字段（Phase 5.1 Task7；Phase 6 Task5）：
+        module_id / module_version（新 Job 将使用的代码版本，已校验真实注册）
+        title / description / 能力字段…
+        registered（module_id 已注册；版本级问题由 unavailable_reason 表达）
+        available（真实可执行：版本已注册 + comfyui provider binding 可加载）
         provider / binding_version / unavailable_reason
     """
     settings: Settings = request.app.state.settings
@@ -36,7 +37,8 @@ def list_modules(request: Request) -> list[dict]:
         info = availability.get(module_id) or {}
         result.append({
             "module_id": capabilities.module_id,
-            "module_version": capabilities.module_version,
+            # Task5（Phase 6）：新 Job 将使用的代码版本（availability 已校验真实注册）
+            "module_version": info.get("module_version") or capabilities.module_version,
             "title": capabilities.title,
             "description": capabilities.description,
             "uses_seed": capabilities.uses_seed,
@@ -46,8 +48,8 @@ def list_modules(request: Request) -> list[dict]:
             "output_kind": capabilities.output_kind,
             "parent_policy": capabilities.parent_policy,
             "output_cardinality": capabilities.output_cardinality,
-            # Task7：真实可用性（前端 Gate 的唯一依据）
-            "registered": True,
+            # Task7/Task5（Phase 6）：真实可用性（前端 Gate 的唯一依据）
+            "registered": bool(info.get("registered", True)),
             "available": bool(info.get("available")),
             "provider": info.get("provider"),
             "binding_version": info.get("binding_version"),

@@ -252,11 +252,19 @@ def test_pipeline_validator_rules():
         validator.validate([{"module_id": "upscale"}], job_kind="generate", has_input_image=False)
     assert error.value.code == "INPUT_IMAGE_REQUIRED"
 
-    # 非法：中间 Stage 不消费上一 Stage 输出（链式执行无意义）
+    # 非法：同一模块重复出现（Phase 6 Task4：第一版明确禁止，专用错误码）
     with pytest.raises(ValidationError) as error:
         validator.validate(
             [{"module_id": "basic_generate"}, {"module_id": "basic_generate"}],
             job_kind="generate", has_input_image=False,
+        )
+    assert error.value.code == "PIPELINE_DUPLICATE_MODULE"
+
+    # 非法：中间 Stage 不消费上一 Stage 输出（链式执行无意义）
+    with pytest.raises(ValidationError) as error:
+        validator.validate(
+            [{"module_id": "upscale"}, {"module_id": "basic_generate"}],
+            job_kind="generate", has_input_image=True,
         )
     assert error.value.code == "PIPELINE_INVALID"
 

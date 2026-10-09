@@ -253,3 +253,97 @@ def test_recipe_save_normalizes_fixed_seed_to_random(mock_client):
     assert recipe["current_version"]["generation_settings"]["seed_mode"] == "random"
     reopened = mock_client.get(f"/api/v1/recipes/{recipe['id']}").json()
     assert reopened["current_version"]["generation_settings"]["seed_mode"] == "random"
+
+
+# ===== Task4：Pipeline 顺序保持 + 重复模块拒绝 =====
+
+def test_resolve_workflow_modules_preserves_request_order(settings):
+    """不再按硬编码 MODULE_ORDER 重排（否则未来 reference_generate→upscale 会被错误重排）。"""
+    from app.engine.factory import resolve_workflow_modules
+
+    identities = resolve_workflow_modules(
+        mock_settings(settings), [{"module_id": "upscale"}, {"module_id": "basic_generate"}],
+    )
+    assert [item["module_id"] for item in identities] == ["upscale", "basic_generate"], \
+        "Pipeline 顺序必须严格等于请求顺序"
+
+
+def test_job_creation_rejects_duplicate_module(mock_client, png_bytes):
+    """同一 module_id 在一个 Pipeline 中重复出现 → 400 PIPELINE_DUPLICATE_MODULE。"""
+    source = import_one(mock_client, "p6_dup.png", png_bytes)
+    response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(
+        input_images=[{"role": "source", "image_id": source["id"]}],
+        workflow_modules=[{"module_id": "img2img"}, {"module_id": "img2img"}],
+    )})
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "PIPELINE_DUPLICATE_MODULE"
+
+
+def test_recipe_rejects_duplicate_module(mock_client):
+    response = mock_client.post("/api/v1/recipes", json={
+        "name": "P6 重复模块",
+        "snapshot": make_snapshot(workflow_modules=[
+            {"module_id": "upscale"}, {"module_id": "upscale"},
+        ]),
+    })
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "PIPELINE_DUPLICATE_MODULE"
+
+
+def test_pipeline_validator_rejects_duplicate_directly():
+    """Validator 是唯一合法性入口（不依赖工厂去重），内部直调路径同样拒绝。"""
+    from app.core.errors import ValidationError
+    from app.services.pipeline_validator import PipelineValidator
+
+    with pytest.raises(ValidationError) as exc:
+        PipelineValidator().validate(
+            [{"module_id": "basic_generate", "module_version": "v1"},
+             {"module_id": "basic_generate", "module_version": "v1"}],
+            job_kind="generate", has_input_image=False,
+        )
+    assert exc.value.code == "PIPELINE_DUPLICATE_MODULE"
+
+
+# ===== Task5：Module Availability 收紧 + 未注册版本创建期拒绝 =====
+
+def test_unregistered_module_version_rejected_at_creation(mock_client):
+    """未注册 module_version（完整固化身份）→ Job 创建期 400，绝不先创建再执行期炸。"""
+    response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(
+        workflow_modules=[{
+            "module_id": "basic_generate", "module_version": "v99",
+            "provider": "mock", "binding_version": "v1",
+        }],
+    )})
+    assert response.status_code == 400, response.text
+    assert "版本不存在" in response.json()["error"]["message"]
+
+
+def test_module_availability_keeps_version_domains_separate(settings):
+    """binding_version 不得用 module_version 兜底；配置了未注册版本 → available=false。"""
+    from app.engine.factory import module_availability
+
+    merged = dataclasses.replace(settings, workflow=WorkflowConfig(raw={"engine": {
+        "provider": "mock", "module_id": "basic_generate",
+        "module_version": "v2", "binding_version": "v1",
+    }}))
+    entries = {item["module_id"]: item for item in module_availability(merged)}
+    basic = entries["basic_generate"]
+    assert basic["module_version"] == "v2"
+    assert basic["binding_version"] == "v1", "不得把 module_version 当 binding_version fallback"
+    assert basic["registered"] is True
+    assert basic["available"] is False
+    assert basic["unavailable_reason"] == "module_version_not_registered"
+    # 其余模块不受默认模块 engine 级配置影响（各自 v1）
+    img2img = entries["img2img"]
+    assert img2img["module_version"] == "v1" and img2img["binding_version"] == "v1"
+    assert img2img["available"] is True
+
+
+def test_modules_api_reports_registered_and_reason(mock_client):
+    modules = {item["module_id"]: item for item in mock_client.get("/api/v1/modules").json()}
+    for module_id in ("basic_generate", "img2img", "upscale"):
+        module = modules[module_id]
+        assert module["registered"] is True
+        assert module["module_version"] == "v1"
+        assert module["available"] is True  # mock：测试引擎可执行全部已注册模块
+        assert module["unavailable_reason"] is None

@@ -159,9 +159,11 @@ def test_resume_inherits_parent_workflow_identity(mock_client):
     engine_cfg["module_version"] = "v2"
     engine_cfg["binding_version"] = "v2"
     try:
-        fresh = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot()}).json()
-        assert fresh["workflow_snapshot"]["modules"][0]["module_version"] == "v2", \
-            "升级后新创建的 Job 才应使用当前 v2 身份"
+        # Phase 6 Task4/Task5：v2 只有配置、没有注册代码 → 新 Job 创建期即拒绝（fail fast，
+        # 禁止先创建再在执行期才炸；修复见 module_availability / PipelineValidator）
+        fresh = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot()})
+        assert fresh.status_code == 400
+        assert "版本不存在" in fresh.json()["error"]["message"]
 
         child = mock_client.post(f"/api/v1/jobs/{job['id']}/resume-remaining").json()
         child_modules = child["workflow_snapshot"]["modules"]

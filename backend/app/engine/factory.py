@@ -17,9 +17,6 @@ from app.core.config import Settings
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError
 from app.engine.input_registry import REGISTRY_FILENAME, EngineInputRegistry
 
-# 已知模块的固定执行顺序（主生成 → 高清 → 未来模块按请求顺序追加）
-MODULE_ORDER = ("basic_generate", "img2img", "upscale")
-
 # 执行身份字段（EngineBindingRef 等价）：任何一项存在即视为"携带身份"
 _IDENTITY_KEYS = ("module_version", "provider", "binding_version", "workflow_hash", "binding_hash")
 
@@ -75,6 +72,11 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
     - 从历史恢复（携带完整身份，Task9）：固定使用原身份，禁止静默升级；
       comfyui 下必须通过 load_binding 校验（BINDING_NOT_FOUND / WORKFLOW_HASH_MISMATCH /
       BINDING_HASH_MISMATCH / BINDING_IDENTITY_MISMATCH 直接拒绝）。
+    Phase 6 Task4：
+    - **严格保持请求顺序**（不再按硬编码 MODULE_ORDER 重排——
+      否则 reference_generate → upscale 会被错误重排成 upscale → reference_generate；
+      合法性由 PipelineValidator + ModuleCapabilities 校验）；
+    - 同一 module_id 在 Pipeline 中重复出现 → PIPELINE_DUPLICATE_MODULE（第一版禁止）。
     """
     engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
     provider = str(engine_cfg.get("provider", "unbound"))
@@ -85,17 +87,21 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
     ids: list[str] = []
     for entry in requested or []:
         module_id = str((entry or {}).get("module_id") or "").strip()
-        if module_id and module_id not in ids:
-            ids.append(module_id)
-            entries[module_id] = dict(entry or {})
+        if not module_id:
+            continue
+        if module_id in entries:
+            raise EngineError(
+                "PIPELINE_DUPLICATE_MODULE",
+                f"Pipeline 不允许同一模块重复出现: {module_id}",
+            )
+        ids.append(module_id)
+        entries[module_id] = dict(entry or {})
     if not ids:
         ids = [default_module]
-    ordered = [module_id for module_id in MODULE_ORDER if module_id in ids]
-    ordered += [module_id for module_id in ids if module_id not in MODULE_ORDER]
 
     identities: list[dict] = []
     adapter = None
-    for module_id in ordered:
+    for module_id in ids:
         pinned = _pinned_identity(entries.get(module_id) or {})
         if pinned is not None:
             if pinned["provider"] != provider:
@@ -159,13 +165,21 @@ def _binding_unavailable_reason(error_type: str) -> str:
 
 
 def module_availability(settings: Settings) -> list[dict]:
-    """Task7（Phase 5.1）：每个已注册模块的**真实可执行性**（registered ≠ available）。
+    """每个已注册模块的**真实可执行性**（registered ≠ available；Phase 5.1 Task7 + Phase 6 Task5）。
 
-    - comfyui：provider binding 能加载（目录 / 自描述 / 指纹一致）才视为 available；
+    Phase 6 Task5 收紧：
+
+    - `module_version` 与 `binding_version` 是不同域，**禁止互相 fallback**
+      （旧实现把配置的 module_version 当作 binding_version 兜底）；
+    - 新 Job 将使用的 module 代码版本必须真实注册（registry 校验），
+      否则 available=false / module_version_not_registered（执行期必炸的问题提前暴露）；
+    - comfyui：provider binding 能加载（目录存在 / 自描述一致 / 指纹）才 available；
     - mock：测试引擎可执行任何已注册模块 → available；
     - unbound：无引擎 → available=false（engine_not_configured）。
 
-    前端"图片生成 Gate"只能依据 available=true 判断，禁止因为代码里注册了模块就显示可用。
+    只检查磁盘绑定，不探测引擎在线状态——ComfyUI 临时离线 ≠ 模块不存在，
+    Engine 是否在线由 /engine/status 单独显示。
+    前端"图片生成 Gate"只能依据 available=true 判断，禁止因为代码里注册了就显示可用。
     """
     from app.workflows.registry import default_registry
 
@@ -179,17 +193,27 @@ def module_availability(settings: Settings) -> list[dict]:
     result: list[dict] = []
     for module_id in registry.ids():
         per_module = modules_cfg.get(module_id) or {}
-        fallback_version = (
-            str(engine_cfg.get("module_version", "v1")) if module_id == default_module else "v1"
-        )
-        binding_version = str(per_module.get("binding_version") or fallback_version)
+        is_default = module_id == default_module
+        # Task5：两个版本字段各自回落（默认模块用 engine 级配置，其余模块假定 v1）
+        module_version = str(per_module.get("module_version") or (
+            str(engine_cfg.get("module_version", "v1")) if is_default else "v1"
+        ))
+        binding_version = str(per_module.get("binding_version") or (
+            str(engine_cfg.get("binding_version", "v1")) if is_default else "v1"
+        ))
         entry: dict = {
             "module_id": module_id,
+            "registered": True,
+            "module_version": module_version,
             "provider": provider,
             "binding_version": binding_version,
             "available": False,
             "unavailable_reason": None,
         }
+        if not registry.has(module_id, module_version):
+            entry["unavailable_reason"] = "module_version_not_registered"
+            result.append(entry)
+            continue
         if provider == "comfyui":
             if adapter is None:
                 from app.engine.comfyui import ComfyUIAdapter

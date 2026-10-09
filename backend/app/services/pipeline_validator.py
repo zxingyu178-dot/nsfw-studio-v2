@@ -2,13 +2,18 @@
 
 在 **Job 创建前**（JobService）依据 ModuleCapabilities 验证，禁止把判断写进 QueueWorker：
 
-- 每个模块必须已注册且版本存在（未知模块在创建期拒绝，而不是执行期才炸）；
+- 同一 module_id 不允许重复出现（第一版明确禁止 → PIPELINE_DUPLICATE_MODULE，Task4）；
+- 每个模块必须已注册且**版本真实存在**（未知 module_id / 未注册 module_version
+  都在创建期拒绝，而不是执行期才炸；Task4/Task5：fail fast，不回退到 id 级）；
 - 模块 config 必须通过模块自己的 ``validate_config`` 钩子（config 是模块参数唯一事实源）；
 - Stage 0 输入配对（P0：输入图片不能被静默忽略）：
   - ``input_required=false`` 的模块携带输入图 → ``UNUSED_INPUT_IMAGE``；
   - ``input_required=true`` 的模块缺少输入图 → ``INPUT_IMAGE_REQUIRED``；
 - Stage N（N>0）必须能接收 Stage N-1 的输出（output_kind → input_kind 链式检查）；
 - 处理型 Job（process）的 Pipeline 必须且只能是 upscale。
+
+顺序语义（Task4）：Validator 只判断"这条 Pipeline 是否合法"，**绝不重排**——
+顺序由用户/Recipe/Workbench 提供，执行层严格保持。
 """
 from __future__ import annotations
 
@@ -28,23 +33,17 @@ class PipelineValidator:
         self._registry = registry or default_registry()
 
     def _resolve(self, module: dict[str, Any]) -> tuple[WorkflowModule, ModuleCapabilities]:
-        """解析模块实例与能力：module_id 未注册 → 4xx（创建期拒绝）。
+        """解析模块实例与能力：module_id / module_version 未注册 → 4xx（创建期拒绝）。
 
-        版本级解析与创建期校验解耦：固化版本暂不存在时（如模拟系统升级 v2），
-        结构校验按同 id 模块能力进行；执行侧仍按 Stage 固化版本严格解析
-        （发现不一致会在 Worker 阶段明确失败，绝不静默改跑别的版本）。
+        Phase 6 Task4/Task5：版本级解析**不再回退**到 id 级——
+        "未知 / 未注册 module_version" 必须在 Job 创建期就拒绝（fail fast），
+        而不是创建一个执行期必然失败的 Job。HISTORY/RECIPE 恢复同样适用：
+        被固化的代码版本已不存在时，明确 4xx，绝不静默改跑别的版本。
         """
         module_id = str(module.get("module_id") or "")
         module_version = module.get("module_version")
-        if module_version:
-            try:
-                instance = self._registry.get(module_id, str(module_version))
-            except EngineError:
-                pass  # 回退到 id 级能力校验
-            else:
-                return instance, instance.capabilities()
         try:
-            instance = self._registry.get(module_id)
+            instance = self._registry.get(module_id, str(module_version)) if module_version else self._registry.get(module_id)
         except EngineError as error:
             raise ValidationError(error.message, code=error.error_type) from error
         return instance, instance.capabilities()
@@ -59,6 +58,18 @@ class PipelineValidator:
         """校验整条 Pipeline；不合法时抛 ValidationError（4xx，Job 不被创建）。"""
         if not modules:
             raise ValidationError("Pipeline 至少需要一个 WorkflowModule", code="PIPELINE_INVALID")
+
+        # 0) Task4（Phase 6）：同一 module_id 不允许在 Pipeline 中重复出现（第一版明确禁止；
+        #    由本 Validator 承担，而不是在工厂里静默去重）
+        seen: set[str] = set()
+        for module in modules:
+            module_id = str(module.get("module_id") or "")
+            if module_id in seen:
+                raise ValidationError(
+                    f"Pipeline 不允许同一模块重复出现: {module_id}",
+                    code="PIPELINE_DUPLICATE_MODULE",
+                )
+            seen.add(module_id)
 
         resolved = [self._resolve(module) for module in modules]
 

@@ -92,10 +92,18 @@ def _validate_workflow_snapshot(modules: list[dict] | None) -> dict[str, Any]:
     if not isinstance(modules, list):
         raise ValidationError("workflow modules 必须为数组", code="WORKFLOW_SNAPSHOT_INVALID")
     cleaned = []
+    seen_ids: set[str] = set()
     for module in modules:
         data = module.model_dump() if isinstance(module, BaseModel) else module
         if not isinstance(data, dict) or not isinstance(data.get("module_id"), str):
             raise ValidationError("workflow module 缺少 module_id", code="WORKFLOW_SNAPSHOT_INVALID")
+        # Phase 6 Task4：同一 module_id 不允许在 Pipeline 中重复出现（第一版明确禁止）
+        if data["module_id"] in seen_ids:
+            raise ValidationError(
+                f"Pipeline 不允许同一模块重复出现: {data['module_id']}",
+                code="PIPELINE_DUPLICATE_MODULE",
+            )
+        seen_ids.add(data["module_id"])
         config = data.get("config")
         module_version = data.get("module_version")
         cleaned.append(
