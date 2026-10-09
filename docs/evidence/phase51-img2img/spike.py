@@ -5,8 +5,8 @@
 实验产物（输入 / 输出 / 元数据）全部落在本目录 outputs/，供 Gate C 判断。
 
 用法（项目 venv，含 httpx）：
-    .venv/Scripts/python.exe temp/experimental/qwen_img2img/spike.py \
-        --input inputs/structure_test_768.png \
+    .venv/Scripts/python.exe docs/evidence/phase51-img2img/spike.py \
+        --input docs/evidence/phase51-img2img/inputs/structure_test_768.png \
         --prompt "..." --negative "..." \
         --seed 12345 --denoise 0.55 --label d055
 

@@ -292,6 +292,16 @@ try {
     assert.deepEqual(state.workflowModules[0], { module_id: 'reference_generate' })
     assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE, '切换 primary 不得破坏高清模块身份')
   })
+
+  await run('历史矛盾数据（图片模式 + basic_generate + 输入图）→ 校正为可用图片模块', () => {
+    store.resetWorkbench()
+    store.setModuleCatalog(CATALOG)
+    store.hydrateWorkbench(makeSnapshot({
+      input_images: [{ role: 'source', image_id: 'img_source_1' }],
+      workflow_modules: [{ module_id: 'basic_generate' }],
+    }))
+    assert.equal(store.getWorkbenchState().workflowModules[0].module_id, 'img2img')
+  })
 } finally {
   await server.close()
 }

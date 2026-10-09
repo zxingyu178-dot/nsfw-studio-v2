@@ -114,7 +114,7 @@ ModuleCapabilities 统一校验，**判断不写进 QueueWorker**：
 
 ## 2. Part B：Qwen Img2Img 零下载实验（Task10-12）
 
-### 2.1 实验资产（temp/experimental/qwen_img2img/，**不进入正式 providers 目录**）
+### 2.1 实验资产（docs/evidence/phase51-img2img/，**不进入正式 providers 目录**）
 
 | 文件 | 内容 |
 | --- | --- |

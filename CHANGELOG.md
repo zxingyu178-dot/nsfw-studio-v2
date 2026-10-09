@@ -50,7 +50,7 @@
 
 ### 实验（零下载 Qwen Img2Img，Gate C 成功）
 
-- `temp/experimental/qwen_img2img/`：实验 Workflow（**不进入正式 providers 目录**）+
+- `docs/evidence/phase51-img2img/`：实验 Workflow（**不进入正式 providers 目录**）+
   spike 脚本 + 输入/输出/元数据。**未下载模型、未安装节点、未升级 ComfyUI、
   未修改用户工作流**。
 - 实测（ComfyUI 0.37.0 / RTX 3060 Laptop 6GB / 768×768 / steps 25 / seed 20261008）：

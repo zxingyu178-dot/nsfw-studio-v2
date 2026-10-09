@@ -27,7 +27,7 @@
 - **Task8 Face 参考图 clear**：reference_action inherit/set/clear；UI [更换]/[移除]；旧版本保留。
 - **Task9 导入去重兜底**：迁移 0011 部分唯一索引（source='import'）+ IntegrityError → duplicate；
   迁移前防御性去重（保留最早行，不删数据）。
-- **Task10-12 零下载实验**：temp/experimental/qwen_img2img/（workflow + spike + 输入/输出/元数据）；
+- **Task10-12 零下载实验**：docs/evidence/phase51-img2img/（workflow + spike + 输入/输出/元数据）；
   ComfyUI 0.37.0 / 3060 6GB / 768×768 / 25 步 / seed 20261008：
   d055（MAE 2.25，结构相关 0.9993）≈ 保留输入结构；d100 同 seed/prompt 对照 = 完全重绘（0.16）；
   无缺节点/模型、无 OOM；输出尺寸正确；seed/denoise 确实进入 KSampler。未下载模型/未装节点/

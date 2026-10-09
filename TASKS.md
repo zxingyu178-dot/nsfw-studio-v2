@@ -23,7 +23,7 @@
 
 ### B. Qwen Img2Img 零下载实验 → Gate C
 
-- [x] Task 10：实验 Workflow（temp/experimental/qwen_img2img/，不进入正式 providers 目录；
+- [x] Task 10：实验 Workflow（docs/evidence/phase51-img2img/，不进入正式 providers 目录；
   未下载模型/未装节点/未升级 ComfyUI/未改用户工作流）
 - [x] Task 11：最小真实实验（1 张输入 768×768 → 输出；seed/denoise/耗时/显存/错误全记录；
   另做 denoise=1.0 同 seed/prompt 对照 + 0.8 中间点）

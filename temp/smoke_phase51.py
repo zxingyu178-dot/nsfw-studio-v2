@@ -33,7 +33,7 @@ from app.storage.manager import StorageManager  # noqa: E402
 from app.workers.queue_worker import SingleQueueWorker  # noqa: E402
 from app.workflows.pipeline import PipelineExecutor  # noqa: E402
 
-DEFAULT_INPUT = PROJECT_ROOT / "temp" / "experimental" / "qwen_img2img" / "inputs" / "structure_test_768.png"
+DEFAULT_INPUT = PROJECT_ROOT / "docs" / "evidence" / "phase51-img2img" / "inputs" / "structure_test_768.png"
 REPORT_PATH = PROJECT_ROOT / "temp" / "smoke_phase51_report.json"
 
 

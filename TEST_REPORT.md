@@ -31,7 +31,7 @@
 | 实验中间点 d080（denoise 0.8） | ✅ 结构保留 + 可见语义变形（0.9886）；曲线 0.55/0.8/1.0 见 PHASE51_REPORT §2.4 |
 | 产品路径真实 smoke（1 张 img2img，走 JobService + Worker + 真实 ComfyUIAdapter） | ✅ Job COMPLETED；身份 img2img@v1/comfyui（wf=92132d53229d9bea, bh=ca978ab11e07ca4a）；StageItem 输入冻结=源图、seed=1182450547；输出 kind=processed、parent=输入图、768×768、落盘 images/processed/；config=denoise 0.55；10/10 检查通过（见 temp/smoke_phase51_report.json） |
 
-> 实验资产：`temp/experimental/qwen_img2img/`（workflow / spike / refetch / 输入输出与元数据，随仓库提交）。
+> 实验资产：`docs/evidence/phase51-img2img/`（workflow / spike / refetch / 输入输出与元数据，随仓库提交）。
 > **未下载模型、未安装节点、未升级 ComfyUI、未改用户工作流。**
 
 ### 未验证 / 限制（如实标注）

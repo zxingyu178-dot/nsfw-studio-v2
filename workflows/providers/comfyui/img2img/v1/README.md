@@ -3,7 +3,7 @@
 ## 来源与选择
 
 Phase 5.1 **零下载实验**验证通过的本机现有链（详见项目 `docs/PHASE51_REPORT.md` 与
-`temp/experimental/qwen_img2img/` 实验记录）：
+`docs/evidence/phase51-img2img/` 实验记录）：
 
 - Qwen-Image 2.1 UC Q4（`qwen-image-2.1-UC-Q4_0.gguf`）+ qwen3vl text encoder + Qwen VAE；
 - 图结构：`LoadImage → VAEEncode → KSampler(denoise) → VAEDecode → SaveImage`；

@@ -7,7 +7,7 @@
 - **核心执行逻辑零改动**：QueueWorker / PipelineScheduler / ImageService 不因本模块增加而修改。
 
 Provider binding：workflows/providers/comfyui/img2img/v1/（Qwen-Image 2.1 零下载 latent Img2Img，
-来源见 temp/experimental/qwen_img2img/ 实验与 docs/PHASE51_REPORT.md）。
+来源见 docs/evidence/phase51-img2img/ 实验与 docs/PHASE51_REPORT.md）。
 """
 from __future__ import annotations
 

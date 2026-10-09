@@ -1,8 +1,8 @@
 """补取实验输出（提交客户端因排队超时退出后，ComfyUI 仍在执行该 prompt）。
 
 用法：
-    .venv/Scripts/python temp/experimental/qwen_img2img/refetch.py \
-        --prompt-id <id> --label d080 --input inputs/structure_test_768.png
+    .venv/Scripts/python docs/evidence/phase51-img2img/refetch.py \
+        --prompt-id <id> --label d080 --input docs/evidence/phase51-img2img/inputs/structure_test_768.png
 """
 from __future__ import annotations
 
