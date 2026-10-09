@@ -3,7 +3,7 @@
 // Workflow stages / 版本 / 错误 / 生成图片，以及"在生成工作台打开 / 在图库查看 / 继续剩余图片"。
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApiRequestError, historyApi, imageApi, jobApi } from '../../api/client'
+import { ApiRequestError, historyApi, imageApi, jobApi, moduleApi } from '../../api/client'
 import { formatDateTime } from '../../utils/format'
 import {
   HISTORY_BUCKET_LABEL,
@@ -216,7 +216,47 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
     }
   }, [job.id])
 
-  const settings = job.generation_settings as { width?: number; height?: number }
+  /** Task9（Phase 6）：尺寸语义——explicit 显示 generation_settings；
+      size_mode=input 显示"跟随输入图 + 实际 Stage 输入尺寸"（不展示 Workbench 遗留的假宽高） */
+  const [sizeText, setSizeText] = useState('—')
+
+  useEffect(() => {
+    let cancelled = false
+    const settings = job.generation_settings as { width?: number; height?: number }
+    const explicit =
+      settings.width && settings.height ? `${settings.width} × ${settings.height}` : '—'
+    setSizeText(explicit)
+
+    const stage0 = job.stages?.[0]
+    const inputId = stage0?.items.find((item) => item.input_image_id)?.input_image_id ?? null
+    if (!stage0 || !inputId) {
+      return () => {
+        cancelled = true
+      }
+    }
+    moduleApi
+      .list()
+      .then((modules) => {
+        if (cancelled) return
+        const capabilities = modules.find((module) => module.module_id === stage0.module_id)
+        if (capabilities?.size_mode !== 'input') return
+        imageApi
+          .get(inputId)
+          .then((image) => {
+            if (!cancelled) setSizeText(`跟随输入图 ${image.width}×${image.height}`)
+          })
+          .catch(() => {
+            if (!cancelled) setSizeText('跟随输入图')
+          })
+      })
+      .catch(() => {
+        // 目录不可用：保持 explicit 展示，不阻塞任务详情
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [job])
+
   const seeds = job.items.map((item) => item.seed).filter((seed): seed is number => seed !== null)
   const structuredFields = STRUCTURED_FIELDS.filter(({ key }) => job.structured_prompt[key]?.trim())
   const resumable = canResumeRemaining(job)
@@ -309,7 +349,7 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
             </>
           )}
           <dt>尺寸</dt>
-          <dd>{settings.width ?? '—'} × {settings.height ?? '—'}</dd>
+          <dd>{sizeText}</dd>
           <dt>Seed</dt>
           <dd>{seeds.length > 0 ? seeds.join(', ') : '—（不使用 Seed）'}</dd>
           <dt>数量</dt>

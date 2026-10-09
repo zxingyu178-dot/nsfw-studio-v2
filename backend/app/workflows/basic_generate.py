@@ -48,8 +48,8 @@ class BasicGenerateModule(WorkflowModule):
             parameters=(
                 ParameterSpec("positive_prompt", "string", required=True, description="最终正向 Prompt"),
                 ParameterSpec("negative_prompt", "string", default="", description="负向 Prompt"),
-                ParameterSpec("width", "int", default=1024, description=f"{SIZE_MIN}~{SIZE_MAX}"),
-                ParameterSpec("height", "int", default=1024, description=f"{SIZE_MIN}~{SIZE_MAX}"),
+                ParameterSpec("width", "int", default=1024, min=SIZE_MIN, max=SIZE_MAX, description=f"{SIZE_MIN}~{SIZE_MAX}"),
+                ParameterSpec("height", "int", default=1024, min=SIZE_MIN, max=SIZE_MAX, description=f"{SIZE_MIN}~{SIZE_MAX}"),
                 ParameterSpec("seed", "int", required=True, description=f"0~{SEED_MAX}（每张独立）"),
             ),
             # Task2 输入/输出语义（ImageService 判定 kind/parent/seed 的唯一依据）
@@ -59,6 +59,8 @@ class BasicGenerateModule(WorkflowModule):
             output_kind="original",
             parent_policy="none",
             output_cardinality=1,
+            # Phase 6 Task9：输出尺寸由工作台显式宽高决定
+            size_mode="explicit",
         )
 
     # ===== 标准输入 =====

@@ -28,7 +28,12 @@ from app.engine.base import EngineAdapter, EngineBindingRef
 
 @dataclass(frozen=True)
 class ParameterSpec:
-    """模块参数定义（能力声明的一部分）。"""
+    """模块参数定义（能力声明的一部分；Phase 6 Task8 元数据驱动）。
+
+    ``configurable=True`` 的参数才是"可由用户/配方调整的模块 config"（如 img2img.denoise），
+    前端按 name/type/min/max/step/enum_values 元数据渲染控件；
+    其余参数（input_image / positive_prompt / seed / width…）由通用工作台字段提供。
+    """
 
     name: str
     type: str = "string"  # string | int | float | bool | enum
@@ -36,6 +41,14 @@ class ParameterSpec:
     default: Any = None
     enum_values: tuple[str, ...] = ()
     description: str = ""
+    # Task8：用户可读标题（中文 UI 标签；空则前端回落 name）
+    title: str = ""
+    # Task8：数值范围与步进（float/int 控件渲染依据；None = 不限）
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    # Task8：是否允许写入 WorkflowModuleRef.config（唯一由 config 承载的参数集合）
+    configurable: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,7 +64,9 @@ class ModuleCapabilities:
     - input_role：输入图片在模块语义中的角色（第一版固定 source）；
     - output_kind：产出物的 Image kind（original | upscaled | processed）；
     - parent_policy：none | input_image（产出物是否挂到输入图片下）；
-    - output_cardinality：单次执行的输出个数（第一版固定 1）。
+    - output_cardinality：单次执行的输出个数（第一版固定 1）；
+    - size_mode（Phase 6 Task9）：explicit | input——输出尺寸由工作台显式宽高决定，
+      还是跟随输入图片（禁止 UI/详情展示与产物不符的"假宽高"）。
     """
 
     module_id: str
@@ -66,6 +81,7 @@ class ModuleCapabilities:
     output_kind: str = "original"
     parent_policy: str = "none"
     output_cardinality: int = 1
+    size_mode: str = "explicit"
 
 
 @dataclass(frozen=True)

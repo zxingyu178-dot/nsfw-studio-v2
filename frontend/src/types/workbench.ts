@@ -207,7 +207,24 @@ export interface RecipeInputImageDTO {
   missing: boolean
 }
 
-/** WorkflowModule 能力声明 + 真实可用性（Phase 5 §十四/§二十；Phase 5.1 Task7）。
+/** 模块参数元数据（Phase 6 Task8：前端按此渲染控件，禁止按 module_id 手写） */
+export interface ModuleParameterDTO {
+  name: string
+  type: 'string' | 'int' | 'float' | 'bool' | 'enum' | string
+  required: boolean
+  default: unknown
+  /** 用户可读标题（中文 UI 标签；空则回落 name） */
+  title?: string
+  min?: number | null
+  max?: number | null
+  step?: number | null
+  enum_values?: string[]
+  /** 只有 configurable=true 的参数才写入 WorkflowModuleRef.config（前端渲染入口） */
+  configurable?: boolean
+  description?: string
+}
+
+/** WorkflowModule 能力声明 + 真实可用性（Phase 5 §十四/§二十；Phase 5.1 Task7；Phase 6 Task8/9）。
  *
  * Gate 判定唯一依据 = ``available``（registered ≠ available：
  * 未配置 provider binding 的模块 registered=true 但 available=false）。
@@ -224,6 +241,10 @@ export interface ModuleCapabilitiesDTO {
   output_kind: string
   parent_policy: string
   output_cardinality: number
+  /** Phase 6 Task9：explicit=工作台显式宽高；input=跟随输入图（UI 不显示假宽高） */
+  size_mode?: 'explicit' | 'input' | string
+  /** Phase 6 Task8：参数元数据（configurable=true 的按 type 渲染控件） */
+  parameters?: ModuleParameterDTO[]
   registered: boolean
   available: boolean
   provider: string | null

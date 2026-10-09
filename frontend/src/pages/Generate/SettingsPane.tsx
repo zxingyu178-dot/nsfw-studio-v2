@@ -3,6 +3,7 @@ import {
   hasUpscaleModule,
   isImageCapablePrimary,
   setCount,
+  setPrimaryModule,
   setPrimaryModuleConfig,
   setSeed,
   setSize,
@@ -27,6 +28,7 @@ import {
   STAGE_LABEL,
   shortJobId,
   type JobDTO,
+  type ModuleParameterDTO,
 } from '../../types/workbench'
 import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 
@@ -53,12 +55,24 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
   // Phase 5.1 Task6：Primary Module 必须与模式一致（图片生成 = 可用图片条件模块）
   const primaryModule = state.workflowModules[0]?.module_id ?? 'basic_generate'
+  const primaryCapabilities =
+    state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
   const primaryTitle =
-    state.moduleCatalog.find((module) => module.module_id === primaryModule)?.title ??
-    MODULE_LABEL[primaryModule] ??
-    primaryModule
-  // 图生图：变化强度来自模块 config（唯一事实源，随快照进入 JobStage.config_json）
-  const denoise = Number(state.workflowModules[0]?.config?.denoise ?? 0.55)
+    primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
+  // Task8（Phase 6）：Primary Module 轻量选择器候选——文生图 = 不消费输入图的可用模块；
+  // 图片生成 = 可用图片条件模块（available=true 是唯一依据）
+  const primaryCandidates = state.moduleCatalog.filter((module) =>
+    module.available &&
+    (state.mode === 'text'
+      ? !module.input_required
+      : module.input_required && module.output_kind === 'processed'),
+  )
+  // Task8（Phase 6）：可配置参数由 catalog Schema 驱动（如 img2img.denoise），不再按 module_id 手写
+  const configurableParams = (primaryCapabilities?.parameters ?? []).filter(
+    (param) => param.configurable,
+  )
+  // Task9（Phase 6）：size_mode=input 的模块输出跟随输入图 → 不显示工作台遗留的假宽高
+  const followsInputSize = primaryCapabilities?.size_mode === 'input'
   const primaryImageCapable = state.mode !== 'image' || isImageCapablePrimary(state)
   // Phase 5：图片生成模式的提交前置条件（Gate / 输入图片 / 丢失标记）
   const inputImage = state.inputImages[0] ?? null
@@ -147,11 +161,29 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
         </p>
       </div>
 
-      {/* ===== 工作流（§十五：轻量模块区，不做节点编辑器） ===== */}
+      {/* ===== 工作流（§十五：轻量模块区，不做节点编辑器；Task8 元数据驱动选择器） ===== */}
       <div className="field">
         <span className="field__label">工作流</span>
         <div className="workflow-modules">
-          <p className="field__static">① {primaryTitle}</p>
+          {primaryCandidates.length > 1 ? (
+            <>
+              <label className="field__label" htmlFor="primary-module">① 主工作流</label>
+              <select
+                id="primary-module"
+                className="input"
+                value={primaryModule}
+                onChange={(event) => setPrimaryModule(event.target.value)}
+              >
+                {primaryCandidates.map((module) => (
+                  <option key={module.module_id} value={module.module_id}>
+                    {module.title || MODULE_LABEL[module.module_id] || module.module_id}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <p className="field__static">① {primaryTitle}</p>
+          )}
           <label className="field__check">
             <input
               type="checkbox"
@@ -166,28 +198,23 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
         </div>
       </div>
 
-      {/* ===== 图生图：变化强度（Phase 5.1；仅当 Primary Module = img2img 时显示） ===== */}
-      {primaryModule === 'img2img' && (
-        <div className="field">
-          <div className="field__label-row">
-            <label className="field__label" htmlFor="img2img-denoise">变化强度</label>
-            <span className="muted">{denoise.toFixed(2)}</span>
-          </div>
-          <input
-            id="img2img-denoise"
-            className="input"
-            type="range"
-            min={0.05}
-            max={1}
-            step={0.05}
-            value={denoise}
-            onChange={(event) => setPrimaryModuleConfig({ denoise: Number(event.target.value) })}
-          />
-          <p className="muted">越低越接近原图；输出尺寸 = 输入图尺寸。</p>
-        </div>
-      )}
+      {/* ===== 模块参数（Task8：catalog 参数 Schema 驱动，float/int/bool/enum；不做节点编辑器） ===== */}
+      {configurableParams.map((param) => (
+        <ModuleParameterField
+          key={param.name}
+          param={param}
+          value={state.workflowModules[0]?.config?.[param.name]}
+          onChange={(value) => setPrimaryModuleConfig({ [param.name]: value })}
+        />
+      ))}
 
-      {primaryModule !== 'img2img' && (
+      {/* ===== 尺寸（Task9：size_mode=input 不显示假宽高） ===== */}
+      {followsInputSize ? (
+        <div className="field">
+          <span className="field__label">尺寸</span>
+          <p className="field__static">跟随输入图（无需设置宽高）</p>
+        </div>
+      ) : (
         <>
           <div className="field">
             <label className="field__label" htmlFor="size-width">宽度 (px)</label>
@@ -490,4 +517,104 @@ function clampDimension(text: string): number {
   const value = Number.parseInt(text, 10)
   if (Number.isNaN(value)) return 1024
   return Math.min(4096, Math.max(64, value))
+}
+
+/**
+ * Task8（Phase 6）：按 ParameterSpec 元数据渲染一个可配置参数。
+ *
+ * 支持 float / int / bool / enum（不做节点编辑器；string/image 等由通用工作台字段承担）。
+ * 值写入 WorkflowModuleRef.config——模块参数唯一事实源，经 Recipe/Job 进入 JobStage.config_json。
+ */
+function ModuleParameterField({
+  param,
+  value,
+  onChange,
+}: {
+  param: ModuleParameterDTO
+  value: unknown
+  onChange: (value: unknown) => void
+}) {
+  const resolved = value ?? param.default
+  const label = param.title || param.name
+  const fieldId = `param-${param.name}`
+
+  if (param.type === 'bool') {
+    return (
+      <div className="field">
+        <label className="field__check">
+          <input
+            type="checkbox"
+            checked={Boolean(resolved)}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          {label}
+        </label>
+        {param.description && <p className="muted">{param.description}</p>}
+      </div>
+    )
+  }
+
+  if (param.type === 'enum') {
+    return (
+      <div className="field">
+        <label className="field__label" htmlFor={fieldId}>{label}</label>
+        <select
+          id={fieldId}
+          className="input"
+          value={String(resolved ?? '')}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {(param.enum_values ?? []).map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+        {param.description && <p className="muted">{param.description}</p>}
+      </div>
+    )
+  }
+
+  const numeric = Number(resolved ?? 0)
+
+  if (param.type === 'int') {
+    return (
+      <div className="field">
+        <label className="field__label" htmlFor={fieldId}>{label}</label>
+        <input
+          id={fieldId}
+          className="input"
+          type="number"
+          min={param.min ?? undefined}
+          max={param.max ?? undefined}
+          step={param.step ?? 1}
+          value={numeric}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        {param.description && <p className="muted">{param.description}</p>}
+      </div>
+    )
+  }
+
+  if (param.type === 'float') {
+    return (
+      <div className="field">
+        <div className="field__label-row">
+          <label className="field__label" htmlFor={fieldId}>{label}</label>
+          <span className="muted">{numeric.toFixed(2)}</span>
+        </div>
+        <input
+          id={fieldId}
+          className="input"
+          type="range"
+          min={param.min ?? 0}
+          max={param.max ?? 1}
+          step={param.step ?? 0.01}
+          value={numeric}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        {param.description && <p className="muted">{param.description}</p>}
+      </div>
+    )
+  }
+
+  return null
 }

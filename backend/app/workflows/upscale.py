@@ -62,6 +62,8 @@ class UpscaleModule(WorkflowModule):
             output_kind="upscaled",
             parent_policy="input_image",
             output_cardinality=1,
+            # Phase 6 Task9：输出尺寸跟随输入图片（×N 由 provider binding 决定，不是工作台宽高）
+            size_mode="input",
         )
 
     # ===== 标准输入 =====

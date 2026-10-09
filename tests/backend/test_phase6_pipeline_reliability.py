@@ -376,3 +376,50 @@ def test_img2img_execute_passes_prompts_into_engine_request():
     assert request.parameters["seed"] == 4242
     assert request.parameters["denoise"] == 0.55
     assert request.parameters["input_image"] == "mock_inputs/img_src.png"
+
+
+# ===== Task8/9：Module 参数元数据（ParameterSpec）与 size_mode =====
+
+def test_modules_api_exposes_parameter_specs_and_size_mode(mock_client):
+    """Task8：/modules 返回参数 Schema（前端据此渲染控件，禁止按 module_id 手写）；
+    Task9：size_mode explicit | input 明确声明。"""
+    modules = {item["module_id"]: item for item in mock_client.get("/api/v1/modules").json()}
+
+    basic = modules["basic_generate"]
+    assert basic["size_mode"] == "explicit"
+    width_spec = next(spec for spec in basic["parameters"] if spec["name"] == "width")
+    assert width_spec["type"] == "int"
+    assert width_spec["min"] == 64 and width_spec["max"] == 4096
+    assert width_spec["configurable"] is False
+
+    img2img = modules["img2img"]
+    assert img2img["size_mode"] == "input", "img2img 输出尺寸跟随输入图（UI 不显示假宽高）"
+    denoise = next(spec for spec in img2img["parameters"] if spec["name"] == "denoise")
+    assert denoise["type"] == "float"
+    assert denoise["min"] == 0.05 and denoise["max"] == 1.0 and denoise["step"] == 0.05
+    assert denoise["configurable"] is True
+    assert denoise["default"] == 0.55 and denoise["title"] == "变化强度"
+
+    assert modules["upscale"]["size_mode"] == "input"
+
+
+def test_img2img_denoise_config_chain_from_schema_default(mock_client, session, png_bytes):
+    """Task8：denoise 不显式配置时按 Schema 默认（0.55）执行，显式配置时精确物化到 config_json。"""
+    from app.models import JobStage
+
+    source = import_one(mock_client, "p6_denoise.png", png_bytes)
+    # 1) 完全走 Schema 默认（前端未触碰滑杆 → config 为空）
+    default_final = run_generate(mock_client, make_snapshot(
+        input_images=[{"role": "source", "image_id": source["id"]}],
+        workflow_modules=[{"module_id": "img2img"}],
+    ))
+    default_stages = list(session.query(JobStage).filter(JobStage.job_id == default_final["id"]))
+    assert json.loads(default_stages[0].config_json) == {}, "未触碰滑杆 → config 保持为空（默认值来自 Schema）"
+
+    # 2) 显式配置（前端 setPrimaryModuleConfig 路径）→ 精确保存
+    set_final = run_generate(mock_client, make_snapshot(
+        input_images=[{"role": "source", "image_id": source["id"]}],
+        workflow_modules=[{"module_id": "img2img", "config": {"denoise": 0.8}}],
+    ))
+    stages = list(session.query(JobStage).filter(JobStage.job_id == set_final["id"]))
+    assert json.loads(stages[0].config_json) == {"denoise": 0.8}

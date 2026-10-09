@@ -305,6 +305,16 @@ export function setPrimaryModuleConfig(patch: Record<string, unknown>): void {
   })
 }
 
+/**
+ * 切换 Primary Module（Phase 6 Task8：轻量选择器）：
+ * 新选择为裸 {module_id}（身份由后端按当前默认版本解析）；
+ * 非 Primary 模块（高清等）保持原顺序与完整身份。
+ */
+export function setPrimaryModule(moduleId: string): void {
+  const [, ...rest] = state.workflowModules
+  setState({ workflowModules: [{ module_id: moduleId }, ...rest].map((module) => ({ ...module })) })
+}
+
 /** 设置输入图片（§七：max=1，选择新图即替换；来源必须是 Gallery image_id） */
 export function setInputImage(imageId: string): void {
   setState({

@@ -41,11 +41,44 @@ async function run(name, fn) {
   }
 }
 
-/** 测试用能力目录（只含 store 需要的字段） */
+/** 测试用能力目录（只含 store 需要的字段；Task8 含参数 Schema / size_mode） */
 const CATALOG = [
-  { module_id: 'basic_generate', available: true, input_required: false, output_kind: 'original' },
-  { module_id: 'img2img', available: true, input_required: true, output_kind: 'processed' },
-  { module_id: 'upscale', available: true, input_required: false, output_kind: 'upscaled' },
+  {
+    module_id: 'basic_generate',
+    available: true,
+    input_required: false,
+    output_kind: 'original',
+    size_mode: 'explicit',
+    parameters: [{ name: 'width', type: 'int', configurable: false, default: 1024, min: 64, max: 4096 }],
+  },
+  {
+    module_id: 'img2img',
+    available: true,
+    input_required: true,
+    output_kind: 'processed',
+    size_mode: 'input',
+    parameters: [
+      { name: 'input_image', type: 'image', configurable: false },
+      { name: 'denoise', type: 'float', configurable: true, default: 0.55, min: 0.05, max: 1, step: 0.05, title: '变化强度' },
+    ],
+  },
+  {
+    module_id: 'upscale',
+    available: true,
+    input_required: false,
+    output_kind: 'upscaled',
+    size_mode: 'input',
+    parameters: [],
+  },
+  // 未来模块演示：Reference 只需新增声明，前端无需重写 SettingsPane（Task8）
+  {
+    module_id: 'reference_generate',
+    available: true,
+    input_required: true,
+    output_kind: 'processed',
+    size_mode: 'input',
+    parameters: [{ name: 'strength', type: 'float', configurable: true, default: 0.7, min: 0, max: 1, step: 0.05 }],
+  },
 ]
 
 const PINNED_BASIC = {
@@ -215,6 +248,49 @@ try {
       workflow_modules: [PINNED_IMG2IMG],
     }))
     assert.equal(store.getWorkbenchState().mode, 'image')
+  })
+
+  // ===== Task8：参数元数据驱动（denoise 由 catalog schema 渲染并保存） =====
+  await run('Task8：denoise 默认值来自 Schema，调整后精确保存进 config', () => {
+    store.resetWorkbench()
+    store.setModuleCatalog(CATALOG)
+    store.setWorkbenchMode('image')
+    let state = store.getWorkbenchState()
+    assert.equal(state.workflowModules[0].module_id, 'img2img', '图片模式 primary = 首个可用图片模块')
+
+    const img2img = CATALOG.find((module) => module.module_id === 'img2img')
+    const denoise = img2img.parameters.find((param) => param.name === 'denoise')
+    assert.equal(denoise.configurable, true)
+    assert.equal(denoise.default, 0.55)
+    assert.equal(denoise.min, 0.05)
+    assert.equal(denoise.step, 0.05)
+    assert.equal(img2img.size_mode, 'input', 'Task9：img2img 输出尺寸跟随输入图')
+    assert.deepEqual(state.workflowModules[0].config ?? {}, {}, '未触碰滑杆 → config 为空（显示回落 Schema 默认）')
+
+    // SettingsPane 的 onChange 路径：写入模块 config（唯一事实源）
+    store.setPrimaryModuleConfig({ denoise: 0.8 })
+    const snapshot = store.snapshotFromState()
+    assert.equal(snapshot.workflow_modules[0].config.denoise, 0.8)
+  })
+
+  await run('Task8：Primary Module 选择器——新模块为裸引用，非 Primary（高清）身份完整保留', () => {
+    store.resetWorkbench()
+    store.setModuleCatalog(CATALOG)
+    store.hydrateWorkbench(makeSnapshot({
+      generation_mode: 'image',
+      input_images: [{ role: 'source', image_id: 'img_0001' }],
+      workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
+    }))
+    // 未来 Reference 模块：仅凭 catalog 声明即可出现在选择器候选（前端零改动）
+    const imageCandidates = CATALOG.filter(
+      (module) => module.available && module.input_required && module.output_kind === 'processed',
+    )
+    assert.deepEqual(imageCandidates.map((module) => module.module_id), ['img2img', 'reference_generate'])
+
+    store.setPrimaryModule('reference_generate')
+    const state = store.getWorkbenchState()
+    assert.deepEqual(state.workflowModules[0], { module_id: 'reference_generate' })
+    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE, '切换 primary 不得破坏高清模块身份')
   })
 } finally {
   await server.close()

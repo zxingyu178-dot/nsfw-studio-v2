@@ -20,9 +20,9 @@ router = APIRouter(prefix="/modules", tags=["modules"])
 def list_modules(request: Request) -> list[dict]:
     """返回全部已注册模块的能力声明与可用性。
 
-    响应字段（Phase 5.1 Task7；Phase 6 Task5）：
+    响应字段（Phase 5.1 Task7；Phase 6 Task5/Task8/Task9）：
         module_id / module_version（新 Job 将使用的代码版本，已校验真实注册）
-        title / description / 能力字段…
+        title / description / 能力字段（含 size_mode）/ parameters（ParameterSpec 元数据）…
         registered（module_id 已注册；版本级问题由 unavailable_reason 表达）
         available（真实可执行：版本已注册 + comfyui provider binding 可加载）
         provider / binding_version / unavailable_reason
@@ -48,6 +48,26 @@ def list_modules(request: Request) -> list[dict]:
             "output_kind": capabilities.output_kind,
             "parent_policy": capabilities.parent_policy,
             "output_cardinality": capabilities.output_cardinality,
+            # Phase 6 Task9：尺寸语义（explicit | input）——UI 据此决定是否显示显式宽高
+            "size_mode": capabilities.size_mode,
+            # Phase 6 Task8：参数元数据（前端按 type/min/max/step/enum_values 渲染控件，
+            # 不再为每个模块手写 SettingsPane；configurable=true 才写入 WorkflowModuleRef.config）
+            "parameters": [
+                {
+                    "name": spec.name,
+                    "type": spec.type,
+                    "required": spec.required,
+                    "default": spec.default,
+                    "title": spec.title,
+                    "min": spec.min,
+                    "max": spec.max,
+                    "step": spec.step,
+                    "enum_values": list(spec.enum_values),
+                    "configurable": spec.configurable,
+                    "description": spec.description,
+                }
+                for spec in capabilities.parameters
+            ],
             # Task7/Task5（Phase 6）：真实可用性（前端 Gate 的唯一依据）
             "registered": bool(info.get("registered", True)),
             "available": bool(info.get("available")),

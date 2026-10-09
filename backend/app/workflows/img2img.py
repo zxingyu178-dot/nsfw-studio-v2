@@ -73,7 +73,9 @@ class Img2ImgModule(WorkflowModule):
                 ParameterSpec("input_image", "image", required=True, description="输入图片（来源）"),
                 ParameterSpec(
                     "denoise", "float", default=DEFAULT_DENOISE,
-                    description=f"变化强度 {DENOISE_MIN}~{DENOISE_MAX}（越低越接近原图）",
+                    min=DENOISE_MIN, max=DENOISE_MAX, step=0.05, configurable=True,
+                    title="变化强度",
+                    description="越低越接近原图；输出尺寸跟随输入图",
                 ),
                 ParameterSpec("positive_prompt", "string", required=True),
                 ParameterSpec("negative_prompt", "string", default=""),
@@ -86,6 +88,8 @@ class Img2ImgModule(WorkflowModule):
             output_kind="processed",
             parent_policy="input_image",
             output_cardinality=1,
+            # Phase 6 Task9：输出尺寸 = 输入图尺寸（UI/详情显示"跟随输入图"，不展示假宽高）
+            size_mode="input",
         )
 
     # ===== config（模块参数唯一事实源） =====
