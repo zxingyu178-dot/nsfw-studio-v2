@@ -1,0 +1,44 @@
+# reference_generate v1 — ComfyUI Provider Binding（Phase 7 Task6）
+#
+# 来源：Phase 7 Task3/Task4 只读重盘 + 本机 Gate 实测（docs/REFERENCE_CAPABILITY_INVENTORY.md）。
+# 复用现有 Qwen-Image 2.1 三件套（nightbatch 已批量跑通），零下载 / 零安装 / 不升级 ComfyUI：
+#
+#   LoadImage(参考图) → TextEncodeQwenImage21（reference latents，1..16 张参考）
+#     → KSampler(latent = 参考尺寸空 latent, denoise=1.0) → VAEDecode → SaveImage
+#
+# 与 img2img/v1 的差异：不经 VAEEncode、无 denoise 编辑语义——
+# 参考图经视觉塔进文本编码器（CLIPLoader device=cpu），VAE 编码为 reference_latents
+# 拼接进 conditioning；latent_image 直接使用 TextEncodeQwenImage21 的 latent 输出
+# （以重采样后的第一张参考图尺寸为准；换尺寸会改变 edit 语义）。
+
+binding_version: v1
+module: reference_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "8"
+# §九：输出命名包含 Studio 身份（job/stage/item），Studio 可据此做文件级恢复核对
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（input_image = 已上传的引擎侧引用名）。
+# 注意：images.image_1 是 Autogrow 动态输入（点号路径），运行时由 API prompt 直接携带；
+# 这里仍静态链接 LoadImage → TextEncodeQwenImage21（见 workflow.json）。
+inputs:
+  input_image:     {node: "4", field: "image"}
+  positive_prompt: {node: "5", field: "prompt"}
+  negative_prompt: {node: "5", field: "negative_prompt"}
+  resolution:      {node: "5", field: "resolution"}
+  seed:            {node: "6", field: "seed"}
+
+# 固定默认（沿用本机用户文生图已验证的采样参数；denoise 固定 1.0——参考条件是"生成"而非"改图"）
+defaults:
+  "6": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例，与 basic_generate / img2img 一致）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
+  reference_mode: qwen21_reference_latents
+  output_size: input_image          # 输出尺寸跟随（重采样后的）参考图，不接受 width/height 注入
