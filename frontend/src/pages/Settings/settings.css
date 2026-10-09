@@ -1,0 +1,11 @@
+/* ===== Settings（UI-4，使用设计 Token，st- 前缀） ===== */
+
+.st-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.st-panel__title { margin: 0 0 var(--space-3); font-size: var(--text-base); }
+.st-panel__text { margin: 0; font-size: var(--text-sm); color: var(--text-secondary); }
