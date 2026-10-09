@@ -528,6 +528,17 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ON images(sha256) WHERE source = 'import' AND sha256 IS NOT NULL",
         ),
     ),
+    Migration(
+        migration_id="0012_stage_item_reuse_trace",
+        version="0.9.0",
+        description=(
+            "Phase 7 Task0：job_stage_items.reused_from_stage_item_id"
+            "（Stage-aware Resume 溯源：复用自父 Job 的哪个 StageItem）"
+        ),
+        statements=(
+            "ALTER TABLE job_stage_items ADD COLUMN reused_from_stage_item_id TEXT",
+        ),
+    ),
 )
 
 

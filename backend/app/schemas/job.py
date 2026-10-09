@@ -54,6 +54,8 @@ class JobStageItemResponse(BaseModel):
     input_image_id: str | None
     output_image_id: str | None
     seed: int | None
+    # Phase 7 Task0：Stage-aware Resume 溯源（复用自父 Job 的 StageItem；重新执行项为 NULL）
+    reused_from_stage_item_id: str | None
     status: str
     engine_job_id: str | None
     progress: float | None
@@ -171,6 +173,7 @@ def _stage_item_response(stage_item: JobStageItem) -> JobStageItemResponse:
         id=stage_item.id, job_stage_id=stage_item.job_stage_id, job_item_id=stage_item.job_item_id,
         item_index=stage_item.item_index, input_image_id=stage_item.input_image_id,
         output_image_id=stage_item.output_image_id, seed=stage_item.seed, status=stage_item.status,
+        reused_from_stage_item_id=stage_item.reused_from_stage_item_id,
         engine_job_id=stage_item.engine_job_id, progress=stage_item.progress,
         error_type=stage_item.error_type, error_message=stage_item.error_message,
         retry_count=stage_item.retry_count, started_at=stage_item.started_at,

@@ -157,6 +157,9 @@ class JobStageItem(Base):
     output_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Phase 4 Task3：本 StageItem 实际使用的 Seed（uses_seed=false 的 Stage 必须为 NULL）
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Phase 7 Task0：Stage-aware Resume 溯源——本 StageItem 复用自父 Job 的哪个 StageItem
+    # （仅 COMPLETED/复用的物化项非空；真正重新执行的项永远为 NULL）
+    reused_from_stage_item_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
     engine_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -140,7 +140,9 @@ def _materialize_stages(
     item_ids: list[str],
     *,
     stage_configs: list[dict[str, Any]] | None = None,
-    input_image_ids: list[str] | None = None,
+    input_image_ids: list[str | None] | None = None,
+    reuse_plan: dict[tuple[int, int], JobStageItem] | None = None,
+    parent_stages: dict[int, JobStage] | None = None,
 ) -> None:
     """把 workflow_snapshot.modules 物化为 JobStage + JobStageItem（§五）。
 
@@ -149,8 +151,15 @@ def _materialize_stages(
     - 处理型 Job（process）：第一（唯一）个 Stage 的 StageItem 预置 input_image_id（§二十一）；
     - config_json（Task3，Phase 5.1）：默认来自 module.config（唯一事实源）；
       stage_configs（内部/测试直调路径）与之合并（显式键优先，不丢模块参数）。
+    - Stage-aware Resume（Phase 7 Task0）：``reuse_plan[(stage_index, item_index)]`` 命中的槽位
+      直接物化为 COMPLETED，并继承父 StageItem 的 input/output/seed/engine 溯源，
+      再写 ``reused_from_stage_item_id``；整段 Stage 全部复用 → Stage 直接 COMPLETED
+      （Worker 按既有"绝不重跑已完成 Stage"语义跳过）。未复用槽位照常 QUEUED，
+      Stage0 注入 input_image_ids[item_index]（复用槽位不注入、也不重新执行）。
     """
     configs = list(stage_configs or [])
+    plan = reuse_plan or {}
+    stages_by_index = parent_stages or {}
     for stage_index, module in enumerate(modules):
         module_config = module.get("config") if isinstance(module.get("config"), dict) else {}
         # 内部直调路径的 stage_configs 与模块 config 合并（不丢模块参数；显式键优先）
@@ -173,7 +182,27 @@ def _materialize_stages(
         )
         session.add(stage)
         session.flush()
+        reused_count = 0
         for index, item_id in enumerate(item_ids):
+            materialized_from = plan.get((stage_index, index))
+            if materialized_from is not None:
+                reused_count += 1
+                session.add(JobStageItem(
+                    id=new_id(JOB_STAGE_ITEM),
+                    job_stage_id=stage.id,
+                    job_item_id=item_id,
+                    item_index=index,
+                    input_image_id=materialized_from.input_image_id,
+                    output_image_id=materialized_from.output_image_id,
+                    seed=materialized_from.seed,
+                    status="COMPLETED",
+                    engine_job_id=materialized_from.engine_job_id,
+                    progress=1.0,
+                    started_at=materialized_from.started_at,
+                    finished_at=materialized_from.finished_at,
+                    reused_from_stage_item_id=materialized_from.id,
+                ))
+                continue
             input_image_id = None
             if input_image_ids is not None and stage_index == 0:
                 input_image_id = input_image_ids[index]
@@ -185,6 +214,18 @@ def _materialize_stages(
                 input_image_id=input_image_id,
                 status="QUEUED",
             ))
+        if item_ids and reused_count == len(item_ids):
+            # 整段复用：本 Stage 在子 Job 中从未真正执行，不重新分配任何资源
+            stage.status = "COMPLETED"
+            stage.completed_count = reused_count
+            parent_stage = stages_by_index.get(stage_index)
+            if parent_stage is not None and parent_stage.finished_at:
+                stage.started_at = parent_stage.started_at
+                stage.finished_at = parent_stage.finished_at
+            else:
+                now = utc_now_iso()
+                stage.started_at = now
+                stage.finished_at = now
 
 
 def record_event(session: Session, job_id: str, event_type: str, *, item_id: str | None = None, payload: dict | None = None) -> None:
@@ -567,21 +608,32 @@ def cancel_job(session: Session, job_id: str) -> Job:
 
 
 def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]:
-    """取消/失败/中断后继续剩余图片（规范 §二十）：创建子 Job，只含未完成数量。"""
+    """取消/失败/中断后继续剩余图片（规范 §二十；Phase 7 Task0：真正 Stage-aware）。
+
+    旧实现把整条 Pipeline 从 Stage 0 全部重跑（已完成的上游 Stage 被白白重算、
+    img2img 输入图被重复消费）。现在的语义：
+
+    - 对每个剩余（非 COMPLETED 的）槽位，逐 Stage 检查父 Job 的同槽位 StageItem：
+      已 COMPLETED 且产出非空的上游 Stage **直接复用**（output/seed/engine 溯源继承，
+      物化为子 Job 的 COMPLETED StageItem + reused_from_stage_item_id）；
+    - 从第一个真正未完成的 Stage 才开始执行；
+    - **只有真正重新执行的 Stage 才重新分配 Seed**：复用槽位保留原 Seed，绝不重算。
+
+    原 Job 的快照与记录永不修改（只读原样取用后构造新的子 Job 快照）。
+    """
     original = get_job(session, original_job_id)
     if original.status not in ("FAILED", "CANCELLED", "INTERRUPTED"):
         raise ValidationError(f"状态 {original.status} 不允许续跑剩余", code="INVALID_JOB_STATE")
 
-    completed = session.execute(
-        select(func.count()).select_from(JobItem)
-        .where(JobItem.job_id == original.id, JobItem.status == "COMPLETED")
-    ).scalar_one()
-    remaining = original.requested_count - completed
+    parent_items = list(session.execute(
+        select(JobItem).where(JobItem.job_id == original.id).order_by(JobItem.item_index)
+    ).scalars())
+    incomplete_indexes = [item.item_index for item in parent_items if item.status != "COMPLETED"]
+    remaining = len(incomplete_indexes)
     if remaining < 1:
         raise ValidationError("没有剩余图片可继续", code="NOTHING_TO_RESUME")
 
     # §五：续跑未完成图片必须使用新随机 Seed——不得复用父 Job 的 fixed seed；
-    # 原 Job 的快照永不修改（只读原样取用后构造新的子 Job 快照）。
     original_snapshot = json.loads(original.workbench_snapshot_json)
     snapshot = {
         **original_snapshot,
@@ -596,35 +648,67 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
     # 不得读取当前 module_identity 静默升级到新 Workflow 版本；
     # 若原 binding 已不存在，执行时由 Adapter 明确报 BINDING_NOT_FOUND。
     resume_module_ids = json.loads(original.workflow_snapshot_json).get("modules") or []
-    remaining_inputs: list[str] | None = None
+
+    # ===== Phase 7 Task0：构建 Stage 级复用计划 =====
+    parent_stages = list(session.execute(
+        select(JobStage).where(JobStage.job_id == original.id).order_by(JobStage.stage_index)
+    ).scalars())
+    parent_item_index_by_id = {item.id: item.item_index for item in parent_items}
+    parent_stage_items: dict[tuple[int, int], JobStageItem] = {}
+    for stage_item, stage_index in session.execute(
+        select(JobStageItem, JobStage.stage_index)
+        .join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+        .where(JobStage.job_id == original.id)
+    ).all():
+        parent_index = parent_item_index_by_id.get(stage_item.job_item_id)
+        if parent_index is not None:
+            parent_stage_items[(stage_index, parent_index)] = stage_item
+
+    # 只有"已 COMPLETED 且产出非空"的父 StageItem 才可复用（失败/取消/中断一律重执行）
+    reuse_plan: dict[tuple[int, int], JobStageItem] = {}
+    for stage in parent_stages:
+        for child_index, parent_index in enumerate(incomplete_indexes):
+            candidate = parent_stage_items.get((stage.stage_index, parent_index))
+            if candidate is not None and candidate.status == "COMPLETED" and candidate.output_image_id:
+                reuse_plan[(stage.stage_index, child_index)] = candidate
+
+    # Stage0 输入：仅注入给"真正重新执行"的槽位；复用槽位不注入（不需要输入）
+    fallback_inputs: list[str | None] = []
     if original.job_kind == "process":
         # 处理型 Job：剩余槽位沿用父 Job 的输入图片（按 item_index 对齐）
-        parent_stage_items = session.execute(
-            select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
-            .where(JobStage.job_id == original.id, JobStage.stage_index == 0)
-        ).scalars().all()
-        incomplete_indexes = [
-            item.item_index for item in session.execute(
-                select(JobItem).where(JobItem.job_id == original.id, JobItem.status != "COMPLETED")
-            ).scalars()
-        ]
-        inputs_by_index = {item.item_index: item.input_image_id for item in parent_stage_items}
-        remaining_inputs = [inputs_by_index.get(index) for index in sorted(incomplete_indexes)]
+        inputs_by_index = {
+            parent_index: item.input_image_id
+            for (stage_index, parent_index), item in parent_stage_items.items() if stage_index == 0
+        }
+        fallback_inputs = [inputs_by_index.get(index) for index in incomplete_indexes]
     else:
         # 生成型 Job（Phase 5.1）：输入图必须从 Parent 快照重新冻结到全部剩余槽位，
         # 否则 img2img 续跑会静默丢失输入图（执行时才会炸）
         parent_input_ids = _snapshot_input_image_ids(original_snapshot)
-        if parent_input_ids:
-            for image_id in parent_input_ids:
-                if session.get(Image, image_id) is None:
-                    raise NotFoundError("输入图片不存在，无法续跑", code="IMAGE_NOT_FOUND")
-            remaining_inputs = [parent_input_ids[0]] * remaining
+        fallback_inputs = [parent_input_ids[0] if parent_input_ids else None] * remaining
+
+    stage0_inputs: list[str | None] = []
+    carried_inputs: list[str | None] = []
+    for child_index, parent_index in enumerate(incomplete_indexes):
+        parent_si = parent_stage_items.get((0, parent_index))
+        value = (
+            parent_si.input_image_id
+            if parent_si is not None and parent_si.input_image_id
+            else fallback_inputs[child_index]
+        )
+        # carried_inputs 表达"本 Job 的 Stage0 输入语义"（含复用槽位），用于管线合法性复核
+        carried_inputs.append(value)
+        stage0_inputs.append(None if (0, child_index) in reuse_plan else value)
+
+    for image_id in stage0_inputs:
+        if image_id is not None and session.get(Image, image_id) is None:
+            raise NotFoundError("输入图片不存在，无法续跑", code="IMAGE_NOT_FOUND")
 
     # Task4/Task5（Phase 5.1）：续跑同样在创建前验证 Pipeline（继承原身份的合法性复核）
     PipelineValidator().validate(
         resume_module_ids,
         job_kind=original.job_kind,
-        has_input_image=bool(remaining_inputs),
+        has_input_image=any(carried_inputs),
     )
 
     job = Job(
@@ -657,10 +741,24 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
         for index in range(remaining):
             item_id = new_id(JOB_ITEM)
             item_ids.append(item_id)
-            session.add(JobItem(id=item_id, job_id=job.id, item_index=index, status="QUEUED"))
-        # §二十三：续跑同样物化 Stage（继承原 Workflow 身份，不由当前配置决定）
-        _materialize_stages(session, job, resume_module_ids, item_ids, input_image_ids=remaining_inputs)
-        record_event(session, job.id, "JOB_CREATED", payload={"count": remaining, "resume_of": original.id})
+            # 复用 Stage0 的槽位保留其真实 Seed（只有真正重新执行的 Stage 才分配新 Seed；
+            # 未复用槽位 seed 为 NULL，由 Worker 执行 Stage0 时分配）
+            reused_stage0 = reuse_plan.get((0, index))
+            session.add(JobItem(
+                id=item_id, job_id=job.id, item_index=index, status="QUEUED",
+                seed=reused_stage0.seed if reused_stage0 is not None else None,
+            ))
+        # §二十三：续跑同样物化 Stage（继承原 Workflow 身份；已完成的 Stage 直接复用）
+        _materialize_stages(
+            session, job, resume_module_ids, item_ids,
+            input_image_ids=stage0_inputs,
+            reuse_plan=reuse_plan,
+            parent_stages={stage.stage_index: stage for stage in parent_stages},
+        )
+        record_event(session, job.id, "JOB_CREATED", payload={
+            "count": remaining, "resume_of": original.id,
+            "reused_stage_items": len(reuse_plan),
+        })
         session.commit()
     except IntegrityError:
         session.rollback()
