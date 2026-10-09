@@ -217,7 +217,7 @@ history success）✅。
 | Phase 5 更新 | `basic_generate+输入图 → UNUSED_INPUT_IMAGE`（原允许行为按新契约反转）；`/modules` Gate C 断言 |
 | 迁移测试更新 | 0011 进入升级路径断言（backfill / upgrade 两个测试） |
 | 前端 | `npm run build`（tsc + vite）通过（60 modules） |
-| 前端 store 逻辑 | `temp/experimental/frontend_store_check/`（esbuild + node 断言）**9/9 PASS** |
+| 前端 store 逻辑 | 临时 esbuild + node 断言脚本 **9/9 PASS**（Phase 6 起由 `tests/frontend/workbench_store.phase6.mjs` + CI `npm run test:store` 取代） |
 | 真实 ComfyUI 实验 | d055 / d100（+ d080）全部成功、无 OOM、无缺节点 |
 
 ## 5. 未执行 / 限制（如实声明）

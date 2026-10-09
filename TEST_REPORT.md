@@ -18,7 +18,8 @@
 ### 前端
 
 - `npm run build`：tsc --noEmit 通过 + vite build 通过（60 modules，JS 262.6KB / gzip 79.1KB）；
-- 工作台 store 逻辑自动断言（`temp/experimental/frontend_store_check/`，esbuild 打包 + node 执行）
+- 工作台 store 逻辑自动断言（临时 esbuild + node 脚本，Phase 6 已由
+  `tests/frontend/workbench_store.phase6.mjs` + CI `npm run test:store` 取代）
   **9/9 PASS**：初始文生图 basic_generate / 图片模式 img2img / 切回 / 选输入图自动图片模式 /
   denoise 入快照 / 恢复完整身份不丢 / available=false Gate 关闭且不选中 / 历史矛盾数据校正。
 

@@ -21,7 +21,8 @@
   INPUT_IMAGE_REQUIRED / 链式 output→input / 处理型仅 upscale / 未知模块创建期拒绝；
   模块 `validate_config` 钩子；resume_remaining 复核 + 生成型输入图重新冻结；未写进 QueueWorker。
 - **Task6 工作台模式绑定 Primary Module**：文生图=basic_generate；图片生成=可用图片模块；
-  历史矛盾数据校正；store 逻辑 9/9 自动断言通过（esbuild+node，见 temp/experimental/frontend_store_check）。
+  历史矛盾数据校正；store 逻辑 9/9 自动断言通过（临时 esbuild+node 脚本，Phase 6 起由
+  tests/frontend/workbench_store.phase6.mjs + CI test:store 取代）。
 - **Task7 /modules 真实可用性**：+registered/available/provider/binding_version/unavailable_reason；
   comfyui 必须能加载 binding（binding_not_configured / binding_invalid）；前端 Gate 仅依据 available。
 - **Task8 Face 参考图 clear**：reference_action inherit/set/clear；UI [更换]/[移除]；旧版本保留。

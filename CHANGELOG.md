@@ -78,7 +78,8 @@
 - Phase 5 专项测试更新：`basic_generate + 输入图 → UNUSED_INPUT_IMAGE`（原"允许"行为纠正）、
   `/modules` Gate C 断言（img2img registered + available）；
 - 前端：`npm run build`（tsc + vite）通过；工作台 store 逻辑经
-  `temp/experimental/frontend_store_check/`（esbuild 打包 + node 断言，9/9 PASS）。
+  临时 esbuild 断言脚本验证 9/9 PASS（Phase 6 起该脚本由 `tests/frontend/workbench_store.phase6.mjs`
+  + CI `npm run test:store` 取代，临时目录已删除）。
 
 ## [0.6.0] — 2026-10-08
 
