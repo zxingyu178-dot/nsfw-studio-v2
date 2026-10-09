@@ -2,6 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError, assetApi } from '../../api/client'
 import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Drawer,
+  Field,
+  Input,
+  Modal,
+  Select,
+  Tabs,
+  Textarea,
+} from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
 import {
   ASSET_TYPES,
@@ -12,8 +24,9 @@ import {
   type AssetType,
   type AssetVersionDTO,
 } from '../../types/workbench'
+import './assets.css'
 
-/** 素材页（规范 §四十一-§四十三、§五十四、§五十五）。 */
+/** 素材页（§四十一-§四十三、§五十四、§五十五）。 */
 export default function AssetsPage() {
   const navigate = useNavigate()
   const [items, setItems] = useState<AssetDTO[]>([])
@@ -59,81 +72,67 @@ export default function AssetsPage() {
   }
 
   return (
-    <section className="page page--wide">
-      <div className="tabs" role="tablist" aria-label="素材分类">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={assetType === 'all'}
-          className={`tabs__item${assetType === 'all' ? ' tabs__item--active' : ''}`}
-          onClick={() => setAssetType('all')}
-        >
-          全部
-        </button>
-        {ASSET_TYPES.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={assetType === key}
-            className={`tabs__item${assetType === key ? ' tabs__item--active' : ''}`}
-            onClick={() => setAssetType(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+    <>
+      <Tabs
+        ariaLabel="素材分类"
+        active={assetType}
+        onChange={(key) => setAssetType(key as AssetType | 'all')}
+        items={[
+          { key: 'all', label: '全部' },
+          ...ASSET_TYPES.map(({ key, label }) => ({ key, label })),
+        ]}
+      />
 
-      <div className="toolbar">
-        <input
-          className="input toolbar__search"
+      <div className="as-toolbar">
+        <Input
           placeholder="搜索素材名称 / Prompt"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <label className="check check--inline">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(event) => setShowArchived(event.target.checked)}
-          />
-          <span>显示已归档</span>
-        </label>
-        <span className="toolbar__spacer" />
-        <button type="button" className="btn btn--primary" onClick={() => setUploadOpen(true)}>
+        <Checkbox
+          label="显示已归档"
+          checked={showArchived}
+          onChange={(event) => setShowArchived(event.target.checked)}
+        />
+        <span className="as-toolbar__spacer" />
+        <Button variant="primary" onClick={() => setUploadOpen(true)}>
           上传素材
-        </button>
+        </Button>
       </div>
 
-      {notice && <p className={`notice notice--${notice.kind}`} role="status">{notice.text}</p>}
+      {notice && (
+        <p className={`ds-notice ds-notice--${notice.kind === 'ok' ? 'success' : 'error'}`} role="status">
+          {notice.text}
+        </p>
+      )}
       {loading && <p className="muted">加载中…</p>}
-      {error && <p className="notice notice--error">{error}</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
       {!loading && !error && items.length === 0 && (
-        <div className="empty-state">
-          <h1 className="empty-state__title">还没有素材</h1>
-          <p className="empty-state__desc">点击"上传素材"创建第一个素材（支持 jpg / png / webp 预览图）。</p>
+        <div className="as-empty">
+          <h2 className="as-empty__title">还没有素材</h2>
+          <p className="muted">点击“上传素材”创建第一个素材（支持 jpg / png / webp 预览图）。</p>
         </div>
       )}
 
-      <div className="asset-grid">
+      <div className="as-grid">
         {items.map((asset) => (
-          <article key={asset.id} className="asset-card" onClick={() => setDetailId(asset.id)}>
-            <div className="asset-card__thumb">
+          <article key={asset.id} className="as-card" onClick={() => setDetailId(asset.id)}>
+            <div className="as-card__thumb">
               {asset.current_version?.preview_path ? (
                 <img src={assetPreviewUrl(asset.id)} alt={asset.name} loading="lazy" />
               ) : (
-                <span className="asset-thumb-placeholder">{ASSET_TYPE_LABEL[asset.type]}</span>
+                <span className="as-placeholder">{ASSET_TYPE_LABEL[asset.type]}</span>
               )}
             </div>
-            <div className="asset-card__body">
-              <h3 className="asset-card__title">
+            <div className="as-card__body">
+              <h3 className="as-card__title">
                 {asset.favorite && <span title="已收藏">★ </span>}
                 {asset.name}
-                {asset.archived && <span className="badge">已归档</span>}
+                {asset.archived && <Badge>已归档</Badge>}
               </h3>
-              <p className="asset-card__tags">
+              <p className="as-card__tags">
                 {(asset.current_version?.tags ?? []).slice(0, 3).map((tag) => (
-                  <span key={tag} className="badge">{tag}</span>
+                  <Badge key={tag}>{tag}</Badge>
                 ))}
               </p>
             </div>
@@ -156,19 +155,16 @@ export default function AssetsPage() {
       {detailId && (
         <AssetDetailDrawer
           assetId={detailId}
-          onClose={() => {
-            setDetailId(null)
-            load()
-          }}
+          onClose={() => { setDetailId(null); load() }}
           onUseInWorkbench={() => handleUseInWorkbench(detailId)}
           onError={(text) => setNotice({ kind: 'error', text })}
         />
       )}
-    </section>
+    </>
   )
 }
 
-// ===== 上传对话框（新建素材 + v1） =====
+// ===== 上传对话框 =====
 interface UploadDialogProps {
   defaultType: AssetType
   onClose: () => void
@@ -211,73 +207,52 @@ function UploadDialog({ defaultType, onClose, onCreated }: UploadDialogProps) {
   }
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="上传素材"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 className="modal__title">上传素材</h3>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-name">名称</label>
-          <input id="upload-name" className="input" value={name} onChange={(event) => setName(event.target.value)} autoFocus />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-type">类型</label>
-          <select
-            id="upload-type"
-            className="input"
-            value={assetType}
-            onChange={(event) => setAssetType(event.target.value as AssetType)}
-          >
-            {ASSET_TYPES.map(({ key, label }) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-prompt">Prompt（该素材的关键词，用于生成时填入对应字段）</label>
-          <textarea
-            id="upload-prompt"
-            className="input input--area"
-            rows={3}
-            value={promptText}
-            onChange={(event) => setPromptText(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-tags">Tags（逗号分隔）</label>
-          <input id="upload-tags" className="input" value={tags} onChange={(event) => setTags(event.target.value)} />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-notes">备注</label>
-          <input id="upload-notes" className="input" value={notes} onChange={(event) => setNotes(event.target.value)} />
-        </div>
-        <div className="field">
-          <label className="field__label" htmlFor="upload-file">预览图（jpg / jpeg / png / webp，≤10MB）</label>
-          <input
-            id="upload-file"
-            className="input"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-        </div>
-        {error && <p className="notice notice--error">{error}</p>}
-        <div className="modal__actions">
-          <button type="button" className="btn" onClick={onClose}>取消</button>
-          <button type="button" className="btn btn--primary" disabled={busy || !name.trim()} onClick={() => void handleSubmit()}>
+    <Modal
+      open
+      onClose={onClose}
+      title="上传素材"
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>取消</Button>
+          <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void handleSubmit()}>
             创建
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <Field label="名称">
+        <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
+      </Field>
+      <Field label="类型">
+        <Select
+          value={assetType}
+          onChange={(event) => setAssetType(event.target.value as AssetType)}
+          options={ASSET_TYPES.map(({ key, label }) => ({ value: key, label }))}
+        />
+      </Field>
+      <Field label="Prompt（该素材的关键词，用于生成时填入对应字段）">
+        <Textarea rows={3} value={promptText} onChange={(event) => setPromptText(event.target.value)} />
+      </Field>
+      <Field label="Tags（逗号分隔）">
+        <Input value={tags} onChange={(event) => setTags(event.target.value)} />
+      </Field>
+      <Field label="备注">
+        <Input value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </Field>
+      <Field label="预览图（jpg / jpeg / png / webp，≤10MB）">
+        <Input
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        />
+      </Field>
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+    </Modal>
   )
 }
 
-// ===== 详情抽屉（大预览 / 编辑产生新版本 / 版本历史） =====
+// ===== 详情抽屉 =====
 interface DetailDrawerProps {
   assetId: string
   onClose: () => void
@@ -313,20 +288,13 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId])
 
-  if (!asset) return <div className="drawer-backdrop"><aside className="drawer"><p className="muted">加载中…</p></aside></div>
-
-  const shownVersion =
-    viewVersion === null
-      ? asset.current_version
-      : (versions.find((version) => version.version_no === viewVersion) ?? asset.current_version)
-
   async function run(action: () => Promise<unknown>, okText: string): Promise<void> {
     setBusy(true)
     setMessage(null)
     try {
       await action()
       load()
-      setMessage(okText)
+      if (okText) setMessage(okText)
     } catch (err) {
       onError(err instanceof ApiRequestError ? err.message : '操作失败')
     } finally {
@@ -334,7 +302,6 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
     }
   }
 
-  /** §十二：Face Asset 绑定 / 更换参考图（来源=图库；内容变化 → 新版本） */
   async function bindReference(imageId: string): Promise<void> {
     setRefPickerOpen(false)
     const formData = new FormData()
@@ -343,191 +310,140 @@ function AssetDetailDrawer({ assetId, onClose, onUseInWorkbench, onError }: Deta
     await run(() => assetApi.addVersion(assetId, formData), '已绑定参考图（创建新版本）')
   }
 
-  /** Task8（Phase 5.1）：清除参考图——新版本 reference=none，旧版本保持原参考图 */
   async function clearReference(): Promise<void> {
     const formData = new FormData()
     formData.set('reference_action', 'clear')
     await run(() => assetApi.addVersion(assetId, formData), '已移除参考图（创建新版本）')
   }
 
+  if (!asset) {
+    return (
+      <Drawer open onClose={onClose} title="加载中…">
+        <p className="muted">加载中…</p>
+      </Drawer>
+    )
+  }
+
+  const shownVersion =
+    viewVersion === null
+      ? asset.current_version
+      : (versions.find((version) => version.version_no === viewVersion) ?? asset.current_version)
+
   const referenceImageId = shownVersion?.reference_images?.[0] ?? null
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="drawer drawer--wide"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="drawer__header">
-          <h3 className="drawer__title">{asset.name}</h3>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose} aria-label="关闭">✕</button>
-        </header>
+    <Drawer open onClose={onClose} width="wide" title={asset.name}>
+      <div className="as-detail__preview">
+        {shownVersion?.preview_path ? (
+          <img src={assetPreviewUrl(asset.id, viewVersion ?? undefined)} alt={asset.name} />
+        ) : (
+          <span className="as-placeholder as-placeholder--lg">{ASSET_TYPE_LABEL[asset.type]}</span>
+        )}
+      </div>
 
-        <div className="asset-detail__preview">
-          {shownVersion?.preview_path ? (
-            <img src={assetPreviewUrl(asset.id, viewVersion ?? undefined)} alt={asset.name} />
+      <div className="as-actions">
+        <Button size="sm" variant="primary" onClick={onUseInWorkbench}>用于生成</Button>
+        <Button
+          size="sm" variant="ghost" disabled={!shownVersion?.prompt_text}
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(shownVersion?.prompt_text ?? '')
+              .then(() => setMessage('已复制 Prompt'))
+              .catch(() => onError('复制失败'))
+          }}
+        >
+          复制 Prompt
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void run(() => assetApi.updateMeta(asset.id, { favorite: !asset.favorite }), '')}>
+          {asset.favorite ? '★ 已收藏' : '☆ 收藏'}
+        </Button>
+        {asset.archived ? (
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => assetApi.restore(asset.id), '已从归档恢复')}>
+            恢复
+          </Button>
+        ) : (
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => assetApi.archive(asset.id), '已归档（软删除）')}>
+            归档
+          </Button>
+        )}
+      </div>
+
+      {message && <p className="ds-notice ds-notice--success" role="status">{message}</p>}
+
+      <dl className="as-fields">
+        <dt>类型</dt>
+        <dd>{ASSET_TYPE_LABEL[asset.type]}</dd>
+        <dt>Prompt</dt>
+        <dd><pre>{shownVersion?.prompt_text || '（空）'}</pre></dd>
+        <dt>Tags</dt>
+        <dd>{(shownVersion?.tags ?? []).join('、') || '（无）'}</dd>
+        <dt>备注</dt>
+        <dd>{shownVersion?.notes || '（无）'}</dd>
+      </dl>
+
+      {asset.type === 'face' && (
+        <section className="as-reference">
+          <h4 className="as-reference__title">参考图（Face Reference · 来源：图库）</h4>
+          {referenceImageId ? (
+            <div className="as-reference__body">
+              <img className="as-reference__thumb" src={imageContentUrl(referenceImageId)} alt="参考图" />
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setRefPickerOpen(true)}>更换</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void clearReference()} title="移除参考图（创建新版本，旧版本保留原参考图）">
+                移除
+              </Button>
+            </div>
           ) : (
-            <span className="asset-thumb-placeholder asset-thumb-placeholder--lg">
-              {ASSET_TYPE_LABEL[asset.type]}
-            </span>
+            <div className="as-reference__body">
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setRefPickerOpen(true)}>
+                绑定参考图
+              </Button>
+              <span className="muted">从图库选择 1 张图片（新版才生效，旧版本保留）</span>
+            </div>
           )}
-        </div>
-
-        <div className="drawer__meta-actions">
-          <button type="button" className="btn btn--primary btn--sm" onClick={onUseInWorkbench}>
-            用于生成
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            disabled={!shownVersion?.prompt_text}
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(shownVersion?.prompt_text ?? '')
-                .then(() => setMessage('已复制 Prompt'))
-                .catch(() => onError('复制失败'))
-            }}
-          >
-            复制 Prompt
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => void run(() => assetApi.updateMeta(asset.id, { favorite: !asset.favorite }), '')}
-          >
-            {asset.favorite ? '★ 已收藏' : '☆ 收藏'}
-          </button>
-          {asset.archived ? (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={busy}
-              onClick={() => void run(() => assetApi.restore(asset.id), '已从归档恢复')}
-            >
-              恢复
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={busy}
-              onClick={() => void run(() => assetApi.archive(asset.id), '已归档（软删除）')}
-            >
-              归档
-            </button>
-          )}
-        </div>
-
-        {message && <p className="notice notice--ok" role="status">{message}</p>}
-
-        <dl className="asset-detail__fields">
-          <dt>类型</dt>
-          <dd>{ASSET_TYPE_LABEL[asset.type]}</dd>
-          <dt>Prompt</dt>
-          <dd><pre className="asset-detail__prompt">{shownVersion?.prompt_text || '（空）'}</pre></dd>
-          <dt>Tags</dt>
-          <dd>{(shownVersion?.tags ?? []).join('、') || '（无）'}</dd>
-          <dt>备注</dt>
-          <dd>{shownVersion?.notes || '（无）'}</dd>
-        </dl>
-
-        {/* ===== Face Asset 参考图（Phase 5 §十二：来源=图库，统一 image_id，不复制外部文件） ===== */}
-        {asset.type === 'face' && (
-          <section className="asset-edit">
-            <h4 className="version-history__title">参考图（Face Reference · 来源：图库）</h4>
-            {referenceImageId ? (
-              <div className="input-image__body">
-                <img
-                  className="input-image__thumb"
-                  src={imageContentUrl(referenceImageId)}
-                  alt="参考图"
-                />
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  disabled={busy}
-                  onClick={() => setRefPickerOpen(true)}
-                >
-                  更换
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  disabled={busy}
-                  onClick={() => void clearReference()}
-                  title="移除参考图（创建新版本，旧版本保留原参考图）"
-                >
-                  移除
-                </button>
-              </div>
-            ) : (
-              <div className="field__actions">
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  disabled={busy}
-                  onClick={() => setRefPickerOpen(true)}
-                >
-                  绑定参考图
-                </button>
-                <span className="muted">从图库选择 1 张图片（新版才生效，旧版本保留）</span>
-              </div>
-            )}
-          </section>
-        )}
-
-        {editOpen && (
-          <AssetEditForm
-            asset={asset}
-            onCancel={() => setEditOpen(false)}
-            onSaved={() => {
-              setEditOpen(false)
-              load()
-            }}
-          />
-        )}
-        {!editOpen && (
-          <div className="pane__footer">
-            <button type="button" className="btn btn--primary" onClick={() => setEditOpen(true)}>
-              编辑（将创建新版本）
-            </button>
-          </div>
-        )}
-
-        <section className="version-history">
-          <h4 className="version-history__title">版本历史（不可变）</h4>
-          <ul className="version-history__list">
-            {versions.map((version) => (
-              <li key={version.id} className="version-history__item">
-                <div className="version-history__row">
-                  <span className="version-history__no">v{version.version_no}</span>
-                  <span className="muted">{formatDateTime(version.created_at)}</span>
-                  {asset.current_version?.id === version.id && <span className="badge">当前</span>}
-                  <span className="toolbar__spacer" />
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--xs"
-                    onClick={() => setViewVersion(viewVersion === version.version_no ? null : version.version_no)}
-                  >
-                    {viewVersion === version.version_no ? '看当前' : '查看'}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
         </section>
+      )}
 
-        {refPickerOpen && (
-          <ImagePickerDrawer
-            title="选择参考图"
-            onClose={() => setRefPickerOpen(false)}
-            onPicked={(image) => void bindReference(image.id)}
-          />
-        )}
-      </aside>
-    </div>
+      {editOpen ? (
+        <AssetEditForm
+          asset={asset}
+          onCancel={() => setEditOpen(false)}
+          onSaved={() => { setEditOpen(false); load() }}
+        />
+      ) : (
+        <div className="as-footer">
+          <Button variant="primary" onClick={() => setEditOpen(true)}>
+            编辑（将创建新版本）
+          </Button>
+        </div>
+      )}
+
+      <section className="as-reference">
+        <h4 className="as-reference__title">版本历史（不可变）</h4>
+        <ul className="pp-versions__list">
+          {versions.map((version) => (
+            <li key={version.id} className="pp-versions__item">
+              <div className="pp-versions__row">
+                <span className="pp-versions__no">v{version.version_no}</span>
+                <span className="muted">{formatDateTime(version.created_at)}</span>
+                {asset.current_version?.id === version.id && <Badge>当前</Badge>}
+                <span className="as-toolbar__spacer" />
+                <Button size="xs" variant="ghost" onClick={() => setViewVersion(viewVersion === version.version_no ? null : version.version_no)}>
+                  {viewVersion === version.version_no ? '看当前' : '查看'}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {refPickerOpen && (
+        <ImagePickerDrawer
+          title="选择参考图"
+          onClose={() => setRefPickerOpen(false)}
+          onPicked={(image) => void bindReference(image.id)}
+        />
+      )}
+    </Drawer>
   )
 }
 
@@ -569,42 +485,30 @@ function AssetEditForm({ asset, onCancel, onSaved }: EditFormProps) {
   }
 
   return (
-    <div className="asset-edit">
-      <h4 className="version-history__title">编辑（保存后将创建新版本，旧版本保留）</h4>
-      <div className="field">
-        <label className="field__label" htmlFor="edit-prompt">Prompt</label>
-        <textarea
-          id="edit-prompt"
-          className="input input--area"
-          rows={3}
-          value={promptText}
-          onChange={(event) => setPromptText(event.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="edit-tags">Tags（逗号分隔）</label>
-        <input id="edit-tags" className="input" value={tags} onChange={(event) => setTags(event.target.value)} />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="edit-notes">备注</label>
-        <input id="edit-notes" className="input" value={notes} onChange={(event) => setNotes(event.target.value)} />
-      </div>
-      <div className="field">
-        <label className="field__label" htmlFor="edit-file">替换预览图（可选）</label>
-        <input
-          id="edit-file"
-          className="input"
+    <div className="as-edit">
+      <h4 className="as-edit__title">编辑（保存后将创建新版本，旧版本保留）</h4>
+      <Field label="Prompt">
+        <Textarea rows={3} value={promptText} onChange={(event) => setPromptText(event.target.value)} />
+      </Field>
+      <Field label="Tags（逗号分隔）">
+        <Input value={tags} onChange={(event) => setTags(event.target.value)} />
+      </Field>
+      <Field label="备注">
+        <Input value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </Field>
+      <Field label="替换预览图（可选）">
+        <Input
           type="file"
           accept=".jpg,.jpeg,.png,.webp"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
-      </div>
-      {error && <p className="notice notice--error">{error}</p>}
-      <div className="modal__actions">
-        <button type="button" className="btn" onClick={onCancel}>取消</button>
-        <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void handleSubmit()}>
+      </Field>
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+      <div className="as-actions">
+        <Button variant="secondary" onClick={onCancel}>取消</Button>
+        <Button variant="primary" disabled={busy} onClick={() => void handleSubmit()}>
           保存为新版本
-        </button>
+        </Button>
       </div>
     </div>
   )
