@@ -98,10 +98,12 @@ class ImageReferencesResponse(BaseModel):
 
 
 class ImageWorkbenchResponse(BaseModel):
-    """Image → 生成工作台（规范 §四十七；Phase 4 Task7/9）。
+    """Image → 生成工作台（规范 §四十七；Phase 4 Task7/9；Phase 6 Task1）。
 
-    追溯规则（Task7）：任何派生图都恢复到**根生成图所属 generate Job** 的 WorkbenchSnapshot；
-    seed 为根图的 Seed（"使用原图 Seed" 由前端显式固定；默认 random）。
+    追溯规则（Phase 6 Task1）：任何派生图都恢复到**最近的生成上下文**——从当前图沿
+    parent_image_id 向上找"距离最近、由 generate Job 产出、且使用 Seed"的图及其 Job
+    （import→img2img→upscale 恢复 Img2Img，而不是树根的导入图）。
+    seed 为该生成上下文图片的**真实 Seed**（"使用此图 Seed"由前端显式固定；默认 random）。
     快照中的 workflow_modules 携带**完整执行身份**（Task9），提交时按原版本精确重现。
     """
 

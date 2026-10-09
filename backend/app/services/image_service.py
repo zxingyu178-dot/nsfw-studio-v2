@@ -443,19 +443,32 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
 
 
 def resolve_generation_context(session: Session, image: Image) -> tuple[Image, Job]:
-    """派生图 → 根生成上下文（Phase 4 Task7）：沿 parent_image_id 找到根图与其生成 Job。
+    """派生图 → **最近的生成上下文**（Phase 6 Task1 修复"永远取树根"）。
 
-    - 根图（original）来自 generate Job → 返回 (root_image, generate_job)；
-    - 根图是外部导入（无 job / job_kind != generate）→ NotFoundError
-      （IMAGE_NO_GENERATION_CONTEXT："没有可恢复的生成配置"，绝不伪造 Prompt）。
+    旧逻辑沿 parent_image_id 找到树根再要求它是生成图；img2img 以外部导入图（或上一代
+    生成图）为输入时树根没有 generate Job，导致 processed / upscaled 图无法恢复配置。
+
+    新语义：从当前图开始沿父链向上，找**距离最近、由 generate Job 产出、且真实使用
+    Seed 的生成图**及其 Job（Seed 用该图真实 Seed，不再无条件用树根 Seed）：
+
+    - import → img2img → 恢复 Img2Img（上下文 = img2img 输出）；
+    - import → img2img → upscale → 仍恢复 Img2Img：同一 generate Job 内嵌的后处理
+      Stage（uses_seed=false）产出图 Seed 为 NULL，继续向上到真实生成图；
+    - basic → upscale → 恢复 basic；纯外部导入图（全链无真实生成图）→ NotFoundError
+      IMAGE_NO_GENERATION_CONTEXT（"没有可恢复的生成配置"，绝不伪造 Prompt）。
     """
-    root = root_image_of(session, image)
-    if root.job_id is None:
-        raise NotFoundError("没有可恢复的生成配置", code="IMAGE_NO_GENERATION_CONTEXT")
-    job = session.get(Job, root.job_id)
-    if job is None or job.job_kind != "generate":
-        raise NotFoundError("没有可恢复的生成配置", code="IMAGE_NO_GENERATION_CONTEXT")
-    return root, job
+    current: Image | None = image
+    visited: set[str] = {image.id}
+    while current is not None:
+        if current.job_id is not None:
+            job = session.get(Job, current.job_id)
+            if job is not None and job.job_kind == "generate" and current.seed is not None:
+                return current, job
+        if not current.parent_image_id or current.parent_image_id in visited:
+            break  # 到顶 / 环保护（防御性；正常数据不可能）
+        visited.add(current.parent_image_id)
+        current = session.get(Image, current.parent_image_id)
+    raise NotFoundError("没有可恢复的生成配置", code="IMAGE_NO_GENERATION_CONTEXT")
 
 
 def load_input_image_ref(session: Session, storage: StorageManager, image_id: str) -> InputImageRef:

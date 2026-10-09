@@ -120,18 +120,20 @@ def favorite_image(image_id: str, body: ImageFavoriteRequest, session: Session =
 
 
 @router.get("/{image_id}/workbench", response_model=ImageWorkbenchResponse,
-            summary="Image → 生成工作台（Task7 追溯根生成 Job；Task9 携带完整执行身份）")
+            summary="Image → 生成工作台（Phase 6 Task1：最近的生成上下文 Job；Task9 携带完整执行身份）")
 def image_to_workbench(image_id: str, session: Session = Depends(get_session)) -> ImageWorkbenchResponse:
-    """任何派生图（原图/高清/未来处理图）都恢复到**根生成图所属 generate Job** 的配置。
+    """任何派生图都恢复到**最近的生成上下文**（Phase 6 Task1）。
 
-    - 禁止恢复 process Job（图库高清）的空 Prompt——沿 parent_image_id 一直找到根图（Task7）；
-    - 外部导入图（无生成 Job）→ IMAGE_NO_GENERATION_CONTEXT（"没有可恢复的生成配置"）；
-    - seed 返回根图 Seed（"使用原图 Seed"）；快照 Seed 默认 random（Task7）；
-    - workflow_modules 覆盖为根 Job 的完整执行身份（Task9：module/version/provider/binding/双指纹），
+    - 从当前图沿 parent_image_id 向上找"距离最近、由 generate Job 产出、且使用 Seed"的图；
+      import→img2img→upscale 恢复 Img2Img（不是树根的导入图）；basic→upscale 恢复 basic；
+    - 禁止恢复 process Job（图库高清）的空 Prompt；
+    - 外部导入图（全链无生成上下文）→ IMAGE_NO_GENERATION_CONTEXT（"没有可恢复的生成配置"）；
+    - seed 返回**生成上下文图片的真实 Seed**（"使用此图 Seed"）；快照 Seed 默认 random；
+    - workflow_modules 覆盖为上下文 Job 的完整执行身份（Task9：module/version/provider/binding/双指纹），
       提交时按原版本精确重现，绝不偷偷升级到当前默认 Workflow。
     """
     image = image_service.get_image(session, image_id)
-    root, job = image_service.resolve_generation_context(session, image)
+    context, job = image_service.resolve_generation_context(session, image)
     snapshot = json.loads(job.workbench_snapshot_json or "{}")
     modules = json.loads(job.workflow_snapshot_json or "{}").get("modules") or []
     if not modules and job.module_id:
@@ -144,7 +146,7 @@ def image_to_workbench(image_id: str, session: Session = Depends(get_session)) -
     snapshot["workflow_modules"] = modules
     snapshot["seed_mode"] = "random"
     snapshot["seed"] = None
-    return ImageWorkbenchResponse(image_id=image.id, seed=root.seed, snapshot=snapshot)
+    return ImageWorkbenchResponse(image_id=image.id, seed=context.seed, snapshot=snapshot)
 
 
 @router.get("/{image_id}/provenance", response_model=ImageProvenanceResponse,
