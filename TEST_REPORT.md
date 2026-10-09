@@ -1,4 +1,54 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1（2026-10-08）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1 / 6（2026-10-09）
+
+## Phase 6 测试（v0.8.0，Pipeline 可靠性收口）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：227 passed**（v0.7.0 的 208 例 + Phase 6 新增 19 例；Phase 4 / 5 / 5.1 全部回归全绿）。
+
+- 新增 `tests/backend/test_phase6_pipeline_reliability.py`（19 用例）覆盖：
+  - Task1：import→img2img（200 恢复 img2img）/ import→img2img→upscale（仍 img2img，Seed=img2img 真实值）/
+    basic→upscale（basic）/ basic→img2img→upscale（img2img，非树根 Seed）/ 纯导入 404；
+  - Task3：fixed Seed 工作台保存 Recipe 201 → reopen random（API 级 + service 级归一化 + 非法值拒绝）；
+  - Task4：`[upscale, basic_generate]` 顺序保持；重复模块 → PIPELINE_DUPLICATE_MODULE（Job/Recipe/Validator 三处）；
+  - Task5：未注册 module_version 创建期 400；availability 两个版本域不混淆（binding_version 不被
+    module_version 兜底）；/modules registered/module_version/unavailable_reason；
+  - Task6：Img2ImgModule.execute 的 EngineJobRequest 与 payload 完全一致（Prompt/Negative/seed/denoise）；
+  - Task7：generation_mode 在 Job/History/Image/Recipe 往返一致；无字段旧快照回落推断；
+  - Task8/9：ParameterSpec（min/max/step/configurable/default/title）+ size_mode（explicit|input）断言；
+    denoise 默认来自 schema（config 为空 → 执行按默认 0.8）、显式配置精确物化 config_json。
+- 既有测试同步更新（契约变更）：`test_phase22_consistency`（未注册 v2 → 创建期 400）、
+  `test_phase51_contract`（重复模块 → PIPELINE_DUPLICATE_MODULE）、`test_recipe_service`（fixed 归一化）。
+
+### 前端
+
+- `npm run build`：tsc --noEmit 通过 + vite build 通过；
+- **新增 `npm run test:store`**（`tests/frontend/workbench_store.phase6.mjs`，11 断言，
+  用 vite SSR 加载真实 store，零新增依赖）——已接入 CI（frontend job）：
+  pinned upscale/img2img 身份经 hydrate→setModuleCatalog→snapshot 双 hash/config 不丢；
+  目录未就绪不静默降级；手动高清才创建裸模块；generation_mode 显式恢复（旧快照推断）；
+  denoise schema 默认 + config 保存；Primary 选择器切换（未来 Reference 零前端改动）。
+
+### 真实 ComfyUI（Task10 真实照片 / Task11 浏览器）
+
+- **Task10 真实照片 img2img 4 次运行**（768×1024；产品路径：JobService + PipelineValidator +
+  QueueWorker + 真实 ComfyUIAdapter → 真实 DataRoot）：d055 / d055_winter / d070_winter / d080_winter
+  **全部 11/11 检查通过**（COMPLETED / kind=processed / parent=输入图 / StageItem.seed /
+  输出尺寸=输入尺寸 / denoise config）；证据 `docs/evidence/phase6-img2img/report_*.json` + outputs/；
+- **默认 denoise 0.55 → 0.8**（0.55 在真实照片上即使换 Prompt 也几乎不变；0.8 人物保留良好且
+  场景级 Prompt 生效——依据实测而非几何图相关系数，详见 docs/PHASE6_REPORT.md §2）；
+- **Task11 浏览器全链路**（Playwright + 系统 Edge，复用 art-museum 已装依赖）：
+  文生图 → 图库导入 → 图片生成（从图库选择）→ Img2Img+高清 → Gallery → History →
+  从 processed/upscaled 恢复工作台 → Recipe 保存/重开 → 切回文生图；
+  结果与截图：`docs/evidence/phase6-img2img/acceptance_browser.json` + `screenshots/`。
+
+### 环境限制（如实标注）
+
+- 本机 ComfyUI 当日多次启动/模型加载停滞（3 次托管启动 420s 超时；轻量高清链探测 22s 正常；
+  照片 img2img 首次尝试因重度换页被 Studio 有限重试判定 ENGINE_NETWORK 失败，重启服务后重跑成功）；
+- 详细时间线与内存数据见 docs/PHASE6_REPORT.md §4；未执行的检查项在各处明确标注。
 
 ## Phase 5.1 测试（v0.7.0，Image Pipeline Contract Closure + Qwen Img2Img）
 

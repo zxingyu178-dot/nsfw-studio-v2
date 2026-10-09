@@ -2,6 +2,60 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.8.0] — 2026-10-09
+
+### Fixed（Phase 6：Pipeline 可靠性收口）
+
+- **Image → Workbench 生成上下文（Task1）**：从当前图沿父链找"距离最近、由 generate Job 产出、
+  且使用 Seed"的图及其 Job（import→img2img→upscale 恢复 Img2Img，不再回到导入图）；
+  `seed` 返回该生成上下文图片的真实 Seed（不再无条件树根 Seed）；
+- **前端工作流身份保留（Task2）**：`normalizeModules()` 不再重建裸 `{module_id:'upscale'}`——
+  从 History / Recipe / Image 恢复的 7 字段身份（含双 hash）与 config 在目录到达 / 模式切换后
+  仍原样保留；只有用户手动开启高清才创建裸模块；
+- **Recipe 固定 Seed（Task3）**：Recipe 不保存固定 Seed——"使用此图 Seed"的工作台保存配方时
+  归一化为 `seed_mode=random / seed=null`（不再 400，也不强制改工作台状态）；
+- **Pipeline 顺序与重复模块（Task4）**：移除硬编码 `MODULE_ORDER` 执行重排（严格保持
+  用户/Recipe/Workbench 提供的顺序）；同一 module_id 重复出现 → `PIPELINE_DUPLICATE_MODULE`；
+- **Module Availability 收紧（Task5）**：`module_version` 与 `binding_version` 不再互相 fallback；
+  新 Job 将使用的 module 版本必须真实注册（否则 `available=false / module_version_not_registered`）；
+  `/modules` 返回 `registered / available / module_version / provider / binding_version / unavailable_reason`；
+  未注册 module_version 在 Job 创建期即拒绝（fail fast）；
+- **Img2ImgModule.execute 契约（Task6）**：直接执行路径补齐 positive/negative Prompt
+  （不再提交空 Prompt）；
+- **generation_mode 显式化（Task7）**：WorkbenchSnapshot / Recipe / Job / History / Image restore
+  全程保存与恢复 `text | image`（旧快照无该字段时按 input_images 推断，向后兼容）；
+- **Module 参数元数据驱动（Task8）**：`ParameterSpec` 增加 `title / min / max / step / configurable`；
+  前端按 schema 渲染 float/int/bool/enum 控件 + Primary Module 轻量选择器（denoise 滑杆
+  不再按 module_id 硬编码）；
+- **有效尺寸语义（Task9）**：`ModuleCapabilities.size_mode`（basic_generate=explicit、
+  img2img/upscale=input）；图片生成模式 UI 不显示假宽高；History 任务详情显示
+  "跟随输入图 W×H"（实际 Stage 输入尺寸）而不是 Workbench 遗留的 1024×1024。
+
+### Changed
+
+- **Img2Img 默认 denoise 0.55 → 0.8**（Task10 真实照片实测：0.55 即使给出不同场景 Prompt
+  也"几乎没变化"（精修档）；0.8 在真实人像上人物保留良好且场景级 Prompt 明显生效。
+  见 `docs/PHASE6_REPORT.md` §2）。滑杆仍为 0.05–1.0；binding.yaml / workflow.json
+  指纹文件未改（历史 Job 的 hash 校验不受影响）；
+- 素材 → 工作台快照显式标记 `generation_mode=text`；工作台"用作输入图 / 以此图进行图生图"
+  显式进入图片模式。
+
+### Tests
+
+- 新增 `tests/backend/test_phase6_pipeline_reliability.py`（19 用例：Task1/3/4/5/6/7/8/9 回归，
+  含 import→img2img→upscale 上下文、pinned 身份、重复/未注册模块、参数 schema、
+  generation_mode 往返、execute 契约）；
+- 新增 `tests/frontend/workbench_store.phase6.mjs`（11 断言，Playwright 之外零新依赖：
+  用 vite SSR 加载真实 store；`npm run test:store` 已接入 CI）；
+- 保持：全量快速套件 227 passed（208 基线 + 19 新增）。
+
+### Chore
+
+- 交接包：Qwen 实验证据迁至 `docs/evidence/phase51-img2img/`；新增
+  `docs/evidence/phase6-img2img/`（真实照片验收输入/输出/报告/浏览器截图）；
+  Source 包由 git tracked 维护（缓存文件确认未跟踪）；
+- 版本 0.7.0 → 0.8.0（后端 / 前端 / configs 同步）。
+
 ## [0.7.0] — 2026-10-08
 
 ### Added（Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img）

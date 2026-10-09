@@ -14,7 +14,7 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 5.1 完成，v0.7.0）
+## 3. 阶段纪律（当前 Phase 6 完成，v0.8.0）
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
 2（Job Execution Core + ComfyUIAdapter + Gallery）/
@@ -33,12 +33,18 @@ Recipe 完整 Workflow 身份（不丢 provider/双 hash）、config 单链唯�
 PipelineValidator（UNUSED_INPUT_IMAGE / INPUT_IMAGE_REQUIRED / 链式校验）、
 工作台模式绑定 Primary Module、`/modules` 真实可用性（registered ≠ available）、
 Face 参考图 clear 语义、0011 导入 sha256 部分唯一索引；**Img2ImgModule 正式落地**
-（Qwen-Image 2.1 零下载 latent Img2Img，img2img/v1 binding，Gate C 成功，v0.7.0））。
+（Qwen-Image 2.1 零下载 latent Img2Img，img2img/v1 binding，Gate C 成功，v0.7.0））/
+6（Pipeline 可靠性收口：Image→Workbench 最近生成上下文（不再找树根）、前端工作流身份完整保留、
+Recipe 固定 Seed 归一化、移除执行重排 + PIPELINE_DUPLICATE_MODULE、未注册 module_version
+创建期拒绝、availability 版本域修正、Img2Img execute Prompt 契约、generation_mode 显式化、
+ParameterSpec 元数据驱动 + size_mode、真实照片验收（默认 denoise 0.55→0.8）与浏览器全链路，v0.8.0）。
 
-**Phase 5.1 后当前能力**：图片生成模式 Primary Module = `img2img`（denoise 0.05–1.0，
-默认见 binding；输出 kind=processed + parent=输入图）；`GET /api/v1/modules` 的
-`available=true` 是前端 Gate 唯一依据；文生图 / 图片生成 / 高清可任意组合为合法链
-（basic_generate→upscale、img2img→upscale）。
+**Phase 6 后当前能力**：图片生成模式 Primary Module = `img2img`（denoise 0.05–1.0，
+**默认 0.8**；输出 kind=processed + parent=输入图 + size_mode=input）；`GET /api/v1/modules`
+返回能力/参数 Schema（ParameterSpec）与 `size_mode`，`available=true` 是前端 Gate 唯一依据；
+`WorkbenchSnapshot.generation_mode`（text|image）显式保存与恢复；Image→工作台恢复"最近的
+生成上下文"（import→img2img→upscale 仍恢复 Img2Img）；文生图 / 图片生成 / 高清可任意组合
+为合法链（basic_generate→upscale、img2img→upscale）。
 
 本阶段仍禁止扩大范围实现：
 

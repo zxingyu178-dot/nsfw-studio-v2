@@ -1,5 +1,27 @@
 # TASKS — NSFW Studio V2
 
+## Phase 6：Pipeline 可靠性收口 ✅（2026-10-09，v0.8.0）
+
+- [x] Task 1：Image → Workbench 最近的生成上下文（不再永远找树根；import→img2img→upscale 仍恢复 Img2Img；
+  Seed 用该上下文图片真实 Seed；纯导入图仍 404 IMAGE_NO_GENERATION_CONTEXT）
+- [x] Task 2：前端 Pipeline 身份保留（normalizeModules 不再重建裸 upscale；非 Primary 模块原顺序 +
+  7 字段身份保留；仅手动开启高清才创建裸模块）
+- [x] Task 3：Recipe 固定 Seed 归一化（不保存固定 Seed；fixed 工作台保存配方 201 → reopen random）
+- [x] Task 4：移除 MODULE_ORDER 执行重排（严格保持输入顺序）+ 重复模块 → PIPELINE_DUPLICATE_MODULE
+- [x] Task 5：Module Availability 收紧（module_version ≠ binding_version fallback；
+  未注册 module_version 创建期拒绝 + /modules 标记 unavailable_reason）
+- [x] Task 6：Img2ImgModule.execute 补 Prompt/Negative 契约（单测断言 EngineJobRequest）
+- [x] Task 7：generation_mode（text|image）显式进入 Snapshot/Recipe/Job/History/Image restore（向后兼容）
+- [x] Task 8：Module 参数元数据驱动（ParameterSpec min/max/step/configurable/title；前端通用控件 +
+  Primary Module 选择器；denoise 由 schema 渲染并保存）
+- [x] Task 9：size_mode（explicit|input）+ 有效尺寸语义（Img2Img UI 无假宽高；History 显示"跟随输入图 W×H"）
+- [x] Task 10：真实照片验收（4 次运行 11/11 通过；默认 denoise 0.55 → 0.8，依据实测；
+  证据 docs/evidence/phase6-img2img/）
+- [x] Task 11：浏览器人工验收（Playwright + 系统 Edge 全链路 + 截图；acceptance_browser.json）
+- [x] Task 12：交接包清理（Qwen 证据 → docs/evidence/phase51-img2img/；Source 包由 git tracked 维护）
+- [x] 测试门槛：208 基线 + 19 新回归全绿（227 passed）；前端 store 11 断言（CI test:store）；npm run build
+- [x] 版本：v0.8.0；feature/phase6-pipeline-reliability → develop → main → tag
+
 ## Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img ✅（2026-10-08，v0.7.0）
 
 ### A. 图片 Pipeline 契约收口

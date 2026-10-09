@@ -1,4 +1,4 @@
-# IMAGE_MODEL — Image / Gallery 数据模型与流程（Phase 2C + Phase 3 + Phase 4 + Phase 5 + Phase 5.1，v0.7.0）
+# IMAGE_MODEL — Image / Gallery 数据模型与流程（Phase 2C + 3 + 4 + 5 + 5.1 + 6，v0.8.0）
 
 > 更新：2026-10-08。实现：`backend/app/models/image.py`、`backend/app/services/image_service.py`、
 > `backend/app/services/image_reference_service.py`、`backend/app/api/v1/images.py`；

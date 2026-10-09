@@ -4,8 +4,21 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 5.1 — Image Pipeline Contract Closure + Qwen Img2Img（已完成，v0.7.0）。**
-Phase 5.1 第一部分（契约收口）：WorkflowModuleRef 正式类型化（module_id / module_version /
+**当前阶段：Phase 6 — Pipeline 可靠性收口（已完成，v0.8.0）。**
+不扩模型，解决"能生成之后如何可靠继续编辑、可靠复现、可靠扩第四个 Module"：
+Image → Workbench 生成上下文改为"距离最近的 generate 上下文"（import→img2img→upscale 恢复
+Img2Img，Seed 用该图真实 Seed）；前端工作流身份完整保留（规范模块顺序，不再重建裸 upscale）；
+Recipe 固定 Seed 归一化（"使用此图 Seed"可保存配方）；移除执行重排 + 重复模块拒绝
+（`PIPELINE_DUPLICATE_MODULE`）+ 未注册 module_version 创建期拒绝；
+`/modules` 返回参数 Schema（ParameterSpec：min/max/step/configurable/title）与 `size_mode`
+（explicit|input），前端按 schema 渲染控件（denoise 滑杆不再硬编码）；`generation_mode`
+（text|image）显式进入 Snapshot/Recipe/Job/History/Image restore；Img2Img 模式不显示假宽高，
+History 显示"跟随输入图 W×H"；**Img2Img 默认 denoise 0.55 → 0.8**（真实照片实测：0.55≈精修
+近乎不变，0.8 人物保留良好且场景级 Prompt 生效）；默认套件 227 passed + 前端 store 断言 11
+（CI `test:store`）+ 真实照片 4 轮验收 + Playwright 浏览器全链路（证据
+`docs/evidence/phase6-img2img/`，报告 `docs/PHASE6_REPORT.md`）。
+
+**Phase 5.1（已完成，v0.7.0）**：契约收口——WorkflowModuleRef 正式类型化（module_id / module_version /
 provider / binding_version / 双 hash / config，前后端镜像）、Recipe 保存完整 Workflow 身份
 （不再丢失 provider / 双 hash，旧配方不会偷偷升级到新版 Workflow）、模块 config 单链
 （Workbench → Recipe → Job.workflow_snapshot → JobStage.config_json 唯一事实源）、
@@ -15,13 +28,13 @@ PipelineValidator 统一校验（输入图片不得被静默忽略：`UNUSED_INP
 返回真实可用性（registered / available / unavailable_reason，Gate 依据 available=true）、
 Face Asset 参考图可清除（`reference_action: inherit/set/clear`）、导入 sha256 部分唯一索引
 （迁移 `0011`，并发 IntegrityError → 返回已存在图片而不是 500）。
-第二部分（零下载实验 → Gate C 成功）：复用现有 Qwen-Image 2.1 三件套完成 latent Img2Img
+零下载实验 → Gate C 成功：复用现有 Qwen-Image 2.1 三件套完成 latent Img2Img
 真实实验（denoise 0.55 ≈ 保留输入结构 / 1.0 完全由 Prompt 驱动，无 OOM），正式落地
 **Img2ImgModule**（第三套 WorkflowModule）+ provider binding `img2img/v1`
 （LoadImage → VAEEncode → KSampler denoise → VAEDecode → SaveImage），输出
 `kind=processed` + `parent_image_id=输入图`；核心调度（QueueWorker / PipelineScheduler /
-ImageService）**零改动**。工作台图片生成模式：变化强度滑杆（0.05–1.0）；图库详情新增
-"以此图进行图生图"（有生成上下文恢复原 Prompt；外部导入 Prompt 为空）。
+ImageService）**零改动**。图库详情新增"以此图进行图生图"（有生成上下文恢复原 Prompt；
+外部导入 Prompt 为空）。
 Phase 5 已完成：外部图片导入正式产品化（`POST /api/v1/images/import`，PNG/JPG/JPEG/WEBP，
 sha256 去重，批量部分失败继续，来源统一 `source=import`）、工作台"输入图片"（模式切换
 [文生图]/[图片生成] + 图库 Picker / 上传即导入，`WorkbenchSnapshot.input_images` max=1）、
@@ -78,7 +91,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.7.0"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.8.0"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）

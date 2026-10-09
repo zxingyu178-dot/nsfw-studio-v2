@@ -1,4 +1,4 @@
-# WORKBENCH_STATE — 工作台状态契约（Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 5.1，v0.7.0）
+# WORKBENCH_STATE — 工作台状态契约（Phase 1 + 2 + 3 + 4 + 5 + 5.1 + 6，v0.8.0）
 
 > 更新：2026-10-08。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
 > 快照同时是 Job 的固化输入（§十）与 Image → Workbench 的恢复载体（§四十七）；
@@ -112,3 +112,6 @@
   模式 ↔ Primary Module 强绑定与历史矛盾数据校正（Task6）；config 单链唯一事实源（Task3）；
   Gate 改为 `available=true`（registered ≠ available，Task7）；
   图库"以此图进行图生图"入口（有上下文恢复原 Prompt，导入为空）。
+- 2026-10-09（v0.8.0）：新增 `generation_mode`（text|image，显式进入 Snapshot/Recipe/Job/History/
+  Image restore；旧快照无该字段 → 按 input_images 推断，Task7）；非 Primary 模块保持原顺序 +
+  完整身份（禁止重建裸 upscale，Task2）；"以此图进行图生图 / 用作输入图"显式进入 image 模式。

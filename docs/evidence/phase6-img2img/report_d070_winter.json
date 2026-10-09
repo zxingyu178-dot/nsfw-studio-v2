@@ -1,0 +1,76 @@
+{
+  "phase": "phase6-task10",
+  "label": "d070_winter",
+  "started_at": "2026-10-09T13:52:59",
+  "data_root": "D:\\NSFW-Studio-Data",
+  "input_path": "D:\\AIHome_2.0_L1_L2\\projects\\nsfw-studio-v2\\docs\\evidence\\phase6-img2img\\inputs\\real_photo_768x1024.png",
+  "input_dimensions": [
+    768,
+    1024
+  ],
+  "prompt": {
+    "style": "photorealistic photo, cinematic",
+    "scene": "snowy winter evening outside the cafe window, blue hour, falling snow, warm interior lights",
+    "extra": "cold blue tones, snowflakes on glass"
+  },
+  "negative": "blurry, low quality, text, watermark, extra fingers",
+  "denoise": 0.7,
+  "input_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+  "identity": {
+    "module_id": "img2img",
+    "module_version": "v1",
+    "provider": "comfyui",
+    "binding_version": "v1",
+    "workflow_hash": "7c11569529d4e653",
+    "binding_hash": "2f2d5c06055c623a"
+  },
+  "job_id": "job_845b73ab-ee1a-4d0b-9c80-84d9fcc8d5d1",
+  "job_created": true,
+  "finished_at": "2026-10-09T13:55:41",
+  "elapsed_seconds": 162.4,
+  "job_status": "COMPLETED",
+  "error_type": null,
+  "error_message": null,
+  "stage": {
+    "module_id": "img2img",
+    "provider": "comfyui",
+    "binding_version": "v1",
+    "workflow_hash": "7c11569529d4e653",
+    "binding_hash": "2f2d5c06055c623a",
+    "config": {
+      "denoise": 0.7,
+      "execution_timeout": 7200
+    }
+  },
+  "stage_item": {
+    "input_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+    "output_image_id": "img_7f535ed2-e5d7-4e6d-9e06-07df82eb174a",
+    "seed": 41520209
+  },
+  "output_image": {
+    "id": "img_7f535ed2-e5d7-4e6d-9e06-07df82eb174a",
+    "kind": "processed",
+    "parent_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+    "file_path": "images/processed/img_7f535ed2-e5d7-4e6d-9e06-07df82eb174a/processed.png",
+    "exists": true,
+    "dimensions": [
+      768,
+      1024
+    ],
+    "seed": 41520209,
+    "abs_path": "D:\\NSFW-Studio-Data\\images\\processed\\img_7f535ed2-e5d7-4e6d-9e06-07df82eb174a\\processed.png"
+  },
+  "checks": {
+    "job_completed": true,
+    "stage_module_img2img": true,
+    "stage_completed": true,
+    "stage_config_denoise": true,
+    "input_frozen": true,
+    "output_exists": true,
+    "output_kind_processed": true,
+    "parent_is_input": true,
+    "stage_item_seed_recorded": true,
+    "output_seed_matches": true,
+    "output_size_equals_input": true
+  }
+}

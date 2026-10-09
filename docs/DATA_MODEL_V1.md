@@ -1,4 +1,4 @@
-# DATA_MODEL_V1 — 数据模型设计（Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 + Phase 5.1，v0.7.0）
+# DATA_MODEL_V1 — 数据模型设计（Phase 1 + 2 + 3 + 4 + 5 + 5.1 + 6，v0.8.0）
 
 > 更新：2026-10-08。本文档是 Prompt / Asset / Recipe / Job / Image 数据模型的权威说明；
 > Job 状态机见 docs/JOB_STATE_MACHINE.md，Image 细节见 docs/IMAGE_MODEL.md，

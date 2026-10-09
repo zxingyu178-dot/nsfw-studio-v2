@@ -1,6 +1,6 @@
 # API_PLAN — API 现状与规划
 
-> 更新：2026-10-08（Phase 5.1，v0.7.0）。错误格式统一为 `{"error": {"code", "message"}}`。
+> 更新：2026-10-09（Phase 6，v0.8.0）。错误格式统一为 `{"error": {"code", "message"}}`。
 
 ## 1. 约定
 
@@ -14,7 +14,7 @@
 
 ### 健康与服务信息
 
-- `GET /api/v1/health` → `{"status":"ok","version":"0.7.0"}`
+- `GET /api/v1/health` → `{"status":"ok","version":"0.8.0"}`
 - `GET /` → 服务基本信息
 
 ### Prompt（`app/api/v1/prompts.py`）

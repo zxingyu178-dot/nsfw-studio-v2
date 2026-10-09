@@ -1,5 +1,51 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-09 — Phase 6：Pipeline 可靠性收口（v0.8.0）
+
+**执行**：TRAE Code Agent（feature/phase6-pipeline-reliability → develop → CI → main → CI → tag v0.8.0）。
+不扩模型，解决"能生成之后如何可靠继续编辑、可靠复现、可靠扩第四个 Module"。
+
+### 交付
+
+- **Task1 Image → Workbench 生成上下文**：`resolve_generation_context` 取"距离最近的 generate 上下文"
+  （同 Job 内嵌后处理 Stage 的产出图 Seed=NULL → 继续向上）；seed 用该图真实 Seed；
+  5 个回归场景（import→img2img→upscale 仍恢复 img2img 等）。
+- **Task2 前端身份保留**：`normalizeModules()` 保留非 Primary 模块原顺序与完整身份
+  （不再重建裸 upscale）；`setPrimaryModule()` 为 Task8 选择器入口。
+- **Task3 Recipe 固定 Seed 归一化**：fixed → `seed_mode=random`（不报错、不强制改工作台）。
+- **Task4 Pipeline 顺序与重复模块**：删除 `MODULE_ORDER`；`[upscale, basic_generate]` 顺序原样保持；
+  重复 → `PIPELINE_DUPLICATE_MODULE`（resolver / validator / recipe 三处）。
+- **Task5 Module Availability 收紧**：版本域修正（module_version ≠ binding_version）；
+  未注册 module_version → 创建期 400 + `/modules` 标 `module_version_not_registered`。
+- **Task6 Img2ImgModule.execute 契约**：Prompt/Negative 进入 JobRequestContext（单测断言引擎请求）。
+- **Task7 generation_mode**：text|image 显式进入 Snapshot/Recipe/Job/History/Image restore
+  （旧快照向后兼容推断）。
+- **Task8 参数元数据驱动**：ParameterSpec +title/min/max/step/configurable；前端通用控件
+  （float/int/bool/enum）+ Primary Module 选择器；denoise 由 schema 渲染并保存。
+- **Task9 size_mode**：explicit|input；Img2Img 模式 UI 无假宽高；History 显示"跟随输入图 W×H"。
+- **Task10 真实照片验收**：4 次真实 img2img（0.55 / 0.55+冬日 / 0.7 / 0.8）全部 11/11 通过；
+  **默认 denoise 0.55 → 0.8**（0.55≈精修几乎不变；0.8 人物保留良好且场景级 Prompt 生效）。
+- **Task11 浏览器人工验收**：Playwright + 系统 Edge（复用 art-museum 已装依赖，零下载）
+  全链路截图与断言（见 `docs/evidence/phase6-img2img/acceptance_browser.json` + screenshots/）。
+- **Task12 交接包清理**：Qwen 证据迁至 `docs/evidence/phase51-img2img/`；
+  删除被新 harness 取代的 `temp/experimental/frontend_store_check/`；
+  `docs/evidence/phase6-img2img/` 收纳真实照片验收证据。
+
+### 测试
+
+- 后端：新增 `tests/backend/test_phase6_pipeline_reliability.py`（19 用例）；
+  全量快速套件 **227 passed**（208 基线 + 19 新增）；
+- 前端：新增 `tests/frontend/workbench_store.phase6.mjs`（11 断言，vite SSR 加载真实 store）→
+  CI 新增 `npm run test:store`；`npm run build`（tsc + vite）通过。
+
+### 环境记录（如实声明）
+
+- 本机 ComfyUI 当日多次启动/加载停滞（3 次托管启动 420s 超时；`import torch` 停滞于内核等待）；
+  用户处理环境后我按授权重启服务（Signal-Stop → Start-ScheduledTask），轻量探测（小模型高清链 22s）通过；
+- 照片 img2img 首次运行在模型加载阶段停滞，Studio 有限重试 3 次后 `ENGINE_NETWORK` 失败
+  （期间空闲内存一度 ~240MB、提交 22GB/40GB 重度换页）；重跑成功（模型加载 ~10min + 采样 2:45）；
+- 结论：16GB 物理内存在常驻应用并存时对"T5 6GB + GGUF 5.4GB"链路过紧（详见 docs/PHASE6_REPORT §4）。
+
 ## 2026-10-08 — Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img（v0.7.0）
 
 **执行**：TRAE Code Agent（feature/phase51-contract-img2img → develop → CI → main → CI → tag v0.7.0）。

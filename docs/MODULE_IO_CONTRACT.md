@@ -1,4 +1,4 @@
-# MODULE_IO_CONTRACT — WorkflowModule 输入/输出契约（Phase 4 + Phase 5 + Phase 5.1 / v0.7.0）
+# MODULE_IO_CONTRACT — WorkflowModule 输入/输出契约（Phase 4 + Phase 5 + Phase 5.1 + Phase 6 / v0.8.0）
 
 > Task 2/3/4 的正式契约：模块能力声明是 kind / parent / seed 的**唯一判定依据**；
 > 禁止再用"有 input_image 就认为是 upscaled"之类的推断。
@@ -6,6 +6,10 @@
 > **Phase 5.1：PipelineValidator 统一校验（Job 创建前）；模块 `validate_config` 钩子；
 > config 单链唯一事实源（Workflow → Recipe → Job → JobStage.config_json → module_config）；
 > Img2ImgModule 正式接入（第三个模块，核心零改动）。**
+> **Phase 6：`ParameterSpec` 元数据化（title / min / max / step / configurable——前端按 schema
+> 渲染控件，不按 module_id 硬编码）；`size_mode`（explicit | input）声明输出尺寸语义；
+> PipelineValidator 拒绝重复 module_id（PIPELINE_DUPLICATE_MODULE）与未注册 module_version；
+> Img2ImgModule.execute 补齐 Prompt/Negative 契约。**
 
 ## 1. ModuleCapabilities（能力声明）
 
@@ -19,6 +23,8 @@ module_id / module_version / title / description / parameters
   output_kind        original | upscaled | processed（产出物 Image.kind → 存储目录）
   parent_policy      none | input_image（产出物是否挂到输入图片下）
   output_cardinality 单次执行输出个数（第一版固定 1）
++ Phase 6：
+  size_mode          explicit（工作台显式宽高）| input（输出尺寸跟随输入图片）
 ```
 
 ### 现有模块声明（固定）
@@ -28,6 +34,10 @@ module_id / module_version / title / description / parameters
 | `basic_generate` | true | none | false | source | original | none | 1 |
 | `img2img`（Phase 5.1） | true | image | true | source | processed | input_image | 1 |
 | `upscale` | false | image | true | source | upscaled | input_image | 1 |
+
+Phase 6 `size_mode`：`basic_generate=explicit`；`img2img=input`（输出=输入尺寸）；`upscale=input`
+（×N 由 provider binding 决定）。`ParameterSpec` 中 `configurable=true` 的参数（如 `img2img.denoise`）
+才由前端按 type/min/max/step/enum 渲染控件并写入模块 config。
 
 **前端 Gate（§二十；Phase 5.1 Task7）**：图片生成模式要求存在
 `available=true 且 input_required=true 且 output_kind=processed` 的模块（当前 = img2img）；

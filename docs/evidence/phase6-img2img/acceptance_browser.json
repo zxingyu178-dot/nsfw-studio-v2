@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-10-09T06:43:56.888Z",
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "results": [
+    {
+      "step": "① 初始：文生图 + 显式宽高",
+      "ok": true,
+      "detail": {
+        "textTabActive": "true",
+        "sizeVisible": true
+      }
+    },
+    {
+      "step": "① 文生图提交",
+      "ok": true,
+      "detail": {
+        "notice": "已加入队列 JOB-dd25ca2e",
+        "job": "job_dd25ca2e-6f7e-40fc-92af-63dfa0e1e139"
+      }
+    },
+    {
+      "step": "① 文生图完成",
+      "ok": true,
+      "detail": {
+        "status": "COMPLETED",
+        "error": null
+      }
+    },
+    {
+      "step": "② 图片模式：输入图 + 跟随输入图 + denoise 滑杆 + 无假宽高",
+      "ok": true,
+      "detail": {
+        "imgMode": "true",
+        "thumbVisible": true,
+        "followsInput": true,
+        "denoise": "0.8",
+        "widthHidden": true
+      }
+    },
+    {
+      "step": "② Img2Img(+高清) 提交",
+      "ok": true,
+      "detail": {
+        "job": "job_257a2b10-15be-4c90-8d3e-dc2c53629b1f",
+        "modules": [
+          "img2img",
+          "upscale"
+        ]
+      }
+    },
+    {
+      "step": "② Img2Img(+高清) 完成",
+      "ok": true,
+      "detail": {
+        "status": "COMPLETED",
+        "error": null
+      }
+    },
+    {
+      "step": "③ Gallery 产出（processed + HD）",
+      "ok": true,
+      "detail": {
+        "badges": [
+          "HD",
+          ""
+        ]
+      }
+    },
+    {
+      "step": "④ 从 History 恢复：图片模式 + denoise + Prompt",
+      "ok": true,
+      "detail": {
+        "restoredMode": "true",
+        "restoredDenoise": "0.8",
+        "restoredPrompt": "sunlit cafe by the window, blurred city street behind glass"
+      }
+    },
+    {
+      "step": "④ 从高清图恢复工作台（Task1：恢复 Img2Img 而非导入图）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "mode": "true",
+        "denoiseVal": "0.8",
+        "inputThumb": true,
+        "imageId": "img_6dd852cb-baaa-41b8-9b97-a6b98c948e2a"
+      }
+    },
+    {
+      "step": "⑤ 切回文生图：基础生成 + 宽高回归",
+      "ok": true,
+      "detail": {
+        "backText": "true",
+        "backSize": true
+      }
+    }
+  ]
+}
