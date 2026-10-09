@@ -28,7 +28,9 @@ from app.workflows.base import (
 
 DENOISE_MIN = 0.05
 DENOISE_MAX = 1.0
-DEFAULT_DENOISE = 0.55
+# Phase 6 Task10 实测调整：0.55 在真实照片上近乎不变（精修档）；
+# 0.8 在真实人像上人物保留良好且场景级 Prompt 明显生效 → 默认 0.8。
+DEFAULT_DENOISE = 0.8
 SEED_MAX = 2147483647
 
 
@@ -75,7 +77,7 @@ class Img2ImgModule(WorkflowModule):
                     "denoise", "float", default=DEFAULT_DENOISE,
                     min=DENOISE_MIN, max=DENOISE_MAX, step=0.05, configurable=True,
                     title="变化强度",
-                    description="越低越接近原图；输出尺寸跟随输入图",
+                    description="0.55 以下≈精修（近乎不变）；0.8（默认）可做场景级变化；输出尺寸跟随输入图",
                 ),
                 ParameterSpec("positive_prompt", "string", required=True),
                 ParameterSpec("negative_prompt", "string", default=""),

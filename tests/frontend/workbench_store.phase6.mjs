@@ -59,7 +59,7 @@ const CATALOG = [
     size_mode: 'input',
     parameters: [
       { name: 'input_image', type: 'image', configurable: false },
-      { name: 'denoise', type: 'float', configurable: true, default: 0.55, min: 0.05, max: 1, step: 0.05, title: '变化强度' },
+      { name: 'denoise', type: 'float', configurable: true, default: 0.8, min: 0.05, max: 1, step: 0.05, title: '变化强度' },
     ],
   },
   {
@@ -261,7 +261,7 @@ try {
     const img2img = CATALOG.find((module) => module.module_id === 'img2img')
     const denoise = img2img.parameters.find((param) => param.name === 'denoise')
     assert.equal(denoise.configurable, true)
-    assert.equal(denoise.default, 0.55)
+    assert.equal(denoise.default, 0.8)
     assert.equal(denoise.min, 0.05)
     assert.equal(denoise.step, 0.05)
     assert.equal(img2img.size_mode, 'input', 'Task9：img2img 输出尺寸跟随输入图')

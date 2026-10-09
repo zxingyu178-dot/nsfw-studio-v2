@@ -398,13 +398,13 @@ def test_modules_api_exposes_parameter_specs_and_size_mode(mock_client):
     assert denoise["type"] == "float"
     assert denoise["min"] == 0.05 and denoise["max"] == 1.0 and denoise["step"] == 0.05
     assert denoise["configurable"] is True
-    assert denoise["default"] == 0.55 and denoise["title"] == "变化强度"
+    assert denoise["default"] == 0.8 and denoise["title"] == "变化强度"
 
     assert modules["upscale"]["size_mode"] == "input"
 
 
 def test_img2img_denoise_config_chain_from_schema_default(mock_client, session, png_bytes):
-    """Task8：denoise 不显式配置时按 Schema 默认（0.55）执行，显式配置时精确物化到 config_json。"""
+    """Task8：denoise 不显式配置时按 Schema 默认（0.8）执行，显式配置时精确物化到 config_json。"""
     from app.models import JobStage
 
     source = import_one(mock_client, "p6_denoise.png", png_bytes)

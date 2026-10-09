@@ -19,7 +19,7 @@ Phase 5.1 **零下载实验**验证通过的本机现有链（详见项目 `docs
 | `positive_prompt` | 节点 6（prompt） | |
 | `negative_prompt` | 节点 6（negative_prompt） | |
 | `seed` | 节点 7（seed） | 每张独立随机 Seed（StageItem 记录真实值） |
-| `denoise` | 节点 7（denoise） | 变化强度 0.05~1.0，默认 0.55（模块 config 唯一来源） |
+| `denoise` | 节点 7（denoise） | 变化强度 0.05~1.0，模块默认 0.8（Phase 6 真实照片实测：0.55≈精修近乎不变、0.8 场景级变化且人物保留良好；模块 config 唯一来源） |
 
 `defaults` 只包含 `resolution / steps / cfg / sampler_name / scheduler`；
 **denoise 不在 defaults**（binding defaults 在 inputs 之后应用，会覆盖注入值）。
