@@ -347,3 +347,32 @@ def test_modules_api_reports_registered_and_reason(mock_client):
         assert module["module_version"] == "v1"
         assert module["available"] is True  # mock：测试引擎可执行全部已注册模块
         assert module["unavailable_reason"] is None
+
+
+# ===== Task6：Img2ImgModule.execute 独立契约（Prompt/Negative 必须进入 EngineJobRequest） =====
+
+def test_img2img_execute_passes_prompts_into_engine_request():
+    """execute(payload, engine) 的 EngineJobRequest 参数必须与 payload 完全一致。"""
+    import asyncio
+
+    from app.engine.mock import MockEngineAdapter
+    from app.workflows.base import InputImageRef, WorkflowInput
+    from app.workflows.img2img import Img2ImgModule
+
+    module = Img2ImgModule()
+    adapter = MockEngineAdapter({})
+    payload = WorkflowInput(values={
+        "input_image": InputImageRef(image_id="img_src", file_name="s.png", data=b"\x89PNGdata"),
+        "positive_prompt": "a photo of a cat",
+        "negative_prompt": "blurry, low quality",
+        "seed": 4242,
+        "denoise": 0.55,
+    })
+    asyncio.run(module.execute(payload, adapter))
+
+    request = adapter.submitted_requests[-1]
+    assert request.parameters["positive_prompt"] == "a photo of a cat"
+    assert request.parameters["negative_prompt"] == "blurry, low quality"
+    assert request.parameters["seed"] == 4242
+    assert request.parameters["denoise"] == 0.55
+    assert request.parameters["input_image"] == "mock_inputs/img_src.png"

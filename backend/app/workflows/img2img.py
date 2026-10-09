@@ -177,8 +177,12 @@ class Img2ImgModule(WorkflowModule):
         if not validation.ok:
             raise EngineError("WORKFLOW_ERROR", f"模块输入校验失败: {'; '.join(validation.errors)}")
 
+        # Phase 6 Task6：payload 的 Prompt 必须完整进入 JobRequestContext，
+        # 否则独立走 execute 时会提交空 Prompt（Worker 主链不经过这里，但公共抽象必须正确）
         context = JobRequestContext(
             input_image=payload.values.get("input_image"),
+            positive_prompt=str(payload.values.get("positive_prompt") or ""),
+            negative_prompt=str(payload.values.get("negative_prompt") or ""),
             seed=int(payload.values["seed"]),
             module_config={"denoise": payload.values.get("denoise")},
             binding=binding or _default_binding(self),
