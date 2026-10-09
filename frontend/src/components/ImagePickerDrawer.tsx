@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiRequestError, imageApi } from '../api/client'
+import { Drawer, Input, Tabs } from './ui'
 import { IMAGE_KIND_LABEL, imageContentUrl, type ImageDTO } from '../types/workbench'
 
 type PickerFilter = 'RECENT' | 'UNREVIEWED' | 'KEPT' | 'FAVORITE'
@@ -17,7 +18,7 @@ interface ImagePickerDrawerProps {
   onPicked: (image: ImageDTO) => void
 }
 
-/** 图库图片选择器（Phase 5 §二十一）：筛选（最近/未审核/保留/收藏）+ 搜索导入文件名；
+/** 图库图片选择器（§二十一）：筛选（最近/未审核/保留/收藏）+ 搜索导入文件名；
  * 卡片只展示缩略图 / 尺寸 / 收藏；选择后返回调用方。 */
 export function ImagePickerDrawer({ title = '从图库选择图片', onClose, onPicked }: ImagePickerDrawerProps) {
   const [filter, setFilter] = useState<PickerFilter>('RECENT')
@@ -47,65 +48,41 @@ export function ImagePickerDrawer({ title = '从图库选择图片', onClose, on
   }, [load])
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="drawer drawer--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="drawer__header">
-          <h3 className="drawer__title">{title}</h3>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose} aria-label="关闭">
-            ✕
+    <Drawer open onClose={onClose} title={title} width="wide">
+      <Tabs
+        ariaLabel="图片筛选"
+        active={filter}
+        onChange={(key) => setFilter(key as PickerFilter)}
+        items={FILTERS.map(({ key, label }) => ({ key, label }))}
+      />
+
+      <Input
+        placeholder="搜索导入文件名"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+
+      {loading && <p className="muted">加载中…</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+      {!loading && !error && items.length === 0 && <p className="muted">没有符合条件的图片。</p>}
+
+      <div className="wb-image-grid">
+        {items.map((image) => (
+          <button
+            key={image.id}
+            type="button"
+            className="wb-image-item"
+            title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${image.width}×${image.height}`}
+            onClick={() => onPicked(image)}
+          >
+            <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
+            <span className="wb-image-meta">
+              {image.width}×{image.height}
+              {image.favorite && <span title="已收藏"> ★</span>}
+            </span>
           </button>
-        </header>
-
-        <div className="tabs" role="tablist" aria-label="图片筛选">
-          {FILTERS.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={filter === key}
-              className={`tabs__item${filter === key ? ' tabs__item--active' : ''}`}
-              onClick={() => setFilter(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <input
-          className="input drawer__search"
-          placeholder="搜索导入文件名"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-
-        {loading && <p className="muted">加载中…</p>}
-        {error && <p className="notice notice--error">{error}</p>}
-        {!loading && !error && items.length === 0 && <p className="muted">没有符合条件的图片。</p>}
-
-        <div className="image-picker__grid">
-          {items.map((image) => (
-            <button
-              key={image.id}
-              type="button"
-              className="image-picker__item"
-              title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${image.width}×${image.height}`}
-              onClick={() => onPicked(image)}
-            >
-              <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
-              <span className="image-picker__meta">
-                {image.width}×{image.height}
-                {image.favorite && <span title="已收藏"> ★</span>}
-              </span>
-            </button>
-          ))}
-        </div>
-      </aside>
-    </div>
+        ))}
+      </div>
+    </Drawer>
   )
 }

@@ -23,7 +23,16 @@ import {
   useJobStore,
 } from '../../stores/jobStore'
 import {
-  JOB_STATUS_LABEL,
+  Button,
+  Checkbox,
+  Field,
+  Input,
+  ProgressBar,
+  Select,
+  Slider,
+  StatusBadge,
+} from '../../components/ui'
+import {
   MODULE_LABEL,
   STAGE_LABEL,
   shortJobId,
@@ -31,12 +40,9 @@ import {
   type ModuleParameterDTO,
 } from '../../types/workbench'
 import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
+import { Pane } from './Pane'
 
-/** 右栏（规范 §五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。
- *
- * Phase 5 §二十 + Phase 5.1 Task6/Task7：图片生成模式需要**可用** Module（available=true），
- * 且 Primary Module 必须真的消费输入图；否则明确提示并禁用提交（禁止自相矛盾状态提交）。
- */
+/** 右栏（§五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。 */
 export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean | null }) {
   const state = useWorkbench()
   const store = useJobStore()
@@ -51,30 +57,23 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
     state.promptMode === 'full'
       ? state.fullPrompt.trim().length > 0
       : Object.values(state.structured).some((value) => value.trim().length > 0)
-  // Task8：开关是派生值；真实状态是 workflowModules 列表（含完整执行身份）
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
-  // Phase 5.1 Task6：Primary Module 必须与模式一致（图片生成 = 可用图片条件模块）
   const primaryModule = state.workflowModules[0]?.module_id ?? 'basic_generate'
   const primaryCapabilities =
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
   const primaryTitle =
     primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
-  // Task8（Phase 6）：Primary Module 轻量选择器候选——文生图 = 不消费输入图的可用模块；
-  // 图片生成 = 可用图片条件模块（available=true 是唯一依据）
   const primaryCandidates = state.moduleCatalog.filter((module) =>
     module.available &&
     (state.mode === 'text'
       ? !module.input_required
       : module.input_required && module.output_kind === 'processed'),
   )
-  // Task8（Phase 6）：可配置参数由 catalog Schema 驱动（如 img2img.denoise），不再按 module_id 手写
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter(
     (param) => param.configurable,
   )
-  // Task9（Phase 6）：size_mode=input 的模块输出跟随输入图 → 不显示工作台遗留的假宽高
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
   const primaryImageCapable = state.mode !== 'image' || isImageCapablePrimary(state)
-  // Phase 5：图片生成模式的提交前置条件（Gate / 输入图片 / 丢失标记）
   const inputImage = state.inputImages[0] ?? null
   const imageGateBlocked = state.mode === 'image' && (imageGenAvailable !== true || !primaryImageCapable)
   const generateHint = store.submitting
@@ -134,71 +133,53 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
 
   const queued = store.queue?.queued ?? []
   const paused = store.queue?.paused ?? []
+  const disabled = store.submitting || generateHint !== undefined
 
   return (
-    <div className="pane">
-      <header className="pane__header">
-        <h2 className="pane__title">生成配置</h2>
-      </header>
-
+    <Pane title="生成配置">
       {/* ===== 真实 Engine 状态 ===== */}
-      <div className="field">
-        <span className="field__label">引擎</span>
-        <p className="field__static">
-          <span
-            className={`engine-status engine-status--${
-              store.engineLoaded ? (store.engine?.online ? 'online' : 'offline') : 'checking'
-            }`}
-            title={store.engine?.detail}
-          >
-            <span className="engine-status__dot" aria-hidden="true" />
-            {store.engine?.online
-              ? `${store.engine.engine_name} ${store.engine.engine_version}`
-              : store.engineLoaded
-                ? '离线'
-                : '检测中'}
-          </span>
-        </p>
-      </div>
+      <Field label="引擎">
+        <span
+          className={`engine-state engine-state--${
+            store.engineLoaded ? (store.engine?.online ? 'online' : 'offline') : 'checking'
+          }`}
+          title={store.engine?.detail}
+        >
+          <span className="engine-state__dot" aria-hidden="true" />
+          {store.engine?.online
+            ? `${store.engine.engine_name} ${store.engine.engine_version}`
+            : store.engineLoaded
+              ? '离线'
+              : '检测中'}
+        </span>
+      </Field>
 
-      {/* ===== 工作流（§十五：轻量模块区，不做节点编辑器；Task8 元数据驱动选择器） ===== */}
-      <div className="field">
-        <span className="field__label">工作流</span>
-        <div className="workflow-modules">
-          {primaryCandidates.length > 1 ? (
-            <>
-              <label className="field__label" htmlFor="primary-module">① 主工作流</label>
-              <select
-                id="primary-module"
-                className="input"
-                value={primaryModule}
-                onChange={(event) => setPrimaryModule(event.target.value)}
-              >
-                {primaryCandidates.map((module) => (
-                  <option key={module.module_id} value={module.module_id}>
-                    {module.title || MODULE_LABEL[module.module_id] || module.module_id}
-                  </option>
-                ))}
-              </select>
-            </>
-          ) : (
-            <p className="field__static">① {primaryTitle}</p>
-          )}
-          <label className="field__check">
-            <input
-              type="checkbox"
-              checked={upscaleEnabled}
-              onChange={(event) => setUpscaleEnabled(event.target.checked)}
-            />
-            ② 高清放大
-          </label>
-          {upscaleEnabled && (
-            <p className="muted">原图全部完成后，依次生成高清图（原图与高清保持父子关系）。</p>
-          )}
-        </div>
-      </div>
+      {/* ===== 工作流 ===== */}
+      <Field label="工作流">
+        {primaryCandidates.length > 1 ? (
+          <Select
+            id="primary-module"
+            value={primaryModule}
+            onChange={(event) => setPrimaryModule(event.target.value)}
+            options={primaryCandidates.map((module) => ({
+              value: module.module_id,
+              label: module.title || MODULE_LABEL[module.module_id] || module.module_id,
+            }))}
+          />
+        ) : (
+          <p className="wb-static">① {primaryTitle}</p>
+        )}
+        <Checkbox
+          checked={upscaleEnabled}
+          onChange={(event) => setUpscaleEnabled(event.target.checked)}
+          label="② 高清放大"
+        />
+        {upscaleEnabled && (
+          <p className="muted">原图全部完成后，依次生成高清图（原图与高清保持父子关系）。</p>
+        )}
+      </Field>
 
-      {/* ===== 模块参数（Task8：catalog 参数 Schema 驱动，float/int/bool/enum；不做节点编辑器） ===== */}
+      {/* ===== 模块参数 ===== */}
       {configurableParams.map((param) => (
         <ModuleParameterField
           key={param.name}
@@ -208,127 +189,91 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
         />
       ))}
 
-      {/* ===== 尺寸（Task9：size_mode=input 不显示假宽高） ===== */}
+      {/* ===== 尺寸 ===== */}
       {followsInputSize ? (
-        <div className="field">
-          <span className="field__label">尺寸</span>
-          <p className="field__static">跟随输入图（无需设置宽高）</p>
-        </div>
+        <Field label="尺寸"><p className="wb-static">跟随输入图（无需设置宽高）</p></Field>
       ) : (
-        <>
-          <div className="field">
-            <label className="field__label" htmlFor="size-width">宽度 (px)</label>
-            <input
-              id="size-width"
-              className="input"
-              type="number"
-              min={64}
-              max={4096}
-              step={64}
+        <div className="size-row">
+          <Field label="宽度 (px)">
+            <Input
+              type="number" min={64} max={4096} step={64}
               value={widthText}
               onChange={(event) => setWidthText(event.target.value)}
               onBlur={commitSize}
             />
-          </div>
-          <div className="field">
-            <label className="field__label" htmlFor="size-height">高度 (px)</label>
-            <input
-              id="size-height"
-              className="input"
-              type="number"
-              min={64}
-              max={4096}
-              step={64}
+          </Field>
+          <Field label="高度 (px)">
+            <Input
+              type="number" min={64} max={4096} step={64}
               value={heightText}
               onChange={(event) => setHeightText(event.target.value)}
               onBlur={commitSize}
             />
-          </div>
-        </>
+          </Field>
+        </div>
       )}
 
-      <div className="field">
-        <label className="field__label" htmlFor="gen-count">数量</label>
-        <select
-          id="gen-count"
-          className="input"
+      <Field label="数量">
+        <Select
           value={state.count}
           onChange={(event) => setCount(Number(event.target.value))}
-        >
-          {[1, 2, 4, 6, 8].map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
-      </div>
+          options={[1, 2, 4, 6, 8].map((n) => ({ value: n, label: String(n) }))}
+        />
+      </Field>
 
-      <div className="field">
-        <div className="field__label-row">
-          <span className="field__label">Seed</span>
-          {state.seedMode === 'fixed' && (
-            <button type="button" className="btn btn--ghost btn--xs" onClick={() => setSeed(null)}>
-              恢复随机
-            </button>
-          )}
-        </div>
+      <Field label="Seed">
         {state.seedMode === 'fixed' && state.seed !== null ? (
-          <p className="field__static">
+          <p className="wb-static">
             固定 {state.seed}
             <span className="muted">（单张精确复现；选择数量 &gt; 1 将自动切回随机）</span>
+            <Button size="xs" variant="ghost" onClick={() => setSeed(null)}>恢复随机</Button>
           </p>
         ) : (
-          <p className="field__static">随机（每张独立）</p>
+          <p className="wb-static">随机（每张独立）</p>
         )}
-      </div>
+      </Field>
 
-      {/* ===== 生成按钮（§五十三：只提交 Job，不直连引擎） ===== */}
       {imageGateBlocked && (
-        <p className="notice notice--warn">
+        <p className="ds-notice ds-notice--warning">
           {imageGenAvailable !== true
             ? '图片生成：尚未配置可用工作流（等待模型方案确认）。可先选择输入图片并保存配方。'
-            : '图片生成：当前工作流不接受输入图片，请切换到可用的图片生成工作流（如"图生图"）。'}
+            : '图片生成：当前工作流不接受输入图片，请切换到可用的图片生成工作流（如“图生图”）。'}
         </p>
       )}
-      <div className="generate-actions">
-        <button
-          type="button"
-          className="btn btn--primary btn--lg generate-actions__main"
-          disabled={store.submitting || generateHint !== undefined}
-          title={generateHint}
+
+      <div className="wb-actions">
+        <Button
+          variant="primary" size="lg" className="wb-actions__main"
+          disabled={disabled} title={generateHint}
           onClick={() => void handleGenerate('normal')}
         >
           {store.submitting ? '提交中…' : '生成'}
-        </button>
-        <button
-          type="button"
-          className="btn btn--sm"
-          disabled={store.submitting || generateHint !== undefined}
-          title={generateHint}
+        </Button>
+        <Button
+          variant="secondary" size="sm"
+          disabled={disabled} title={generateHint}
           onClick={() => void handleGenerate('next')}
         >
           优先生成（插队）
-        </button>
+        </Button>
       </div>
-      {store.lastError && <p className="notice notice--error" role="alert">{store.lastError}</p>}
-      {notice && <p className="notice notice--ok" role="status">{notice}</p>}
 
-      {/* ===== 当前任务（§五十一） ===== */}
+      {store.lastError && <p className="ds-notice ds-notice--error" role="alert">{store.lastError}</p>}
+      {notice && <p className="ds-notice ds-notice--success" role="status">{notice}</p>}
+
       {job && <CurrentJobCard job={job} busy={store.busyJobId === job.id} />}
 
-      {/* ===== 队列（§五十四） ===== */}
-      <section className="queue">
-        <h3 className="queue__title">队列</h3>
+      {/* ===== 队列 ===== */}
+      <section className="wb-queue">
+        <h3 className="wb-queue__title">队列</h3>
         {store.queue?.worker.queue_paused && (
-          <div className="notice notice--warn" role="alert">
-            <p style={{ margin: '0 0 6px' }}>
-              队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}
-            </p>
-            <button type="button" className="btn btn--sm" onClick={() => void resumeQueue()}>
-              恢复队列
-            </button>
+          <div className="ds-notice ds-notice--warning" role="alert">
+            <p>队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}</p>
+            <Button size="sm" onClick={() => void resumeQueue()}>恢复队列</Button>
           </div>
         )}
         {queued.length === 0 && paused.length === 0 && <p className="muted">暂无等待任务</p>}
-        <ul className="queue-list">
+        <ul className="wb-queue-list">
           {queued.map((item, index) => (
             <QueueRow
               key={item.id}
@@ -345,16 +290,10 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
               actions={
                 <>
                   {index > 0 && (
-                    <button type="button" className="btn btn--ghost btn--xs" onClick={() => moveToFront(item.id)}>
-                      优先
-                    </button>
+                    <Button size="xs" variant="ghost" onClick={() => moveToFront(item.id)}>优先</Button>
                   )}
-                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void pauseJob(item.id)}>
-                    暂停
-                  </button>
-                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void cancelJob(item.id)}>
-                    取消
-                  </button>
+                  <Button size="xs" variant="ghost" onClick={() => void pauseJob(item.id)}>暂停</Button>
+                  <Button size="xs" variant="ghost" onClick={() => void cancelJob(item.id)}>取消</Button>
                 </>
               }
             />
@@ -365,19 +304,15 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
               job={item}
               actions={
                 <>
-                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void resumeJob(item.id)}>
-                    继续
-                  </button>
-                  <button type="button" className="btn btn--ghost btn--xs" onClick={() => void cancelJob(item.id)}>
-                    取消
-                  </button>
+                  <Button size="xs" variant="ghost" onClick={() => void resumeJob(item.id)}>继续</Button>
+                  <Button size="xs" variant="ghost" onClick={() => void cancelJob(item.id)}>取消</Button>
                 </>
               }
             />
           ))}
         </ul>
       </section>
-    </div>
+    </Pane>
   )
 }
 
@@ -401,70 +336,56 @@ function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
     job.completed_count < job.requested_count
 
   return (
-    <section className="job-card">
-      <div className="job-card__head">
-        <span className={`status-chip status-chip--${job.status.toLowerCase()}`}>
-          {JOB_STATUS_LABEL[job.status]}
-        </span>
+    <section className="wb-job">
+      <div className="wb-job__head">
+        <StatusBadge status={job.status} />
         <span className="muted">{shortJobId(job.id)}</span>
       </div>
-      <p className="job-card__title" title={excerpt}>
+      <p className="wb-job__title" title={excerpt}>
         {excerpt.length > 28 ? `${excerpt.slice(0, 28)}…` : excerpt}
       </p>
-      <div className="progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-        <span className="progress-bar__fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
-      </div>
+      <ProgressBar value={progress / 100} ariaLabel="任务进度" />
       {stageLines.length > 0 ? (
-        <ul className="stage-progress" aria-label="分阶段进度">
+        <ul className="wb-stages" aria-label="分阶段进度">
           {stageLines.map((line) => (
-            <li key={line.key} className={line.done ? 'stage-progress__done' : undefined}>
+            <li key={line.key} className={line.done ? 'wb-stages__done' : undefined}>
               {line.text}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="job-card__meta">
+        <p className="wb-job__meta">
           {progressText}
           {runningItem?.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''}
         </p>
       )}
-      <p className="job-card__meta">{moduleLabel}</p>
-      {job.resume_of_job_id && (
-        <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>
+      <p className="wb-job__meta">{moduleLabel}</p>
+      {job.resume_of_job_id && <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>}
+      {job.error_message && (
+        <p className="ds-notice ds-notice--error">{job.error_type}：{job.error_message}</p>
       )}
-      {job.error_message && <p className="notice notice--error">{job.error_type}：{job.error_message}</p>}
 
-      <div className="job-card__actions">
+      <div className="wb-job__actions">
         {job.status === 'RUNNING' && !job.pause_requested && (
-          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void pauseJob(job.id)}>
-            暂停
-          </button>
+          <Button size="sm" disabled={busy} onClick={() => void pauseJob(job.id)}>暂停</Button>
         )}
         {job.status === 'RUNNING' && job.pause_requested && (
           <span className="muted">将在当前图完成后暂停…</span>
         )}
         {job.status === 'QUEUED' && (
-          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void pauseJob(job.id)}>
-            暂停
-          </button>
+          <Button size="sm" disabled={busy} onClick={() => void pauseJob(job.id)}>暂停</Button>
         )}
         {job.status === 'PAUSED' && (
-          <button type="button" className="btn btn--sm" disabled={busy} onClick={() => void resumeJob(job.id)}>
-            继续
-          </button>
+          <Button size="sm" disabled={busy} onClick={() => void resumeJob(job.id)}>继续</Button>
         )}
-        {job.status === 'RUNNING' && job.cancel_requested && (
-          <span className="muted">正在取消…</span>
-        )}
+        {job.status === 'RUNNING' && job.cancel_requested && <span className="muted">正在取消…</span>}
         {['QUEUED', 'RUNNING', 'PAUSED'].includes(job.status) && !job.cancel_requested && (
-          <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void cancelJob(job.id)}>
-            取消
-          </button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void cancelJob(job.id)}>取消</Button>
         )}
         {canResumeRemaining && (
-          <button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={() => void resumeRemaining(job.id)}>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void resumeRemaining(job.id)}>
             继续剩余图片
-          </button>
+          </Button>
         )}
       </div>
     </section>
@@ -488,27 +409,27 @@ function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, 
   const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
   return (
     <li
-      className={`queue-item${dragging ? ' queue-item--dragging' : ''}`}
+      className={`wb-queue-item${dragging ? ' wb-queue-item--dragging' : ''}`}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      <div className="queue-item__body">
-        <div className="queue-item__title">
-          {draggable && <span className="queue-item__handle" title="拖拽排序" aria-hidden="true">⋮⋮</span>}
-          {job.status === 'PAUSED' && <span className="status-chip status-chip--paused">已暂停</span>}
+      <div className="wb-queue-item__body">
+        <div className="wb-queue-item__title">
+          {draggable && <span className="wb-queue-item__handle" title="拖拽排序" aria-hidden="true">⋮⋮</span>}
+          {job.status === 'PAUSED' && <StatusBadge status="PAUSED" />}
           <span title={excerpt}>{excerpt.length > 18 ? `${excerpt.slice(0, 18)}…` : excerpt}</span>
         </div>
-        <div className="queue-item__meta muted">
+        <div className="wb-queue-item__meta muted">
           {shortJobId(job.id)} · {job.requested_count} 张 ·{' '}
           {job.stages && job.stages.length > 1
             ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' + ')
             : MODULE_LABEL[job.module_id ?? ''] ?? '基础生成'}
         </div>
       </div>
-      <div className="queue-item__actions">{actions}</div>
+      <div className="wb-queue-item__actions">{actions}</div>
     </li>
   )
 }
@@ -520,10 +441,8 @@ function clampDimension(text: string): number {
 }
 
 /**
- * Task8（Phase 6）：按 ParameterSpec 元数据渲染一个可配置参数。
- *
- * 支持 float / int / bool / enum（不做节点编辑器；string/image 等由通用工作台字段承担）。
- * 值写入 WorkflowModuleRef.config——模块参数唯一事实源，经 Recipe/Job 进入 JobStage.config_json。
+ * 按 ParameterSpec 元数据渲染一个可配置参数（float/int/bool/enum）。
+ * 值写入 WorkflowModuleRef.config——模块参数唯一事实源。
  */
 function ModuleParameterField({
   param,
@@ -536,40 +455,30 @@ function ModuleParameterField({
 }) {
   const resolved = value ?? param.default
   const label = param.title || param.name
-  const fieldId = `param-${param.name}`
 
   if (param.type === 'bool') {
     return (
-      <div className="field">
-        <label className="field__check">
-          <input
-            type="checkbox"
-            checked={Boolean(resolved)}
-            onChange={(event) => onChange(event.target.checked)}
-          />
-          {label}
-        </label>
+      <Field>
+        <Checkbox
+          checked={Boolean(resolved)}
+          onChange={(event) => onChange(event.target.checked)}
+          label={label}
+        />
         {param.description && <p className="muted">{param.description}</p>}
-      </div>
+      </Field>
     )
   }
 
   if (param.type === 'enum') {
     return (
-      <div className="field">
-        <label className="field__label" htmlFor={fieldId}>{label}</label>
-        <select
-          id={fieldId}
-          className="input"
+      <Field label={label}>
+        <Select
           value={String(resolved ?? '')}
           onChange={(event) => onChange(event.target.value)}
-        >
-          {(param.enum_values ?? []).map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
+          options={(param.enum_values ?? []).map((option) => ({ value: option, label: option }))}
+        />
         {param.description && <p className="muted">{param.description}</p>}
-      </div>
+      </Field>
     )
   }
 
@@ -577,11 +486,8 @@ function ModuleParameterField({
 
   if (param.type === 'int') {
     return (
-      <div className="field">
-        <label className="field__label" htmlFor={fieldId}>{label}</label>
-        <input
-          id={fieldId}
-          className="input"
+      <Field label={label}>
+        <Input
           type="number"
           min={param.min ?? undefined}
           max={param.max ?? undefined}
@@ -590,29 +496,24 @@ function ModuleParameterField({
           onChange={(event) => onChange(Number(event.target.value))}
         />
         {param.description && <p className="muted">{param.description}</p>}
-      </div>
+      </Field>
     )
   }
 
   if (param.type === 'float') {
     return (
-      <div className="field">
-        <div className="field__label-row">
-          <label className="field__label" htmlFor={fieldId}>{label}</label>
-          <span className="muted">{numeric.toFixed(2)}</span>
-        </div>
-        <input
-          id={fieldId}
-          className="input"
-          type="range"
+      <Field label={label}>
+        <Slider
           min={param.min ?? 0}
           max={param.max ?? 1}
           step={param.step ?? 0.01}
           value={numeric}
-          onChange={(event) => onChange(Number(event.target.value))}
+          onChange={(v) => onChange(v)}
+          ariaLabel={label}
+          valueSlot={<span>{numeric.toFixed(2)}</span>}
         />
         {param.description && <p className="muted">{param.description}</p>}
-      </div>
+      </Field>
     )
   }
 

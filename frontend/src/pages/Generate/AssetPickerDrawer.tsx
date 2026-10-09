@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiRequestError, assetApi } from '../../api/client'
+import { Drawer, Input } from '../../components/ui'
 import { ASSET_TYPE_LABEL, assetPreviewUrl, type AssetDTO, type AssetType } from '../../types/workbench'
 
 interface AssetPickerDrawerProps {
@@ -40,62 +41,47 @@ export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawer
   }, [search, load])
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`选择${ASSET_TYPE_LABEL[slot]}素材`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="drawer__header">
-          <h3 className="drawer__title">选择{ASSET_TYPE_LABEL[slot]}素材</h3>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose} aria-label="关闭">
-            ✕
+    <Drawer open onClose={onClose} title={`选择${ASSET_TYPE_LABEL[slot]}素材`}>
+      <Input
+        className="wb-asset-search"
+        placeholder="搜索素材名称 / Prompt"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+
+      {loading && <p className="muted">加载中…</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+      {!loading && !error && items.length === 0 && (
+        <p className="muted">暂无{ASSET_TYPE_LABEL[slot]}素材，可在“素材”页上传。</p>
+      )}
+
+      <div className="wb-asset-grid">
+        {items.map((asset) => (
+          <button
+            key={asset.id}
+            type="button"
+            className="wb-asset-item"
+            title={asset.current_version?.prompt_text || asset.name}
+            onClick={() => {
+              const version = asset.current_version
+              onPicked(version?.prompt_text ?? '', {
+                asset_id: asset.id,
+                asset_version_id: version?.id ?? '',
+                name: asset.name,
+              })
+            }}
+          >
+            <span className="wb-asset-thumb">
+              {asset.current_version?.preview_path ? (
+                <img src={assetPreviewUrl(asset.id)} alt={asset.name} />
+              ) : (
+                <span className="wb-asset-placeholder">{ASSET_TYPE_LABEL[slot]}</span>
+              )}
+            </span>
+            <span className="wb-asset-name">{asset.name}</span>
           </button>
-        </header>
-
-        <input
-          className="input drawer__search"
-          placeholder="搜索素材名称 / Prompt"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-
-        {loading && <p className="muted">加载中…</p>}
-        {error && <p className="notice notice--error">{error}</p>}
-        {!loading && !error && items.length === 0 && (
-          <p className="muted">暂无{ASSET_TYPE_LABEL[slot]}素材，可在"素材"页上传。</p>
-        )}
-
-        <div className="asset-picker__grid">
-          {items.map((asset) => (
-            <button
-              key={asset.id}
-              type="button"
-              className="asset-picker__item"
-              title={asset.current_version?.prompt_text || asset.name}
-              onClick={() => {
-                const version = asset.current_version
-                onPicked(version?.prompt_text ?? '', {
-                  asset_id: asset.id,
-                  asset_version_id: version?.id ?? '',
-                  name: asset.name,
-                })
-              }}
-            >
-              <span className="asset-picker__thumb">
-                {asset.current_version?.preview_path ? (
-                  <img src={assetPreviewUrl(asset.id)} alt={asset.name} />
-                ) : (
-                  <span className="asset-thumb-placeholder">{ASSET_TYPE_LABEL[slot]}</span>
-                )}
-              </span>
-              <span className="asset-picker__name">{asset.name}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
-    </div>
+        ))}
+      </div>
+    </Drawer>
   )
 }

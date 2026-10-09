@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi } from '../../api/client'
+import { EmptyState, Spinner, StatusBadge } from '../../components/ui'
 import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
-  JOB_STATUS_LABEL,
   STAGE_LABEL,
   imageContentUrl,
   shortJobId,
   type ImageDTO,
 } from '../../types/workbench'
 import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
+import { Pane } from './Pane'
 
 /**
  * 中栏（规范 §五十）：当前生成图片 + 本 Job 已完成缩略图。
@@ -62,27 +63,17 @@ export function ResultPane() {
   const stageLines = job ? stageProgressLines(job) : []
 
   return (
-    <div className="pane pane--center">
-      <header className="pane__header">
-        <h2 className="pane__title">预览</h2>
-        {job && (
-          <span className={`status-chip status-chip--${job.status.toLowerCase()}`}>
-            {JOB_STATUS_LABEL[job.status]}
-          </span>
-        )}
-      </header>
-
+    <Pane title="预览" actions={job ? <StatusBadge status={job.status} /> : undefined}>
       {!job && (
-        <div className="result-placeholder">
-          <div className="empty-state__badge">Ready</div>
-          <p className="result-placeholder__text">暂无生成结果</p>
-          <p className="muted">填写 Prompt 并点击"生成"，结果与缩略图会实时显示在这里。</p>
-        </div>
+        <EmptyState
+          title="暂无生成结果"
+          description="填写 Prompt 并点击“生成”，结果与缩略图会实时显示在这里。"
+        />
       )}
 
       {job && (
         <>
-          <p className="muted result-pane__jobline">
+          <p className="muted wb-jobline">
             {shortJobId(job.id)}
             {job.resume_of_job_id ? `（续跑自 ${shortJobId(job.resume_of_job_id)}）` : ''}
             {' · '}
@@ -96,67 +87,67 @@ export function ResultPane() {
           </p>
 
           {stageLines.length > 0 && (
-            <ul className="stage-progress" aria-label="分阶段进度">
+            <ul className="wb-stages" aria-label="分阶段进度">
               {stageLines.map((line) => (
-                <li key={line.key} className={line.done ? 'stage-progress__done' : undefined}>
+                <li key={line.key} className={line.done ? 'wb-stages__done' : undefined}>
                   {line.text}
                 </li>
               ))}
             </ul>
           )}
 
-          <div className="result-pane__stage">
+          <div className="result-stage">
             {shown ? (
               <>
                 <img src={imageContentUrl(shown.id)} alt="生成结果" />
-                {shown.kind === 'upscaled' && <span className="result-pane__hd">HD</span>}
+                {shown.kind === 'upscaled' && <span className="result-stage__hd">HD</span>}
               </>
             ) : (
-              <div className="result-placeholder result-placeholder--inner">
-                <div className="empty-state__badge">
-                  {job.status === 'RUNNING' ? 'Generating' : job.status.toLowerCase()}
-                </div>
-                <p className="result-placeholder__text">
-                  {job.status === 'RUNNING' || job.status === 'QUEUED'
-                    ? '正在生成，完成后逐张显示…'
-                    : '本任务暂无图片'}
-                </p>
+              <div className="result-stage__placeholder">
+                {job.status === 'RUNNING' || job.status === 'QUEUED' ? (
+                  <>
+                    <Spinner ariaLabel="正在生成" />
+                    <p className="muted">正在生成，完成后逐张显示…</p>
+                  </>
+                ) : (
+                  <p className="muted">本任务暂无图片</p>
+                )}
               </div>
             )}
           </div>
 
           {images.length > 0 && (
-            <div className="thumb-strip" role="list" aria-label="本任务已完成图片">
+            <div className="wb-thumbs" role="list" aria-label="本任务已完成图片">
               {images.map((image) => (
                 <button
                   key={image.id}
                   type="button"
                   role="listitem"
-                  className={`thumb-strip__item${
-                    shown?.id === image.id ? ' thumb-strip__item--active' : ''
+                  className={`wb-thumbs__item${
+                    shown?.id === image.id ? ' wb-thumbs__item--active' : ''
                   }`}
                   onClick={() => setSelectedId(image.id)}
                   title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
                   <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
-                  {image.kind === 'upscaled' && <span className="thumb-strip__hd">HD</span>}
+                  {image.kind === 'upscaled' && <span className="wb-thumbs__hd">HD</span>}
                 </button>
               ))}
             </div>
           )}
 
-          <div className="result-pane__footer">
-            <Link className="btn btn--ghost btn--sm" to={`/gallery?job=${job.id}`}>
-              在图库中查看本任务
-            </Link>
-          </div>
+          <Link className="ds-btn ds-btn--ghost ds-btn--sm" to={`/gallery?job=${job.id}`}>
+            在图库中查看本任务
+          </Link>
         </>
       )}
 
-      {error && <p className="notice notice--error">{error}</p>}
-      <p className="muted result-pane__hint">
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+      <p className="muted">
         图片来源于真实引擎输出，已导入 Studio 数据目录；全部完成后可在图库审核、保留或淘汰。
       </p>
-    </div>
+    </Pane>
   )
 }
+
+export default ResultPane

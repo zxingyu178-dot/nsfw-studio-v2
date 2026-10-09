@@ -2,7 +2,16 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { ApiRequestError, imageApi, promptApi, recipeApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
 import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
-import { STRUCTURED_FIELDS, imageContentUrl, type StructuredPrompt } from '../../types/workbench'
+import {
+  Button,
+  Checkbox,
+  Field,
+  Input,
+  Modal,
+  SegmentedControl,
+  Textarea,
+} from '../../components/ui'
+import { STRUCTURED_FIELDS, imageContentUrl, type AssetType, type StructuredPrompt } from '../../types/workbench'
 import {
   applyAssetToSlot,
   clearAssetFromSlot,
@@ -16,12 +25,14 @@ import {
   useWorkbench,
 } from '../../stores/workbenchStore'
 import { AssetPickerDrawer } from './AssetPickerDrawer'
+import { Pane } from './Pane'
 
 type SaveTarget = 'prompt' | 'recipe' | null
+const SLOT_KEYS: Array<'face' | 'clothing' | 'pose' | 'scene'> = ['face', 'clothing', 'pose', 'scene']
 
 export function PromptEditorPane() {
   const state = useWorkbench()
-  const [pickerSlot, setPickerSlot] = useState<import('../../types/workbench').AssetType | null>(null)
+  const [pickerSlot, setPickerSlot] = useState<AssetType | null>(null)
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
   const [saveTarget, setSaveTarget] = useState<SaveTarget>(null)
   const [saveName, setSaveName] = useState('')
@@ -74,7 +85,7 @@ export function PromptEditorPane() {
           structured: snapshot.structured_prompt,
           favorite: saveFavorite,
         })
-        setMessage({ kind: 'ok', text: '已保存为 Prompt（可在"提示词"页查看）' })
+        setMessage({ kind: 'ok', text: '已保存为 Prompt（可在“提示词”页查看）' })
       } else if (saveTarget === 'recipe') {
         await recipeApi.create({ name: saveName.trim(), favorite: saveFavorite, snapshot })
         setMessage({ kind: 'ok', text: '已保存为配方（含 Prompt 与素材快照）' })
@@ -90,68 +101,53 @@ export function PromptEditorPane() {
     }
   }
 
-  return (
-    <div className="pane">
-      <header className="pane__header">
-        <h2 className="pane__title">Prompt 编辑</h2>
-        <div className="segmented">
-          <button
-            type="button"
-            className={`segmented__item${state.promptMode === 'structured' ? ' segmented__item--active' : ''}`}
-            onClick={() => setPromptMode('structured')}
-          >
-            结构化
-          </button>
-          <button
-            type="button"
-            className={`segmented__item${state.promptMode === 'full' ? ' segmented__item--active' : ''}`}
-            onClick={() => setPromptMode('full')}
-          >
-            完整 Prompt
-          </button>
-        </div>
-      </header>
+  const saveTitle = saveTarget === 'prompt' ? '保存为 Prompt' : '保存为配方'
 
-      {/* ===== 输入图片（Phase 5 §七：独立区域，不塞进八栏 Prompt；仅"图片生成"模式） ===== */}
+  return (
+    <Pane
+      title="Prompt 编辑"
+      actions={
+        <SegmentedControl
+          size="sm"
+          value={state.promptMode}
+          onChange={(m) => setPromptMode(m as typeof state.promptMode)}
+          options={[
+            { value: 'structured', label: '结构化' },
+            { value: 'full', label: '完整 Prompt' },
+          ]}
+          ariaLabel="Prompt 编辑模式"
+        />
+      }
+    >
+      {/* ===== 输入图片（§七：独立区域，仅“图片生成”模式） ===== */}
       {state.mode === 'image' && (
-        <section className="input-image" aria-label="输入图片">
-          <div className="field__label-row">
-            <span className="field__label">输入图片</span>
+        <section className="wb-input" aria-label="输入图片">
+          <div className="wb-input__label-row">
+            <span className="ds-field__label">输入图片</span>
             <span className="muted">（{inputImage ? '1 / 1' : '0 / 1'}）</span>
           </div>
           {inputImage ? (
-            <div className="input-image__body">
+            <div className="wb-input__body">
               {inputImage.missing ? (
-                <div className="input-image__missing">输入图片已丢失（请移除后重新选择）</div>
+                <div className="wb-input__missing">输入图片已丢失（请移除后重新选择）</div>
               ) : (
                 <img
-                  className="input-image__thumb"
+                  className="wb-input__thumb"
                   src={imageContentUrl(inputImage.image_id)}
                   alt="当前输入图片"
                 />
               )}
-              <div className="field__actions">
-                <button type="button" className="btn btn--sm" onClick={() => setImagePickerOpen(true)}>
-                  更换
-                </button>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={clearInputImage}>
-                  移除
-                </button>
+              <div className="wb-input__actions">
+                <Button size="sm" onClick={() => setImagePickerOpen(true)}>更换</Button>
+                <Button size="sm" variant="ghost" onClick={clearInputImage}>移除</Button>
               </div>
             </div>
           ) : (
-            <div className="field__actions">
-              <button type="button" className="btn btn--sm" onClick={() => setImagePickerOpen(true)}>
-                从图库选择
-              </button>
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                disabled={uploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
+            <div className="wb-input__actions">
+              <Button size="sm" onClick={() => setImagePickerOpen(true)}>从图库选择</Button>
+              <Button size="sm" variant="ghost" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
                 {uploading ? '导入中…' : '上传新图片'}
-              </button>
+              </Button>
             </div>
           )}
           <input
@@ -165,42 +161,34 @@ export function PromptEditorPane() {
       )}
 
       {structuredEditable ? (
-        <div className="structured-editor">
+        <div className="wb-structured">
           {STRUCTURED_FIELDS.map(({ key, label }) => {
-            const slotRef = (key === 'face' || key === 'clothing' || key === 'pose' || key === 'scene')
-              ? state.selectedAssets[key]
-              : undefined
-            const isSlot = key === 'face' || key === 'clothing' || key === 'pose' || key === 'scene'
+            const isSlot = (SLOT_KEYS as string[]).includes(key)
+            const slotRef = isSlot ? state.selectedAssets[key as 'face'] : undefined
             return (
-              <div key={key} className="field">
-                <div className="field__label-row">
-                  <label className="field__label" htmlFor={`field-${key}`}>{label}</label>
+              <div key={key} className="wb-structured-field">
+                <div className="wb-structured-field__top">
+                  <span className="ds-field__label">{label}</span>
                   {isSlot && (
-                    <div className="field__actions">
+                    <span className="wb-structured-field__actions">
                       {slotRef && (
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--xs"
+                        <Button
+                          size="xs"
+                          variant="ghost"
                           title="移除已选素材（不影响素材本身）"
-                          onClick={() => clearAssetFromSlot(key as 'face' | 'clothing' | 'pose' | 'scene')}
+                          onClick={() => clearAssetFromSlot(key as 'face')}
                         >
                           已选: {slotRef.name} ✕
-                        </button>
+                        </Button>
                       )}
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--xs"
-                        onClick={() => setPickerSlot(key as 'face' | 'clothing' | 'pose' | 'scene')}
-                      >
+                      <Button size="xs" variant="ghost" onClick={() => setPickerSlot(key as AssetType)}>
                         选择素材
-                      </button>
-                    </div>
+                      </Button>
+                    </span>
                   )}
                 </div>
-                <textarea
-                  id={`field-${key}`}
-                  className="input input--area"
-                  rows={key === 'extra' ? 2 : 2}
+                <Textarea
+                  rows={2}
                   value={state.structured[key]}
                   onChange={(event) => setStructuredField(key, event.target.value)}
                 />
@@ -209,84 +197,60 @@ export function PromptEditorPane() {
           })}
         </div>
       ) : (
-        <div className="field">
-          <label className="field__label" htmlFor="full-prompt">完整 Prompt</label>
-          <textarea
-            id="full-prompt"
-            className="input input--area"
+        <Field label="完整 Prompt">
+          <Textarea
             rows={12}
             value={state.fullPrompt}
             onChange={(event) => setFullPrompt(event.target.value)}
             placeholder="输入完整正向 Prompt"
           />
-        </div>
+        </Field>
       )}
 
-      <div className="field">
-        <label className="field__label" htmlFor="negative-prompt">Negative Prompt</label>
-        <textarea
-          id="negative-prompt"
-          className="input input--area"
+      <Field label="Negative Prompt">
+        <Textarea
           rows={3}
           value={state.negativePrompt}
           onChange={(event) => setNegativePrompt(event.target.value)}
           placeholder="可选：不希望出现的内容"
         />
-      </div>
+      </Field>
 
       <ComposePreview mode={state.promptMode} structured={state.structured} fullPrompt={state.fullPrompt} />
 
-      <div className="pane__footer">
-        <button type="button" className="btn btn--primary" onClick={() => setSaveTarget('prompt')}>
-          保存为 Prompt
-        </button>
-        <button type="button" className="btn" onClick={() => setSaveTarget('recipe')}>
-          保存为配方
-        </button>
+      <div className="wb-footer">
+        <Button variant="primary" onClick={() => setSaveTarget('prompt')}>保存为 Prompt</Button>
+        <Button variant="secondary" onClick={() => setSaveTarget('recipe')}>保存为配方</Button>
       </div>
 
       {message && (
-        <p className={`notice notice--${message.kind}`} role="status">{message.text}</p>
+        <p className={`ds-notice ds-notice--${message.kind === 'ok' ? 'success' : 'error'}`} role="status">
+          {message.text}
+        </p>
       )}
 
-      {saveTarget && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSaveTarget(null)}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={saveTarget === 'prompt' ? '保存为 Prompt' : '保存为配方'}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 className="modal__title">{saveTarget === 'prompt' ? '保存为 Prompt' : '保存为配方'}</h3>
-            <div className="field">
-              <label className="field__label" htmlFor="save-name">名称</label>
-              <input
-                id="save-name"
-                className="input"
-                value={saveName}
-                onChange={(event) => setSaveName(event.target.value)}
-                autoFocus
-              />
-            </div>
-            <label className="check">
-              <input type="checkbox" checked={saveFavorite} onChange={(event) => setSaveFavorite(event.target.checked)} />
-              <span>收藏</span>
-            </label>
-            <div className="modal__actions">
-              <button type="button" className="btn" onClick={() => setSaveTarget(null)}>取消</button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                disabled={!saveName.trim() || saving}
-                onClick={() => void handleSaveConfirm()}
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={saveTarget !== null}
+        onClose={() => setSaveTarget(null)}
+        title={saveTitle}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSaveTarget(null)}>取消</Button>
+            <Button variant="primary" disabled={!saveName.trim() || saving} onClick={() => void handleSaveConfirm()}>
+              保存
+            </Button>
+          </>
+        }
+      >
+        <Field label="名称">
+          <Input value={saveName} onChange={(event) => setSaveName(event.target.value)} autoFocus />
+        </Field>
+        <Checkbox
+          label="收藏"
+          checked={saveFavorite}
+          onChange={(event) => setSaveFavorite(event.target.checked)}
+        />
+      </Modal>
 
       {pickerSlot && (
         <AssetPickerDrawer
@@ -308,7 +272,7 @@ export function PromptEditorPane() {
           }}
         />
       )}
-    </div>
+    </Pane>
   )
 }
 

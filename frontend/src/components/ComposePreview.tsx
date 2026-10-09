@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ApiRequestError, promptApi } from '../api/client'
+import { Button } from './ui'
 import type { PromptMode, StructuredPrompt } from '../types/workbench'
+import './compose-preview.css'
 
 interface ComposePreviewProps {
   mode: PromptMode
@@ -9,8 +11,8 @@ interface ComposePreviewProps {
 }
 
 /**
- * 完整 Prompt 预览（规范 §四十）：默认折叠；调用与保存相同的后端合成规则，
- * 保证"UI 看到的 Prompt == 真正保存的 Prompt"。只读，不可直接编辑拼接结果。
+ * 完整 Prompt 预览（§四十）：默认折叠；调用与保存相同的后端合成规则，
+ * 保证“UI 看到的 Prompt == 真正保存的 Prompt”。只读，不可直接编辑拼接结果。
  */
 export function ComposePreview({ mode, structured, fullPrompt }: ComposePreviewProps) {
   const [expanded, setExpanded] = useState(false)
@@ -54,22 +56,17 @@ export function ComposePreview({ mode, structured, fullPrompt }: ComposePreviewP
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
-        完整 Prompt 预览 {expanded ? '▲' : '▼'}
+        完整 Prompt 预览 <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
       </button>
       {expanded && (
         <div className="compose-preview__body">
-          {mode === 'structured' && error && <p className="notice notice--error">{error}</p>}
+          {mode === 'structured' && error && <p className="ds-notice ds-notice--error">{error}</p>}
           <pre className="compose-preview__text" aria-live="polite">
             {text || (mode === 'structured' ? '（结构化字段均为空）' : '（完整 Prompt 为空）')}
           </pre>
-          <button
-            type="button"
-            className="btn btn--ghost btn--xs"
-            onClick={() => void handleCopy()}
-            disabled={!text}
-          >
+          <Button size="xs" variant="ghost" onClick={() => void handleCopy()} disabled={!text}>
             {copied ? '已复制' : '复制'}
-          </button>
+          </Button>
         </div>
       )}
     </div>
