@@ -1,4 +1,45 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1 / 6（2026-10-09）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1 / 6 / 7（2026-10-09）
+
+## Phase 7 测试（v0.9.0，可靠性收口 + Reference Gate）
+
+### 快速套件（CI 同口径，无 ComfyUI）
+
+命令：`.venv\Scripts\python -m pytest tests/backend --ignore=tests/backend/test_comfyui_integration.py`
+
+**结果：254 passed**（v0.8.0 的 227 例 + Phase 7 新增 27 例；Phase 4~6 全部回归全绿）。
+
+- 新增 `tests/backend/test_phase7_stage_resume.py`（4 用例，Task0）：四种场景全离线 Mock——
+  basic→upscale（Stage2 全失败）/ img2img→upscale（Stage2 取消，img2img 输入图不被二次消费）/
+  Stage2 部分失败（已 COMPLETED 槽位不再续跑）/ Stage0 取消（未完成槽位重执行新 Seed、
+  已完成槽位复用原 Seed）；断言复用溯源 `reused_from_stage_item_id`、引擎提交次数（复用 Stage 绝不重算）、
+  链式流转（重跑 Stage 输入 = 复用 Stage 输出）；
+- 新增 `tests/backend/test_phase7_guards.py`（10 用例，Task2/7/8）：
+  能力驱动 process 校验（未来处理模块声明能力即可，Validator 零改动）；
+  幂等指纹（同 payload 重放 / 不同 payload → 409 IDEMPOTENCY_KEY_CONFLICT / queue_mode 不冲突 /
+  历史 NULL 指纹兼容）；/modules 按选中 module_version 取 capabilities；生成上下文按
+  `is_generative` 语义（Seed 数据缺失仍可恢复）；非 comfyui/mock 引擎输出 source=engine 而非 import；
+- 新增 `tests/backend/test_phase7_input_slots.py`（7 用例，Task5）：slot 声明 / 未声明角色 /
+  必填缺失 / 超量 / 旧 img2img source 兼容 / Recipe 多角色往返 / /modules input_slots；
+- 新增 `tests/backend/test_phase7_reference_module.py`（6 用例，Task6，离线 Mock）：
+  reference_generate 能力声明与 config 校验 / Slot 门禁（缺 reference → INPUT_IMAGE_REQUIRED；
+  给 source → UNUSED_INPUT_IMAGE）/ 端到端（original 输出 + parent=参考图 + seed + resolution 单链）/
+  reference_generate→upscale 链 / /modules available；
+- 既有测试同步更新（契约变更）：多输入图的 schema 级 422 → 400 INPUT_SLOT_LIMIT_EXCEEDED；
+  迁移清单断言 + 0012/0013。
+
+### 前端
+
+- `npm run build`：tsc --noEmit 通过 + vite build 通过（0.9.0）；
+- `npm run test:store`：11 断言全绿（未改动前端行为，仅类型镜像扩展）。
+
+### 真实 ComfyUI（Task3/4 Gate + Task9 smoke）
+
+- **Task3 只读重盘**：`docs/REFERENCE_CAPABILITY_INVENTORY.md`（ComfyUI 0.37.0 / 1169 节点 /
+  可加载模型清单 / 六个参考能力方向逐项结论 / 用户历史工作流现状）；
+- **Task4 Gate 实测（直接 ComfyUI API，零下载）**：Qwen-Image 2.1 + 原生
+  `TextEncodeQwenImage21` 参考图链 COMPLETED，输出与参考图对比：同一人物身份 + 换衣 + 换场景生效；
+- **Task9 产品路径 smoke**：`tests/manual/smoke_phase7_reference.py`（参考图 → reference_generate
+  （可选 → upscale）→ 真实 DataRoot；真实迁移 0012/0013 应用）——结果见 `docs/PHASE7_REPORT.md`。
 
 ## Phase 6 测试（v0.8.0，Pipeline 可靠性收口）
 

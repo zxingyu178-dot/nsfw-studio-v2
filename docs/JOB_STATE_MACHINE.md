@@ -123,17 +123,34 @@ output_importer 抛异常              → STORAGE_ERROR → Item FAILED
 统一后果：Item FAILED、Job 最终 FAILED、`completed_count` 不增加、`image_id = null`。
 **禁止状态：`COMPLETED` 且 `image_id = null`**（崩溃恢复的 `ITEM_RECOVERED` 路径同样遵守）。
 
-## 10. Seed 与续跑（Phase 2.1 §五 + 2.2 §3，固定）
+## 10. Seed 与续跑（Phase 2.1 §五 + 2.2 §3 + Phase 7 Task0，固定）
 
 - 每张图执行时分配 Seed（random：SystemRandom；fixed：仅单张精确复现，见 §5）；
-- **续跑（resume-remaining）一律使用新随机 Seed**：子 Job 快照
-  `count = remaining, seed_mode = random, seed = null`（workbench_snapshot 与
-  generation_settings_json 同步重建）；
+- **续跑（resume-remaining）使用新随机 Seed —— 但只作用于真正重新执行的 Stage**
+  （Phase 7 Task0）：子 Job 快照 `count = remaining, seed_mode = random, seed = null`；
+- **Stage-aware Resume（Phase 7 Task0）**：`resume_remaining()` 不再把整条 Pipeline 从
+  Stage 0 重跑——对每个剩余（非 COMPLETED 的）槽位逐 Stage 检查父 Job 同槽位 StageItem：
+  - 已 COMPLETED 且 `output_image_id` 非空的**上游 Stage 直接复用**：物化为子 Job 的
+    COMPLETED StageItem（继承 input/output/seed/engine_job_id + `reused_from_stage_item_id`
+    溯源字段），整段全复用 → Stage 直接 COMPLETED（Worker 按"绝不重跑已完成 Stage"跳过）；
+  - **从第一个真正未完成的 Stage 才开始执行**；复用槽位保留原 Seed（绝不重算），
+    只有重新执行的 Stage 才由 Worker 分配新 Seed；
+  - 链式流转：重跑 Stage 的输入 = 复用 Stage 的 `output_image_id`（Worker 既有派生逻辑）；
+  - 覆盖四种场景：basic→upscale、img2img→upscale、Stage2 失败、Stage2 取消；
 - **续跑完整继承 Parent 的 Workflow 身份**（Phase 2.2 §3）：workflow_snapshot_json +
   module_id / module_version / provider / binding_version / workflow_hash 全部原样继承，
   不读取当前 settings、不静默升级；原 binding 已不存在时执行期明确报 BINDING_NOT_FOUND；
 - 想"用最新版 Workflow 重做剩余内容"请创建新 Job，而不是 Resume；
 - 原 Job 的 workbench_snapshot 永不修改；已成功 Item 的 Seed 永远保留。
+
+## 10.1 幂等键冲突（Phase 7 Task7，固定）
+
+- `(source, client_request_id)` 幂等命中时**必须比对请求指纹**
+  （`jobs.client_request_fingerprint` = job_kind + 快照 + 显式输入/配置的 canonical hash）：
+  - 相同 key + 相同 payload → 返回原 Job（正常重放，`idempotent_replay=true`）；
+  - 相同 key + **不同 payload** → `IDEMPOTENCY_KEY_CONFLICT`（409），绝不静默返回旧 Job；
+- 队列模式（queue_mode）不进入指纹：只影响排队位置，不属于任务内容；
+- 历史 Job（本阶段之前创建，指纹为 NULL）保持旧兼容行为（无法比对 → 返回原 Job）。
 
 ## 11. Worker 取消 / 内部异常（Phase 2.2 + Phase 3 §0.1）
 

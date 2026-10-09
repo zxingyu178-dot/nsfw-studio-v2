@@ -2,6 +2,61 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.9.0] — 2026-10-09
+
+### Added（Phase 7：可靠性收口 + Reference 能力 Gate）
+
+- **Stage-aware Resume（Task0）**：`resume_remaining()` 不再把整条 Pipeline 从 Stage 0 重跑——
+  对每个剩余槽位逐 Stage 检查父 Job 同槽位 StageItem，已 COMPLETED 且产出非空的上游 Stage
+  直接复用（output/seed/engine 溯源继承，物化为 COMPLETED StageItem +
+  新增 `job_stage_items.reused_from_stage_item_id` 溯源字段），从第一个未完成 Stage 才开始执行；
+  **只有真正重新执行的 Stage 才重新分配 Seed**；覆盖 basic→upscale / img2img→upscale /
+  Stage2 失败 / Stage2 取消四种场景（离线 Mock 回归 4 例）；
+- **通用图片输入 Slot 契约（Task5）**：`ModuleCapabilities.input_slots`
+  （role=source/reference/face_reference + required + max_count）；Workbench 快照
+  `input_images` 支持多角色（上限 4）；Job 创建期由 PipelineValidator 按模块声明校验
+  （未声明角色 → `UNUSED_INPUT_IMAGE`、必填缺失 → `INPUT_IMAGE_REQUIRED`、
+  超量 → `INPUT_SLOT_LIMIT_EXCEEDED`）；img2img/upscale 继续兼容 source；
+  Recipe 输入图快照保留多角色；
+- **Reference Module（Task6，Gate 通过后）**：新增 `reference_generate` v1
+  （Qwen-Image 2.1 原生 reference latents 参考图条件生成；slot=reference 单张；
+  kind=original、parent=参考图；configurable `resolution` 512–2048）；
+  provider binding `workflows/providers/comfyui/reference_generate/v1/`
+  （`TextEncodeQwenImage21` 参考图链 + 参考尺寸 latent；双指纹固化）；
+- **Reference 能力重盘（Task3）**：`docs/REFERENCE_CAPABILITY_INVENTORY.md`
+  （零下载只读重盘：可加载模型清单 / 缺失方向逐项结论 / Gate 实测）；
+- **幂等请求指纹（Task7）**：`jobs.client_request_fingerprint`——
+  相同 (source, client_request_id) + 相同 payload 返回原 Job；
+  相同 key + 不同 payload → `IDEMPOTENCY_KEY_CONFLICT`（409），不再静默返回旧 Job；
+  队列模式变更不视为冲突（兼容历史 Job 的 NULL 指纹）；
+- **Capability 扩展（Task2/Task8）**：`allowed_job_kinds` / `can_start_from_image` /
+  `is_generative` / `input_slots` 四个能力字段（`/modules` 同步返回）；
+  `size_mode` 之外的前向兼容语义全部由 ModuleCapabilities 驱动。
+
+### Changed
+
+- **处理型 Job 校验能力驱动（Task2）**：移除 PipelineValidator 的
+  "process 必须且只能是 upscale" 硬编码——改为模块声明 `allowed_job_kinds`（含 process）
+  且首个模块 `can_start_from_image=true`；未来 Face Repair / 背景移除等处理模块
+  只需声明能力，不再修改 Validator；
+- **`/modules` capabilities 按实际选中的 module_version 获取（Task8）**：
+  不再固定读取注册表默认版本；
+- **Image → Workbench 生成上下文语义化（Task8）**：判定依据从 `seed != null` 改为
+  产出 Stage 的模块语义（`is_generative`），未来非 ComfyUI 引擎 / 未记录 Seed 的生成路径
+  仍可恢复工作台；
+- **图片来源标注（Task8）**：`Image.source` 增加 `engine`——
+  非 comfyui/mock 的未来引擎产出绝不错标成 `import`（import 只表示外部导入）。
+
+### 仓库与工具（Task1）
+
+- 大型验收 input/output/screenshots 移出 Git 跟踪（完整图片只进 Handoff ZIP）；
+  `.gitignore` 增加 `docs/evidence/**/*.{png,jpg,jpeg,webp,gif}` 与 `temp/`；
+- 长期脚本迁移：`temp/` → `scripts/acceptance/`（check_ci / send_handoff_mail /
+  inspect_jobs / inspect_recipes）与 `tests/manual/`（smoke_phase51 / smoke_phase6_photo /
+  acceptance_phase6(_browser) / probe_engine_upscale）；
+- 每阶段交付邮件改为参数化工具 `scripts/acceptance/send_handoff_mail.py`
+  （--phase/--source/--handoff/--subject(-file)/--body-file + IMAP SHA-256 复核）。
+
 ## [0.8.0] — 2026-10-09
 
 ### Fixed（Phase 6：Pipeline 可靠性收口）

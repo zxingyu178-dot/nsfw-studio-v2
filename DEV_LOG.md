@@ -1,5 +1,56 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-09 — Phase 7：可靠性收口 + Reference 能力 Gate（v0.9.0）
+
+**执行**：TRAE Code Agent（feature/phase7-reference-slots → develop → CI → main → CI → tag v0.9.0）。
+不扩模型；先真正 Stage-aware Resume + 能力驱动/前向兼容收口，再重盘 ComfyUI 走 Reference Gate。
+
+### 交付
+
+- **Task0 Stage-aware Resume**：`resume_remaining()` 逐 Stage 复用已 COMPLETED 的上游 StageItem
+  （物化 COMPLETED + `reused_from_stage_item_id` 溯源，迁移 0012）；从第一个未完成 Stage 才执行；
+  只有真正重新执行的 Stage 才分配新 Seed；4 场景离线 Mock 回归（basic→upscale 失败 /
+  img2img→upscale 取消 / Stage2 部分失败 / Stage0 取消）。
+- **Task1 Git Evidence 清理**：大图（真实照片/生成图/截图）移出跟踪（只进 Handoff ZIP）；
+  `.gitignore` 防误提交；temp 长期脚本迁 `scripts/acceptance/` 与 `tests/manual/`（并修 PROJECT_ROOT）；
+  交付邮件工具参数化（send_handoff_mail.py）。
+- **Task2 process 校验能力驱动**：移除"必须且只能是 upscale"硬编码；新增
+  `allowed_job_kinds` / `can_start_from_image`（未来处理模块声明能力即可，Validator 零改动）。
+- **Task3 只读重盘**：`docs/REFERENCE_CAPABILITY_INVENTORY.md`——现役 Qwen-Image 2.1 三件套；
+  IPAdapter / PuLID / InstantID / PhotoMaker / ControlNet / Qwen-Image-Edit 权重全部缺失
+  （需下载，不做）；用户历史 SD 工作流因底模缺失不可运行。
+- **Task4 Reference Gate：通过**。真实照片直接 ComfyUI API 实测
+  `TextEncodeQwenImage21` reference latents：同一人物身份 + 换衣 + 换夜景生效（零下载）。
+- **Task5 输入 Slot 契约**：`input_slots`（source/reference/face_reference + required + max_count）；
+  快照多角色（上限 4）；Job 创建期按模块声明校验（UNUSED/REQUIRED/LIMIT_EXCEEDED）；
+  Recipe 多角色往返；Face Asset 参考图直接复用。
+- **Task6 Reference Module**：`reference_generate` v1（Qwen 参考链；configurable resolution
+  512~2048；kind=original、parent=参考图）；binding
+  `workflows/providers/comfyui/reference_generate/v1/`（双指纹）；QueueWorker 核心零修改；
+  离线 Mock 6 用例全绿。
+- **Task7 幂等指纹**：`jobs.client_request_fingerprint`（迁移 0013）；同 key 不同 payload →
+  409 `IDEMPOTENCY_KEY_CONFLICT`；queue_mode 不参与；历史 NULL 指纹兼容。
+- **Task8 三个兼容点**：/modules 按选中 module_version 取 capabilities；生成上下文按
+  `is_generative` 语义（不再依赖 seed 数据）；非 comfyui/mock 引擎输出 `source=engine`。
+
+### 测试
+
+- 后端：新增 4 个 Phase 7 测试文件（27 用例：Stage Resume 4 / guards 10 / slots 7 / reference 6）；
+  全量快速套件 **254 passed**（227 基线 + 27 新增）；
+- 前端：`npm run build` 通过；`npm run test:store` 11 断言全绿；
+- 真实 DataRoot：迁移 0012/0013 实测应用成功（0.8.0 → 0.9.0）。
+
+### 环境记录（如实声明）
+
+- Gate 实测（直接 ComfyUI API，20 步 640px）：冷加载 ~35 分钟（16GB RAM 重度换页）+
+  采样，单次 > 1 小时；产品路径 smoke 使用热缓存；
+- 未下载模型、未安装节点、未升级 ComfyUI；ComfyUI 生命周期未改动（仅提交普通任务）；
+- Reference 慢是当前 6GB/16GB 硬件的客观事实，Phase 7 不尝试优化（低频高质量能力定位）。
+
+### 发布链（2026-10-09）
+
+（CI run / tag / 邮件复核结果在交付时回填。）
+
 ## 2026-10-09 — Phase 6：Pipeline 可靠性收口（v0.8.0）
 
 **执行**：TRAE Code Agent（feature/phase6-pipeline-reliability → develop → CI → main → CI → tag v0.8.0）。

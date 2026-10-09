@@ -1,5 +1,28 @@
 # TASKS — NSFW Studio V2
 
+## Phase 7：可靠性收口 + Reference 能力 Gate ✅（2026-10-09，v0.9.0）
+
+- [x] Task 0：真正 Stage-aware Resume（复用已完成上游 Stage + `reused_from_stage_item_id` 溯源；
+  从第一个未完成 Stage 才执行；只有重新执行的 Stage 才分配新 Seed；4 场景离线 Mock 回归）
+- [x] Task 1：Git Evidence 清理（大图移出跟踪，只进 Handoff ZIP；.gitignore 防误提交；
+  temp 长期脚本 → scripts/acceptance/ + tests/manual/；邮件工具参数化）
+- [x] Task 2：process Job 校验能力驱动（`allowed_job_kinds` / `can_start_from_image`；
+  未来处理模块零改 Validator）
+- [x] Task 3：ComfyUI 只读重盘 → docs/REFERENCE_CAPABILITY_INVENTORY.md
+  （0.37.0 / 1169 节点 / 可加载模型清单 / 六个参考方向逐项结论）
+- [x] Task 4：Reference Gate → **通过**（真实照片实测 Qwen-Image 2.1 + TextEncodeQwenImage21
+  reference latents：身份保持 + 换衣 + 换场景；零下载），选定唯一方案
+- [x] Task 5：通用图片输入 Slot 契约（source / reference / face_reference；模块声明
+  required + max_count；快照上限 4；Recipe 多角色往返；Face Asset 复用现有数据）
+- [x] Task 6：Reference Module（Gate 通过）→ `reference_generate` v1 + comfyui binding
+  （双指纹；QueueWorker 核心零修改；离线 Mock 6 用例；产品路径真实 smoke 见下）
+- [x] Task 7：幂等请求指纹（同 key 不同 payload → 409 IDEMPOTENCY_KEY_CONFLICT；
+  queue_mode 不参与；历史 NULL 指纹兼容；迁移 0013）
+- [x] Task 8：三个未来兼容点（/modules 按选中版本取 capabilities；生成上下文按
+  is_generative 语义；非 comfyui/mock 输出 source=engine）
+- [x] Task 9：验收（254 passed 快速套件 + 前端 build/store 全绿 + 真实参考图 smoke）
+- [x] 版本：v0.9.0；feature/phase7-reference-slots → develop → main → tag
+
 ## Phase 6：Pipeline 可靠性收口 ✅（2026-10-09，v0.8.0）
 
 - [x] Task 1：Image → Workbench 最近的生成上下文（不再永远找树根；import→img2img→upscale 仍恢复 Img2Img；

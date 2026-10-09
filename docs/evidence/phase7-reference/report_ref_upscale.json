@@ -1,0 +1,113 @@
+{
+  "phase": "phase7-reference-smoke",
+  "label": "ref_upscale",
+  "started_at": "2026-10-09T17:12:54",
+  "data_root": "D:\\NSFW-Studio-Data",
+  "input_path": "D:\\AIHome_2.0_L1_L2\\projects\\nsfw-studio-v2\\docs\\evidence\\phase6-img2img\\inputs\\real_photo_768x1024.png",
+  "input_dimensions": [
+    768,
+    1024
+  ],
+  "prompt": {
+    "style": "photorealistic",
+    "scene": "night city street with warm neon lights",
+    "clothing": "red dress",
+    "extra": "keep the same person identity and facial features"
+  },
+  "negative": "blurry, low quality, text, watermark, deformed",
+  "resolution": 768,
+  "chain": [
+    "reference_generate",
+    "upscale"
+  ],
+  "reference_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+  "identities": [
+    {
+      "module_id": "reference_generate",
+      "module_version": "v1",
+      "provider": "comfyui",
+      "binding_version": "v1",
+      "workflow_hash": "b9413c99c1f4ddeb",
+      "binding_hash": "1022da22e48721e6"
+    },
+    {
+      "module_id": "upscale",
+      "module_version": "v1",
+      "provider": "comfyui",
+      "binding_version": "v1",
+      "workflow_hash": "8232a833dc049803",
+      "binding_hash": "6a7a21944d428ef6"
+    }
+  ],
+  "job_id": "job_25c14f4d-0e86-486a-a7b9-292516629a53",
+  "job_created": true,
+  "finished_at": "2026-10-09T17:32:06",
+  "elapsed_seconds": 1151.7,
+  "job_status": "COMPLETED",
+  "error_type": null,
+  "error_message": null,
+  "stages": [
+    {
+      "stage_index": 0,
+      "module_id": "reference_generate",
+      "status": "COMPLETED",
+      "config": {
+        "resolution": 768,
+        "execution_timeout": 7200
+      },
+      "provider": "comfyui",
+      "binding_version": "v1",
+      "workflow_hash": "b9413c99c1f4ddeb",
+      "binding_hash": "1022da22e48721e6"
+    },
+    {
+      "stage_index": 1,
+      "module_id": "upscale",
+      "status": "COMPLETED",
+      "config": {},
+      "provider": "comfyui",
+      "binding_version": "v1",
+      "workflow_hash": "8232a833dc049803",
+      "binding_hash": "6a7a21944d428ef6"
+    }
+  ],
+  "stage0_item": {
+    "input_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+    "output_image_id": "img_2c732d9b-c311-4455-af26-f50724914e50",
+    "seed": 504415952
+  },
+  "output_image": {
+    "id": "img_2c732d9b-c311-4455-af26-f50724914e50",
+    "kind": "original",
+    "parent_image_id": "img_0fb0302c-8e36-49bf-922b-d910e57bd151",
+    "file_path": "images/originals/img_2c732d9b-c311-4455-af26-f50724914e50/original.png",
+    "exists": true,
+    "dimensions": [
+      672,
+      896
+    ],
+    "seed": 504415952,
+    "abs_path": "D:\\NSFW-Studio-Data\\images\\originals\\img_2c732d9b-c311-4455-af26-f50724914e50\\original.png"
+  },
+  "final_image": {
+    "id": "img_3f81fdbf-426f-46dc-b321-2e4b0e0573a2",
+    "kind": "upscaled",
+    "parent_image_id": "img_2c732d9b-c311-4455-af26-f50724914e50",
+    "abs_path": "D:\\NSFW-Studio-Data\\images\\upscaled\\img_3f81fdbf-426f-46dc-b321-2e4b0e0573a2\\upscaled.png"
+  },
+  "checks": {
+    "job_completed": true,
+    "stage0_module_reference_generate": true,
+    "stage0_completed": true,
+    "stage0_config_resolution": true,
+    "reference_frozen": true,
+    "reference_output_exists": true,
+    "reference_output_kind_original": true,
+    "reference_parent_is_input": true,
+    "stage_item_seed_recorded": true,
+    "reference_output_seed_matches": true,
+    "final_output_exists": true,
+    "upscale_stage_completed": true,
+    "upscale_parent_is_reference_output": true
+  }
+}

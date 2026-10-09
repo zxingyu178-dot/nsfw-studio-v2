@@ -74,13 +74,19 @@ Phase 5 §九：snapshot.input_images（[{role:"source", image_id}]，max=1）�
 
 ```
 POST   /api/v1/jobs                        创建生成任务（body: {snapshot, client_request_id?,
-                                           queue_mode: normal|next, source}；幂等返回原 Job）
+                                           queue_mode: normal|next, source}）
+                                           幂等（Phase 7 Task7）：相同 (source, client_request_id) +
+                                           相同 payload → 返回原 Job（idempotent_replay=true）；
+                                           相同 key + 不同 payload → 409 IDEMPOTENCY_KEY_CONFLICT
 GET    /api/v1/jobs                        列表（status/limit/offset）
-GET    /api/v1/jobs/{id}                   详情（含 items 子项 + stages 多阶段进度，§二十四）
+GET    /api/v1/jobs/{id}                   详情（含 items 子项 + stages 多阶段进度，§二十四；
+                                           StageItem 含 reused_from_stage_item_id 复用溯源）
 POST   /api/v1/jobs/{id}/pause             安全暂停（当前图完成后暂停）
 POST   /api/v1/jobs/{id}/resume            继续暂停任务（已完成 Item 不重跑）
 POST   /api/v1/jobs/{id}/cancel            取消（终态；已完成图片保留）
-POST   /api/v1/jobs/{id}/resume-remaining  继续剩余图片（创建子 Job，继承原 Workflow 身份）
+POST   /api/v1/jobs/{id}/resume-remaining  继续剩余图片（创建子 Job，继承原 Workflow 身份；
+                                           Phase 7 Task0：Stage-aware——已 COMPLETED 的上游 Stage
+                                           直接复用，从第一个未完成 Stage 才开始执行）
 GET    /api/v1/history                     历史任务（Phase 4 Task5/6：来源=jobs；
                                            bucket=all|active|completed|failed|cancelled + source 筛选；
                                            按 resume_of_job_id 归组为任务族 [{root_job_id, root, resumes}]）
@@ -126,9 +132,18 @@ GET    /api/v1/modules                     WorkflowModule 能力列表（module_
                                              registered（恒 true）
                                              available（comfyui 下必须能加载 provider binding）
                                              provider / binding_version / unavailable_reason
+                                           + Phase 6 Task8/9：parameters（ParameterSpec 元数据）/
+                                             size_mode
+                                           + Phase 7：allowed_job_kinds / can_start_from_image /
+                                             is_generative / input_slots（role+required+max_count）
+                                           + Phase 7 Task8：capabilities 按实际选中的
+                                             module_version 获取（非注册表默认版本）
                                            → 前端"文生图/图片生成"Gate 判定（禁止硬编码模块列表；
                                              Gate 唯一依据 available=true，registered ≠ available）
 ```
+
+Stage0 输入 Slot 校验（Phase 7 Task5，Job 创建前）：未声明角色 → `UNUSED_INPUT_IMAGE` /
+必填缺失 → `INPUT_IMAGE_REQUIRED` / 超量 → `INPUT_SLOT_LIMIT_EXCEEDED`（模块声明为准）。
 
 约定：状态机与暂停/取消/续跑语义见 docs/JOB_STATE_MACHINE.md；队列行为见 docs/QUEUE_SPEC.md；
 崩溃恢复见 docs/RECOVERY_SPEC.md。

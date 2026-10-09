@@ -1,4 +1,4 @@
-# MODULE_IO_CONTRACT — WorkflowModule 输入/输出契约（Phase 4 + Phase 5 + Phase 5.1 + Phase 6 / v0.8.0）
+# MODULE_IO_CONTRACT — WorkflowModule 输入/输出契约（Phase 4 ~ Phase 7 / v0.9.0）
 
 > Task 2/3/4 的正式契约：模块能力声明是 kind / parent / seed 的**唯一判定依据**；
 > 禁止再用"有 input_image 就认为是 upscaled"之类的推断。
@@ -10,6 +10,10 @@
 > 渲染控件，不按 module_id 硬编码）；`size_mode`（explicit | input）声明输出尺寸语义；
 > PipelineValidator 拒绝重复 module_id（PIPELINE_DUPLICATE_MODULE）与未注册 module_version；
 > Img2ImgModule.execute 补齐 Prompt/Negative 契约。**
+> **Phase 7：能力驱动 Job kind 校验（`allowed_job_kinds` / `can_start_from_image`——移除
+> "process 必须 upscale" 硬编码）；通用输入 Slot 契约（`input_slots`，role=source/reference/
+> face_reference + required + max_count）；`is_generative`（Image → Workbench 生成上下文锚点
+> 语义）；ReferenceGenerateModule 正式接入（第四个模块，核心零改动）。**
 
 ## 1. ModuleCapabilities（能力声明）
 
@@ -19,28 +23,40 @@ module_id / module_version / title / description / parameters
   uses_seed          本模块是否真正使用随机 Seed（false → 绝不分配/展示 Seed）
   input_kind         none | image（模块是否需要输入图片）
   input_required     Phase 5：执行是否必须提供输入图片（模式判定 / 校验）
-  input_role         Phase 5：输入图片在模块语义中的角色（第一版固定 source）
+  input_role         Phase 5：输入图片在模块语义中的角色（旧版固定 source）
   output_kind        original | upscaled | processed（产出物 Image.kind → 存储目录）
   parent_policy      none | input_image（产出物是否挂到输入图片下）
   output_cardinality 单次执行输出个数（第一版固定 1）
 + Phase 6：
   size_mode          explicit（工作台显式宽高）| input（输出尺寸跟随输入图片）
++ Phase 7：
+  allowed_job_kinds    允许的 Job 类型（generate / process；能力驱动，Validator 不硬编码）
+  can_start_from_image 能否作为"以已有图片为起点"的 Pipeline 首模块（处理型 Job Stage0 语义）
+  is_generative        产出是否构成"生成上下文"（Image → Workbench 恢复锚点；不依赖 seed 数据）
+  input_slots          通用输入槽声明（role / required / max_count / description）
 ```
 
 ### 现有模块声明（固定）
 
-| 模块 | uses_seed | input_kind | input_required | input_role | output_kind | parent_policy | output_cardinality |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `basic_generate` | true | none | false | source | original | none | 1 |
-| `img2img`（Phase 5.1） | true | image | true | source | processed | input_image | 1 |
-| `upscale` | false | image | true | source | upscaled | input_image | 1 |
+| 模块 | uses_seed | input_kind | input_required | output_kind | parent_policy | cardinality | size_mode | job kinds | slots |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `basic_generate` | true | none | false | original | none | 1 | explicit | generate | — |
+| `img2img`（Phase 5.1） | true | image | true | processed | input_image | 1 | input | generate | source(必填×1) |
+| `reference_generate`（Phase 7） | true | image | true | original | input_image | 1 | input | generate | reference(必填×1) |
+| `upscale` | false | image | true | upscaled | input_image | 1 | input | generate + process | source(必填×1) |
+
+`is_generative`：`basic_generate / img2img / reference_generate = true`；`upscale = false`
+（后处理产出不构成生成上下文，Workbench 恢复继续向上追溯）。
+`can_start_from_image`：`img2img / reference_generate / upscale = true`；`basic_generate = false`。
 
 Phase 6 `size_mode`：`basic_generate=explicit`；`img2img=input`（输出=输入尺寸）；`upscale=input`
-（×N 由 provider binding 决定）。`ParameterSpec` 中 `configurable=true` 的参数（如 `img2img.denoise`）
+（×N 由 provider binding 决定）；`reference_generate=input`（输出跟随重采样后的参考图）。
+`ParameterSpec` 中 `configurable=true` 的参数（如 `img2img.denoise`、`reference_generate.resolution`）
 才由前端按 type/min/max/step/enum 渲染控件并写入模块 config。
 
-**前端 Gate（§二十；Phase 5.1 Task7）**：图片生成模式要求存在
-`available=true 且 input_required=true 且 output_kind=processed` 的模块（当前 = img2img）；
+**前端 Gate（§二十；Phase 5.1 Task7；Phase 7 Task5）**：图片生成模式要求存在
+`available=true 且 input_required=true` 的 Image-conditioned 模块（当前 = img2img / reference_generate）；
+输入角色/数量以 `/modules` 返回的 `input_slots` 为准；
 `registered ≠ available`（binding 不可加载的模块不得显示可用）；
 Gate 判定以 `GET /api/v1/modules` 为准，禁止前端硬编码模块列表。
 
@@ -54,18 +70,23 @@ Gate 判定以 `GET /api/v1/modules` 为准，禁止前端硬编码模块列表�
 - binding `defaults` 在 `inputs` 之后应用，因此**受模块控制的参数不得写进 defaults**
   （img2img 的 denoise 不在 defaults）。
 
-### PipelineValidator（Phase 5.1 Task4/Task5）
+### PipelineValidator（Phase 5.1 Task4/Task5；Phase 7 Task2/Task5）
 
 Job 创建前（JobService / resume_remaining）统一校验，**禁止写进 QueueWorker**：
 
 | 规则 | 错误码 |
 | --- | --- |
-| Stage0 `input_required=false` 却携带输入图 | `UNUSED_INPUT_IMAGE` |
-| Stage0 `input_required=true` 却没给输入图 | `INPUT_IMAGE_REQUIRED` |
+| Stage0 提供了模块**未声明**的输入槽（含旧模块携带输入图） | `UNUSED_INPUT_IMAGE` |
+| Stage0 必填输入槽缺失（旧模块：`input_required=true` 却无输入图） | `INPUT_IMAGE_REQUIRED` |
+| 输入槽数量超出模块声明的 `max_count` | `INPUT_SLOT_LIMIT_EXCEEDED` |
+| 模块的 `allowed_job_kinds` 不含当前 Job 类型 | `PIPELINE_INVALID` |
+| 处理型 Job 的首个模块 `can_start_from_image=false` | `PIPELINE_INVALID` |
 | Stage N 不消费 Stage N-1 输出 / 上游输出非图片产物 | `PIPELINE_INVALID` |
-| 处理型 Job 非 upscale-only | `PIPELINE_INVALID` |
-| 模块未注册 | `WORKFLOW_ERROR` |
+| 同一 module_id 重复出现 | `PIPELINE_DUPLICATE_MODULE` |
+| 模块未注册 / module_version 未注册 | `WORKFLOW_ERROR` |
 | 模块 config 非法 | `MODULE_CONFIG_INVALID` |
+
+顺序语义：Validator 只判断合法性，**绝不重排**（顺序由用户/Recipe/Workbench 提供）。
 
 ## 2. 判定规则（ImageService / Worker 必须遵守）
 

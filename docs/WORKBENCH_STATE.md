@@ -1,14 +1,17 @@
-# WORKBENCH_STATE — 工作台状态契约（Phase 1 + 2 + 3 + 4 + 5 + 5.1 + 6，v0.8.0）
+# WORKBENCH_STATE — 工作台状态契约（Phase 1 + 2 + 3 + 4 + 5 + 5.1 + 6 + 7，v0.9.0）
 
-> 更新：2026-10-08。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
+> 更新：2026-10-09。统一工作台快照是 Phase 1 的核心设计点；Phase 2 打通生成链路后
 > 快照同时是 Job 的固化输入（§十）与 Image → Workbench 的恢复载体（§四十七）；
 > Phase 3 起 `workflow_modules` 由"② 高清放大"开关决定（§十五/§十六）；
 > Phase 4 Task8/9：前端状态升级为 `workflowModules: WorkflowModuleRef[]` 列表，
 > 恢复路径携带完整执行身份（固定原版本，绝不静默升级）；
-> Phase 5：新增 `input_images`（输入图片，max=1）与生成模式（文生图 / 图片生成）；
+> Phase 5：新增 `input_images`（输入图片）与生成模式（文生图 / 图片生成）；
 > **Phase 5.1：`WorkflowModuleRef` 正式类型化（+config）；模式与 Primary Module 强绑定
 > （文生图=basic_generate / 图片生成=可用图片模块）；config 单链唯一事实源；
 > Gate 依据 `/modules` 的 `available=true`（registered ≠ available）。**
+> **Phase 7 Task5：`input_images` 升级为通用 Slot 契约——角色 source / reference /
+> face_reference（总上限 4，角色数量与必填性由模块 `input_slots` 声明 + PipelineValidator
+> 校验，schema 不再硬编码 max=1）。**
 
 ## 1. WorkbenchSnapshot
 
@@ -38,21 +41,23 @@
       "workflow_hash": "…", "binding_hash": "…",
       "config": { "denoise": 0.55 } }    //   Phase 5.1 Task1/Task3：模块参数（唯一事实源）
   ],
-  "input_images": [                      // Phase 5：输入图片（max=1，role=source；统一 image_id）
-    { "role": "source", "image_id": "img_..." }   // 图片生成模式；文生图模式为空数组
+  "input_images": [                      // Phase 5 + Phase 7 Task5：通用 Slot（总上限 4）
+    { "role": "source", "image_id": "img_..." }   // 图片生成模式（img2img）；文生图模式为空数组
+    // 未来 Reference：{"role": "reference" | "face_reference", "image_id": "img_..."}
   ],
   "source_prompt_id": null,              // 来源追溯（可选）
   "source_prompt_version_id": null
 }
 ```
 
-**输入图片（Phase 5 §七/§八）**：工作台状态含 `mode: 'text' | 'image'` 与
-`inputImages: InputImageRef[]`（max=1）；`snapshotFromState()` 只在图片生成模式把
-`input_images` 写入快照（文生图语义不带输入图）；从配方 / 图库恢复携带输入图时自动进入
-图片生成模式。输入图片一律是 Gallery `image_id`（上传新图片 = 先正式导入 Gallery 再引用），
+**输入图片（Phase 5 §七/§八；Phase 7 Task5 Slot 化）**：工作台状态含
+`mode: 'text' | 'image'` 与 `inputImages: InputImageRef[]`；`snapshotFromState()` 只在
+图片生成模式把 `input_images` 写入快照（文生图语义不带输入图）；从配方 / 图库恢复携带输入图时
+自动进入图片生成模式。输入图片一律是 Gallery `image_id`（上传新图片 = 先正式导入 Gallery 再引用），
 **绝不保存临时外部路径**。Job 创建时快照中的 input_images 冻结到 Stage0 全部
-`JobStageItem.input_image_id`（§十）；RecipeVersion 快照保存 `image_id + file hash + role`
-（§九，`missing=true` 表示图片已丢失——界面显式提示，不静默清空）。
+`JobStageItem.input_image_id`（§十；链式主输入 = 模块声明顺序中第一个有图的槽位）；
+RecipeVersion 快照保存 `image_id + file hash + role`（§九，`missing=true` 表示图片已丢失——
+界面显式提示，不静默清空）。
 
 **模式 ↔ Primary Module（Phase 5.1 Task6）**：`workflowModules[0]` 必须与模式一致——
 文生图 = `basic_generate`；图片生成 = `availableImageModuleIds(catalog)[0]`（当前 = `img2img`）；
