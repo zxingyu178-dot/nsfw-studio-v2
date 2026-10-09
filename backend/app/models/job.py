@@ -29,6 +29,9 @@ class Job(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     client_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Phase 7 Task7：请求指纹（幂等键冲突判定）——相同 (source, client_request_id) 但
+    # payload 不同时必须 IDEMPOTENCY_KEY_CONFLICT，而不是静默返回旧 Job。
+    client_request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
 
     prompt_mode: Mapped[str] = mapped_column(String(16), nullable=False)

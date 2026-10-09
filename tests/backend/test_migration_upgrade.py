@@ -36,6 +36,7 @@ def test_upgrade_from_v012_database(settings, monkeypatch):
         "0002_prompt", "0003_asset", "0004_recipe", "0005_job", "0006_image", "0007_pipeline_stage",
         "0008_pipeline_backfill", "0009_execution_fingerprint", "0010_image_inputs",
         "0011_image_import_dedup_unique", "0012_stage_item_reuse_trace",
+        "0013_client_request_fingerprint",
     ]
 
     # 3) 旧数据仍在 + 新表可写

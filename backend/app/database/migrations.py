@@ -539,6 +539,17 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE job_stage_items ADD COLUMN reused_from_stage_item_id TEXT",
         ),
     ),
+    Migration(
+        migration_id="0013_client_request_fingerprint",
+        version="0.9.0",
+        description=(
+            "Phase 7 Task7：jobs.client_request_fingerprint"
+            "（幂等键冲突判定：相同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT）"
+        ),
+        statements=(
+            "ALTER TABLE jobs ADD COLUMN client_request_fingerprint TEXT",
+        ),
+    ),
 )
 
 

@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -228,6 +229,45 @@ def _materialize_stages(
                 stage.finished_at = now
 
 
+def _request_fingerprint(
+    *,
+    job_kind: str,
+    snapshot: dict[str, Any],
+    input_image_ids: list[str],
+    stage_configs: list[dict[str, Any]],
+) -> str:
+    """请求指纹（Phase 7 Task7）：判定同 (source, client_request_id) 下 payload 是否一致。
+
+    只覆盖**请求语义**（job_kind + 工作台快照 + 显式输入/配置）：
+    - queue_mode 不进入指纹（只影响排队位置，不影响任务内容；重放以原 Job 为准）；
+    - 解析后的绑定身份（workflow_hash / binding_version 等）属于服务端派生，也不进入指纹。
+    """
+    canonical = json.dumps(
+        {
+            "job_kind": job_kind,
+            "snapshot": snapshot,
+            "input_image_ids": list(input_image_ids),
+            "stage_configs": list(stage_configs),
+        },
+        sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _assert_idempotent_payload(existing: Job, fingerprint: str) -> None:
+    """幂等命中时的 payload 一致性校验（Phase 7 Task7）。
+
+    相同 key + 相同 payload → 返回原 Job（正常幂等重放）；
+    相同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT（绝不静默返回旧 Job）。
+    历史 Job（fingerprint 为 NULL，本阶段之前创建）无法比对 → 保持旧兼容行为。
+    """
+    if existing.client_request_fingerprint and existing.client_request_fingerprint != fingerprint:
+        raise ConflictError(
+            "client_request_id 已用于不同的请求内容（幂等键冲突）",
+            code="IDEMPOTENCY_KEY_CONFLICT",
+        )
+
+
 def record_event(session: Session, job_id: str, event_type: str, *, item_id: str | None = None, payload: dict | None = None) -> None:
     session.add(JobEvent(job_id=job_id, job_item_id=item_id, event_type=event_type,
                          payload_json=json.dumps(payload or {}, ensure_ascii=False)))
@@ -376,7 +416,9 @@ def create_job(
 
     workflow_modules：真实执行身份列表（API 层经 resolve_workflow_modules 解析），
     缺省时为最小基础生成身份（直接调用 service 的测试/内部路径）。
-    返回 (job, created)；幂等命中时 created=False。
+    返回 (job, created)；幂等命中时 created=False：
+    - 相同 (source, client_request_id) + 相同 payload → 返回原 Job（正常重放）；
+    - 相同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT（Phase 7 Task7）。
     """
     if source not in JOB_SOURCES:
         raise ValidationError(f"非法任务来源: {source}", code="JOB_SOURCE_INVALID")
@@ -385,12 +427,20 @@ def create_job(
     if job_kind not in JOB_KINDS:
         raise ValidationError(f"非法任务类型: {job_kind}", code="JOB_KIND_INVALID")
 
-    # 幂等（规范 §十二）
+    fingerprint = _request_fingerprint(
+        job_kind=job_kind,
+        snapshot=snapshot,
+        input_image_ids=list(input_image_ids or []),
+        stage_configs=list(stage_configs or []),
+    )
+
+    # 幂等（规范 §十二；Phase 7 Task7：payload 指纹判定冲突）
     if client_request_id:
         existing = session.execute(
             select(Job).where(Job.source == source, Job.client_request_id == client_request_id)
         ).scalars().first()
         if existing is not None:
+            _assert_idempotent_payload(existing, fingerprint)
             return existing, False
 
     prompt_mode = snapshot.get("prompt_mode", "structured")
@@ -489,6 +539,8 @@ def create_job(
         id=new_id(JOB),
         source=source,
         client_request_id=client_request_id,
+        # Phase 7 Task7：请求指纹只对携带幂等键的请求有意义
+        client_request_fingerprint=fingerprint if client_request_id else None,
         status="QUEUED",
         job_kind=job_kind,
         prompt_mode=prompt_mode,
@@ -538,12 +590,13 @@ def create_job(
         session.commit()
     except IntegrityError:
         session.rollback()
-        # 并发幂等：另一个请求先创建了相同 client_request_id
+        # 并发幂等：另一个请求先创建了相同 client_request_id（Phase 7 Task7：同样校验指纹）
         if client_request_id:
             existing = session.execute(
                 select(Job).where(Job.source == source, Job.client_request_id == client_request_id)
             ).scalars().first()
             if existing is not None:
+                _assert_idempotent_payload(existing, fingerprint)
                 return existing, False
         raise ConflictError("任务创建冲突，请重试", code="JOB_CREATE_CONFLICT")
     except Exception:

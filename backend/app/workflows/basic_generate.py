@@ -61,6 +61,10 @@ class BasicGenerateModule(WorkflowModule):
             output_cardinality=1,
             # Phase 6 Task9：输出尺寸由工作台显式宽高决定
             size_mode="explicit",
+            # Phase 7 Task2/Task8：文生图是生成型模块（不允许处理型 Job；产出即生成上下文锚点）
+            allowed_job_kinds=("generate",),
+            can_start_from_image=False,
+            is_generative=True,
         )
 
     # ===== 标准输入 =====

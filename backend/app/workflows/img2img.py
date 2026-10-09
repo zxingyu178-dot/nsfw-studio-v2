@@ -92,6 +92,11 @@ class Img2ImgModule(WorkflowModule):
             output_cardinality=1,
             # Phase 6 Task9：输出尺寸 = 输入图尺寸（UI/详情显示"跟随输入图"，不展示假宽高）
             size_mode="input",
+            # Phase 7 Task2/Task8：图生图可从已有图片起步（生成流水线 Stage0），
+            # 是生成型模块（产出构成生成上下文锚点）；当前不允许处理型 Job
+            allowed_job_kinds=("generate",),
+            can_start_from_image=True,
+            is_generative=True,
         )
 
     # ===== config（模块参数唯一事实源） =====

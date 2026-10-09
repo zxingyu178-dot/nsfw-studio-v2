@@ -10,7 +10,9 @@
   - ``input_required=false`` 的模块携带输入图 → ``UNUSED_INPUT_IMAGE``；
   - ``input_required=true`` 的模块缺少输入图 → ``INPUT_IMAGE_REQUIRED``；
 - Stage N（N>0）必须能接收 Stage N-1 的输出（output_kind → input_kind 链式检查）；
-- 处理型 Job（process）的 Pipeline 必须且只能是 upscale。
+- Job kind 能力驱动（Phase 7 Task2）：模块必须声明允许当前 job_kind（allowed_job_kinds），
+  处理型 Job 的首个模块必须 can_start_from_image=true——不再硬编码"process 必须 upscale"，
+  未来新增处理模块（Face Repair / 背景移除）只需声明能力，不需要修改本 Validator。
 
 顺序语义（Task4）：Validator 只判断"这条 Pipeline 是否合法"，**绝不重排**——
 顺序由用户/Recipe/Workbench 提供，执行层严格保持。
@@ -87,12 +89,24 @@ class PipelineValidator:
                     code="MODULE_CONFIG_INVALID",
                 )
 
-        # 2) 处理型 Job：Phase 3 语义不变（只跑处理模块，每个 JobItem 对应一张已有图片）
-        if job_kind == "process":
-            if [module.get("module_id") for module in modules] != ["upscale"]:
+        # 2) Job kind 能力驱动（Phase 7 Task2）：不再硬编码"process 必须且只能是 upscale"——
+        #    - 每个模块必须声明允许当前 job_kind（allowed_job_kinds）；
+        #    - 处理型 Job（每个 JobItem = 一张已有图片）的**首个模块**必须
+        #      can_start_from_image=true（以已有图片为起点）。
+        #    未来 Face Repair / 背景移除等处理模块只需声明能力，不需要修改本 Validator。
+        for _instance, capabilities in resolved:
+            if job_kind not in capabilities.allowed_job_kinds:
                 raise ValidationError(
-                    "处理型 Job 的 Pipeline 必须且只能是 upscale", code="PIPELINE_INVALID"
+                    f"模块 {capabilities.module_id} 不允许用于 {job_kind} 型任务"
+                    f"（allowed_job_kinds={list(capabilities.allowed_job_kinds)}）",
+                    code="PIPELINE_INVALID",
                 )
+        if job_kind == "process" and not resolved[0][1].can_start_from_image:
+            raise ValidationError(
+                f"处理型 Job 的首个模块 {resolved[0][1].module_id} 不能以已有图片为起点"
+                "（can_start_from_image=false）",
+                code="PIPELINE_INVALID",
+            )
 
         capabilities_list = [capabilities for _instance, capabilities in resolved]
         first = capabilities_list[0]

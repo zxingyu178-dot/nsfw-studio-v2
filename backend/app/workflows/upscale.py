@@ -64,6 +64,12 @@ class UpscaleModule(WorkflowModule):
             output_cardinality=1,
             # Phase 6 Task9：输出尺寸跟随输入图片（×N 由 provider binding 决定，不是工作台宽高）
             size_mode="input",
+            # Phase 7 Task2：高清是纯后处理模块——可作生成流水线的后续 Stage，
+            # 也可作为处理型 Job（图库高清）的起点；新增处理模块不再修改 PipelineValidator。
+            allowed_job_kinds=("generate", "process"),
+            can_start_from_image=True,
+            # Phase 7 Task8：后处理产出不构成生成上下文（Image → Workbench 需继续向上追溯）
+            is_generative=False,
         )
 
     # ===== 标准输入 =====

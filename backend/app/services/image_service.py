@@ -31,12 +31,12 @@ from app.core.filetypes import (
     validate_image_upload,
 )
 from app.core.ids import IMAGE, new_id
-from app.engine.base import EngineOutputFile
+from app.engine.base import EngineError, EngineOutputFile
 from app.models import Image, Job, JobItem, JobStage, JobStageItem
 from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
 
-IMAGE_SOURCES = ("comfyui", "mock", "import")
+IMAGE_SOURCES = ("comfyui", "mock", "import", "engine")
 IMAGE_KIND_DIRS = {
     "original": "images/originals",
     "upscaled": "images/upscaled",
@@ -419,7 +419,14 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
     if capabilities is not None and capabilities.parent_policy == "input_image":
         parent_image_id = stage_item.input_image_id if stage_item is not None else None
     seed = stage_item.seed if stage_item is not None else None
-    source = "comfyui" if job.provider == "comfyui" else ("mock" if job.provider == "mock" else "import")
+    # Phase 7 Task8：图片来源必须反映真实产出引擎——"import" 只属于外部导入，
+    # 非 comfyui/mock 的未来引擎输出绝不能错标成 import（统一记 engine，provenance 保留 actual_provider）。
+    if job.provider == "comfyui":
+        source = "comfyui"
+    elif job.provider == "mock":
+        source = "mock"
+    else:
+        source = "engine"
     metadata = {
         "module_id": stage.module_id if stage is not None else job.module_id,
         "module_version": stage.module_version if stage is not None else job.module_version,
@@ -442,19 +449,40 @@ def import_adapter_outputs(session: Session, storage: StorageManager, job: Job,
     return [image.id for image in images]
 
 
+def _is_generative_output(session: Session, image: Image) -> bool:
+    """Phase 7 Task8：本图产出是否来自"生成型"模块（生成上下文锚点判定）。
+
+    依据产出 Stage 的 ModuleCapabilities.is_generative（模块语义声明），
+    **不再依赖 Image.seed 数据是否非空**——未来非 ComfyUI Engine / 未记录 Seed 的生成路径
+    同样能恢复工作台。旧数据（找不到产出 StageItem / 模块版本已不存在）回退兼容判定。
+    """
+    stage = session.execute(
+        select(JobStage)
+        .join(JobStageItem, JobStageItem.job_stage_id == JobStage.id)
+        .where(JobStageItem.output_image_id == image.id)
+    ).scalars().first()
+    if stage is None:
+        return image.seed is not None  # 兼容：Phase 3 之前无 Stage 结构的旧数据
+    try:
+        return _stage_capabilities(stage).is_generative
+    except EngineError:
+        return image.seed is not None  # 模块版本已不存在：兼容回落
+
+
 def resolve_generation_context(session: Session, image: Image) -> tuple[Image, Job]:
-    """派生图 → **最近的生成上下文**（Phase 6 Task1 修复"永远取树根"）。
+    """派生图 → **最近的生成上下文**（Phase 6 Task1 修复"永远取树根"；Phase 7 Task8 语义化）。
 
     旧逻辑沿 parent_image_id 找到树根再要求它是生成图；img2img 以外部导入图（或上一代
     生成图）为输入时树根没有 generate Job，导致 processed / upscaled 图无法恢复配置。
 
-    新语义：从当前图开始沿父链向上，找**距离最近、由 generate Job 产出、且真实使用
-    Seed 的生成图**及其 Job（Seed 用该图真实 Seed，不再无条件用树根 Seed）：
+    语义：从当前图开始沿父链向上，找**距离最近、由 generate Job 产出、且产出模块声明为
+    生成型（ModuleCapabilities.is_generative）**的图及其 Job（Seed 用该图真实 Seed，
+    不再无条件用树根 Seed，也不再依赖 seed 数据是否非空）：
 
     - import → img2img → 恢复 Img2Img（上下文 = img2img 输出）；
     - import → img2img → upscale → 仍恢复 Img2Img：同一 generate Job 内嵌的后处理
-      Stage（uses_seed=false）产出图 Seed 为 NULL，继续向上到真实生成图；
-    - basic → upscale → 恢复 basic；纯外部导入图（全链无真实生成图）→ NotFoundError
+      Stage（is_generative=false）产出不构成锚点，继续向上到真实生成图；
+    - basic → upscale → 恢复 basic；纯外部导入图（全链无生成图）→ NotFoundError
       IMAGE_NO_GENERATION_CONTEXT（"没有可恢复的生成配置"，绝不伪造 Prompt）。
     """
     current: Image | None = image
@@ -462,7 +490,11 @@ def resolve_generation_context(session: Session, image: Image) -> tuple[Image, J
     while current is not None:
         if current.job_id is not None:
             job = session.get(Job, current.job_id)
-            if job is not None and job.job_kind == "generate" and current.seed is not None:
+            if (
+                job is not None
+                and job.job_kind == "generate"
+                and _is_generative_output(session, current)
+            ):
                 return current, job
         if not current.parent_image_id or current.parent_image_id in visited:
             break  # 到顶 / 环保护（防御性；正常数据不可能）

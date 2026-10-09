@@ -14,7 +14,9 @@ from app.database.base import Base
 
 IMAGE_KINDS = ("original", "upscaled", "processed")
 REVIEW_STATUSES = ("UNREVIEWED", "KEPT", "REJECTED")
-IMAGE_SOURCES = ("comfyui", "mock", "import")
+# comfyui / mock：真实引擎产物；engine：非 comfyui/mock 的未来引擎产物（不允许错标成 import）；
+# import：仅表示外部导入（Phase 7 Task8）
+IMAGE_SOURCES = ("comfyui", "mock", "import", "engine")
 
 
 class Image(Base):

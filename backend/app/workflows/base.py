@@ -67,6 +67,13 @@ class ModuleCapabilities:
     - output_cardinality：单次执行的输出个数（第一版固定 1）；
     - size_mode（Phase 6 Task9）：explicit | input——输出尺寸由工作台显式宽高决定，
       还是跟随输入图片（禁止 UI/详情展示与产物不符的"假宽高"）。
+    - allowed_job_kinds（Phase 7 Task2）：本模块允许参与的 Job 类型
+      （generate / process）；PipelineValidator 据此校验，不再硬编码"process 必须 upscale"，
+      未来 Face Repair / 背景移除等处理模块只需声明能力，无需修改 Validator。
+    - can_start_from_image（Phase 7 Task2）：本模块能否作为"以已有图片为起点"的 Pipeline 首模块
+      （处理型 Job 的 Stage0 语义：每个 JobItem 对应一张已有图片）。
+    - is_generative（Phase 7 Task8）：本模块产出是否构成"生成上下文"
+      （Image → Workbench 恢复的锚点，按模块语义判定，不再依赖 seed 数据是否非空）。
     """
 
     module_id: str
@@ -82,6 +89,11 @@ class ModuleCapabilities:
     parent_policy: str = "none"
     output_cardinality: int = 1
     size_mode: str = "explicit"
+    # Phase 7 Task2：能力驱动的 Job 类型许可（默认仅生成型；处理模块显式声明 process）
+    allowed_job_kinds: tuple[str, ...] = ("generate",)
+    can_start_from_image: bool = False
+    # Phase 7 Task8：生成语义（默认 False：只有明确的生成型模块才可作为生成上下文锚点）
+    is_generative: bool = False
 
 
 @dataclass(frozen=True)
