@@ -134,16 +134,16 @@ WorkflowModule（模块）
 
 ## 7. URL 结构
 
-使用 `HashRouter`（本地静态文件友好）：
+使用 `BrowserRouter`（本地由 Vite / FastAPI 提供入口）：
 
 ```
-#/generate
-#/gallery
-#/prompts?tab=prompts
-#/prompts?tab=recipes
-#/prompts?tab=history
-#/assets
-#/settings
+/generate
+/gallery
+/prompts?tab=prompts
+/prompts?tab=recipes
+/prompts?tab=history
+/assets
+/settings
 ```
 
 - Tab 状态反映在 query，刷新后保持所在子视图；

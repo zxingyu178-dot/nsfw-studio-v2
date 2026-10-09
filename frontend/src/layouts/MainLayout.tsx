@@ -13,7 +13,7 @@ export function MainLayout() {
   return (
     <div className="app-shell">
       <TopNav />
-      <main className="app-main">
+      <main className="app-shell__main">
         <Outlet />
       </main>
     </div>

@@ -40,7 +40,7 @@ body {
 .topnav {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-nav);
   display: flex;
   align-items: center;
   gap: 28px;
@@ -92,6 +92,7 @@ body {
   align-items: center;
   gap: 14px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ===== Engine 状态指示 ===== */
