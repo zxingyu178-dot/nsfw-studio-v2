@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.ids import JOB, JOB_ITEM, JOB_STAGE, JOB_STAGE_ITEM, new_id
 from app.core.timeutil import utc_now_iso
+from app.engine.base import EngineError
 from app.engine.errors import classify_engine_message
 from app.models import (
     JOB_KINDS,
@@ -116,22 +117,57 @@ def _merge_module_configs(
     return merged
 
 
-def _snapshot_input_image_ids(snapshot: dict[str, Any]) -> list[str]:
-    """从 WorkbenchSnapshot 提取输入图片 image_id 列表（Phase 5 §十）。
+def _snapshot_input_images(snapshot: dict[str, Any]) -> list[tuple[str, str]]:
+    """从 WorkbenchSnapshot 提取输入图片 (role, image_id) 对（Phase 5 §十；Phase 7 Task5 Slot 化）。
 
-    第一版只支持一张（schema 已限 max_length=1）；结构非法直接拒绝，禁止静默忽略。
+    - 角色/数量上限由模块声明的输入槽在 PipelineValidator 中校验（不再在 schema/服务层
+      硬编码"只能 1 张 source"）；结构非法直接拒绝，禁止静默忽略；
+    - 总数量上限与 WorkbenchSnapshotModel（max_length=4）保持一致。
     """
     refs = snapshot.get("input_images") or []
     if not isinstance(refs, list):
         raise ValidationError("input_images 必须为数组", code="WORKBENCH_INPUT_INVALID")
-    image_ids: list[str] = []
+    pairs: list[tuple[str, str]] = []
     for ref in refs:
         if not isinstance(ref, dict) or not ref.get("image_id"):
             raise ValidationError("input_images 结构非法", code="WORKBENCH_INPUT_INVALID")
-        image_ids.append(str(ref["image_id"]))
-    if len(image_ids) > 1:
-        raise ValidationError("Phase 5 输入图片最多 1 张", code="WORKBENCH_INPUT_INVALID")
-    return image_ids
+        role = str(ref.get("role") or "source")
+        pairs.append((role, str(ref["image_id"])))
+    if len(pairs) > 4:
+        raise ValidationError("input_images 最多 4 张", code="WORKBENCH_INPUT_INVALID")
+    return pairs
+
+
+def _first_module_input_slots(modules: list[dict[str, Any]]):
+    """解析首个模块声明的输入槽（Phase 7 Task5）。
+
+    版本未注册时返回空（PipelineValidator 会另行以明确错误拒绝，这里不做兜底判断）。
+    """
+    from app.workflows.registry import default_registry
+
+    if not modules:
+        return ()
+    first = modules[0]
+    try:
+        instance = default_registry().get(
+            str(first.get("module_id") or ""), first.get("module_version")
+        )
+    except EngineError:
+        return ()
+    return instance.capabilities().input_slots
+
+
+def _primary_input_image_id(pairs: list[tuple[str, str]], slots) -> str | None:
+    """Stage0 链式主输入（StageItem.input_image_id）= 模块声明顺序中第一个有图的槽位。
+
+    img2img/upscale：source；未来 reference 模块：其声明的首个槽位（如 face_reference）。
+    槽位声明顺序即优先级；未声明任何槽位时回退到第一张输入图（会被 Validator 拒绝消费）。
+    """
+    for slot in slots:
+        for role, image_id in pairs:
+            if role == slot.role:
+                return image_id
+    return pairs[0][1] if pairs else None
 
 
 def _materialize_stages(
@@ -497,28 +533,39 @@ def create_job(
     modules = _merge_module_configs(modules, snapshot.get("workflow_modules") or [])
 
     # Phase 5 §十：从 WorkbenchSnapshot 冻结输入图片（Job 创建后切换工作台图片不影响本 Job）
-    snapshot_input_ids = _snapshot_input_image_ids(snapshot)
-    for image_id in snapshot_input_ids:
+    snapshot_inputs = _snapshot_input_images(snapshot)
+    for _role, image_id in snapshot_inputs:
         if session.get(Image, image_id) is None:
             raise NotFoundError("输入图片不存在", code="IMAGE_NOT_FOUND")
 
     stage0_input_ids: list[str] | None = None
+    input_roles: dict[str, int] = {}
     if job_kind == "process":
         # §二十/§二十一：处理型 Job 的输入 = 每 JobItem 一张已有图片（Pipeline 校验在 Validator）
         image_ids = list(input_image_ids or [])
         if len(image_ids) != count:
             raise ValidationError("处理型 Job 的图片数量与 count 不一致", code="PIPELINE_INVALID")
         # 快照携带输入图（如前端一并提交）时，必须与处理型输入一致，禁止两个事实源打架
-        if snapshot_input_ids and snapshot_input_ids != list(dict.fromkeys(image_ids)):
+        if snapshot_inputs and [image_id for _role, image_id in snapshot_inputs] != list(dict.fromkeys(image_ids)):
             raise ValidationError("快照输入图片与处理型输入不一致", code="PIPELINE_INVALID")
         stage0_input_ids = image_ids
-    elif snapshot_input_ids:
-        # 生成型 Job：输入图片冻结到 Stage0 全部槽位（由模块 input_required 决定是否合法）
-        stage0_input_ids = [snapshot_input_ids[0]] * count
+        # 处理型 Job 的输入是**每 JobItem 一张**（不是 Job 级 N 张）：按"每个槽位 1 张 source"校验，
+        # 否则图库多选高清会被误判为超出 input_slots.max_count（Phase 7 Task5）
+        input_roles = {"source": 1} if image_ids else {}
+    elif snapshot_inputs:
+        # 生成型 Job：输入图片冻结到 Stage0 全部槽位；链式主输入 = 模块声明顺序中第一个有图的槽位
+        slots = _first_module_input_slots(modules)
+        primary = _primary_input_image_id(snapshot_inputs, slots)
+        if primary is not None:
+            stage0_input_ids = [primary] * count
+        for role, _image_id in snapshot_inputs:
+            input_roles[role] = input_roles.get(role, 0) + 1
 
-    # Task4/Task5（Phase 5.1）：Pipeline 输入合法性统一验证（Job 创建前，禁止静默忽略输入图）
+    # Task4/Task5（Phase 5.1 + Phase 7）：Pipeline 输入合法性统一验证
+    # （Job 创建前，禁止静默忽略输入图；Phase 7 Task5：按模块声明的输入槽校验角色/数量）
     PipelineValidator().validate(
-        modules, job_kind=job_kind, has_input_image=bool(stage0_input_ids)
+        modules, job_kind=job_kind, has_input_image=bool(stage0_input_ids),
+        input_roles=input_roles,
     )
 
     identity = modules[0]
@@ -585,7 +632,8 @@ def create_job(
         record_event(session, job.id, "JOB_CREATED", payload={
             "count": count, "queue_mode": queue_mode, "job_kind": job_kind,
             "modules": [m.get("module_id") for m in modules],
-            "input_images": snapshot_input_ids,
+            # Phase 7 Task5：输入以 Slot 对（role, image_id）记录
+            "input_images": [{"role": role, "image_id": image_id} for role, image_id in snapshot_inputs],
         })
         session.commit()
     except IntegrityError:
@@ -727,6 +775,7 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
 
     # Stage0 输入：仅注入给"真正重新执行"的槽位；复用槽位不注入（不需要输入）
     fallback_inputs: list[str | None] = []
+    parent_input_pairs: list[tuple[str, str]] = []
     if original.job_kind == "process":
         # 处理型 Job：剩余槽位沿用父 Job 的输入图片（按 item_index 对齐）
         inputs_by_index = {
@@ -737,8 +786,8 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
     else:
         # 生成型 Job（Phase 5.1）：输入图必须从 Parent 快照重新冻结到全部剩余槽位，
         # 否则 img2img 续跑会静默丢失输入图（执行时才会炸）
-        parent_input_ids = _snapshot_input_image_ids(original_snapshot)
-        fallback_inputs = [parent_input_ids[0] if parent_input_ids else None] * remaining
+        parent_input_pairs = _snapshot_input_images(original_snapshot)
+        fallback_inputs = [parent_input_pairs[0][1] if parent_input_pairs else None] * remaining
 
     stage0_inputs: list[str | None] = []
     carried_inputs: list[str | None] = []
@@ -757,11 +806,21 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
         if image_id is not None and session.get(Image, image_id) is None:
             raise NotFoundError("输入图片不存在，无法续跑", code="IMAGE_NOT_FOUND")
 
-    # Task4/Task5（Phase 5.1）：续跑同样在创建前验证 Pipeline（继承原身份的合法性复核）
+    # 输入角色（Phase 7 Task5）：处理型按"每个槽位 1 张 source"（每 JobItem 一张图）；
+    # 生成型按父快照的 (role, image_id) 还原
+    if original.job_kind == "process":
+        input_roles: dict[str, int] = {"source": 1} if any(carried_inputs) else {}
+    else:
+        input_roles = {}
+        for role, _image_id in parent_input_pairs:
+            input_roles[role] = input_roles.get(role, 0) + 1
+
+    # Task4/Task5（Phase 5.1 + Phase 7）：续跑同样在创建前验证 Pipeline（继承原身份的合法性复核）
     PipelineValidator().validate(
         resume_module_ids,
         job_kind=original.job_kind,
         has_input_image=any(carried_inputs),
+        input_roles=input_roles,
     )
 
     job = Job(

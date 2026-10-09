@@ -52,6 +52,26 @@ class ParameterSpec:
 
 
 @dataclass(frozen=True)
+class InputSlotSpec:
+    """模块输入槽声明（Phase 7 Task5：通用图片输入 Slot 契约，第一版不做复杂 DAG）。
+
+    - role：槽位角色（source | reference | face_reference）；
+    - required：本模块执行是否必须提供该槽位的图片；
+    - max_count：该槽位允许的最大图片数（默认 1）；
+    - description：前端/文档展示说明。
+
+    Job 创建期由 PipelineValidator 校验：未声明角色的输入图 → UNUSED_INPUT_IMAGE；
+    必填槽位缺失 → INPUT_IMAGE_REQUIRED；超出 max_count → INPUT_SLOT_LIMIT_EXCEEDED。
+    旧模块（未声明 input_slots）仍按 input_required 的兼容语义校验。
+    """
+
+    role: str
+    required: bool = False
+    max_count: int = 1
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class ModuleCapabilities:
     """模块能力声明：身份 + 版本 + 参数定义 + 输入/输出语义（Phase 4 Task2）。
 
@@ -94,6 +114,9 @@ class ModuleCapabilities:
     can_start_from_image: bool = False
     # Phase 7 Task8：生成语义（默认 False：只有明确的生成型模块才可作为生成上下文锚点）
     is_generative: bool = False
+    # Phase 7 Task5：通用输入槽声明（source / reference / face_reference）；
+    # 空 = 不消费任何输入图（旧模块的 input_required 兼容语义仍生效）
+    input_slots: tuple[InputSlotSpec, ...] = ()
 
 
 @dataclass(frozen=True)

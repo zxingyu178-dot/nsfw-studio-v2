@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError, EngineJobRequest
 from app.workflows.base import (
     InputImageRef,
+    InputSlotSpec,
     JobRequestContext,
     ModuleCapabilities,
     ParameterSpec,
@@ -70,6 +71,11 @@ class UpscaleModule(WorkflowModule):
             can_start_from_image=True,
             # Phase 7 Task8：后处理产出不构成生成上下文（Image → Workbench 需继续向上追溯）
             is_generative=False,
+            # Phase 7 Task5：输入 Slot 契约——高清只消费 source（图库单张或上一 Stage 输出）
+            input_slots=(
+                InputSlotSpec("source", required=True, max_count=1,
+                              description="待放大的输入图片"),
+            ),
         )
 
     # ===== 标准输入 =====

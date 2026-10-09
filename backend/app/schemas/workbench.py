@@ -12,6 +12,8 @@ from app.services.prompt_composer import loads_structured
 PromptMode = Literal["structured", "full"]
 # Phase 6 Task7：生成模式（文生图 / 图片生成）——显式字段，禁止长期靠"有没有 input_images"反推
 GenerationMode = Literal["text", "image"]
+# Phase 7 Task5：通用图片输入 Slot 角色（模块在 ModuleCapabilities.input_slots 中声明所需角色）
+InputImageRole = Literal["source", "reference", "face_reference"]
 
 
 class StructuredPromptModel(BaseModel):
@@ -38,10 +40,13 @@ class SelectedAssetRef(BaseModel):
 class InputImageRefModel(BaseModel):
     """工作台输入图片（Phase 5 §八：统一使用 image_id，禁止保存临时外部路径）。
 
-    第一版只支持一张（role=source，max_length=1）；未来 Reference 多图再扩展 Slots。
+    Phase 7 Task5：升级为通用 Slot 契约（source / reference / face_reference）——
+    每张输入图携带自己的角色；模块在 ModuleCapabilities.input_slots 中声明
+    所需 slot（角色 / 是否必填 / 最大数量），数量与必填性由 PipelineValidator
+    在 Job 创建期校验（禁止靠 schema 硬编码"只能 1 张 source"）。
     """
 
-    role: Literal["source"] = "source"
+    role: InputImageRole = "source"
     image_id: str
 
 
@@ -97,8 +102,8 @@ class WorkbenchSnapshotModel(BaseModel):
     full_prompt: str = ""
     negative_prompt: str = ""
     selected_assets: dict[str, SelectedAssetRef] = Field(default_factory=dict)
-    # Phase 5：输入图片（image_id 统一引用图库；第一版 max=1，role=source）
-    input_images: list[InputImageRefModel] = Field(default_factory=list, max_length=1)
+    # Phase 5：输入图片（image_id 统一引用图库；Phase 7 Task5：Slot 化，角色数量上限见各模块声明）
+    input_images: list[InputImageRefModel] = Field(default_factory=list, max_length=4)
     # Phase 6 Task7：生成模式显式字段（向后兼容：None = 旧快照，按 input_images / Primary Module 推断）。
     # 图片生成（含未来 Reference）不会因为"暂时没有选择图片"被自动改回文生图。
     generation_mode: GenerationMode | None = None

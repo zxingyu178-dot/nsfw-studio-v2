@@ -68,6 +68,16 @@ def list_modules(request: Request) -> list[dict]:
             "allowed_job_kinds": list(capabilities.allowed_job_kinds),
             "can_start_from_image": capabilities.can_start_from_image,
             "is_generative": capabilities.is_generative,
+            # Phase 7 Task5：输入 Slot 声明（前端据此提示需要选择哪些角色的图片）
+            "input_slots": [
+                {
+                    "role": slot.role,
+                    "required": slot.required,
+                    "max_count": slot.max_count,
+                    "description": slot.description,
+                }
+                for slot in capabilities.input_slots
+            ],
             # Phase 6 Task8：参数元数据（前端按 type/min/max/step/enum_values 渲染控件，
             # 不再为每个模块手写 SettingsPane；configurable=true 才写入 WorkflowModuleRef.config）
             "parameters": [

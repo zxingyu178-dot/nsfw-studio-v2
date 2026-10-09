@@ -56,8 +56,13 @@ class PipelineValidator:
         *,
         job_kind: str,
         has_input_image: bool,
+        input_roles: dict[str, int] | None = None,
     ) -> None:
-        """校验整条 Pipeline；不合法时抛 ValidationError（4xx，Job 不被创建）。"""
+        """校验整条 Pipeline；不合法时抛 ValidationError（4xx，Job 不被创建）。
+
+        ``input_roles``（Phase 7 Task5）：Stage0 输入图的「角色 → 数量」；
+        未提供时回退为 ``{"source": 1} if has_input_image else {}``（旧调用方兼容）。
+        """
         if not modules:
             raise ValidationError("Pipeline 至少需要一个 WorkflowModule", code="PIPELINE_INVALID")
 
@@ -111,17 +116,50 @@ class PipelineValidator:
         capabilities_list = [capabilities for _instance, capabilities in resolved]
         first = capabilities_list[0]
 
-        # 3) Stage 0 输入配对（P0：输入图片不能被静默忽略）
-        if has_input_image and not first.input_required:
-            raise ValidationError(
-                f"输入图片未被 Pipeline 使用：首个模块 {first.module_id} 不消费输入图（input_required=false）",
-                code="UNUSED_INPUT_IMAGE",
-            )
-        if not has_input_image and first.input_required:
-            raise ValidationError(
-                f"Pipeline 需要输入图片但未提供：{first.module_id}（input_required=true）",
-                code="INPUT_IMAGE_REQUIRED",
-            )
+        # 3) Stage 0 输入配对（P0：输入图片不能被静默忽略；Phase 7 Task5：Slot 契约驱动）
+        provided = (
+            dict(input_roles)
+            if input_roles is not None
+            else ({"source": 1} if has_input_image else {})
+        )
+        if first.input_slots:
+            # 模块声明了输入 Slot：按角色校验（未声明角色 → 不被消费；必填缺失 → 拒绝；
+            # 超量 → 拒绝）——新增 Reference / Face 模块只需声明 slot，不需要修改 Validator。
+            declared = {slot.role: slot for slot in first.input_slots}
+            for role, count in provided.items():
+                if role not in declared:
+                    raise ValidationError(
+                        f"输入图片未被 Pipeline 使用：首个模块 {first.module_id} 未声明输入槽 {role}",
+                        code="UNUSED_INPUT_IMAGE",
+                    )
+                if count > declared[role].max_count:
+                    raise ValidationError(
+                        f"输入槽 {role} 超出上限：{first.module_id} 最多 {declared[role].max_count} 张"
+                        f"（收到 {count} 张）",
+                        code="INPUT_SLOT_LIMIT_EXCEEDED",
+                    )
+            missing = [
+                slot.role for slot in first.input_slots
+                if slot.required and provided.get(slot.role, 0) < 1
+            ]
+            if missing:
+                raise ValidationError(
+                    f"Pipeline 需要输入图片但未提供：{first.module_id} 必填输入槽 "
+                    f"{', '.join(missing)}",
+                    code="INPUT_IMAGE_REQUIRED",
+                )
+        else:
+            # 兼容旧声明（未声明 input_slots 的模块）：沿用 input_required 语义
+            if has_input_image and not first.input_required:
+                raise ValidationError(
+                    f"输入图片未被 Pipeline 使用：首个模块 {first.module_id} 不消费输入图（input_required=false）",
+                    code="UNUSED_INPUT_IMAGE",
+                )
+            if not has_input_image and first.input_required:
+                raise ValidationError(
+                    f"Pipeline 需要输入图片但未提供：{first.module_id}（input_required=true）",
+                    code="INPUT_IMAGE_REQUIRED",
+                )
 
         # 4) Stage 链式检查：Stage N 必须能接收 Stage N-1 输出
         for index in range(1, len(capabilities_list)):

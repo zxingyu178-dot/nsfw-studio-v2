@@ -185,15 +185,23 @@ def test_job_creation_validates_input_image_exists(client):
 
 
 def test_job_rejects_multiple_input_images(client, png_bytes):
-    """§八：第一版 max=1（schema 直接拒绝，不进入业务层）。"""
+    """Phase 7 Task5：schema 不再硬编码 max=1；数量上限由模块声明的输入槽校验。
+
+    img2img 声明 source max_count=1 → 两张 source 必须被 PipelineValidator 拒绝
+    （进入业务层给出明确 400，而不是 schema 级 422）。
+    """
     image = import_one(client, "one.png", png_bytes)
     response = client.post("/api/v1/jobs", json={
-        "snapshot": make_snapshot(input_images=[
-            {"role": "source", "image_id": image["id"]},
-            {"role": "source", "image_id": image["id"]},
-        ]),
+        "snapshot": make_snapshot(
+            input_images=[
+                {"role": "source", "image_id": image["id"]},
+                {"role": "source", "image_id": image["id"]},
+            ],
+            workflow_modules=[{"module_id": "img2img"}],
+        ),
     })
-    assert response.status_code == 422
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "INPUT_SLOT_LIMIT_EXCEEDED"
 
 
 def test_process_job_snapshot_input_mismatch_rejected(session, settings, png_bytes):

@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError, EngineJobRequest
 from app.workflows.base import (
     InputImageRef,
+    InputSlotSpec,
     JobRequestContext,
     ModuleCapabilities,
     ParameterSpec,
@@ -97,6 +98,11 @@ class Img2ImgModule(WorkflowModule):
             allowed_job_kinds=("generate",),
             can_start_from_image=True,
             is_generative=True,
+            # Phase 7 Task5：输入 Slot 契约——img2img 只消费 source（旧行为兼容）
+            input_slots=(
+                InputSlotSpec("source", required=True, max_count=1,
+                              description="图生图输入（来源图片，来自 Studio 图库）"),
+            ),
         )
 
     # ===== config（模块参数唯一事实源） =====

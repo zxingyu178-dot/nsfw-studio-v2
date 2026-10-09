@@ -120,21 +120,24 @@ def _validate_workflow_snapshot(modules: list[dict] | None) -> dict[str, Any]:
     return {"modules": cleaned}
 
 
-RECIPE_INPUT_ROLES = ("source",)
+# Phase 7 Task5：输入图角色与 WorkbenchSnapshotModel 的 Slot 契约保持一致
+RECIPE_INPUT_ROLES = ("source", "reference", "face_reference")
 
 
 def _validate_input_images(refs: list[dict] | None) -> list[dict[str, Any]]:
     """归一化输入图快照（Phase 5 §九）：至少保存 image_id + file hash + role。
 
-    第一版最多 1 张（role=source）；sha256 由 API 层在保存时解析（文件缺失可为 None，
-    但字段必须存在——历史版本据此判断"输入图片已丢失"而不是静默清空）。
+    Phase 7 Task5：支持多角色 Slot（source / reference / face_reference，总上限 4）；
+    角色数量与必填性在 Job 创建时由模块声明的输入槽校验，配方保存只做结构校验。
+    sha256 由 API 层在保存时解析（文件缺失可为 None，但字段必须存在——
+    历史版本据此判断"输入图片已丢失"而不是静默清空）。
     """
     if refs is None:
         return []
     if not isinstance(refs, list):
         raise ValidationError("input_images 必须为数组", code="RECIPE_INPUT_INVALID")
-    if len(refs) > 1:
-        raise ValidationError("Phase 5 输入图片最多 1 张", code="RECIPE_INPUT_INVALID")
+    if len(refs) > 4:
+        raise ValidationError("input_images 最多 4 张", code="RECIPE_INPUT_INVALID")
     cleaned: list[dict[str, Any]] = []
     for ref in refs:
         if not isinstance(ref, dict) or not ref.get("image_id"):
