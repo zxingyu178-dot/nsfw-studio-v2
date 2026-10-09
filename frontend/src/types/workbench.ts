@@ -166,12 +166,16 @@ export interface WorkflowModuleRef {
   config?: Record<string, unknown>
 }
 
-/** 工作台输入图片（Phase 5 §八：统一 image_id，max=1，role=source）。
+/** 工作台输入图片（Phase 5 §八：统一 image_id；Phase 7 Task5：通用 Slot 契约）。
  *
+ * 角色由后端模块在 ModuleCapabilities.input_slots 中声明（source / reference / face_reference），
+ * 数量/必填性由 PipelineValidator 在 Job 创建期校验；当前 UI 只提交 source。
  * missing 仅用于"配方恢复后图片已丢失"的显式标记（不进入提交体，后端模型忽略未知字段）。
  */
+export type InputImageRole = 'source' | 'reference' | 'face_reference'
+
 export interface InputImageRef {
-  role: 'source'
+  role: InputImageRole
   image_id: string
   missing?: boolean
 }
@@ -243,6 +247,14 @@ export interface ModuleCapabilitiesDTO {
   output_cardinality: number
   /** Phase 6 Task9：explicit=工作台显式宽高；input=跟随输入图（UI 不显示假宽高） */
   size_mode?: 'explicit' | 'input' | string
+  /** Phase 7 Task2：允许的 Job 类型（generate / process），能力驱动 */
+  allowed_job_kinds?: string[]
+  /** Phase 7 Task2：能否作为"以已有图片为起点"的 Pipeline 首模块 */
+  can_start_from_image?: boolean
+  /** Phase 7 Task8：本模块产出是否构成"生成上下文"（Image → Workbench 恢复锚点） */
+  is_generative?: boolean
+  /** Phase 7 Task5：模块声明的输入 Slot（前端据此提示需要选择哪些角色的图片） */
+  input_slots?: { role: string; required: boolean; max_count: number; description?: string }[]
   /** Phase 6 Task8：参数元数据（configurable=true 的按 type 渲染控件） */
   parameters?: ModuleParameterDTO[]
   registered: boolean
