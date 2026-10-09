@@ -20,7 +20,7 @@ from pathlib import Path
 
 import httpx
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BASE = "http://127.0.0.1:8000/api/v1"
 EVIDENCE = PROJECT_ROOT / "docs" / "evidence" / "phase6-img2img"
 PHOTO = EVIDENCE / "inputs" / "real_photo_768x1024.png"
