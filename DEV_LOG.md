@@ -46,6 +46,16 @@
   （期间空闲内存一度 ~240MB、提交 22GB/40GB 重度换页）；重跑成功（模型加载 ~10min + 采样 2:45）；
 - 结论：16GB 物理内存在常驻应用并存时对"T5 6GB + GGUF 5.4GB"链路过紧（详见 docs/PHASE6_REPORT §4）。
 
+### 发布链（2026-10-09）
+
+- develop：推送 `3d389d41d` → CI run **37895848115 success**（backend pytest + frontend build +
+  新增 `npm run test:store`）；
+- main：推送 `3d389d41d` → CI run **37896107832 success**；
+- 本记录（最终 docs 回填）→ develop/main CI 复跑 → **tag v0.8.0（指向最终 main commit）**；
+- 交付：从 tag `git archive` 生成 Source ZIP（仅 tracked 文件；`.pytest_cache / __pycache__ / *.pyc`
+  天然排除）+ `scripts/build_handoff.py --phase Phase6` 生成 Handoff ZIP →
+  邮件（附件 MIMEApplication）→ IMAP SHA-256 复核（见交付邮件）。
+
 ## 2026-10-08 — Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img（v0.7.0）
 
 **执行**：TRAE Code Agent（feature/phase51-contract-img2img → develop → CI → main → CI → tag v0.7.0）。

@@ -20,6 +20,7 @@
 - [x] Task 11：浏览器人工验收（Playwright + 系统 Edge 全链路 + 截图；acceptance_browser.json）
 - [x] Task 12：交接包清理（Qwen 证据 → docs/evidence/phase51-img2img/；Source 包由 git tracked 维护）
 - [x] 测试门槛：208 基线 + 19 新回归全绿（227 passed）；前端 store 11 断言（CI test:store）；npm run build
+- [x] CI：develop run 37895848115 ✅ / main run 37896107832 ✅（均 3d389d41d）；tag v0.8.0（最终 main commit）
 - [x] 版本：v0.8.0；feature/phase6-pipeline-reliability → develop → main → tag
 
 ## Phase 5.1：Image Pipeline Contract Closure + Qwen Img2Img ✅（2026-10-08，v0.7.0）
