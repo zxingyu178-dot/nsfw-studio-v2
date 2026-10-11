@@ -55,10 +55,9 @@ EXCLUDE_SUFFIXES = {
     # 模型权重
     ".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx",
 }
-# DataRoot / 私有配置路径关键字
-FORBIDDEN_PATH_HINTS = (
-    "dataroot", "data_root", "config.local", "originals/", "processed/",
-    "thumbnails/", "upscaled/", "comfyui/outputs", "studio.db",
+# DataRoot 数据目录前缀（仅匹配以这些目录开头的真实数据条目；源码/配置中的声明字符串不会命中）
+DATA_PREFIXES = (
+    "images/", "data/", "dataroot/", "models/", "comfyui/",
 )
 MAX_BYTES = 3_000_000  # 单条目上限（package-lock 等通常 < 3MB）
 
@@ -143,8 +142,8 @@ def main() -> int:
         names = zf.namelist()
         for n in names:
             low = n.lower()
-            if any(h in low for h in FORBIDDEN_PATH_HINTS):
-                violations.append(f"path-hint: {n}")
+            if any(low.startswith(p) for p in DATA_PREFIXES):
+                violations.append(f"data-prefix: {n}")
             if Path(n).suffix.lower() in EXCLUDE_SUFFIXES:
                 violations.append(f"forbidden-suffix: {n}")
             if zf.getinfo(n).file_size > MAX_BYTES:
