@@ -238,7 +238,10 @@ export const jobApi = {
   reorder(orderedJobIds: string[]): Promise<QueueDTO> {
     return request('/api/v1/queue/reorder', jsonInit('POST', { ordered_job_ids: orderedJobIds }))
   },
-  resumeQueue(): Promise<{ queue_paused: boolean }> {
+  pauseQueue(): Promise<QueueDTO> {
+    return request('/api/v1/queue/pause', jsonInit('POST', {}))
+  },
+  resumeQueue(): Promise<QueueDTO> {
     return request('/api/v1/queue/resume', jsonInit('POST', {}))
   },
   engineStatus(): Promise<EngineStatusDTO> {

@@ -15,6 +15,7 @@ import {
   activeJob,
   cancelJob,
   pauseJob,
+  pauseQueue,
   reorderQueue,
   resumeJob,
   resumeQueue,
@@ -133,6 +134,7 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
 
   const queued = store.queue?.queued ?? []
   const paused = store.queue?.paused ?? []
+  const queueHasActivity = Boolean(store.queue?.running) || queued.length > 0
   const disabled = store.submitting || generateHint !== undefined
 
   return (
@@ -265,7 +267,20 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
 
       {/* ===== 队列 ===== */}
       <section className="wb-queue">
-        <h3 className="wb-queue__title">队列</h3>
+        <div className="wb-queue__head">
+          <h3 className="wb-queue__title">队列</h3>
+          {queueHasActivity && (
+            store.queue?.worker.queue_paused ? (
+              <Button size="xs" variant="primary" onClick={() => void resumeQueue()}>
+                继续队列
+              </Button>
+            ) : (
+              <Button size="xs" variant="ghost" onClick={() => void pauseQueue()}>
+                暂停队列
+              </Button>
+            )
+          )}
+        </div>
         {store.queue?.worker.queue_paused && (
           <div className="ds-notice ds-notice--warning" role="alert">
             <p>队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}</p>
