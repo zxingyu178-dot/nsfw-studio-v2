@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi } from '../../api/client'
-import { EmptyState, Spinner, StatusBadge } from '../../components/ui'
+import { EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
 import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
   STAGE_LABEL,
@@ -84,6 +84,12 @@ export function ResultPane() {
                     runningItem.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''
                   }`
                 : `已完成 ${job.completed_count} / ${job.requested_count}`}
+              {job.started_at && (
+                <>
+                  {' · '}
+                  <ElapsedTimer startedAt={job.started_at} finishedAt={job.finished_at} />
+                </>
+              )}
           </p>
 
           {stageLines.length > 0 && (

@@ -27,6 +27,7 @@ import {
 import {
   Button,
   Checkbox,
+  ElapsedTimer,
   Field,
   Input,
   ProgressBar,
@@ -350,6 +351,11 @@ function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
         </p>
       )}
       <p className="wb-job__meta">{moduleLabel}</p>
+      {job.started_at && (
+        <p className="wb-job__meta">
+          <ElapsedTimer startedAt={job.started_at} finishedAt={job.finished_at} />
+        </p>
+      )}
       {job.resume_of_job_id && <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>}
       {job.error_message && (
         <p className="ds-notice ds-notice--error">{job.error_type}：{job.error_message}</p>
