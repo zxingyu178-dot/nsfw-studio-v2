@@ -264,7 +264,12 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
           </div>
         )}
         {queued.length === 0 && paused.length === 0 && <p className="muted">暂无等待任务</p>}
-        <ul className="wb-queue-list">
+        {/* 紧凑队列：列表固定高度 + 内部滚动，20+ 任务不再撑高右栏；标题/暂停按钮/自动暂停提示固定在滚动区外。
+            拖拽排序（draggable + DnD handlers）、优先/暂停/取消与队列暂停/继续全部保留。 */}
+        <ul
+          className="wb-queue-list wb-queue-list--scroll"
+          style={{ maxHeight: '300px', overflowY: 'auto' }}
+        >
           {queued.map((item, index) => (
             <QueueRow
               key={item.id}

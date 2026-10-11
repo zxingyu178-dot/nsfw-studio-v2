@@ -218,6 +218,12 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+/* 紧凑队列：固定高度 + 内部滚动，队列 20+ 行时右栏/页面不整体增高。
+   标题与暂停队列按钮、自动暂停提示固定在本滚动区之外。 */
+.wb-queue-list--scroll {
+  max-height: 300px;
+  overflow-y: auto;
+}
 .wb-queue-item {
   display: flex;
   align-items: flex-start;
