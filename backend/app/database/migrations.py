@@ -550,6 +550,12 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE jobs ADD COLUMN client_request_fingerprint TEXT",
         ),
     ),
+    Migration(
+        migration_id="0014_prompt_preview_image",
+        version="1.0.0",
+        description="Daily Use：prompts.preview_image_id（封面预览图，属元数据，不产生版本）",
+        statements=("ALTER TABLE prompts ADD COLUMN preview_image_id TEXT",),
+    ),
 )
 
 

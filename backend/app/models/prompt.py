@@ -17,6 +17,7 @@ class Prompt(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     current_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preview_image_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     favorite: Mapped[bool] = mapped_column(nullable=False, default=False)
     archived: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
