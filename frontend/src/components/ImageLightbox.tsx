@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { imageContentUrl, type ImageDTO } from '../types/workbench'
 import { useFocusGuard } from './ui/useOverlay'
 import './ImageLightbox.css'
@@ -12,6 +12,7 @@ import './ImageLightbox.css'
  * - 鼠标：滚轮以中心为锚点缩放（clamp 0.25~4）；缩放后按住拖动平移；
  *   点击遮罩空白处关闭、点击图片不关闭。
  * - 默认适应窗口（contain）；切换图片后缩放/平移复位。
+ * - Phase 0.11：可选 renderSidePanel（Gallery 传入右侧信息栏）；不传则维持纯看图布局。
  */
 
 export interface ImageLightboxProps {
@@ -19,6 +20,8 @@ export interface ImageLightboxProps {
   index: number
   onClose: () => void
   onNavigate: (index: number) => void
+  // Gallery 传入的图片运行时即完整 ImageDTO；renderSidePanel 收到完整对象。
+  renderSidePanel?: (image: ImageDTO) => ReactNode
 }
 
 const MIN_SCALE = 0.25
@@ -30,7 +33,7 @@ const clampScale = (value: number): number =>
 
 const ZERO_OFFSET = { x: 0, y: 0 }
 
-export function ImageLightbox({ images, index, onClose, onNavigate }: ImageLightboxProps) {
+export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePanel }: ImageLightboxProps) {
   // null = 适应窗口（contain）；数字 = 实际缩放倍率
   const [scale, setScale] = useState<number | null>(null)
   const [offset, setOffset] = useState<{ x: number; y: number }>(ZERO_OFFSET)
@@ -140,46 +143,52 @@ export function ImageLightbox({ images, index, onClose, onNavigate }: ImageLight
       aria-label="图片预览"
       tabIndex={-1}
     >
-      <div
-        className={`lb-stage${scale === null ? '' : ' lb-stage--zoomed'}`}
-        onWheel={handleWheel}
-        onMouseDown={(event) => {
-          // 点击遮罩空白处（点在 stage 本身而非图片）关闭
-          if (event.target === event.currentTarget) onClose()
-        }}
-      >
-        <img
-          className="lb-img"
-          src={src}
-          alt=""
-          draggable={false}
-          style={scale === null ? undefined : { transform }}
-          onMouseDown={startDrag}
-        />
+      <div className="lb-body">
+        <div
+          className={`lb-stage${scale === null ? '' : ' lb-stage--zoomed'}`}
+          onWheel={handleWheel}
+          onMouseDown={(event) => {
+            // 点击遮罩空白处（点在 stage 本身而非图片）关闭
+            if (event.target === event.currentTarget) onClose()
+          }}
+        >
+          <img
+            className="lb-img"
+            src={src}
+            alt=""
+            draggable={false}
+            style={scale === null ? undefined : { transform }}
+            onMouseDown={startDrag}
+          />
+        </div>
+
+        <div className="lb-toolbar">
+          <span className="lb-count" aria-live="polite">
+            {clampedIndex + 1} / {images.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => onNavigate(clampedIndex - 1)}
+            disabled={clampedIndex <= 0}
+          >
+            上一张
+          </button>
+          <button type="button" onClick={resetToFit}>适应窗口</button>
+          <button type="button" onClick={zoomTo100}>100%</button>
+          <button
+            type="button"
+            onClick={() => onNavigate(clampedIndex + 1)}
+            disabled={clampedIndex >= images.length - 1}
+          >
+            下一张
+          </button>
+          <button type="button" onClick={onClose}>关闭</button>
+        </div>
       </div>
 
-      <div className="lb-toolbar">
-        <span className="lb-count" aria-live="polite">
-          {clampedIndex + 1} / {images.length}
-        </span>
-        <button
-          type="button"
-          onClick={() => onNavigate(clampedIndex - 1)}
-          disabled={clampedIndex <= 0}
-        >
-          上一张
-        </button>
-        <button type="button" onClick={resetToFit}>适应窗口</button>
-        <button type="button" onClick={zoomTo100}>100%</button>
-        <button
-          type="button"
-          onClick={() => onNavigate(clampedIndex + 1)}
-          disabled={clampedIndex >= images.length - 1}
-        >
-          下一张
-        </button>
-        <button type="button" onClick={onClose}>关闭</button>
-      </div>
+      {renderSidePanel && (
+        <div className="lb-side-wrap">{renderSidePanel(current as ImageDTO)}</div>
+      )}
     </div>
   )
 }

@@ -37,6 +37,7 @@ import {
   type WorkbenchSnapshot,
 } from '../../types/workbench'
 import { ImageLightbox } from '../../components/ImageLightbox'
+import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode } from './ReviewMode'
 import './gallery.css'
 
@@ -426,8 +427,10 @@ export default function GalleryPage() {
 
   /** Phase 0.11：按任务打开 Review Mode（仅该 Job 的图） */
   function startReviewJob(jobId: string): void {
+    // page_size 上限 100（后端冻结）；单 Job 图片通常 ≤100。超过 100 的 Job 第一版只审前 100，
+    // 后续如需可改为分页拉全。
     imageApi
-      .list({ job_id: jobId, page_size: 200, sort: 'created_asc' })
+      .list({ job_id: jobId, page_size: 100, sort: 'created_asc' })
       .then((page) => {
         if (page.items.length > 0) setReviewImages(page.items)
       })
@@ -650,6 +653,17 @@ export default function GalleryPage() {
           index={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onNavigate={(next) => setLightboxIndex(next)}
+          renderSidePanel={(img) => (
+            <LightboxInfoPanel
+              image={img}
+              onUpdated={(u) =>
+                setItems((previous) => previous.map((it) => (it.id === u.id ? u : it)))}
+              onDeleted={() => {
+                setLightboxIndex(null)
+                loadFirst()
+              }}
+            />
+          )}
         />
       )}
 

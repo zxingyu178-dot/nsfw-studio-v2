@@ -77,7 +77,15 @@ def _delete_one(session: Session, storage: StorageManager, image: Image) -> int:
     freed = _image_disk_bytes(session, storage, image)
 
     # 1) 文件：original + 全部 variants（含 thumbnail）
-    storage.safe_delete(storage.absolutize(image.file_path))
+    original_abs = storage.absolutize(image.file_path)
+    storage.safe_delete(original_abs)
+    # 删除 now-empty 的 per-image 目录（仅当为空且目录名即本图 id，绝不误删 originals 根）
+    try:
+        parent = original_abs.parent
+        if parent.name == image.id and not any(parent.iterdir()):
+            parent.rmdir()
+    except OSError:
+        pass
     for variant in _list_variants(session, image.id):
         storage.safe_delete(storage.absolutize(variant.path))
 

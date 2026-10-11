@@ -613,13 +613,21 @@ def set_image_status(session: Session, image_id: str, status: str,
     - 置 status、review_note；除 NEW 外置 reviewed_at=now，回到 NEW 则清空；
     - FAVORITE 同步 favorite=1，离开 FAVORITE（KEEP/REJECT/ARCHIVED/NEW）同步 favorite=0，
       保持 status 与 favorite 语义一致（记录在代码注释）。
+    - 同步旧 review_status 列：job_gallery_summary 仍按旧列（UNREVIEWED/KEPT/REJECTED）聚合，
+      双写以保证 Job 审核统计随新状态实时变化（旧列保留兼容，不做删除）。
     """
     if status not in IMAGE_STATUSES:
         raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    # 新状态 → 旧 review_status 映射（ARCHIVED/FAVORITE 在旧体系中按"保留"计）
+    legacy_review = {
+        "NEW": "UNREVIEWED", "KEEP": "KEPT", "FAVORITE": "KEPT",
+        "REJECT": "REJECTED", "ARCHIVED": "KEPT",
+    }
     image = get_image(session, image_id)
     image.status = status
     image.review_note = note or ""
     image.reviewed_at = None if status == "NEW" else utc_now_iso()
+    image.review_status = legacy_review[status]
     # FAVORITE 语义同步：进入 FAVORITE → favorite=1；离开 → favorite=0
     image.favorite = (status == "FAVORITE")
     session.commit()

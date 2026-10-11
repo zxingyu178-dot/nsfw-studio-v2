@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiRequestError, imageApi } from '../../api/client'
 import {
   imageContentUrl,
@@ -46,30 +46,58 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
     (next: number) => {
       if (next < 0 || next >= list.length) return
       setZoomed(false)
+      indexRef.current = next
       setIndex(next)
     },
     [list.length],
   )
 
-  const applyStatus = useCallback(
-    async (status: ImageReviewStatus) => {
-      if (!current || busy) return
-      setBusy(true)
-      setError(null)
-      const id = current.id
-      try {
-        const updated = await imageApi.setStatus(id, { status })
-        setList((prev) => prev.map((img) => (img.id === id ? updated : img)))
-        onChanged?.(updated)
+  // 打标请求队列：用户快速连按 A/D/F 时，PATCH 期间的按键不再被丢弃，
+  // 而是排队、逐张落标并自动前进（摄影选片场景的关键健壮性）。
+  const listRef = useRef<ImageDTO[]>(list)
+  listRef.current = list
+  const indexRef = useRef<number>(clamped)
+  indexRef.current = clamped
+  const queueRef = useRef<ImageReviewStatus[]>([])
+  const processingRef = useRef(false)
+
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return
+    processingRef.current = true
+    setBusy(true)
+    try {
+      while (queueRef.current.length > 0) {
+        const curIndex = indexRef.current
+        const cur = listRef.current[curIndex]
+        if (!cur) break
+        const status = queueRef.current.shift() as ImageReviewStatus
+        try {
+          const updated = await imageApi.setStatus(cur.id, { status })
+          setList((prev) => prev.map((img) => (img.id === cur.id ? updated : img)))
+          onChanged?.(updated)
+        } catch (err) {
+          setError(err instanceof ApiRequestError ? err.message : '审核状态更新失败')
+          break // 出错即停，把队列留给用户看到错误后决定
+        }
         // 打标后自动跳到下一张（到末尾则停住）
-        if (clamped < list.length - 1) setIndex(clamped + 1)
-      } catch (err) {
-        setError(err instanceof ApiRequestError ? err.message : '审核状态更新失败')
-      } finally {
-        setBusy(false)
+        if (curIndex < listRef.current.length - 1) {
+          indexRef.current = curIndex + 1
+          setIndex(curIndex + 1)
+        }
       }
+    } finally {
+      processingRef.current = false
+      setBusy(false)
+    }
+  }, [onChanged])
+
+  const enqueueMark = useCallback(
+    (status: ImageReviewStatus) => {
+      setError(null)
+      queueRef.current.push(status)
+      void processQueue()
     },
-    [current, busy, clamped, list.length, onChanged],
+    [processQueue],
   )
 
   // 键盘：←/→ 切换；A 保留 / D 淘汰 / F 收藏；Space 放大；ESC 关闭
@@ -91,18 +119,18 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
         setZoomed((z) => !z)
       } else if (event.key === 'a' || event.key === 'A') {
         event.preventDefault()
-        void applyStatus('KEEP')
+        enqueueMark('KEEP')
       } else if (event.key === 'd' || event.key === 'D') {
         event.preventDefault()
-        void applyStatus('REJECT')
+        enqueueMark('REJECT')
       } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault()
-        void applyStatus('FAVORITE')
+        enqueueMark('FAVORITE')
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [clamped, goTo, applyStatus, onClose])
+  }, [clamped, goTo, enqueueMark, onClose])
 
   // 打开期间锁定 body 滚动
   useEffect(() => {
@@ -168,19 +196,19 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
         <div className="rv-actions">
           <button
             type="button" className="rv-btn rv-btn--reject" disabled={busy}
-            onClick={() => void applyStatus('REJECT')}
+            onClick={() => enqueueMark('REJECT')}
           >
             ❌ 淘汰 (D)
           </button>
           <button
             type="button" className="rv-btn rv-btn--keep" disabled={busy}
-            onClick={() => void applyStatus('KEEP')}
+            onClick={() => enqueueMark('KEEP')}
           >
             ✅ 保留 (A)
           </button>
           <button
             type="button" className="rv-btn rv-btn--fav" disabled={busy}
-            onClick={() => void applyStatus('FAVORITE')}
+            onClick={() => enqueueMark('FAVORITE')}
           >
             ⭐ 收藏 (F)
           </button>

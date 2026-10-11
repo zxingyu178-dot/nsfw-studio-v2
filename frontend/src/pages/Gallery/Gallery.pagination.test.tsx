@@ -77,7 +77,11 @@ describe('GalleryPagination 无限滚动分页', () => {
     ;(window as unknown as { __triggerIntersection: () => void }).__triggerIntersection()
 
     // 第二页已追加（40 → 41），且请求了 page=2
-    await waitFor(() => expect(container.querySelectorAll('.gal-card')).toHaveLength(41))
+    // 注：全局触发会同步回调 40 个缩略图 observer + 哨兵，整批 flush 在高负载下较慢，给足超时
+    await waitFor(
+      () => expect(container.querySelectorAll('.gal-card')).toHaveLength(41),
+      { timeout: 4000 },
+    )
     expect(imageApi.list).toHaveBeenCalledWith(expect.objectContaining({ page: 2, page_size: 40 }))
   })
 })
