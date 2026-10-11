@@ -34,7 +34,8 @@ from app.storage.manager import StorageManager
 router = APIRouter(prefix="/images", tags=["images"])
 
 
-@router.get("", response_model=ImageListResponse, summary="图库列表（job/review/favorite/source/date 过滤）")
+@router.get("", response_model=ImageListResponse,
+            summary="图库列表（Phase 0.11 标准分页：page/page_size/sort/status）")
 def list_images(
     job_id: str | None = Query(default=None),
     review_status: str | None = Query(default=None),
@@ -44,17 +45,36 @@ def list_images(
     search: str | None = Query(default=None, description="按导入文件名搜索"),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=40, ge=1, le=100),
+    # 兼容旧调用方（Phase 0.11 前用 limit/offset 一次性拉取）；
+    # 一旦提供 limit 即以其为页大小，旧语义不变；否则走标准 page/page_size。
+    limit: int | None = Query(default=None, ge=1, le=200, include_in_schema=False),
+    offset: int = Query(default=0, ge=0, include_in_schema=False),
     session: Session = Depends(get_session),
 ) -> ImageListResponse:
+    if limit is not None:
+        eff_limit = limit
+        eff_offset = offset
+        eff_page = (offset // limit) + 1 if limit else 1
+        eff_page_size = limit
+    else:
+        eff_limit = page_size
+        eff_offset = (page - 1) * page_size
+        eff_page = page
+        eff_page_size = page_size
+
     items, total = image_service.list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
-        limit=limit, offset=offset,
+        status=status, sort=sort, limit=eff_limit, offset=eff_offset,
     )
+    has_next = (eff_offset + len(items)) < total
     return ImageListResponse(
-        items=[image_response(image) for image in items], total=total, limit=limit, offset=offset
+        items=[image_response(image) for image in items], total=total,
+        page=eff_page, page_size=eff_page_size, has_next=has_next,
     )
 
 

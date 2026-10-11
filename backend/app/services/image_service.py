@@ -32,7 +32,7 @@ from app.core.filetypes import (
 )
 from app.core.ids import IMAGE, new_id
 from app.engine.base import EngineError, EngineOutputFile
-from app.models import Image, Job, JobItem, JobStage, JobStageItem
+from app.models import IMAGE_STATUSES, Image, Job, JobItem, JobStage, JobStageItem
 from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
 
@@ -529,6 +529,8 @@ def list_images(
     search: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    status: str | None = None,
+    sort: str = "created_desc",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[Image], int]:
@@ -538,6 +540,10 @@ def list_images(
         raise ValidationError("offset 不能为负")
     if review_status is not None and review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
         raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
+    if status is not None and status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    if sort not in ("created_desc", "created_asc", "favorite", "size"):
+        raise ValidationError(f"非法排序: {sort}", code="IMAGE_SORT_INVALID")
 
     query = select(Image)
     if job_id is not None:
@@ -546,6 +552,8 @@ def list_images(
         query = query.where(Image.review_status == review_status)
     if favorite is not None:
         query = query.where(Image.favorite == favorite)
+    if status is not None:
+        query = query.where(Image.status == status)
     if source is not None:
         query = query.where(Image.source == source)
     if kind is not None:
@@ -559,7 +567,24 @@ def list_images(
         query = query.where(Image.created_at <= date_to)
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
-    items = list(session.execute(query.order_by(Image.created_at.desc()).limit(limit).offset(offset)).scalars())
+
+    # Phase 0.11 排序：
+    # - created_desc/created_asc：按生成时间；
+    # - favorite：精品优先，再按时间倒序；
+    # - size：按像素数（width*height）倒序，大尺寸优先（图片无文件字节列，
+    #   像素数由列直接可得、确定性可排序，避免为排序而全库读文件）。
+    if sort == "created_asc":
+        order_by = (Image.created_at.asc(),)
+    elif sort == "favorite":
+        order_by = (Image.favorite.desc(), Image.created_at.desc())
+    elif sort == "size":
+        order_by = ((Image.width * Image.height).desc(), Image.created_at.desc())
+    else:
+        order_by = (Image.created_at.desc(),)
+
+    items = list(session.execute(
+        query.order_by(*order_by).limit(limit).offset(offset)
+    ).scalars())
     return items, int(total)
 
 
