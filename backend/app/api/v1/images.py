@@ -14,6 +14,9 @@ from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
 from app.schemas.image import (
     ImageBatchStatusRequest,
     ImageBatchStatusResponse,
+    ImageCleanupPreview,
+    ImageCleanupRejectedRequest,
+    ImageCleanupResult,
     ImageFavoriteRequest,
     ImageImportDuplicate,
     ImageImportFailure,
@@ -31,7 +34,13 @@ from app.schemas.image import (
     image_response,
 )
 from app.schemas.job import JobResponse, job_response
-from app.services import image_reference_service, image_service, job_service, thumbnail_service
+from app.services import (
+    cleanup_service,
+    image_reference_service,
+    image_service,
+    job_service,
+    thumbnail_service,
+)
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/images", tags=["images"])
@@ -175,6 +184,24 @@ def batch_status_images(body: ImageBatchStatusRequest,
     return ImageBatchStatusResponse(
         updated=len(images), items=[image_response(image) for image in images]
     )
+
+
+@router.post("/cleanup-rejected",
+             summary="废片清理（REJECT；两阶段：confirm 非 true 仅预览，true 才真删）")
+def cleanup_rejected(body: ImageCleanupRejectedRequest,
+                    session: Session = Depends(get_session),
+                    storage: StorageManager = Depends(get_storage)
+                    ) -> ImageCleanupPreview | ImageCleanupResult:
+    """REJECT 图两阶段清理：
+
+    - confirm != true → 预览 {candidate_count, total_bytes(预计释放), protected_count}，不删除；
+    - confirm == true → 删除未受保护的 REJECT 图的 original+全部 variants 文件与 DB 记录；
+      被 Prompt/Asset/Recipe/派生图/活跃 Job 引用的图跳过并计入 protected，绝不留悬空。
+    """
+    ids = body.image_ids or None
+    if not body.confirm:
+        return ImageCleanupPreview(**cleanup_service.preview(session, storage, ids))
+    return ImageCleanupResult(**cleanup_service.execute(session, storage, ids))
 
 
 @router.get("/{image_id}/workbench", response_model=ImageWorkbenchResponse,
