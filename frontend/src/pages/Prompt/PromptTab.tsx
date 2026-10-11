@@ -256,6 +256,9 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
         const updated = await refreshDetail(prompt.id)
         setName(updated.name)
         setCoverImageId(updated.preview_image_id)
+      } else {
+        // 新建 Prompt：刷新外层列表，使新卡片立即出现（否则需手动刷新页面）
+        onChanged()
       }
       setMessage({ kind: 'ok', text: okText })
     } catch (error) {

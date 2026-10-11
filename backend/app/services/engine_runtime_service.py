@@ -198,6 +198,9 @@ class EngineRuntimeService:
         if os.name == "nt":
             kwargs["creationflags"] = CREATE_NO_WINDOW
         proc = subprocess.Popen(argv, **kwargs)
+        # Popen 已把该句柄继承给子进程（作为其 stdout）；立即关闭父进程(Studio)持有的副本，
+        # 避免每次受管 start 在父进程泄漏一个 OS 文件句柄。子进程保留自己的副本，可继续写日志。
+        log_fh.close()
         self._cmd = argv
         self._cwd = self.working_dir or None
         return proc.pid

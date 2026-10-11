@@ -132,3 +132,30 @@ describe('Prompt 卡片封面与一键复制', () => {
   })
 })
 
+describe('新建 Prompt 后立即刷新列表', () => {
+  it('创建成功后重新拉取列表（onChanged），新卡片无需手动刷新即出现', async () => {
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [] } as never)
+    vi.mocked(promptApi.create).mockResolvedValue(
+      makePrompt({ id: 'prm_new', name: '新建的猫' }) as never)
+    const { container } = renderTab()
+
+    fireEvent.click(screen.getByRole('button', { name: '新建 Prompt' }))
+    const drawer = container.querySelector('.ds-drawer') as HTMLElement
+    expect(drawer).toBeTruthy()
+    fireEvent.change(drawer.querySelector('input') as HTMLInputElement, {
+      target: { value: '新建的猫' },
+    })
+    fireEvent.change(drawer.querySelector('textarea') as HTMLTextAreaElement, {
+      target: { value: 'masterpiece, best quality, a cat' },
+    })
+
+    const callsBefore = vi.mocked(promptApi.list).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: '创建' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(promptApi.list).mock.calls.length).toBeGreaterThan(callsBefore))
+    expect(promptApi.create).toHaveBeenCalledTimes(1)
+  })
+})
+
