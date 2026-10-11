@@ -1,0 +1,118 @@
+/* ===== 生图引擎控制 Popover（Task4） ===== */
+.engine-status-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.engine-status--trigger {
+  padding: 4px 8px;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  color: var(--fg-muted);
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+
+.engine-status--trigger:hover {
+  background: var(--panel);
+  color: var(--fg);
+}
+
+.engine-status--trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ep {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  width: 260px;
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.ep__header {
+  margin-bottom: var(--space-2);
+}
+
+.ep__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: var(--text-md);
+}
+
+.ep__title--warn {
+  color: var(--warn);
+}
+
+.ep__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ep__dot--ok {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+.ep__dot--off {
+  background: var(--offline);
+}
+
+.ep__dot--warn {
+  background: var(--warn);
+}
+
+.ep__dot--busy {
+  background: var(--warn);
+  animation: ep-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ep-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.ep__sub {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+
+.ep__note {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-2);
+}
+
+.ep__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.ep__error {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}

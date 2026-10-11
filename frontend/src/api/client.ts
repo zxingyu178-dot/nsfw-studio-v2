@@ -47,6 +47,7 @@ import type {
   AssetType,
   AssetVersionDTO,
   ComposeResult,
+  EngineRuntimeDTO,
   EngineStatusDTO,
   HistoryBucket,
   HistoryResponseDTO,
@@ -252,6 +253,22 @@ export const jobApi = {
   },
   engineStatus(): Promise<EngineStatusDTO> {
     return request('/api/v1/engine/status')
+  },
+}
+
+// ===== 生图引擎运行时控制（Task4：启停/重启 ComfyUI 子进程） =====
+export const engineRuntimeApi = {
+  get(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime')
+  },
+  start(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/start', jsonInit('POST', {}))
+  },
+  stop(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/stop', jsonInit('POST', {}))
+  },
+  restart(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/restart', jsonInit('POST', {}))
   },
 }
 

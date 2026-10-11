@@ -442,6 +442,32 @@ export interface EngineStatusDTO {
   engine_version: string
 }
 
+/** 生图引擎运行时状态（独立于 Job State；由 /api/v1/engine/runtime 返回） */
+export type EngineRuntimeState =
+  | 'STOPPED'
+  | 'STARTING'
+  | 'RUNNING_MANAGED'
+  | 'RUNNING_EXTERNAL'
+  | 'STOPPING'
+  | 'PORT_CONFLICT'
+  | 'ERROR'
+
+export interface EngineRuntimeDTO {
+  state: EngineRuntimeState
+  host: string
+  port: number
+  owned: boolean
+  pid: number | null
+  started_at: string | null
+  detail: string
+  log_location: string | null
+  health: {
+    online: boolean
+    engine_name: string
+    engine_version: string
+  }
+}
+
 export interface JobEventDTO {
   type: string
   job_id: string
