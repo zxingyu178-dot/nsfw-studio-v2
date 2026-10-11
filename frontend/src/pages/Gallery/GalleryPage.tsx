@@ -29,6 +29,7 @@ import {
   type ReviewStatus,
   type WorkbenchSnapshot,
 } from '../../types/workbench'
+import { ImageLightbox } from '../../components/ImageLightbox'
 import './gallery.css'
 
 /**
@@ -85,6 +86,10 @@ export default function GalleryPage() {
   const [notice, setNotice] = useState<{ text: string; undoable?: boolean } | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const undoStack = useRef<UndoEntry[]>([])
+  // Lightbox：null = 关闭；否则为当前图片在 items 中的下标
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // 单击延迟打开 Detail Drawer，以便和双击 Lightbox 区分（避免抽屉闪烁）
+  const detailTimer = useRef<number | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -155,6 +160,42 @@ export default function GalleryPage() {
     setSelectedIds((previous) =>
       previous.includes(imageId) ? previous.filter((id) => id !== imageId) : [...previous, imageId],
     )
+  }
+
+  // 卸载时清理单击定时器
+  useEffect(() => {
+    return () => {
+      if (detailTimer.current !== null) window.clearTimeout(detailTimer.current)
+    }
+  }, [])
+
+  /** 单击 = 延迟打开 Detail Drawer；双击在 onDoubleClick 里取消该定时器改开 Lightbox。 */
+  function handleCardClick(image: ImageDTO): void {
+    if (selectMode) {
+      toggleSelect(image.id)
+      return
+    }
+    if (detailTimer.current !== null) window.clearTimeout(detailTimer.current)
+    detailTimer.current = window.setTimeout(() => {
+      detailTimer.current = null
+      setDetail(image)
+    }, 220)
+  }
+
+  function handleCardDoubleClick(image: ImageDTO): void {
+    // 取消尚未触发的抽屉定时器，避免抽屉与 Lightbox 同时出现 / 闪烁
+    if (detailTimer.current !== null) {
+      window.clearTimeout(detailTimer.current)
+      detailTimer.current = null
+    }
+    if (selectMode) return
+    const index = items.findIndex((item) => item.id === image.id)
+    if (index >= 0) setLightboxIndex(index)
+  }
+
+  function openLightboxAt(image: ImageDTO): void {
+    const index = items.findIndex((item) => item.id === image.id)
+    if (index >= 0) setLightboxIndex(index)
   }
 
   /** §二十：选择图库已有图片（1 张或多张）→ 创建 upscale-only process Job */
@@ -269,6 +310,8 @@ export default function GalleryPage() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
+      // Lightbox 打开期间抑制 Gallery 自己的方向键/K/R/F，避免与 Lightbox 双向响应
+      if (lightboxIndex !== null) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         void undoLast()
@@ -424,7 +467,8 @@ export default function GalleryPage() {
                 key={image.id}
                 type="button"
                 className={`gal-card${selectedIds.includes(image.id) ? ' gal-card--selected' : ''}`}
-                onClick={() => (selectMode ? toggleSelect(image.id) : setDetail(image))}
+                onClick={() => handleCardClick(image)}
+                onDoubleClick={() => handleCardDoubleClick(image)}
                 title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${REVIEW_STATUS_LABEL[image.review_status]}`}
               >
                 <img
@@ -461,6 +505,16 @@ export default function GalleryPage() {
           onUseAsInput={useAsInput}
           onReviewStart={(prev) => recordUndo({ imageId: detail.id, review: prev, label: '审核修改' })}
           onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}
+          onPreviewLightbox={() => openLightboxAt(detail)}
+        />
+      )}
+
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={items}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={(next) => setLightboxIndex(next)}
         />
       )}
     </>
@@ -479,11 +533,12 @@ interface DetailDrawerProps {
   onUseAsInput: (image: ImageDTO) => void
   onReviewStart: (previous: ReviewStatus) => void
   onFavoriteStart: (previous: boolean) => void
+  onPreviewLightbox: () => void
 }
 
 function GalleryDetailDrawer({
   image, onClose, onUpdated, onSelectImage, onUpscale, upscaling,
-  onUseAsInput, onReviewStart, onFavoriteStart,
+  onUseAsInput, onReviewStart, onFavoriteStart, onPreviewLightbox,
 }: DetailDrawerProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
@@ -621,7 +676,7 @@ function GalleryDetailDrawer({
         </>
       }
     >
-      <div className="gal-detail__preview">
+      <div className="gal-detail__preview" onDoubleClick={onPreviewLightbox} title="双击放大查看">
         <img src={imageContentUrl(image.id)} alt="" />
         {image.kind === 'upscaled' && <span className="gal-detail__hd">HD</span>}
       </div>

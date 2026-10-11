@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi } from '../../api/client'
 import { EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
+import { ImageLightbox } from '../../components/ImageLightbox'
 import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
   STAGE_LABEL,
@@ -22,6 +23,8 @@ export function ResultPane() {
   const [images, setImages] = useState<ImageDTO[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Lightbox：null = 关闭；否则为当前图在 images 中的下标
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   const jobId = job?.id ?? null
   const parentId = job?.resume_of_job_id ?? null
@@ -61,6 +64,11 @@ export function ResultPane() {
   const runningItem = job?.items.find((item) => item.status === 'RUNNING') ?? null
   const progress = job ? overallProgress(job) : 0
   const stageLines = job ? stageProgressLines(job) : []
+
+  function openLightboxFor(image: ImageDTO): void {
+    const index = images.findIndex((item) => item.id === image.id)
+    if (index >= 0) setLightboxIndex(index)
+  }
 
   return (
     <Pane title="预览" actions={job ? <StatusBadge status={job.status} /> : undefined}>
@@ -102,7 +110,10 @@ export function ResultPane() {
             </ul>
           )}
 
-          <div className="result-stage">
+          <div
+            className="result-stage"
+            onDoubleClick={() => { if (shown) openLightboxFor(shown) }}
+          >
             {shown ? (
               <>
                 <img src={imageContentUrl(shown.id)} alt="生成结果" />
@@ -133,6 +144,7 @@ export function ResultPane() {
                     shown?.id === image.id ? ' wb-thumbs__item--active' : ''
                   }`}
                   onClick={() => setSelectedId(image.id)}
+                  onDoubleClick={() => openLightboxFor(image)}
                   title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
                   <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
@@ -152,6 +164,15 @@ export function ResultPane() {
       <p className="muted">
         图片来源于真实引擎输出，已导入 Studio 数据目录；全部完成后可在图库审核、保留或淘汰。
       </p>
+
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={(next) => setLightboxIndex(next)}
+        />
+      )}
     </Pane>
   )
 }
