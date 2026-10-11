@@ -31,6 +31,7 @@ from app.core.filetypes import (
     validate_image_upload,
 )
 from app.core.ids import IMAGE, new_id
+from app.core.timeutil import utc_now_iso
 from app.engine.base import EngineError, EngineOutputFile
 from app.models import IMAGE_STATUSES, Image, Job, JobItem, JobStage, JobStageItem
 from app.storage.manager import StorageManager
@@ -602,6 +603,38 @@ def set_favorite(session: Session, image_id: str, favorite: bool) -> Image:
     image.favorite = favorite
     session.commit()
     return image
+
+
+def set_image_status(session: Session, image_id: str, status: str,
+                     note: str | None = None) -> Image:
+    """Phase 0.11 新审核状态流转（NEW/KEEP/FAVORITE/REJECT/ARCHIVED）。
+
+    语义（合同冻结）：
+    - 置 status、review_note；除 NEW 外置 reviewed_at=now，回到 NEW 则清空；
+    - FAVORITE 同步 favorite=1，离开 FAVORITE（KEEP/REJECT/ARCHIVED/NEW）同步 favorite=0，
+      保持 status 与 favorite 语义一致（记录在代码注释）。
+    """
+    if status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    image = get_image(session, image_id)
+    image.status = status
+    image.review_note = note or ""
+    image.reviewed_at = None if status == "NEW" else utc_now_iso()
+    # FAVORITE 语义同步：进入 FAVORITE → favorite=1；离开 → favorite=0
+    image.favorite = (status == "FAVORITE")
+    session.commit()
+    return image
+
+
+def batch_set_status(session: Session, image_ids: list[str], status: str,
+                    note: str | None = None) -> list[Image]:
+    """Phase 0.11 批量审核（POST /images/batch-status）。
+
+    逐个调用 set_image_status（单图事务）；任一 id 不存在即 404 中止，不静默跳过。
+    """
+    if status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    return [set_image_status(session, image_id, status, note) for image_id in image_ids]
 
 
 def job_gallery_summary(session: Session, job_id: str) -> dict:

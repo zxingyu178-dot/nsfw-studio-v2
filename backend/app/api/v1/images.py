@@ -12,6 +12,8 @@ from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.errors import NotFoundError, ValidationError
 from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
 from app.schemas.image import (
+    ImageBatchStatusRequest,
+    ImageBatchStatusResponse,
     ImageFavoriteRequest,
     ImageImportDuplicate,
     ImageImportFailure,
@@ -22,6 +24,7 @@ from app.schemas.image import (
     ImageReferencesResponse,
     ImageResponse,
     ImageReviewRequest,
+    ImageStatusRequest,
     ImageUpscaleRequest,
     ImageVersionsResponse,
     ImageWorkbenchResponse,
@@ -151,6 +154,27 @@ def review_image(image_id: str, body: ImageReviewRequest, session: Session = Dep
 @router.patch("/{image_id}/favorite", response_model=ImageResponse, summary="收藏切换")
 def favorite_image(image_id: str, body: ImageFavoriteRequest, session: Session = Depends(get_session)) -> ImageResponse:
     return image_response(image_service.set_favorite(session, image_id, body.favorite))
+
+
+@router.patch("/{image_id}/status", response_model=ImageResponse,
+              summary="新审核状态（NEW/KEEP/FAVORITE/REJECT/ARCHIVED）")
+def status_image(image_id: str, body: ImageStatusRequest,
+                 session: Session = Depends(get_session)) -> ImageResponse:
+    """置 images.status + review_note；除 NEW 外置 reviewed_at。
+
+    FAVORITE 同步 favorite=1，离开 FAVORITE 同步 favorite=0（语义一致）。
+    """
+    return image_response(image_service.set_image_status(session, image_id, body.status, body.note))
+
+
+@router.post("/batch-status", response_model=ImageBatchStatusResponse,
+             summary="批量审核（同一状态批量应用到多张图）")
+def batch_status_images(body: ImageBatchStatusRequest,
+                       session: Session = Depends(get_session)) -> ImageBatchStatusResponse:
+    images = image_service.batch_set_status(session, body.image_ids, body.status, body.note)
+    return ImageBatchStatusResponse(
+        updated=len(images), items=[image_response(image) for image in images]
+    )
 
 
 @router.get("/{image_id}/workbench", response_model=ImageWorkbenchResponse,
