@@ -20,6 +20,7 @@ from app.api.v1.router import api_v1_router
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.core.events import EventBroker
+from app.core.static_hosting import register_static_hosting
 from app.database.base import make_engine, make_session_factory
 from app.engine.factory import create_engine_adapter
 from app.models import Job, JobItem, JobStageItem
@@ -150,9 +151,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(api_v1_router)
 
-    @application.get("/", include_in_schema=False)
-    def root() -> dict[str, str]:
-        return {"name": settings.app.name, "version": settings.app.version, "api": "/api/v1/health"}
+    # 日用模式：dist 存在时 FastAPI 直接托管 React 构建产物（/assets + SPA catch-all）；
+    # dist 缺失（开发/测试）时不启用，保留下方 JSON 根路由，Vite(5173 + proxy) 不受影响。
+    spa_enabled = register_static_hosting(application)
+    if not spa_enabled:
+
+        @application.get("/", include_in_schema=False)
+        def root() -> dict[str, str]:
+            return {"name": settings.app.name, "version": settings.app.version, "api": "/api/v1/health"}
 
     return application
 
