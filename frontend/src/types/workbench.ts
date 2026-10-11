@@ -303,10 +303,45 @@ export function imageContentUrl(imageId: string): string {
   return `/api/v1/images/${imageId}/content`
 }
 
+/** Phase 0.11：图库缩略图（512px WebP，后端按需生成）。Grid 卡片只用缩略图，Lightbox 才载原图。 */
+export function imageThumbUrl(imageId: string): string {
+  return `/api/v1/images/${imageId}/thumbnail`
+}
+
 // ===== Phase 2：Job / Queue / Image =====
 export type JobStatus =
   | 'QUEUED' | 'RUNNING' | 'PAUSED' | 'INTERRUPTED' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
 export type ReviewStatus = 'UNREVIEWED' | 'KEPT' | 'REJECTED'
+
+/**
+ * Phase 0.11 图片审核状态（新体系，单字段取代旧 review_status + favorite）。
+ * NEW=待审（默认）；KEEP=普通保留；FAVORITE=精品素材/封面/Reference；
+ * REJECT=废片（不立即删除，经「清理废片」才真删）；ARCHIVED=长期归档。
+ * 旧 review_status / favorite 字段保留在 DTO 上，不删。
+ */
+export type ImageReviewStatus = 'NEW' | 'KEEP' | 'FAVORITE' | 'REJECT' | 'ARCHIVED'
+
+/** Phase 0.11 图库排序（GET /api/v1/images?sort=） */
+export type ImageSort = 'created_desc' | 'created_asc' | 'favorite' | 'size'
+
+/** Phase 0.11 分页图库响应（替代旧 limit/offset 的平铺 ListResponse） */
+export interface ImagePage<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  has_next: boolean
+}
+
+/** Phase 0.11 废片清理：预览（confirm=false）与执行（confirm=true）两种结果 */
+export interface CleanupRejectedResult {
+  candidate_count?: number
+  total_bytes?: number
+  protected_count?: number
+  deleted_count?: number
+  deleted_bytes?: number
+  failed?: { image_id: string; error: string }[]
+}
 
 export interface JobItemDTO {
   id: string
@@ -423,6 +458,10 @@ export interface ImageDTO {
   seed: number | null
   review_status: ReviewStatus
   favorite: boolean
+  /** Phase 0.11：新审核状态（旧数据/未回填时可能缺省 → 按 normalizeImageStatus 回退） */
+  status?: ImageReviewStatus
+  reviewed_at?: string | null
+  review_note?: string
   source: string
   metadata: Record<string, unknown>
   created_at: string
@@ -540,6 +579,27 @@ export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
   UNREVIEWED: '未审核',
   KEPT: '保留',
   REJECTED: '淘汰',
+}
+
+/** Phase 0.11 新审核状态中文标签 */
+export const IMAGE_STATUS_LABEL: Record<ImageReviewStatus, string> = {
+  NEW: '待审核',
+  KEEP: '保留',
+  FAVORITE: '收藏',
+  REJECT: '淘汰',
+  ARCHIVED: '归档',
+}
+
+/**
+ * Phase 0.11：归一化图片展示状态。
+ * 优先取新 status 字段；旧数据无 status 时由 review_status / favorite 回推（平滑迁移）。
+ */
+export function normalizeImageStatus(image: ImageDTO): ImageReviewStatus {
+  if (image.status) return image.status
+  if (image.review_status === 'KEPT') return 'KEEP'
+  if (image.review_status === 'REJECTED') return 'REJECT'
+  if (image.favorite) return 'FAVORITE'
+  return 'NEW'
 }
 
 export const IMAGE_SOURCE_LABEL: Record<string, string> = {

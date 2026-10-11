@@ -141,3 +141,69 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+
+/* ===== Phase 0.11：卡片缩略图懒加载 ===== */
+.gal-card__media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--surface-2);
+}
+.gal-card__ph {
+  position: absolute;
+  inset: 0;
+  animation: gal-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gal-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+.gal-card__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gal-card__err {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  padding: var(--space-2);
+}
+
+/* ===== Phase 0.11：无限滚动哨兵 ===== */
+.gal-sentinel {
+  height: 1px;
+  width: 100%;
+}
+
+/* ===== Phase 0.11：分组卡片（内容按钮 + 审核按钮并排） ===== */
+.gal-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  padding: var(--space-3) var(--space-4);
+}
+button.gal-group__main {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.gal-group__main:hover .gal-group__title { color: var(--accent); }

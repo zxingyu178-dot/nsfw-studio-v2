@@ -18,6 +18,7 @@ import {
   STRUCTURED_FIELDS,
   emptyStructured,
   imageContentUrl,
+  imageThumbUrl,
   type PromptDTO,
   type PromptMode,
   type PromptVersionDTO,
@@ -159,7 +160,7 @@ function PromptCard({ prompt, onOpen }: PromptCardProps) {
       {prompt.preview_image_id ? (
         <img
           className="pp-card__cover"
-          src={imageContentUrl(prompt.preview_image_id)}
+          src={imageThumbUrl(prompt.preview_image_id)}
           loading="lazy"
           alt=""
         />

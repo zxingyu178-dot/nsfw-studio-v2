@@ -53,9 +53,13 @@ import type {
   HistoryResponseDTO,
   ImageDTO,
   ImageImportResponseDTO,
+  ImagePage,
   ImageProvenanceDTO,
   ImageReferencesDTO,
+  ImageReviewStatus,
+  ImageSort,
   ImageVersionsDTO,
+  CleanupRejectedResult,
   JobDTO,
   JobEventDTO,
   ListResponse,
@@ -286,9 +290,17 @@ export const historyApi = {
   },
 }
 
-// ===== Image / Gallery（Phase 2C） =====
+// ===== Image / Gallery（Phase 2C；Phase 0.11 分页 + 状态 + 缩略图） =====
 export interface ImageListParams {
   job_id?: string | null
+  /** Phase 0.11 新审核状态筛选 */
+  status?: ImageReviewStatus | null
+  /** Phase 0.11 排序 */
+  sort?: ImageSort | null
+  /** Phase 0.11 分页（page 从 1 起） */
+  page?: number
+  page_size?: number
+  // —— 旧参数（ImagePickerDrawer / ResultPane 仍在用，保持向后兼容） ——
   review_status?: ReviewStatus | null
   favorite?: boolean | null
   source?: string | null
@@ -300,7 +312,9 @@ export interface ImageListParams {
 }
 
 export const imageApi = {
-  list(params: ImageListParams = {}): Promise<ListResponse<ImageDTO>> {
+  /** Phase 0.11：分页图库（返回 {items,total,page,page_size,has_next}）。
+   *  同时兼容旧 limit/offset/review_status（选择器 / 生成结果面板）。 */
+  list(params: ImageListParams = {}): Promise<ImagePage<ImageDTO>> {
     return request(`/api/v1/images${buildQuery(params)}`)
   },
   get(id: string): Promise<ImageDTO> {
@@ -311,6 +325,23 @@ export const imageApi = {
   },
   favorite(id: string, favorite: boolean): Promise<ImageDTO> {
     return request(`/api/v1/images/${id}/favorite`, jsonInit('PATCH', { favorite }))
+  },
+  /** Phase 0.11：更新单张图片审核状态（NEW/KEEP/FAVORITE/REJECT/ARCHIVED） */
+  setStatus(id: string, body: { status: ImageReviewStatus; note?: string }): Promise<ImageDTO> {
+    return request(`/api/v1/images/${id}/status`, jsonInit('PATCH', body))
+  },
+  /** Phase 0.11：批量审核（Review Mode / 多选） */
+  batchStatus(body: {
+    image_ids: string[]
+    status: ImageReviewStatus
+    note?: string
+  }): Promise<{ updated: number; items: ImageDTO[] }> {
+    return request('/api/v1/images/batch-status', jsonInit('POST', body))
+  },
+  /** Phase 0.11：废片清理（两阶段）。confirm=false 预览候选/占用/保护数；confirm=true 真删。
+   *  可带 image_ids 清理指定图（单图删除也走这里，复用引用保护）。 */
+  cleanupRejected(body: { image_ids?: string[]; confirm: boolean }): Promise<CleanupRejectedResult> {
+    return request('/api/v1/images/cleanup-rejected', jsonInit('POST', body))
   },
   workbench(id: string): Promise<{ image_id: string; seed: number | null; snapshot: WorkbenchSnapshot }> {
     return request(`/api/v1/images/${id}/workbench`)
