@@ -5,7 +5,7 @@
 - 独立 worktree：`projects/nsfw-studio-v2-phase011`。
 - **未 merge main**；最终停在 feature 分支等待审查。
 
-## 提交链（基线 f6fad0d 之上，共 8 个提交）
+## 提交链（基线 f6fad0d 之上）
 
 | # | SHA | Subject |
 |---|---|---|
@@ -16,9 +16,11 @@
 | 4 | `2ce5952` | test(gallery): phase0.11 pagination, thumbnail, review-mode/keyboard and detail tests |
 | 5 | `87c00c9` | feat(review): image status transitions and batch review |
 | 6 | `14e16c8` | feat(cleanup): rejected-image cleanup with reference protection |
-| 7/8 | `2013f0a` | test/docs: phase0.11 runtime fixes, lightbox info panel, e2e and reports |
+| 7/8 | `a312df9` | test/docs: phase0.11 runtime fixes, lightbox info panel, e2e and reports |
+| — | （最终 HEAD） | docs: finalize phase reports（仅定稿本报告与 PHASE_REPORT） |
 
-> 最终 commit SHA：**`2013f0a21b22d71a8d04f1bbfb2b41e1f7d71829`**
+> 功能/代码收口 commit：**`a312df9484e7aae8b9652364aaf046c4694481bf`**
+> 最终 HEAD 为其后的 docs 定稿提交（用 `git rev-parse HEAD` 获取）。
 
 ## 与合同 8-commit 节奏的对应（如实说明）
 合同节奏：1 pagination → 2 thumbnail → 3 lazy loading → 4 review status → 5 review mode →

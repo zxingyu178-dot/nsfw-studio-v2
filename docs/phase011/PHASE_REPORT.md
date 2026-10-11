@@ -6,7 +6,7 @@
 
 ## 1. Git
 - 独立 worktree `projects/nsfw-studio-v2-phase011`，分支 `feature/phase0.11-image-asset-management`。
-- 共 8 个提交（详见 GIT_COMMITS.md）；最终 commit **`2013f0a21b22d71a8d04f1bbfb2b41e1f7d71829`**。
+- 功能/代码收口 commit **`a312df9484e7aae8b9652364aaf046c4694481bf`**；其后一个 docs 定稿提交为最终 HEAD（详见 GIT_COMMITS.md）。
 - 已 push 到 origin（见第 9 节核验）；**未 merge main**，停 feature 分支等待审查。
 - 未对主工作树 / Daily Use worktree 做任何 stash/reset/clean/checkout。
 
