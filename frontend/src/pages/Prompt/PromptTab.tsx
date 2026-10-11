@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError, promptApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
+import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
 import {
   Badge,
   Button,
@@ -16,6 +17,7 @@ import { formatDateTime } from '../../utils/format'
 import {
   STRUCTURED_FIELDS,
   emptyStructured,
+  imageContentUrl,
   type PromptDTO,
   type PromptMode,
   type PromptVersionDTO,
@@ -83,24 +85,7 @@ export function PromptTab() {
 
       <div className="pp-grid">
         {items.map((prompt) => (
-          <article
-            key={prompt.id}
-            className="pp-card"
-            onClick={() => setDrawer({ open: true, prompt })}
-          >
-            <header className="pp-card__head">
-              <h3 className="pp-card__title">
-                {prompt.favorite && <span title="已收藏">★ </span>}
-                {prompt.name}
-                {prompt.archived && <Badge>已归档</Badge>}
-              </h3>
-              <Badge tone="accent">
-                {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
-              </Badge>
-            </header>
-            <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
-            <footer className="pp-card__foot">{formatDateTime(prompt.updated_at)}</footer>
-          </article>
+          <PromptCard key={prompt.id} prompt={prompt} onOpen={(p) => setDrawer({ open: true, prompt: p })} />
         ))}
       </div>
 
@@ -146,6 +131,67 @@ export function promptToSnapshot(prompt: PromptDTO): WorkbenchSnapshot {
   }
 }
 
+interface PromptCardProps {
+  prompt: PromptDTO
+  onOpen: (prompt: PromptDTO) => void
+}
+
+/** Prompt 卡片：封面缩略图 + 一键复制【当前版本完整 positive_prompt】（不打开抽屉）。 */
+function PromptCard({ prompt, onOpen }: PromptCardProps) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy(event: React.MouseEvent<HTMLButtonElement>): Promise<void> {
+    // 阻止冒泡：点击复制按钮绝不能打开编辑抽屉
+    event.stopPropagation()
+    event.preventDefault()
+    const text = prompt.current_version?.positive_prompt ?? ''
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // 剪贴板权限不可用时仅做 UI 反馈，不阻断卡片
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <article className="pp-card" onClick={() => onOpen(prompt)}>
+      {prompt.preview_image_id ? (
+        <img
+          className="pp-card__cover"
+          src={imageContentUrl(prompt.preview_image_id)}
+          loading="lazy"
+          alt=""
+        />
+      ) : (
+        <div className="pp-card__cover pp-card__cover--empty">无封面</div>
+      )}
+      <header className="pp-card__head">
+        <h3 className="pp-card__title">
+          {prompt.favorite && <span title="已收藏">★ </span>}
+          {prompt.name}
+          {prompt.archived && <Badge>已归档</Badge>}
+        </h3>
+        <Badge tone="accent">
+          {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
+        </Badge>
+      </header>
+      <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
+      <footer className="pp-card__foot">
+        <span className="pp-card__time">{formatDateTime(prompt.updated_at)}</span>
+        <button
+          type="button"
+          className="pp-card__copy"
+          title="复制当前版本完整 Prompt"
+          onClick={(event) => void handleCopy(event)}
+        >
+          {copied ? '已复制' : '复制'}
+        </button>
+      </footer>
+    </article>
+  )
+}
+
 interface EditorDrawerProps {
   prompt: PromptDTO | null
   onClose: () => void
@@ -168,6 +214,8 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
   const [viewingVersionId, setViewingVersionId] = useState<string | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [coverImageId, setCoverImageId] = useState<string | null>(prompt?.preview_image_id ?? null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     setName(prompt?.name ?? '')
@@ -177,6 +225,8 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
     setNegative(prompt?.current_version?.negative_prompt ?? '')
     setViewingVersionId(null)
     setMessage(null)
+    setCoverImageId(prompt?.preview_image_id ?? null)
+    setPickerOpen(false)
     if (prompt) {
       promptApi
         .listVersions(prompt.id)
@@ -205,6 +255,7 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
       if (prompt) {
         const updated = await refreshDetail(prompt.id)
         setName(updated.name)
+        setCoverImageId(updated.preview_image_id)
       }
       setMessage({ kind: 'ok', text: okText })
     } catch (error) {
@@ -240,6 +291,11 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
         '已保存（内容变化创建新版本，内容不变不产生版本）',
       )
     }
+  }
+
+  async function handlePickCover(imageId: string): Promise<void> {
+    setPickerOpen(false)
+    await run(() => promptApi.setPreviewImage(prompt!.id, imageId), '封面已设置')
   }
 
   return (
@@ -312,6 +368,41 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
       </Field>
 
       <ComposePreview mode={mode} structured={structured} fullPrompt={fullPrompt} />
+
+      {!isNew && prompt && (
+        <section className="pp-cover">
+          <h4 className="pp-cover__title">封面</h4>
+          <div className="pp-cover__body">
+            {coverImageId ? (
+              <img className="pp-cover__img" src={imageContentUrl(coverImageId)} loading="lazy" alt="" />
+            ) : (
+              <div className="pp-cover__empty">无封面</div>
+            )}
+            <div className="pp-cover__actions">
+              <Button size="sm" variant="ghost" onClick={() => setPickerOpen(true)}>
+                {coverImageId ? '更换封面' : '设置封面'}
+              </Button>
+              {coverImageId && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void run(() => promptApi.clearPreviewImage(prompt.id), '封面已移除')}
+                >
+                  移除封面
+                </Button>
+              )}
+            </div>
+          </div>
+          {pickerOpen && (
+            <ImagePickerDrawer
+              title="选择封面图片"
+              onClose={() => setPickerOpen(false)}
+              onPicked={(image) => void handlePickCover(image.id)}
+            />
+          )}
+        </section>
+      )}
 
       {message && (
         <p className={`ds-notice ds-notice--${message.kind === 'ok' ? 'success' : 'error'}`} role="status">

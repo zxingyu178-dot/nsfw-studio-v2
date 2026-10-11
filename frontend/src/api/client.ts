@@ -127,6 +127,12 @@ export const promptApi = {
   restore(id: string): Promise<PromptDTO> {
     return request(`/api/v1/prompts/${id}/restore`, jsonInit('POST', {}))
   },
+  setPreviewImage(id: string, image_id: string): Promise<PromptDTO> {
+    return request(`/api/v1/prompts/${id}/preview-image`, jsonInit('PUT', { image_id }))
+  },
+  clearPreviewImage(id: string): Promise<PromptDTO> {
+    return request(`/api/v1/prompts/${id}/preview-image`, jsonInit('DELETE', {}))
+  },
   compose(body: { mode: PromptMode; positive_prompt?: string; structured?: unknown }): Promise<ComposeResult> {
     return request('/api/v1/prompts/compose', jsonInit('POST', body))
   },

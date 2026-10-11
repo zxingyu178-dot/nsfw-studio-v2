@@ -62,6 +62,7 @@ export interface PromptDTO {
   name: string
   favorite: boolean
   archived: boolean
+  preview_image_id: string | null
   created_at: string
   updated_at: string
   current_version: PromptVersionDTO | null
