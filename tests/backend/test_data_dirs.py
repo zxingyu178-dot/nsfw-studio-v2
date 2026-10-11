@@ -6,6 +6,7 @@ EXPECTED_DIRS = [
     "images/originals",
     "images/upscaled",
     "images/processed",
+    "images/thumbnails",
     "images/temp",
     "assets/face",
     "assets/clothing",

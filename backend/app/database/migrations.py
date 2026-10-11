@@ -556,6 +556,53 @@ MIGRATIONS: tuple[Migration, ...] = (
         description="Daily Use：prompts.preview_image_id（封面预览图，属元数据，不产生版本）",
         statements=("ALTER TABLE prompts ADD COLUMN preview_image_id TEXT",),
     ),
+    Migration(
+        migration_id="0015_image_variant_system",
+        version="1.1.0",
+        description=(
+            "Phase 0.11：image_variants（同一 Image 的 original/thumbnail/未来4K 等都作为 variant；"
+            "不污染 images 表）。第一版做 thumbnail，预留 preview/upscaled/processed"
+        ),
+        statements=(
+            """
+            CREATE TABLE image_variants (
+                id            TEXT PRIMARY KEY,
+                image_id      TEXT NOT NULL REFERENCES images(id),
+                variant_type  TEXT NOT NULL
+                              CHECK (variant_type IN ('thumbnail', 'preview', 'upscaled', 'processed')),
+                path          TEXT NOT NULL,
+                width         INTEGER,
+                height        INTEGER,
+                format        TEXT,
+                created_at    TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_image_variants_image ON image_variants(image_id)",
+            # 每张 Image 至多一个 thumbnail；其它 variant_type 允许多个（部分唯一索引）
+            "CREATE UNIQUE INDEX uq_image_variants_thumbnail "
+            "ON image_variants(image_id) WHERE variant_type = 'thumbnail'",
+        ),
+    ),
+    Migration(
+        migration_id="0016_image_review_status",
+        version="1.1.0",
+        description=(
+            "Phase 0.11：images.status / reviewed_at / review_note（新审核体系 "
+            "NEW/KEEP/FAVORITE/REJECT/ARCHIVED），并从旧 review_status 回填，避免语义丢失"
+        ),
+        statements=(
+            """
+            ALTER TABLE images ADD COLUMN status TEXT NOT NULL DEFAULT 'NEW'
+            CHECK (status IN ('NEW', 'KEEP', 'FAVORITE', 'REJECT', 'ARCHIVED'))
+            """,
+            "ALTER TABLE images ADD COLUMN reviewed_at TEXT",
+            "ALTER TABLE images ADD COLUMN review_note TEXT NOT NULL DEFAULT ''",
+            "CREATE INDEX idx_images_new_status ON images(status)",
+            # 旧审核状态 → 新 status 回填（旧列保留不删，避免破坏既有代码）
+            "UPDATE images SET status = 'KEEP' WHERE review_status = 'KEPT'",
+            "UPDATE images SET status = 'REJECT' WHERE review_status = 'REJECTED'",
+        ),
+    ),
 )
 
 

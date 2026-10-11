@@ -39,6 +39,7 @@ DEFAULT_LAYOUT: tuple[str, ...] = (
     "images/originals",
     "images/upscaled",
     "images/processed",
+    "images/thumbnails",
     "images/temp",
     "assets/face",
     "assets/clothing",

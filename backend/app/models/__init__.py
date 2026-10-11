@@ -6,7 +6,8 @@ Phase 2：Job / JobItem / JobEvent、Image；
 Phase 3：JobStage / JobStageItem（多阶段管线）。详见 docs/DATA_MODEL_V1.md。
 """
 from app.models.asset import ASSET_REFERENCE_ROLES, ASSET_TYPES, Asset, AssetReferenceImage, AssetVersion
-from app.models.image import IMAGE_KINDS, REVIEW_STATUSES, Image
+from app.models.image import IMAGE_KINDS, IMAGE_STATUSES, REVIEW_STATUSES, Image
+from app.models.image_variant import VARIANT_TYPES, ImageVariant
 from app.models.job import (
     JOB_ITEM_STATUSES,
     JOB_KINDS,
@@ -30,8 +31,11 @@ __all__ = [
     "AssetReferenceImage",
     "AssetVersion",
     "IMAGE_KINDS",
+    "IMAGE_STATUSES",
     "REVIEW_STATUSES",
     "Image",
+    "ImageVariant",
+    "VARIANT_TYPES",
     "JOB_ITEM_STATUSES",
     "JOB_KINDS",
     "JOB_SOURCES",
