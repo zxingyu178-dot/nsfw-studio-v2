@@ -2,6 +2,7 @@ import { useState, type DragEvent, type ReactNode } from 'react'
 import {
   hasUpscaleModule,
   isImageCapablePrimary,
+  isImageStartModule,
   setCount,
   setPrimaryModule,
   setPrimaryModuleConfig,
@@ -42,13 +43,12 @@ import {
 } from '../../types/workbench'
 import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 import { Pane } from './Pane'
+import { AspectRatioPicker } from './AspectRatioPicker'
 
 /** 右栏（§五十一、§五十三、§五十四）：真实 Engine 状态 / 参数 / 生成按钮 / 当前任务 / 队列。 */
 export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean | null }) {
   const state = useWorkbench()
   const store = useJobStore()
-  const [widthText, setWidthText] = useState(String(state.width))
-  const [heightText, setHeightText] = useState(String(state.height))
   const [notice, setNotice] = useState<string | null>(null)
   const [dragJobId, setDragJobId] = useState<string | null>(null)
 
@@ -64,11 +64,11 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
   const primaryTitle =
     primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
+  // §21：图片条件 Primary 用能力判断 isImageStartModule（不再用 output_kind==='processed' 猜）
   const primaryCandidates = state.moduleCatalog.filter((module) =>
-    module.available &&
-    (state.mode === 'text'
-      ? !module.input_required
-      : module.input_required && module.output_kind === 'processed'),
+    state.mode === 'text'
+      ? module.available && !module.input_required
+      : isImageStartModule(module),
   )
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter(
     (param) => param.configurable,
@@ -92,14 +92,6 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
             : inputImage?.missing
               ? '输入图片已丢失，请移除后重新选择'
               : undefined
-
-  function commitSize(): void {
-    const width = clampDimension(widthText)
-    const height = clampDimension(heightText)
-    setWidthText(String(width))
-    setHeightText(String(height))
-    setSize(width, height)
-  }
 
   async function handleGenerate(queueMode: 'normal' | 'next'): Promise<void> {
     setNotice(null)
@@ -191,28 +183,11 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
         />
       ))}
 
-      {/* ===== 尺寸 ===== */}
+      {/* ===== 尺寸（画幅 + 分辨率预设） ===== */}
       {followsInputSize ? (
         <Field label="尺寸"><p className="wb-static">跟随输入图（无需设置宽高）</p></Field>
       ) : (
-        <div className="size-row">
-          <Field label="宽度 (px)">
-            <Input
-              type="number" min={64} max={4096} step={64}
-              value={widthText}
-              onChange={(event) => setWidthText(event.target.value)}
-              onBlur={commitSize}
-            />
-          </Field>
-          <Field label="高度 (px)">
-            <Input
-              type="number" min={64} max={4096} step={64}
-              value={heightText}
-              onChange={(event) => setHeightText(event.target.value)}
-              onBlur={commitSize}
-            />
-          </Field>
-        </div>
+        <AspectRatioPicker width={state.width} height={state.height} onSizeChange={setSize} />
       )}
 
       <Field label="数量">
@@ -447,12 +422,6 @@ function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, 
       <div className="wb-queue-item__actions">{actions}</div>
     </li>
   )
-}
-
-function clampDimension(text: string): number {
-  const value = Number.parseInt(text, 10)
-  if (Number.isNaN(value)) return 1024
-  return Math.min(4096, Math.max(64, value))
 }
 
 /**
