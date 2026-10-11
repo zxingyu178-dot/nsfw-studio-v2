@@ -91,6 +91,12 @@ async def lifespan(application: FastAPI):
     application.state.adapter = adapter
     application.state.worker = worker
 
+    # 受管 ComfyUI 运行时单例（生命周期独立于 Job；应用关闭时不主动停 managed，
+    # 也绝不杀 external）
+    from app.services.engine_runtime_service import EngineRuntimeService
+
+    application.state.engine_runtime = EngineRuntimeService(settings)
+
     # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
     recovered = await worker.recover_interrupted()
 
