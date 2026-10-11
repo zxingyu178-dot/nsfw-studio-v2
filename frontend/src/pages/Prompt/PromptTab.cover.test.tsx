@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { PromptTab } from './PromptTab'
-import { imageContentUrl } from '../../types/workbench'
+import { imageThumbUrl } from '../../types/workbench'
 import type { PromptDTO } from '../../types/workbench'
 
 vi.mock('../../api/client', () => ({
@@ -66,7 +66,7 @@ function renderTab() {
 }
 
 describe('Prompt 卡片封面与一键复制', () => {
-  it('有 preview_image_id 时渲染 lazy 封面 img，src 为 imageContentUrl', async () => {
+  it('有 preview_image_id 时渲染 lazy 封面 img，src 为缩略图 URL', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
     const { container } = renderTab()
@@ -75,7 +75,7 @@ describe('Prompt 卡片封面与一键复制', () => {
     const cover = container.querySelector('img.pp-card__cover') as HTMLImageElement
     expect(cover).toBeTruthy()
     expect(cover.getAttribute('loading')).toBe('lazy')
-    expect(cover.getAttribute('src')).toBe(imageContentUrl('img_cover'))
+    expect(cover.getAttribute('src')).toBe(imageThumbUrl('img_cover'))
     expect(screen.queryByText('无封面')).toBeNull()
   })
 

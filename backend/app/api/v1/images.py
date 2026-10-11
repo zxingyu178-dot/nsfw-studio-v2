@@ -28,7 +28,7 @@ from app.schemas.image import (
     image_response,
 )
 from app.schemas.job import JobResponse, job_response
-from app.services import image_reference_service, image_service, job_service
+from app.services import image_reference_service, image_service, job_service, thumbnail_service
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/images", tags=["images"])
@@ -127,6 +127,20 @@ def get_image_content(image_id: str, session: Session = Depends(get_session),
         raise NotFoundError("图片文件缺失", code="IMAGE_FILE_MISSING")
     suffix = absolute.suffix.lower()
     return FileResponse(absolute, media_type=mime_for_suffix(suffix))
+
+
+@router.get("/{image_id}/thumbnail", summary="缩略图（512px WebP q80；缺失则按需生成并落 ImageVariant）")
+def get_image_thumbnail(image_id: str, session: Session = Depends(get_session),
+                       storage: StorageManager = Depends(get_storage)) -> FileResponse:
+    """图库只加载缩略图；Lightbox 才加载 original。
+
+    - 若该图已有 thumbnail variant 且文件在 → 直接返回；
+    - 缺失 → 轻量 resize 生成 WebP 并写 ImageVariant 后返回（不阻塞整库）；
+    - 历史缺图由回填脚本批量补齐，浏览不依赖回填完成。
+    """
+    image = image_service.get_image(session, image_id)
+    absolute, _variant = thumbnail_service.get_or_create_thumbnail(session, storage, image)
+    return FileResponse(absolute, media_type="image/webp")
 
 
 @router.patch("/{image_id}/review", response_model=ImageResponse, summary="审核状态（保留/淘汰/未审核）")
