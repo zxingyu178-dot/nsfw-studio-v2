@@ -224,20 +224,21 @@ export default ResultPane
 
 /**
  * 分页拉全一个或多个 Job family 的图片（Phase 0.12 任务 10.5）。
- * 旧实现硬编码 limit=200；这里按分页逐页拉到 has_next=false，契约上不再有隐形上限。
- * 后端分页返回 { items, total, page, page_size, has_next }；旧 mock / 无 has_next 时单页即止。
+ * 旧实现硬编码 limit=200；这里按 limit/offset 逐页拉满到 total，契约上不再有隐形上限。
+ * 共享 ListResponse 冻结形状为 { items, total, limit, offset }（无 has_next），
+ * 故用“整页未读完或累计 < total”判定是否继续翻页。
  */
 async function fetchAllJobImages(jobIds: string[]): Promise<ImageDTO[]> {
   const PAGE_SIZE = 100
   const merged: ImageDTO[] = []
   for (const jobId of jobIds) {
-    let page = 1
+    let offset = 0
     // 安全阀：Job 图片即便异常膨胀也不会无限翻页（正常单 Job 产物远小于此）
     for (let guard = 0; guard < 50; guard++) {
-      const res = await imageApi.list({ job_id: jobId, page, page_size: PAGE_SIZE })
+      const res = await imageApi.list({ job_id: jobId, limit: PAGE_SIZE, offset })
       merged.push(...res.items)
-      if (!res.has_next || res.items.length === 0) break
-      page += 1
+      if (res.items.length < PAGE_SIZE || offset + res.items.length >= res.total) break
+      offset += res.items.length
     }
   }
   return merged

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiRequestError, assetApi } from '../../api/client'
-import { Drawer, Input } from '../../components/ui'
+import { Button, Drawer, Input } from '../../components/ui'
 import { ASSET_TYPE_LABEL, assetPreviewUrl, type AssetDTO, type AssetType } from '../../types/workbench'
 
 interface AssetPickerDrawerProps {
@@ -9,36 +9,79 @@ interface AssetPickerDrawerProps {
   onPicked: (promptText: string, ref: { asset_id: string; asset_version_id: string; name: string }) => void
 }
 
-/** 工作台内的素材选择 Drawer（规范 §四十五）：按 slot 类型列出素材。 */
+const PAGE_SIZE = 60
+
+/**
+ * 工作台内的素材选择 Drawer（规范 §四十五；Phase 0.12 任务 10.5）。
+ * 修复隐形上限：旧实现 `limit: 60` 无翻页，第 61 个以后素材选不到。
+ * 现在按分页逐页追加（offset 递增），搜索/slot 切换用 stale guard（reqId）丢弃过期响应，
+ * 保证快速连续搜索时不会把旧页结果拼进新结果。
+ */
 export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawerProps) {
   const [items, setItems] = useState<AssetDTO[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasNext, setHasNext] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const offsetRef = useRef(0)
+  const reqIdRef = useRef(0)
 
-  const load = useCallback(
+  const reload = useCallback(
     (searchText: string) => {
+      const reqId = ++reqIdRef.current
+      offsetRef.current = 0
       setLoading(true)
       setError(null)
       assetApi
-        .list({ type: slot, search: searchText || undefined, limit: 60 })
-        .then((page) => setItems(page.items))
+        .list({ type: slot, search: searchText || undefined, limit: PAGE_SIZE, offset: 0 })
+        .then((page) => {
+          if (reqId !== reqIdRef.current) return
+          setItems(page.items)
+          offsetRef.current = page.items.length
+          setHasNext(page.items.length >= PAGE_SIZE)
+        })
         .catch((err: unknown) => {
+          if (reqId !== reqIdRef.current) return
           setError(err instanceof ApiRequestError ? err.message : '加载素材失败')
         })
-        .finally(() => setLoading(false))
+        .finally(() => {
+          if (reqId === reqIdRef.current) setLoading(false)
+        })
     },
     [slot],
   )
 
   useEffect(() => {
-    load('')
-  }, [load])
+    reload('')
+  }, [reload])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => load(search.trim()), 300)
+    const timer = window.setTimeout(() => reload(search.trim()), 300)
     return () => window.clearTimeout(timer)
-  }, [search, load])
+  }, [search, reload])
+
+  function loadMore(): void {
+    const reqId = reqIdRef.current
+    setLoadingMore(true)
+    assetApi
+      .list({ type: slot, search: search.trim() || undefined, limit: PAGE_SIZE, offset: offsetRef.current })
+      .then((page) => {
+        if (reqId !== reqIdRef.current) return
+        setItems((prev) => {
+          const seen = new Set(prev.map((asset) => asset.id))
+          return [...prev, ...page.items.filter((asset) => !seen.has(asset.id))]
+        })
+        offsetRef.current += page.items.length
+        setHasNext(page.items.length >= PAGE_SIZE)
+      })
+      .catch(() => {
+        // 加载下一页失败不阻断当前列表，用户可重试
+      })
+      .finally(() => {
+        if (reqId === reqIdRef.current) setLoadingMore(false)
+      })
+  }
 
   return (
     <Drawer open onClose={onClose} title={`选择${ASSET_TYPE_LABEL[slot]}素材`}>
@@ -82,6 +125,14 @@ export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawer
           </button>
         ))}
       </div>
+
+      {!loading && hasNext && (
+        <div className="wb-asset-more">
+          <Button size="sm" variant="ghost" disabled={loadingMore} onClick={loadMore}>
+            {loadingMore ? '加载中…' : `加载更多（已选 ${items.length}）`}
+          </Button>
+        </div>
+      )}
     </Drawer>
   )
 }
