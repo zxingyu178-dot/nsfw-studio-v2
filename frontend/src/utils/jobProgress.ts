@@ -41,3 +41,14 @@ export function overallProgress(job: JobDTO): number {
   if (runningItem?.progress != null) return Math.round(runningItem.progress * 100)
   return job.requested_count > 0 ? Math.round((job.completed_count / job.requested_count) * 100) : 0
 }
+
+/** v0.13.2：失败原因的可读中文文案。
+ *  ENGINE_STALLED（引擎 stall_timeout 内 progress 一直 0，已自动判失败并释放队列头）翻成人话，
+ *  不再把机器码直接甩给用户；其余错误保留"类型：详情"。 */
+export function jobErrorText(errorType: string | null, errorMessage: string | null): string | null {
+  if (!errorType && !errorMessage) return null
+  if (errorType === 'ENGINE_STALLED') {
+    return '引擎长时间无进度，已自动停止并释放队列头，可重试该任务。'
+  }
+  return `${errorType ?? '失败'}：${errorMessage ?? ''}`
+}

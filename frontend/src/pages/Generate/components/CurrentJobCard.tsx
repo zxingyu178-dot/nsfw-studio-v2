@@ -6,7 +6,7 @@ import {
   shortJobId,
   type JobDTO,
 } from '../../../types/workbench'
-import { overallProgress, stageProgressLines } from '../../../utils/jobProgress'
+import { overallProgress, stageProgressLines, jobErrorText } from '../../../utils/jobProgress'
 
 /**
  * 当前任务卡片（规范 §五十三）：状态徽标 / Prompt 摘要 / 进度 / 分阶段 / 模块 / 耗时 / 操作。
@@ -61,7 +61,7 @@ export function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
       )}
       {job.resume_of_job_id && <p className="muted">续跑自 {shortJobId(job.resume_of_job_id)}</p>}
       {job.error_message && (
-        <p className="ds-notice ds-notice--error">{job.error_type}：{job.error_message}</p>
+        <p className="ds-notice ds-notice--error" data-testid="job-error-text">{jobErrorText(job.error_type, job.error_message)}</p>
       )}
 
       <div className="wb-job__actions">
