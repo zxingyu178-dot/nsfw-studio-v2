@@ -109,6 +109,16 @@ async def lifespan(application: FastAPI):
     except Exception:
         logger.warning("引擎输入缓存清理失败（忽略）", exc_info=True)
 
+    # Phase 0.11.1：清理陈旧的 delete_staging 残留隔离区（失败只 warning，不阻断启动）
+    try:
+        from app.services.cleanup_service import cleanup_stale_staging
+
+        stale_removed = cleanup_stale_staging(storage)
+        if stale_removed:
+            logger.info("清理 stale delete staging: %s 个残留目录", stale_removed)
+    except Exception:
+        logger.warning("清理 stale delete staging 失败（忽略）", exc_info=True)
+
     worker.start()
 
     logging.getLogger(__name__).info(
