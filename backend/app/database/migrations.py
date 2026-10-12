@@ -626,6 +626,69 @@ MIGRATIONS: tuple[Migration, ...] = (
             "UPDATE images SET reviewed_at = NULL WHERE status = 'NEW'",
         ),
     ),
+    Migration(
+        migration_id="0018_mobile_review_bridge",
+        version="0.13.0",
+        description=(
+            "Phase 0.13：Mobile Review Bridge——移动审核设备/配对码/冻结审核会话/会话条目。"
+            "device 只存 token SHA-256（绝不存 Bearer 明文）；配对码 6 位数字、一次性、"
+            "10 分钟过期、成功即失效且只存 hash；会话创建时冻结符合 filter 的 image_id 顺序。"
+        ),
+        statements=(
+            """
+            CREATE TABLE mobile_review_devices (
+                id             TEXT PRIMARY KEY,
+                installation_id TEXT    NOT NULL,
+                name           TEXT    NOT NULL DEFAULT '',
+                token_hash     TEXT    NOT NULL,
+                paired_at      TEXT    NOT NULL,
+                last_seen_at   TEXT,
+                revoked        INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
+                UNIQUE (installation_id)
+            )
+            """,
+            "CREATE UNIQUE INDEX uq_mobile_devices_token ON mobile_review_devices(token_hash) "
+            "WHERE revoked = 0",
+            "CREATE INDEX idx_mobile_devices_install ON mobile_review_devices(installation_id)",
+            """
+            CREATE TABLE mobile_review_pairing_codes (
+                id            TEXT PRIMARY KEY,
+                code_hash     TEXT    NOT NULL,
+                expires_at    TEXT    NOT NULL,
+                used          INTEGER NOT NULL DEFAULT 0 CHECK (used IN (0, 1)),
+                created_at    TEXT    NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_mobile_pairing_used ON mobile_review_pairing_codes(used)",
+            """
+            CREATE TABLE mobile_review_sessions (
+                id            TEXT PRIMARY KEY,
+                filter_json   TEXT    NOT NULL DEFAULT '{}',
+                total_count   INTEGER NOT NULL DEFAULT 0,
+                seen_count    INTEGER NOT NULL DEFAULT 0,
+                status        TEXT    NOT NULL DEFAULT 'ACTIVE'
+                              CHECK (status IN ('ACTIVE', 'COMPLETED')),
+                current_index INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT    NOT NULL,
+                updated_at    TEXT    NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_mobile_sessions_status ON mobile_review_sessions(status)",
+            """
+            CREATE TABLE mobile_review_session_items (
+                id            TEXT PRIMARY KEY,
+                session_id    TEXT    NOT NULL REFERENCES mobile_review_sessions(id),
+                item_index    INTEGER NOT NULL,
+                image_id      TEXT    NOT NULL REFERENCES images(id),
+                seen          INTEGER NOT NULL DEFAULT 0 CHECK (seen IN (0, 1)),
+                UNIQUE (session_id, item_index),
+                UNIQUE (session_id, image_id)
+            )
+            """,
+            "CREATE INDEX idx_mobile_session_items_session ON mobile_review_session_items(session_id)",
+            "CREATE INDEX idx_mobile_session_items_image ON mobile_review_session_items(image_id)",
+        ),
+    ),
 )
 
 

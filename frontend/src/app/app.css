@@ -37,6 +37,12 @@ body {
   overflow-y: auto;
 }
 
+/* Phase 0.13：Generate 工作台根级禁止撑长——main 不滚动，整页不出现纵向滚动条；
+   三栏（或窄屏单栏 tab）在各自 body 内部滚动。 */
+.app-shell__main--workspace {
+  overflow: hidden;
+}
+
 /* ===== 顶部导航 ===== */
 .topnav {
   position: sticky;
@@ -149,4 +155,14 @@ body {
 .muted {
   color: var(--fg-muted);
   font-size: 13px;
+}
+
+/* ===== Phase 0.13：低高度窗口压缩（禁止靠整页滚动腾空间） =====
+   视口高度 ≤700px 时压缩 TopNav 与工作台各档间距，把空间让给三栏内容本身。 */
+@media (max-height: 700px) {
+  .topnav {
+    height: 48px;
+    padding: 0 16px;
+    gap: 16px;
+  }
 }

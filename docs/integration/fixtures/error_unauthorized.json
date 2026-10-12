@@ -1,0 +1,10 @@
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "缺少或无效的 Bearer token",
+    "details": null
+  },
+  "request_id": "00000000-0000-0000-0000-000000000009"
+}

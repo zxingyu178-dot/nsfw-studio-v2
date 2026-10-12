@@ -4,6 +4,7 @@ import { useTheme } from '../../themes/ThemeProvider'
 import { ApiRequestError, engineRuntimeApi, imageApi, systemApi } from '../../api/client'
 import { Button, RadioGroup } from '../../components/ui'
 import type { EngineRuntimeState, SystemStatus, ThumbnailBackfillStatusDTO } from '../../types/workbench'
+import MobileReviewSection from './MobileReviewSection'
 import './settings.css'
 
 /** 磁盘剩余空间阈值：Warning / Severe（用于存储面板提示）。 */
@@ -164,6 +165,9 @@ export default function SettingsPage() {
         )}
         {actionError && <p className="ds-notice ds-notice--error">{actionError}</p>}
       </section>
+
+      {/* Phase 0.13：局域网手机审核桥（独立 8767） */}
+      <MobileReviewSection />
 
       <section className="st-panel">
         <h2 className="st-panel__title">图片缓存</h2>

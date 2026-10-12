@@ -2,6 +2,47 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.13.0] — 2026-10-12
+
+> Phase 0.13 — Generate 一屏工作台收口 + 局域网 Mobile Review Bridge。
+> 不新增模型 / 节点 / AI 能力；无数据库迁移（沿用 0017，启动自动应用 0018 仅
+> 元数据补全）。
+
+### Added
+
+- **Generate 真正一屏工作台**：根节点锁定高度（`100dvh` / 内部各自滚动），
+  任何宽度下整页不再出现外层文档滚动；紧凑三栏在 ≥1024 完整保留（左栏素材
+  Chip + 中栏舞台 + 右栏四组折叠），<1024 自动降级为 Workspace Tabs 模式，
+  极低高度（≤600px）下进一步压缩顶栏与 modebar；[生成] 按钮在所有断点都常驻
+  sticky action footer 内，永不被裁切到视口外。
+- **Mobile Review Bridge（独立 8767 端口）**：新增审核专用 FastAPI 服务，与主
+  站 8010 完全解耦；局域网手机（MediaReview Android 客户端）扫码 / 配对码配对
+  后获得短期 Token，针对 Desktop 冻结出的 review session 做只读图审。配对采用
+  6 位数字配对码 + 倒计时窗口，配对成功后撤销 / 设备管理在 Settings“手机审核”
+  区集中操作。
+- **冻结式 Review Session**：Desktop ReviewMode 迁移到 `/review/*` 会话语义——
+  一次会话绑定 `job_id` + 图片快照（可选），服务端下发全局统计 / 剩余待审 /
+  已审计数，决策走 `POST /review/{session_id}/decision`（A 保留 / D 淘汰 / F 收藏），
+  会话并发冲突返回 409，Ctrl+Z 撤销、结束态汇总与跨端一致；手机端与桌面端共享
+  同一套 review service，不再各自维护本地队列。
+- **Settings“手机审核”区**：Bridge 运行状态 / 端口（默认 8767）/ 局域网访问
+  提示 / 已配对设备列表 / 生成配对码（含倒计时）/ 撤销配对 / 启停开关。
+- **MediaReview 对接文档五份**（`docs/integration/`）：
+  - `MEDIAREVIEW_COMPATIBILITY_AUDIT.md` — ba19d01 客户端与本桥的兼容性审计；
+  - `MEDIAREVIEW_NSFW_CONTRACT_V1.md` — 桥对外 REST 契约 v1；
+  - `MEDIAREVIEW_STATE_MAPPING.md` — NSFW 审核语义 ↔ MediaReview 状态映射；
+  - `MEDIAREVIEW_ANDROID_IMPLEMENTATION_GUIDE.md` — Android 端接入指南；
+  - `MEDIAREVIEW_TEST_MATRIX.md` — 端到端测试矩阵；
+  另附 `openapi-mobile-review.json` 作为机器可读契约。
+
+### Changed
+
+- **Gallery 联合刷新（T18）**：focus / visible 事件触发静默重拉首页 + stats，
+  避免从 ReviewMode / Lightbox 返回后看到旧计数。
+- **安全硬化**：移动端 8767 与桌面 8010 的 `/docs` `/redoc` `/openapi.json`
+  统一 404（不在局域网暴露文档面）；未知路由错误信封强制 `error.code=NOT_FOUND`，
+  便于前端桥接层做稳定分支。
+
 ## [0.12.0] — 2026-10-12
 
 > Phase 0.12 — Product UX & Existing Capability Closure：产品体验收口、UI 体系修复、

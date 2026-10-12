@@ -25,10 +25,10 @@ describe('GeneratePage 工作台骨架', () => {
     // 模式栏（UI-1 前为 tablist 结构）
     expect(screen.getByText('文生图')).toBeInTheDocument()
     expect(screen.getByText('图片生成')).toBeInTheDocument()
-    // 三栏标题
-    expect(screen.getByText('Prompt 编辑')).toBeInTheDocument()
-    expect(screen.getByText('预览')).toBeInTheDocument()
-    expect(screen.getByText('生成配置')).toBeInTheDocument()
+    // 三栏标题（h2.wb-pane__title；窄屏 tab 也有“预览”，故按 heading 精确取 pane 标题）
+    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '预览' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '生成配置' })).toBeInTheDocument()
   })
 
   it('提交按钮存在（主操作）', () => {

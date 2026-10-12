@@ -5,6 +5,7 @@ import type {
   ImageJobGroupDTO,
   ImageReviewStatus,
   ImageSort,
+  ImageStatsResponse,
 } from '../../../types/workbench'
 
 /**
@@ -46,8 +47,12 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
   const [groupsPage, setGroupsPage] = useState(1)
   const [groupsHasNext, setGroupsHasNext] = useState(false)
 
+  // T18 联合刷新：静默重拉后的全局统计（与 list 同过滤口径）
+  const [serverStats, setServerStats] = useState<ImageStatsResponse | null>(null)
+
   const requestSeq = useRef(0)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const lastVisibleRefresh = useRef(0)
 
   // Phase 0.11.1：收藏是独立 boolean。「收藏」Tab 用 favorite=true；其余按 status。
   function listQuery(page: number = 1): GalleryListQuery {
@@ -82,6 +87,42 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
   useEffect(() => {
     loadFirst()
   }, [loadFirst])
+
+  // T18 联合刷新：不做 SSE / 高频轮询；仅 window focus / visibilitychange→visible 时
+  // 静默重拉首页（page 1）+ stats。Gallery tab re-enter = 路由重挂载，已由上面的 loadFirst 覆盖。
+  // 2s 防抖：focus 与 visibilitychange 在同一次切回时会双触发。
+  const refreshOnVisible = useCallback(() => {
+    const now = Date.now()
+    if (now - lastVisibleRefresh.current < 2000) return
+    lastVisibleRefresh.current = now
+    const seq = ++requestSeq.current
+    imageApi
+      .list(listQuery())
+      .then((page) => {
+        if (seq !== requestSeq.current) return
+        setItems(page.items)
+        setTotal(page.total)
+        setHasNext(page.has_next)
+      })
+      .catch(() => {})
+    imageApi
+      .stats(buildStatsParams())
+      .then((s) => setServerStats(s))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, subStatus, sort, jobFilter])
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshOnVisible()
+    }
+    window.addEventListener('focus', refreshOnVisible)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', refreshOnVisible)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [refreshOnVisible])
 
   // 追加下一页（无限滚动）。带请求序号：切 tab/sort/job 后旧 loadNext 响应不得 append；
   // append 前按 image.id 去重。
@@ -168,6 +209,8 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
     loadFirst, loadNext,
     sentinelRef, listQuery, buildStatsParams,
     applyItemUpdated, removeItem,
+    // T18
+    serverStats,
     // 分组
     groups, groupsLoading, groupsPage, groupsHasNext,
     loadGroups, resetGroups,
