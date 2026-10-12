@@ -210,6 +210,20 @@ export async function resumeQueue(): Promise<void> {
   }
 }
 
+/** v0.13.2：清理陈旧任务（跨重启遗留的 QUEUED/RUNNING/PAUSED/INTERRUPTED → CANCELLED，不删图）。
+ *  返回实际清理数量；失败时写入 lastError 并返回 0。 */
+export async function clearStaleJobs(): Promise<number> {
+  setState({ lastError: null })
+  try {
+    const res = await jobApi.clearStale()
+    await refreshJobs()
+    return res.cancelled
+  } catch (error) {
+    setState({ lastError: error instanceof ApiRequestError ? error.message : '清理陈旧任务失败' })
+    return 0
+  }
+}
+
 // ===== App 生命周期（SSE + 兜底轮询） =====
 
 let started = false
