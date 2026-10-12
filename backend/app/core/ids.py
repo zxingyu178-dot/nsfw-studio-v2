@@ -26,6 +26,10 @@ JOB_STAGE = "stg"
 JOB_STAGE_ITEM = "sti"
 ASSET_REFERENCE_IMAGE = "arimg"
 IMAGE_VARIANT = "imgv"
+MOBILE_DEVICE = "mdev"
+MOBILE_PAIRING_CODE = "mpc"
+MOBILE_REVIEW_SESSION = "mrs"
+MOBILE_REVIEW_SESSION_ITEM = "mrsi"
 
 
 def new_id(prefix: str) -> str:

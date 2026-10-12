@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "device_id": "mdev_abc123",
+    "installation_id": "accept-phone-1",
+    "name": "accept-client",
+    "token": "d8a7f2c4e6b01359a2f4c6d8e013579b2468ace013579bdf2468ace013579bdf2",
+    "paired_at": "2026-10-12T10:00:00.000Z"
+  },
+  "error": null,
+  "request_id": "00000000-0000-0000-0000-000000000003"
+}

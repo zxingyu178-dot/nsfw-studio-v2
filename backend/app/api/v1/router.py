@@ -1,7 +1,19 @@
 """v1 路由聚合。"""
 from fastapi import APIRouter
 
-from app.api.v1 import assets, engine_runtime, health, images, jobs, modules, prompts, recipes, system
+from app.api.v1 import (
+    assets,
+    engine_runtime,
+    health,
+    images,
+    jobs,
+    mobile_review_admin,
+    modules,
+    prompts,
+    recipes,
+    review,
+    system,
+)
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(health.router)
@@ -13,3 +25,5 @@ api_v1_router.include_router(images.router)
 api_v1_router.include_router(modules.router)
 api_v1_router.include_router(engine_runtime.router)
 api_v1_router.include_router(system.router)
+api_v1_router.include_router(review.router)
+api_v1_router.include_router(mobile_review_admin.router)

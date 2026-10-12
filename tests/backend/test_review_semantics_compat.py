@@ -171,10 +171,10 @@ def test_migration_0017_normalizes_favorite_and_status(settings, monkeypatch):
     insert("img_archived", "ARCHIVED", 0, "KEPT", now)
     insert("img_new", "NEW", 0, "UNREVIEWED", None)      # NEW 不动
 
-    # 升级：应用 0017
+    # 升级：应用 0017（及之后的 0018 等；本用例只关心 0017 的归一语义）
     monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
     applied = init_database(engine)
-    assert applied[-1].migration_id == "0017_image_review_semantics"
+    assert "0017_image_review_semantics" in [m.migration_id for m in applied]
 
     with engine.connect() as conn:
         rows = conn.execute(text(

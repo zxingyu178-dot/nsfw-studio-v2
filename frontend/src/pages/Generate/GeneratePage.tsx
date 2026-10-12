@@ -16,9 +16,19 @@ import {
 import type { WorkbenchNavigationState } from './workbenchNavigation'
 import './generate.css'
 
+type WorkspaceTab = 'prompt' | 'preview' | 'settings'
+
+const TAB_LABELS: Array<{ key: WorkspaceTab; label: string }> = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'preview', label: '预览' },
+  { key: 'settings', label: '配置' },
+]
+
 export default function GeneratePage() {
   const location = useLocation()
   const state = useWorkbench()
+  // 窄屏（<1024）Workspace Tabs：一次只显示一个 pane；宽屏三栏时该状态不影响布局。
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('prompt')
   /**
    * 图片生成 Gate（Phase 5 §二十；Phase 5.1 Task7）：
    * 目录中存在 **available=true** 且 input_required=true / output_kind=processed 的模块才算可用。
@@ -49,7 +59,7 @@ export default function GeneratePage() {
   }, [])
 
   return (
-    <div className="generate" aria-label="生成工作台">
+    <div className={`generate generate--tab-${activeTab}`} aria-label="生成工作台">
       <div className="generate__modebar">
         <SegmentedControl
           value={state.mode}
@@ -61,7 +71,7 @@ export default function GeneratePage() {
           ariaLabel="生成模式"
         />
         {state.mode === 'image' && (
-          <span className="muted">
+          <span className="muted generate__modebar-hint">
             {imageGenAvailable === null
               ? '正在检查图片生成工作流…'
               : imageGenAvailable
@@ -70,10 +80,30 @@ export default function GeneratePage() {
           </span>
         )}
       </div>
+      {/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏 */}
+      <div className="generate__tabs" role="tablist" aria-label="工作台面板">
+        {TAB_LABELS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.key}
+            onClick={() => setActiveTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <div className="generate__columns">
-        <PromptEditorPane />
-        <ResultPane />
-        <SettingsPane imageGenAvailable={imageGenAvailable} />
+        <div className="generate__pane generate__pane--prompt">
+          <PromptEditorPane />
+        </div>
+        <div className="generate__pane generate__pane--preview">
+          <ResultPane />
+        </div>
+        <div className="generate__pane generate__pane--settings">
+          <SettingsPane imageGenAvailable={imageGenAvailable} />
+        </div>
       </div>
     </div>
   )

@@ -12,15 +12,46 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
-  position: sticky;
-  /* Phase 0.12：sticky 起点下移一个 topnav 高度，禁止盖一级导航。 */
-  top: var(--topnav-height);
-  /* 页内 sticky 永远低于 TopNav（--z-nav:100 > --z-page-sticky:50）。 */
-  z-index: var(--z-page-sticky);
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(10px);
+  /* Phase 0.13：modebar 不再 sticky——工作台根级已禁止整页滚动，
+     modebar 作为 flex 子项 static 钉在顶部，高度压到 ~38px。 */
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-4);
+  min-height: 38px;
   border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.generate__modebar-hint {
+  /* 紧凑 / 低高度窗口下隐藏右侧长解释，只留“文生图 | 图片生成”。 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phase 0.13：窄屏（<1024）Workspace Tabs——一次只显示一个 pane。
+   宽屏默认隐藏，由 <1024 媒体查询打开。 */
+.generate__tabs {
+  display: none;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.generate__tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: var(--text-base);
+}
+.generate__tabs button[aria-selected='true'] {
+  background: var(--surface-1);
+  color: var(--fg);
+  font-weight: var(--weight-semibold);
 }
 
 .generate__columns {
@@ -29,7 +60,18 @@
   display: grid;
   grid-template-columns: 5fr 4fr 3fr;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* 每个 pane 外层包裹：宽屏为 grid 项，窄屏为 tab 切换项 */
+.generate__pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.generate__pane > .wb-pane {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ===== Pane 卡片 ===== */
@@ -398,41 +440,54 @@
   white-space: nowrap;
 }
 
-/* ===== 响应式：三档断点（Phase 0.12） =====
+/* ===== 响应式：三档断点（Phase 0.13：任何宽度都不回退整页文档滚动） =====
    ≥1320        完整三栏（5fr 4fr 3fr）
-   1180~1319    压缩三栏：中心预览最低宽度优先，左右两栏先压
-   <1180        单栏堆叠，整页自然滚动（不做手机端优化）
+   1024~1319    紧凑三栏（不堆叠，中间预览优先保宽，gap/padding/header 紧凑）
+   <1024        Workspace Tabs（一次一个 pane，height:100% overflow:hidden，body 内滚）
 */
 
-/* 1180~1319：压缩三栏，中间预览保留最小宽度 */
+/* 1024~1319：紧凑三栏，中间预览保留最小宽度，左右两栏先压 */
 @media (max-width: 1319px) {
   .generate__columns {
-    grid-template-columns: minmax(0, 3fr) minmax(360px, 5fr) minmax(0, 2.5fr);
+    grid-template-columns: minmax(270px, 0.9fr) minmax(320px, 1.2fr) minmax(250px, 0.85fr);
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  /* 紧凑 pane 头 / 内容 / 底栏 */
+  .wb-pane__header { padding: var(--space-1) var(--space-2); }
+  .wb-pane__body { padding: var(--space-2); gap: var(--space-2); }
+  .wb-pane__footer { padding: var(--space-2); }
+  /* 紧凑窗口隐藏右侧长解释 */
+  .generate__modebar-hint { display: none; }
+}
+
+/* <1024：Workspace Tabs——不纵向展开，固定高度单栏 + 顶部 tab 切换 */
+@media (max-width: 1023px) {
+  .generate__tabs { display: flex; }
+  .generate__columns {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: var(--space-2);
+  }
+  .generate__pane { display: none; flex: 1 1 0; min-height: 0; }
+  .generate--tab-prompt .generate__pane--prompt,
+  .generate--tab-preview .generate__pane--preview,
+  .generate--tab-settings .generate__pane--settings {
+    display: flex;
   }
 }
 
-/* <1180：单栏堆叠，解除高度锁，三栏内容自然展开 */
-@media (max-width: 1179px) {
-  .generate {
-    height: auto;
-    min-height: 100%;
-  }
-  .generate__modebar {
-    position: static;
-  }
-  .generate__columns {
-    grid-template-columns: 1fr;
-    overflow: visible;
-  }
-  .wb-pane {
-    overflow: visible;
-  }
-  .wb-pane__body {
-    overflow: visible;
-  }
-  .prompt-preview__pre {
-    max-height: none;
-  }
+/* Phase 0.13：低高度窗口压缩（与 app.css 的 topnav 压缩配合），禁止靠整页滚动腾空间 */
+@media (max-height: 700px) {
+  .generate__modebar { min-height: 34px; padding: 2px var(--space-3); }
+  .generate__modebar-hint { display: none; }
+  .generate__columns { padding: var(--space-1) var(--space-2); gap: var(--space-2); }
+  .wb-pane__header { padding: var(--space-1) var(--space-2); }
+  .wb-pane__body { padding: var(--space-2); gap: var(--space-2); }
+  .wb-pane__footer { padding: var(--space-1) var(--space-2); }
+  .result-stage { min-height: 220px; }
+  .result-stage img { max-height: 50vh; }
 }
 
 .wb-asset-more { display: flex; justify-content: center; margin-top: var(--space-3); }

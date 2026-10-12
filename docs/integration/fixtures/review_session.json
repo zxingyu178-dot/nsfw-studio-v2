@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "data": {
+    "id": "mrs_0001",
+    "status": "ACTIVE",
+    "total_count": 3,
+    "seen_count": 0,
+    "current_index": 0,
+    "created_at": "2026-10-12T10:01:00.000Z",
+    "updated_at": "2026-10-12T10:01:00.000Z",
+    "filter": { "status": "NEW", "sort": "created_desc" }
+  },
+  "error": null,
+  "request_id": "00000000-0000-0000-0000-000000000004"
+}

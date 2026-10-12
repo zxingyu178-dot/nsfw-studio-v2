@@ -20,9 +20,12 @@
 }
 
 /* 全屏应用页（生成工作台）：填满 main 高度，内部三栏各自滚动，
-   使 [生成] 动作钉在视口内、整页不随右栏内容变长。 */
+   使 [生成] 动作钉在视口内、整页不随右栏内容变长。
+   Phase 0.13：从根上 height:100% + overflow:hidden，任何宽度都不回退整页文档滚动。 */
 .ds-page--fill {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding-bottom: var(--space-6);
@@ -31,20 +34,6 @@
 .ds-page--fill > * {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-/* 窄屏（与 generate.css 的堆叠断点一致）：恢复为整页文档滚动 */
-@media (max-width: 1179px) {
-  .ds-page--fill {
-    height: auto;
-    display: block;
-    padding-bottom: var(--space-10);
-  }
-
-  .ds-page--fill > * {
-    flex: initial;
-    min-height: 0;
-  }
 }
 
 @media (max-width: 720px) {

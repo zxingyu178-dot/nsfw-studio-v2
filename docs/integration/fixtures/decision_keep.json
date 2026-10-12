@@ -1,0 +1,33 @@
+{
+  "success": true,
+  "data": {
+    "session": {
+      "id": "mrs_0001",
+      "status": "ACTIVE",
+      "total_count": 3,
+      "seen_count": 1,
+      "current_index": 0,
+      "created_at": "2026-10-12T10:01:00.000Z",
+      "updated_at": "2026-10-12T10:02:00.000Z",
+      "filter": { "status": "NEW", "sort": "created_desc" }
+    },
+    "item_index": 0,
+    "image": {
+      "image_id": "img_0001",
+      "width": 1024,
+      "height": 768,
+      "created_at": "2026-10-12T09:59:00.000Z",
+      "updated_at": "2026-10-12T10:02:00.000Z",
+      "status": "KEEP",
+      "is_favorite": false,
+      "kind": "original",
+      "job_id": "job_0001",
+      "seed": 12345,
+      "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+      "preview_url": "/mobile/images/img_0001/preview",
+      "original_url": "/mobile/images/img_0001/original"
+    }
+  },
+  "error": null,
+  "request_id": "00000000-0000-0000-0000-000000000006"
+}

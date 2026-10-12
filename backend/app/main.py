@@ -33,8 +33,11 @@ from app.workflows.pipeline import PipelineExecutor
 logger = logging.getLogger(__name__)
 
 
-def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}})
+def _error_response(status_code: int, code: str, message: str, details=None) -> JSONResponse:
+    err = {"code": code, "message": message}
+    if details is not None:
+        err["details"] = details
+    return JSONResponse(status_code=status_code, content={"error": err})
 
 
 def _make_output_importer(session_factory, storage: StorageManager):
@@ -102,6 +105,11 @@ async def lifespan(application: FastAPI):
 
     application.state.engine_runtime = EngineRuntimeService(settings)
 
+    # Phase 0.13：Mobile Review Bridge 受管运行时（独立 8767；enabled=false 时只探测不自启）
+    from app.services.mobile_review_runtime_service import MobileReviewRuntimeService
+
+    application.state.mobile_review_runtime = MobileReviewRuntimeService(settings)
+
     # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
     recovered = await worker.recover_interrupted()
 
@@ -157,7 +165,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ===== 统一错误格式（Phase 1 规范 §三十六） =====
     @application.exception_handler(AppError)
     def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        return _error_response(exc.status_code, exc.code, exc.message)
+        return _error_response(exc.status_code, exc.code, exc.message,
+                              details=getattr(exc, "details", None))
 
     @application.exception_handler(RequestValidationError)
     def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
