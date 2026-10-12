@@ -25,9 +25,15 @@ class Base(DeclarativeBase):
 def make_engine(database_path: Path) -> Engine:
     """按路径创建 SQLite 引擎（父目录自动创建，连接统一应用基础 PRAGMA）。"""
     database_path.parent.mkdir(parents=True, exist_ok=True)
+    # SQLite/WAL 下连接开销低。预留足够连接：FastAPI 线程池并发请求 + QueueWorker +
+    # 单 worker 回填 + 首屏并发 rendition（缩略图/preview）请求，避免突发请求在默认
+    # 连接池（5+10）排队超时被误报为 500。写入仍由 SQLite busy_timeout 串行化。
     engine = create_engine(
         f"sqlite:///{database_path.as_posix()}",
         connect_args={"check_same_thread": False},  # FastAPI 线程池中使用
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
         future=True,
     )
 

@@ -1,137 +1,239 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiRequestError, assetApi, imageApi, jobApi } from '../../api/client'
+import { ApiRequestError, assetApi, imageApi, jobApi, promptApi } from '../../api/client'
 import { formatDateTime } from '../../utils/format'
 import { emptyWorkbenchSnapshot, snapshotFromState } from '../../stores/workbenchStore'
+import {
+  Badge,
+  Button,
+  Drawer,
+  Field,
+  Input,
+  Modal,
+  Select,
+  StatusBadge,
+  Tabs,
+} from '../../components/ui'
 import {
   ASSET_TYPES,
   IMAGE_KIND_LABEL,
   IMAGE_SOURCE_LABEL,
+  IMAGE_STATUS_LABEL,
   MODULE_LABEL,
-  REVIEW_STATUS_LABEL,
   imageContentUrl,
+  imageThumbUrl,
+  normalizeImageStatus,
   shortJobId,
   type AssetType,
+  type CleanupRejectedResult,
   type ImageDTO,
+  type ImageJobGroupDTO,
   type ImageProvenanceDTO,
+  type ImageReviewStatus,
+  type ImageSort,
   type ImageVersionsDTO,
   type JobDTO,
-  type ReviewStatus,
+  type PromptDTO,
   type WorkbenchSnapshot,
 } from '../../types/workbench'
+import { ImageLightbox } from '../../components/ImageLightbox'
+import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
+import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
+import './gallery.css'
 
 /**
- * 图库（Phase 2C 规范 §四十五-§四十九；Phase 5 导入 / 用作输入图片 / 快捷键）。
- * 顶部筛选（未审核 / 保留 / 收藏 / 淘汰）+ 图片 Grid + 右侧 Detail Drawer，
- * 支持按 Job 查看、审核 / 收藏、Image → Workbench、从图库创建素材、外部图片批量导入。
- * 快捷键（§二十四）：← / → 上一张 / 下一张，K 保留，R 淘汰，F 收藏，Ctrl+Z 撤销最近一次审核操作。
+ * 图库（§四十五-§四十九；Phase 0.11：分页 + 缩略图懒加载 + 审核体系 + Review Mode + 废片清理）。
+ * 顶部筛选（全部 / 待审核 / 收藏 / 归档）+ 排序 + 图片 Grid（无限滚动）+ 右侧 Detail Drawer。
+ * Review Mode：A 保留 / D 淘汰 / F 收藏 / Space 放大 / ←→ 切换。
  */
 
-type Filter = 'ALL' | 'UNREVIEWED' | 'KEPT' | 'FAVORITE' | 'REJECTED'
+const PAGE_SIZE = 40
+
+type TabKey = 'ALL' | 'NEW' | 'FAVORITE' | 'ARCHIVED'
 type ViewMode = 'flat' | 'group'
 
-/** 撤销记录（只支持最近一次审核 / 收藏操作的撤销，不做复杂设置页） */
-interface UndoEntry {
-  imageId: string
-  review?: ReviewStatus
-  favorite?: boolean
-  label: string
-}
-
-const FILTERS: { key: Filter; label: string }[] = [
+const TABS: { key: TabKey; label: string }[] = [
   { key: 'ALL', label: '全部' },
-  { key: 'UNREVIEWED', label: '未审核' },
-  { key: 'KEPT', label: '保留' },
+  { key: 'NEW', label: '待审核' },
   { key: 'FAVORITE', label: '收藏' },
-  { key: 'REJECTED', label: '淘汰' },
+  { key: 'ARCHIVED', label: '归档' },
 ]
 
-interface JobSummary {
-  job_id: string
-  total: number
-  unreviewed: number
-  kept: number
-  rejected: number
-  favorites: number
+const SORT_OPTIONS: { value: ImageSort; label: string }[] = [
+  { value: 'created_desc', label: '最新优先' },
+  { value: 'created_asc', label: '最早优先' },
+  { value: 'favorite', label: '收藏优先' },
+  { value: 'size', label: '尺寸优先' },
+]
+
+/** 细分子筛选：在主 Tab 之上叠加 KEEP / REJECT 过滤 */
+const SUB_STATUS_OPTIONS: { value: '' | ImageReviewStatus; label: string }[] = [
+  { value: '', label: '状态：全部' },
+  { value: 'KEEP', label: '保留' },
+  { value: 'REJECT', label: '淘汰' },
+]
+
+interface UndoEntry {
+  imageId: string
+  status?: ImageReviewStatus
+  favorite?: boolean
+  label: string
 }
 
 export default function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const jobFilter = searchParams.get('job')
-  const [filter, setFilter] = useState<Filter>('ALL')
+
+  const [tab, setTab] = useState<TabKey>('ALL')
+  const [subStatus, setSubStatus] = useState<'' | ImageReviewStatus>('')
+  const [sort, setSort] = useState<ImageSort>('created_desc')
   const [view, setView] = useState<ViewMode>('flat')
+
+  // —— 分页状态 ——
   const [items, setItems] = useState<ImageDTO[]>([])
   const [total, setTotal] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
   const [detail, setDetail] = useState<ImageDTO | null>(null)
-  const [groups, setGroups] = useState<{ job: JobDTO; summary: JobSummary }[]>([])
+  // Phase 0.11.1：按任务分组改为 job-groups 后端聚合分页（替代逐 Job summary 的 N+1）
+  const [groups, setGroups] = useState<ImageJobGroupDTO[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
-  // §二十：图库多选 → 高清放大（创建 process Job）
+  const [groupsPage, setGroupsPage] = useState(1)
+  const [groupsHasNext, setGroupsHasNext] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [upscaling, setUpscaling] = useState(false)
-  // Phase 5 §二十三：外部图片批量导入（逐张导入 → 进度 n / N；单张失败不整批失败）
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
-  // Phase 5 §二十四：审核快捷键 + 撤销最近一次审核操作
   const [notice, setNotice] = useState<{ text: string; undoable?: boolean } | null>(null)
   const [canUndo, setCanUndo] = useState(false)
   const undoStack = useRef<UndoEntry[]>([])
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const detailTimer = useRef<number | null>(null)
 
-  const load = useCallback(() => {
+  // Phase 0.11.1：Review Session（分页 loader，全历史审核）
+  const [reviewSession, setReviewSession] = useState<{
+    loader: ReviewPageLoader
+    title?: string
+    total?: number
+  } | null>(null)
+  const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
+  const [cleanupBusy, setCleanupBusy] = useState(false)
+
+  // 分页请求序号（避免快速切换时旧响应覆盖新列表）
+  const requestSeq = useRef(0)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // Phase 0.11.1：收藏是独立 boolean（FAVORITE 不再是审核状态）。
+  // 「收藏」Tab 通过 favorite=true 过滤；其余 Tab 按 status 过滤。
+  function listQuery(page: number = 1): {
+    job_id: string | null | undefined
+    sort: ImageSort
+    page: number
+    page_size: number
+    status?: ImageReviewStatus | null
+    favorite?: boolean
+  } {
+    const query: {
+      job_id: string | null | undefined
+      sort: ImageSort
+      page: number
+      page_size: number
+      status?: ImageReviewStatus | null
+      favorite?: boolean
+    } = { job_id: jobFilter, sort, page, page_size: PAGE_SIZE }
+    if (subStatus) query.status = subStatus
+    else if (tab === 'NEW') query.status = 'NEW'
+    else if (tab === 'ARCHIVED') query.status = 'ARCHIVED'
+    else if (tab === 'FAVORITE') query.favorite = true
+    return query
+  }
+
+  // 第一页 / 切筛选或排序 → 重置列表
+  const loadFirst = useCallback(() => {
+    const seq = ++requestSeq.current
     setLoading(true)
     setError(null)
     imageApi
-      .list({
-        job_id: jobFilter,
-        review_status:
-          filter === 'UNREVIEWED' || filter === 'KEPT' || filter === 'REJECTED' ? filter : null,
-        favorite: filter === 'FAVORITE' ? true : null,
-        limit: 200,
-      })
+      .list(listQuery())
       .then((page) => {
+        if (seq !== requestSeq.current) return
         setItems(page.items)
         setTotal(page.total)
+        setHasNext(page.has_next)
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
-  }, [filter, jobFilter])
+      .finally(() => {
+        if (seq === requestSeq.current) setLoading(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, subStatus, sort, jobFilter])
 
   useEffect(() => {
-    load()
-  }, [load])
+    loadFirst()
+  }, [loadFirst])
+
+  // 追加下一页（无限滚动）。带请求序号：切 tab/sort/job 后旧 loadNext 响应不得 append 到新列表；
+  // append 前按 image.id 去重。
+  const loadNext = useCallback(() => {
+    if (loadingMore || loading || !hasNext) return
+    const seq = requestSeq.current
+    setLoadingMore(true)
+    imageApi
+      .list(listQuery(Math.floor(items.length / PAGE_SIZE) + 1))
+      .then((page) => {
+        if (seq !== requestSeq.current) return
+        setItems((prev) => {
+          const known = new Set(prev.map((img) => img.id))
+          const fresh = page.items.filter((img) => !known.has(img.id))
+          return [...prev, ...fresh]
+        })
+        setHasNext(page.has_next)
+        setTotal(page.total)
+      })
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载更多失败'))
+      .finally(() => {
+        if (seq === requestSeq.current) setLoadingMore(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter])
+
+  // 哨兵进入视口 → 加载下一页
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadNext()
+      },
+      { rootMargin: '600px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [loadNext])
+
+  const loadGroups = useCallback((page: number) => {
+    setGroupsLoading(true)
+    imageApi
+      .jobGroups({ page, page_size: 20 })
+      .then((result) => {
+        setGroups((prev) => (page === 1 ? result.items : [...prev, ...result.items]))
+        setGroupsPage(page)
+        setGroupsHasNext(result.has_next)
+      })
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组'))
+      .finally(() => setGroupsLoading(false))
+  }, [])
 
   useEffect(() => {
     if (view !== 'group' || jobFilter) return
-    let cancelled = false
-    setGroupsLoading(true)
-    jobApi
-      .list({ limit: 50 })
-      .then(async (page) => {
-        const candidates = page.items.filter((job) => job.completed_count > 0).slice(0, 20)
-        const summaries = await Promise.all(
-          candidates.map((job) => imageApi.jobSummary(job.id).catch(() => null)),
-        )
-        if (cancelled) return
-        setGroups(
-          candidates.flatMap((job, index) => {
-            const summary = summaries[index]
-            return summary ? [{ job, summary }] : []
-          }),
-        )
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组')
-      })
-      .finally(() => {
-        if (!cancelled) setGroupsLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [view, jobFilter])
+    setGroups([])
+    loadGroups(1)
+  }, [view, jobFilter, loadGroups])
 
   function applyJobFilter(jobId: string | null): void {
     const next = new URLSearchParams(searchParams)
@@ -147,11 +249,43 @@ export default function GalleryPage() {
 
   function toggleSelect(imageId: string): void {
     setSelectedIds((previous) =>
-      previous.includes(imageId) ? previous.filter((id) => id !== imageId) : [...previous, imageId],
+      previous.includes(imageId) ? previous.filter((id) => imageId !== id) : [...previous, imageId],
     )
   }
 
-  /** §二十：选择图库已有图片（1 张或多张）→ 创建 upscale-only process Job（绝不直连 ComfyUI） */
+  useEffect(() => {
+    return () => {
+      if (detailTimer.current !== null) window.clearTimeout(detailTimer.current)
+    }
+  }, [])
+
+  function handleCardClick(image: ImageDTO): void {
+    if (selectMode) {
+      toggleSelect(image.id)
+      return
+    }
+    if (detailTimer.current !== null) window.clearTimeout(detailTimer.current)
+    detailTimer.current = window.setTimeout(() => {
+      detailTimer.current = null
+      setDetail(image)
+    }, 220)
+  }
+
+  function handleCardDoubleClick(image: ImageDTO): void {
+    if (detailTimer.current !== null) {
+      window.clearTimeout(detailTimer.current)
+      detailTimer.current = null
+    }
+    if (selectMode) return
+    const index = items.findIndex((item) => item.id === image.id)
+    if (index >= 0) setLightboxIndex(index)
+  }
+
+  function openLightboxAt(image: ImageDTO): void {
+    const index = items.findIndex((item) => item.id === image.id)
+    if (index >= 0) setLightboxIndex(index)
+  }
+
   async function submitUpscale(imageIds: string[]): Promise<JobDTO | null> {
     if (imageIds.length === 0) return null
     setUpscaling(true)
@@ -170,7 +304,6 @@ export default function GalleryPage() {
     }
   }
 
-  /** §二十三：外部图片批量导入（多选；逐张导入可显示进度；单张失败不整批失败） */
   async function handleImport(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
@@ -203,10 +336,8 @@ export default function GalleryPage() {
         failureMessages.length > 0 ? `（${failureMessages.slice(0, 3).join('；')}）` : ''
       }`,
     })
-    load()
+    loadFirst()
   }
-
-  // ===== §二十四：快捷键（← / → / K / R / F / Ctrl+Z） =====
 
   function recordUndo(entry: UndoEntry): void {
     undoStack.current.push(entry)
@@ -214,19 +345,13 @@ export default function GalleryPage() {
     setCanUndo(true)
   }
 
-  /** 撤销最近一次审核 / 收藏操作（页面内 Toast 按钮 或 Ctrl+Z） */
   async function undoLast(): Promise<void> {
     const entry = undoStack.current.pop()
     setCanUndo(undoStack.current.length > 0)
     if (!entry) return
     try {
-      if (entry.review !== undefined) {
-        setDetail((current) =>
-          current && current.id === entry.imageId
-            ? { ...current, review_status: entry.review as ReviewStatus }
-            : current,
-        )
-        handleUpdated(await imageApi.review(entry.imageId, entry.review))
+      if (entry.status !== undefined) {
+        handleUpdated(await imageApi.setStatus(entry.imageId, { status: entry.status }))
       }
       if (entry.favorite !== undefined) {
         handleUpdated(await imageApi.favorite(entry.imageId, entry.favorite))
@@ -237,12 +362,13 @@ export default function GalleryPage() {
     }
   }
 
-  async function quickReview(status: 'KEPT' | 'REJECTED'): Promise<void> {
+  async function quickReview(status: 'KEEP' | 'REJECT'): Promise<void> {
     if (!detail) return
-    recordUndo({ imageId: detail.id, review: detail.review_status, label: status === 'KEPT' ? '保留' : '淘汰' })
+    const prev = normalizeImageStatus(detail)
+    recordUndo({ imageId: detail.id, status: prev, label: status === 'KEEP' ? '保留' : '淘汰' })
     try {
-      handleUpdated(await imageApi.review(detail.id, status))
-      setNotice({ text: `已${status === 'KEPT' ? '保留' : '淘汰'}`, undoable: true })
+      handleUpdated(await imageApi.setStatus(detail.id, { status }))
+      setNotice({ text: `已${status === 'KEEP' ? '保留' : '淘汰'}`, undoable: true })
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : '操作失败')
     }
@@ -266,6 +392,7 @@ export default function GalleryPage() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
+      if (lightboxIndex !== null || reviewSession !== null) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         void undoLast()
@@ -279,64 +406,127 @@ export default function GalleryPage() {
         if (next >= 0 && next < items.length) setDetail(items[next])
         return
       }
-      if (event.key === 'k' || event.key === 'K') void quickReview('KEPT')
-      if (event.key === 'r' || event.key === 'R') void quickReview('REJECTED')
+      if (event.key === 'k' || event.key === 'K') void quickReview('KEEP')
+      if (event.key === 'r' || event.key === 'R') void quickReview('REJECT')
       if (event.key === 'f' || event.key === 'F') void quickFavorite()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   })
 
-  /** §二十二：图片 → 用作输入图片 → 打开生成工作台并设置 input_image（只使用 image_id） */
   function useAsInput(image: ImageDTO): void {
     const snapshot = snapshotFromState()
     snapshot.input_images = [{ role: 'source', image_id: image.id }]
-    snapshot.generation_mode = 'image' // Task7：显式图片生成模式（不靠输入图反推）
+    snapshot.generation_mode = 'image'
     setDetail(null)
     navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
 
+  /** Phase 0.11.1：以当前筛选为查询打开 Review Session（首屏一页、接近末尾预取直到 has_next=false） */
+  function startReview(): void {
+    const query = listQuery(1)
+    setReviewSession({
+      title: '图库审核',
+      total,
+      loader: {
+        loadPage: (page) =>
+          imageApi
+            .list({ ...query, page })
+            .then((p) => ({ items: p.items, has_next: p.has_next, total: p.total })),
+      },
+    })
+  }
+
+  /** Phase 0.11.1：按 Job 打开 Review Mode——取消 page_size=100 上限，分页拉全直到 has_next=false */
+  function startReviewJob(jobId: string): void {
+    setReviewSession({
+      title: `任务 ${shortJobId(jobId)}`,
+      loader: {
+        loadPage: (page) =>
+          imageApi
+            .list({ job_id: jobId, sort: 'created_asc', page, page_size: PAGE_SIZE })
+            .then((p) => ({ items: p.items, has_next: p.has_next, total: p.total })),
+      },
+    })
+  }
+
+  /** Phase 0.11：废片清理——先预览（confirm=false） */
+  async function openCleanup(): Promise<void> {
+    setCleanupBusy(true)
+    setError(null)
+    try {
+      const result = await imageApi.cleanupRejected({ confirm: false })
+      setCleanupPreview(result)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '无法预览废片清理')
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
+  async function confirmCleanup(): Promise<void> {
+    setCleanupBusy(true)
+    try {
+      const result = await imageApi.cleanupRejected({ confirm: true })
+      setNotice({
+        text: `清理完成：已删除 ${result.deleted_count ?? 0} 张，释放 ${formatBytes(result.deleted_bytes ?? 0)}；受保护未删 ${result.protected_count ?? 0} 张`,
+      })
+      setCleanupPreview(null)
+      loadFirst()
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '清理失败')
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
   return (
-    <section className="page page--wide">
-      <div className="tabs" role="tablist" aria-label="图库筛选">
-        {FILTERS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={filter === key}
-            className={`tabs__item${filter === key ? ' tabs__item--active' : ''}`}
-            onClick={() => setFilter(key)}
-          >
-            {label}
-          </button>
-        ))}
-        <span className="toolbar__spacer" />
-        <button
-          type="button"
-          className={`tabs__item${selectMode ? ' tabs__item--active' : ''}`}
-          onClick={() => {
-            setSelectMode(!selectMode)
-            setSelectedIds([])
-          }}
+    <>
+      <div className="gal-toolbar">
+        <Tabs
+          ariaLabel="图库筛选"
+          active={tab}
+          onChange={(key) => setTab(key as TabKey)}
+          items={TABS.map(({ key, label }) => ({ key, label }))}
+        />
+        <Select
+          aria-label="审核状态细分"
+          value={subStatus}
+          onChange={(event) => setSubStatus(event.target.value as '' | ImageReviewStatus)}
+          options={SUB_STATUS_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <Select
+          aria-label="排序"
+          value={sort}
+          onChange={(event) => setSort(event.target.value as ImageSort)}
+          options={SORT_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <span className="gal-toolbar__spacer" />
+        <Button size="sm" variant="primary" onClick={startReview}>
+          开始审核
+        </Button>
+        <Button size="sm" variant="danger" disabled={cleanupBusy} onClick={() => void openCleanup()}>
+          {cleanupBusy ? '准备中…' : '清理废片'}
+        </Button>
+        <Button
+          size="sm" variant={selectMode ? 'primary' : 'secondary'}
+          onClick={() => { setSelectMode(!selectMode); setSelectedIds([]) }}
         >
           {selectMode ? '退出选择' : '选择'}
-        </button>
-        <button
-          type="button"
-          className={`tabs__item${view === 'group' ? ' tabs__item--active' : ''}`}
+        </Button>
+        <Button
+          size="sm" variant={view === 'group' ? 'primary' : 'secondary'}
           onClick={() => setView(view === 'group' ? 'flat' : 'group')}
         >
           按任务查看
-        </button>
-        <button
-          type="button"
-          className="tabs__item"
+        </Button>
+        <Button
+          size="sm" variant="secondary"
           disabled={importProgress !== null}
           onClick={() => importInputRef.current?.click()}
         >
           {importProgress ? `导入中 ${importProgress.done} / ${importProgress.total}` : '导入'}
-        </button>
+        </Button>
         <input
           ref={importInputRef}
           type="file"
@@ -348,74 +538,71 @@ export default function GalleryPage() {
       </div>
 
       {selectMode && (
-        <div className="toolbar">
-          <span className="badge badge--mode">已选 {selectedIds.length} 张</span>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
+        <div className="gal-toolbar">
+          <Badge tone="accent">已选 {selectedIds.length} 张</Badge>
+          <Button
+            size="sm" variant="primary"
             disabled={upscaling || selectedIds.length === 0}
             onClick={() => void submitUpscale(selectedIds)}
           >
             {upscaling ? '提交中…' : '高清放大'}
-          </button>
+          </Button>
           <span className="muted">选择图库已有图片（可多张）→ 创建高清任务，不重复生成原图。</span>
         </div>
       )}
 
       {notice && (
-        <p className="notice notice--ok" role="status">
+        <p className="ds-notice ds-notice--success" role="status">
           {notice.text}
           {notice.undoable && canUndo && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--xs"
-              style={{ marginLeft: 8 }}
-              onClick={() => void undoLast()}
-            >
+            <Button size="xs" variant="ghost" className="gal-undo-btn" onClick={() => void undoLast()}>
               撤销 (Ctrl+Z)
-            </button>
+            </Button>
           )}
         </p>
       )}
 
       {jobFilter && (
-        <div className="toolbar">
-          <span className="badge badge--mode">任务筛选：{shortJobId(jobFilter)}</span>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => applyJobFilter(null)}>
+        <div className="gal-toolbar">
+          <Badge>任务筛选：{shortJobId(jobFilter)}</Badge>
+          <Button size="sm" variant="ghost" onClick={() => applyJobFilter(null)}>
             清除筛选
-          </button>
+          </Button>
         </div>
       )}
 
-      {error && <p className="notice notice--error">{error}</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
 
-      {/* ===== 按任务分组（§四十九） ===== */}
+      {/* ===== 按任务分组 ===== */}
       {view === 'group' && !jobFilter && (
-        <div className="job-group-list">
+        <div className="gal-group-list">
           {groupsLoading && <p className="muted">加载中…</p>}
           {!groupsLoading && groups.length === 0 && (
             <p className="muted">还没有完成过的生成任务。</p>
           )}
-          {groups.map(({ job, summary }) => (
-            <button
-              key={job.id}
-              type="button"
-              className="job-group card card--clickable"
-              onClick={() => applyJobFilter(job.id)}
-            >
-              <div className="job-group__head">
-                <span className="job-group__id">{shortJobId(job.id)}</span>
-                <span className="muted">{summary.total} 张 · {formatDateTime(job.created_at)}</span>
-              </div>
-              <p className="job-group__title">
-                {job.positive_prompt_snapshot.trim().slice(0, 42) || '（无 Prompt）'}
-              </p>
-              <p className="job-group__counts muted">
-                未审核 {summary.unreviewed} · 保留 {summary.kept} · 收藏 {summary.favorites} · 淘汰{' '}
-                {summary.rejected}
-              </p>
-            </button>
+          {groups.map((g) => (
+            <div key={g.job_id} className="gal-group">
+              <button type="button" className="gal-group__main" onClick={() => applyJobFilter(g.job_id)}>
+                <div className="gal-group__head">
+                  <span className="gal-group__id">{shortJobId(g.job_id)}</span>
+                  <span className="muted">{g.total} 张 · {formatDateTime(g.created_at)}</span>
+                </div>
+                <p className="gal-group__counts muted">
+                  未审核 {g.unreviewed} · 保留 {g.kept} · 收藏 {g.favorites} · 淘汰 {g.rejected}
+                </p>
+              </button>
+              <Button size="sm" variant="primary" onClick={() => startReviewJob(g.job_id)}>
+                开始审核
+              </Button>
+            </div>
           ))}
+          {groupsHasNext && (
+            <div className="gal-group">
+              <Button size="sm" variant="secondary" disabled={groupsLoading} onClick={() => loadGroups(groupsPage + 1)}>
+                {groupsLoading ? '加载中…' : '加载更多任务'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -424,42 +611,38 @@ export default function GalleryPage() {
         <>
           {loading && <p className="muted">加载中…</p>}
           {!loading && items.length === 0 && (
-            <div className="empty-state">
-              <h1 className="empty-state__title">还没有图片</h1>
-              <p className="empty-state__desc">
-                在生成工作台创建任务后，生成的图片会逐张进入这里。
-              </p>
+            <div className="gal-empty">
+              <h2 className="gal-empty__title">还没有图片</h2>
+              <p className="muted">在生成工作台创建任务后，生成的图片会逐张进入这里。</p>
             </div>
           )}
-          <p className="muted">共 {total} 张</p>
-          <div className="gallery-grid">
-            {items.map((image) => (
-              <button
-                key={image.id}
-                type="button"
-                className={`gallery-card${selectedIds.includes(image.id) ? ' gallery-card--selected' : ''}`}
-                onClick={() => (selectMode ? toggleSelect(image.id) : setDetail(image))}
-                title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${REVIEW_STATUS_LABEL[image.review_status]}`}
-              >
-                <img
-                  className="gallery-card__img"
-                  src={imageContentUrl(image.id)}
-                  alt=""
-                  loading="lazy"
-                />
-                <span className="gallery-card__badges">
-                  {image.kind === 'upscaled' && <span className="status-chip status-chip--hd">HD</span>}
-                  {selectedIds.includes(image.id) && <span className="status-chip status-chip--kept">✓</span>}
-                  {image.favorite && <span className="status-chip status-chip--favorite">★</span>}
-                  {image.review_status !== 'UNREVIEWED' && (
-                    <span className={`status-chip status-chip--${image.review_status.toLowerCase()}`}>
-                      {REVIEW_STATUS_LABEL[image.review_status]}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
+          <p className="gal-count">共 {total} 张</p>
+          <div className="gal-grid">
+            {items.map((image) => {
+              const status = normalizeImageStatus(image)
+              return (
+                <button
+                  key={image.id}
+                  type="button"
+                  className={`gal-card${selectedIds.includes(image.id) ? ' gal-card--selected' : ''}`}
+                  onClick={() => handleCardClick(image)}
+                  onDoubleClick={() => handleCardDoubleClick(image)}
+                  title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${IMAGE_STATUS_LABEL[status]}`}
+                >
+                  <GalleryThumb image={image} />
+                  <span className="gal-card__badges">
+                    {image.kind === 'upscaled' && <span className="gal-card__hd">HD</span>}
+                    {selectedIds.includes(image.id) && <Badge tone="accent">✓</Badge>}
+                    {image.favorite && <span className="gal-card__fav" title="收藏">★</span>}
+                    {status !== 'NEW' && <StatusBadge status={status} />}
+                  </span>
+                </button>
+              )
+            })}
           </div>
+          {/* 无限滚动哨兵 */}
+          {hasNext && <div ref={sentinelRef} className="gal-sentinel" aria-hidden="true" />}
+          {loadingMore && <p className="muted">加载更多…</p>}
         </>
       )}
 
@@ -475,35 +658,173 @@ export default function GalleryPage() {
           onUpscale={(imageId) => void submitUpscale([imageId])}
           upscaling={upscaling}
           onUseAsInput={useAsInput}
-          onReviewStart={(prev) => recordUndo({ imageId: detail.id, review: prev, label: '审核修改' })}
+          onReviewStart={(prev) => recordUndo({ imageId: detail.id, status: prev, label: '审核修改' })}
           onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}
+          onPreviewLightbox={() => openLightboxAt(detail)}
+          onDeleted={() => { setDetail(null); loadFirst() }}
         />
       )}
-    </section>
+
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={items}
+          index={lightboxIndex}
+          hasMore={hasNext}
+          onLoadMore={() => loadNext()}
+          loadingMore={loadingMore}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={(next) => setLightboxIndex(next)}
+          renderSidePanel={(img) => (
+            <LightboxInfoPanel
+              image={img}
+              onUpdated={(u) =>
+                setItems((previous) => previous.map((it) => (it.id === u.id ? u : it)))}
+              onDeleted={(deletedId) => {
+                setItems((previous) => previous.filter((it) => it.id !== deletedId))
+                setLightboxIndex(null)
+              }}
+            />
+          )}
+        />
+      )}
+
+      {reviewSession !== null && (
+        <ReviewMode
+          loader={reviewSession.loader}
+          total={reviewSession.total}
+          title={reviewSession.title}
+          onClose={() => setReviewSession(null)}
+          onChanged={handleUpdated}
+        />
+      )}
+
+      {/* 废片清理两阶段确认 */}
+      <Modal
+        open={cleanupPreview !== null}
+        onClose={() => setCleanupPreview(null)}
+        title="清理废片（REJECT）"
+        footer={
+          <>
+            <Button size="sm" variant="secondary" onClick={() => setCleanupPreview(null)}>
+              取消
+            </Button>
+            <Button
+              size="sm" variant="danger"
+              disabled={cleanupBusy || (cleanupPreview?.deletable_count ?? 0) === 0}
+              onClick={() => void confirmCleanup()}
+            >
+              {cleanupBusy ? '删除中…' : `确认删除 ${cleanupPreview?.deletable_count ?? 0} 张`}
+            </Button>
+          </>
+        }
+      >
+        <p className="muted">将永久删除可删 REJECT 图片的 original + thumbnail 及数据库记录（不可恢复）。</p>
+        <dl className="gal-fields">
+          <dt>候选（全部 REJECT）</dt>
+          <dd>{cleanupPreview?.candidate_count ?? 0} 张</dd>
+          <dt>实际可删</dt>
+          <dd>{cleanupPreview?.deletable_count ?? 0} 张</dd>
+          <dt>预计释放</dt>
+          <dd>{formatBytes(cleanupPreview?.total_bytes ?? 0)}</dd>
+          <dt>被引用保护</dt>
+          <dd>{cleanupPreview?.protected_count ?? 0} 张（被 Prompt / 素材 / 配方引用，不会删除）</dd>
+        </dl>
+        {(cleanupPreview?.protected_items?.length ?? 0) > 0 && (
+          <details>
+            <summary className="muted">查看受保护图片及原因</summary>
+            <ul className="gal-protected-list">
+              {cleanupPreview?.protected_items?.map((item) => (
+                <li key={item.image_id}>
+                  <span className="gal-protected__id">{shortJobId(item.image_id)}</span>
+                  <span className="muted">{item.reasons.join('；')}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {(cleanupPreview?.deletable_count ?? 0) >= 500 && (
+          <p className="muted" role="status">数量较多，删除可能需要数十秒，请勿关闭页面。</p>
+        )}
+      </Modal>
+    </>
   )
 }
 
-// ===== 详情抽屉（§四十六-§四十八） =====
+/** 人读字节数 */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+/** 卡片缩略图：进入 viewport+300px 才加载，带占位 / 错误重试 */
+function GalleryThumb({ image }: { image: ImageDTO }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [inView, setInView] = useState(false)
+  const [error, setError] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true)
+          obs.disconnect()
+        }
+      },
+      { rootMargin: '300px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  return (
+    <div className="gal-card__media" ref={ref}>
+      {!inView ? (
+        <div className="gal-card__ph" aria-hidden="true" />
+      ) : error ? (
+        <div className="gal-card__err" onClick={() => { setError(false); setRetryKey((k) => k + 1) }} role="button" tabIndex={0}>
+          加载失败 · 重试
+        </div>
+      ) : (
+        <img
+          key={retryKey}
+          className="gal-card__img"
+          src={imageThumbUrl(image.id)}
+          alt=""
+          onError={() => setError(true)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ===== 详情抽屉（§四十六-§四十八；Phase 0.11 信息栏 + 设封面 + 删除） =====
 
 interface DetailDrawerProps {
   image: ImageDTO
   onClose: () => void
   onUpdated: (image: ImageDTO) => void
-  /** §十九：在原图 / 高清之间切换 */
   onSelectImage: (image: ImageDTO) => void
-  /** §二十：单张高清放大 */
   onUpscale: (imageId: string) => void
   upscaling: boolean
-  /** §二十二：用作输入图片 → 生成工作台 */
   onUseAsInput: (image: ImageDTO) => void
-  /** §二十四：审核 / 收藏前记录撤销点（记录操作前的状态） */
-  onReviewStart: (previous: ReviewStatus) => void
+  onReviewStart: (previous: ImageReviewStatus) => void
   onFavoriteStart: (previous: boolean) => void
+  onPreviewLightbox: () => void
+  onDeleted: () => void
 }
 
 function GalleryDetailDrawer({
   image, onClose, onUpdated, onSelectImage, onUpscale, upscaling,
-  onUseAsInput, onReviewStart, onFavoriteStart,
+  onUseAsInput, onReviewStart, onFavoriteStart, onPreviewLightbox, onDeleted,
 }: DetailDrawerProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
@@ -514,69 +835,55 @@ function GalleryDetailDrawer({
   const [provenance, setProvenance] = useState<ImageProvenanceDTO | null>(null)
   const [assetType, setAssetType] = useState<AssetType>('face')
   const [assetName, setAssetName] = useState(`图库-${image.id.replace(/^img_/, '').slice(0, 8)}`)
+  // Phase 0.11：设为 Prompt 封面
+  const [promptChoices, setPromptChoices] = useState<PromptDTO[]>([])
+  const [coverPromptId, setCoverPromptId] = useState('')
+  // Phase 0.11：删除确认
+  const [deleteArm, setDeleteArm] = useState(false)
 
   useEffect(() => {
     if (!image.job_id) return
     let cancelled = false
     jobApi
       .get(image.job_id)
-      .then((detail) => {
-        if (!cancelled) setJob(detail)
-      })
-      .catch(() => {
-        // 任务信息缺失不阻塞图片查看
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((detail) => { if (!cancelled) setJob(detail) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [image.job_id])
 
-  // §十九：父子关系（来源原图 / 派生版本）
   useEffect(() => {
     let cancelled = false
     setVersions(null)
     imageApi
       .versions(image.id)
-      .then((result) => {
-        if (!cancelled) setVersions(result)
-      })
-      .catch(() => {
-        // 关系信息缺失不阻塞图片查看
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((result) => { if (!cancelled) setVersions(result) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [image.id])
 
-  // Task10：溯源信息（来源任务 / Seed / 管线 / 高级字段）
   useEffect(() => {
     let cancelled = false
     setProvenance(null)
     imageApi
       .provenance(image.id)
-      .then((result) => {
-        if (!cancelled) setProvenance(result)
-      })
-      .catch(() => {
-        // 溯源信息缺失不阻塞图片查看
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((result) => { if (!cancelled) setProvenance(result) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [image.id])
 
-  async function run(action: () => Promise<ImageDTO>, okText: string): Promise<void> {
+  function run(action: () => Promise<ImageDTO>, okText: string): Promise<void> {
     setBusy(true)
     setError(null)
     setMessage(null)
-    try {
-      onUpdated(await action())
-      setMessage(okText)
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : '操作失败')
-    } finally {
-      setBusy(false)
-    }
+    return action()
+      .then((updated) => {
+        onUpdated(updated)
+        setMessage(okText)
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof ApiRequestError ? err.message : '操作失败')
+      })
+      .finally(() => setBusy(false))
   }
 
   function openInWorkbench(useSeed: boolean): void {
@@ -585,13 +892,10 @@ function GalleryDetailDrawer({
       .workbench(image.id)
       .then((result) => {
         const snapshot = { ...result.snapshot }
-        // Phase 6 Task1：seed 来自**最近的生成上下文图**（result.seed，如 img2img 输出），
-        // 不是派生高清图自己的空 seed；
-        // 后端已按"最近生成上下文 Job + 完整执行身份"返回快照（Task9）
         if (useSeed && result.seed !== null) {
           snapshot.seed = result.seed
           snapshot.seed_mode = 'fixed'
-          snapshot.count = 1 // §0.4：固定 Seed 仅用于单张精确复现
+          snapshot.count = 1
         }
         onClose()
         navigate('/generate', { state: { workbench: snapshot } })
@@ -601,18 +905,12 @@ function GalleryDetailDrawer({
       )
   }
 
-  /**
-   * Phase 5.1：以此图进行图生图。
-   * - 有生成上下文 → 追溯根生成 Job 恢复原 Prompt + 完整身份；
-   * - 外部导入 → Prompt 为空（第一版语义，绝不伪造 Prompt）；
-   * 输入图统一 image_id；模式与 Primary Module 由工作台按可用模块校正（Task6）。
-   */
   function startImg2Img(): void {
     setError(null)
     const go = (base: WorkbenchSnapshot): void => {
       const snapshot: WorkbenchSnapshot = {
         ...base,
-        generation_mode: 'image', // Task7：图生图必须显式进入图片生成模式
+        generation_mode: 'image',
         input_images: [{ role: 'source', image_id: image.id }],
       }
       onClose()
@@ -658,263 +956,322 @@ function GalleryDetailDrawer({
     }
   }
 
+  function openPromptChooser(): void {
+    setError(null)
+    setMessage(null)
+    promptApi
+      .list({ limit: 200 })
+      .then((page) => setPromptChoices(page.items))
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载 Prompt 列表'))
+  }
+
+  async function applyPromptCover(): Promise<void> {
+    if (!coverPromptId) {
+      setError('请先选择一个 Prompt')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await promptApi.setPreviewImage(coverPromptId, image.id)
+      setMessage('已设为该 Prompt 封面')
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '设置封面失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function copyPrompt(): Promise<void> {
+    const text = job?.positive_prompt_snapshot ?? ''
+    try {
+      await navigator.clipboard.writeText(text)
+      setMessage('Prompt 已复制')
+    } catch {
+      setError('复制失败')
+    }
+  }
+
+  /** Phase 0.11.1：普通图（非 REJECT）“淘汰此图”——仅置 REJECT、保留文件，不物理删除。 */
+  async function softReject(): Promise<void> {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      onReviewStart(displayStatus)
+      onUpdated(await imageApi.setStatus(image.id, { status: 'REJECT' }))
+      setMessage('已移入废片（REJECT），文件仍保留；可在「清理废片」中永久删除。')
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Phase 0.11.1：仅 REJECT 图“永久删除此废片”——先引用保护预览，确认后真删；
+   *  只有 deleted_count===1 才真正从 UI 移除，杜绝假成功。 */
+  async function deleteImage(): Promise<void> {
+    if (!deleteArm) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const preview = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: false })
+      if ((preview.protected_count ?? 0) > 0) {
+        const reason = preview.protected_items?.[0]?.reasons?.join('；')
+        setError(`该图片被引用，禁止删除（已保护）${reason ? `：${reason}` : ''}。`)
+        setDeleteArm(false)
+        return
+      }
+      const result = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: true })
+      if ((result.deleted_count ?? 0) === 1) {
+        onDeleted()
+      } else {
+        setError(`后端实际删除 ${result.deleted_count ?? 0} 张（预期 1），未从列表移除。`)
+        setDeleteArm(false)
+      }
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '删除失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const displayStatus = normalizeImageStatus(image)
+
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="drawer drawer--wide"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="drawer__header">
-          <h3 className="drawer__title">
-            图片详情
-            {image.favorite && <span title="已收藏"> ★</span>}
-          </h3>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose} aria-label="关闭">
-            ✕
-          </button>
-        </header>
+    <Drawer
+      open
+      onClose={onClose}
+      width="wide"
+      title={
+        <>
+          图片详情
+          {image.favorite && <span title="收藏"> ★</span>}
+        </>
+      }
+    >
+      <div className="gal-detail__preview" onDoubleClick={onPreviewLightbox} title="双击放大查看">
+        <img src={imageContentUrl(image.id)} alt="" />
+        {image.kind === 'upscaled' && <span className="gal-detail__hd">HD</span>}
+      </div>
 
-        <div className="gallery-detail__preview">
-          <img src={imageContentUrl(image.id)} alt="" />
-          {image.kind === 'upscaled' && <span className="result-pane__hd">HD</span>}
+      {(versions?.parent || (versions?.children.length ?? 0) > 0) && (
+        <div className="gal-version-links">
+          {versions?.parent && (
+            <Button size="sm" variant="ghost" onClick={() => onSelectImage(versions.parent as ImageDTO)}>
+              来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看
+            </Button>
+          )}
+          {(versions?.children.length ?? 0) > 0 && (
+            <div className="gal-version-children">
+              <span className="muted">派生版本：</span>
+              {versions!.children.map((child) => {
+                const scale = image.width > 0 ? Math.round(child.width / image.width) : 0
+                return (
+                  <Button
+                    key={child.id}
+                    size="sm" variant="ghost"
+                    onClick={() => onSelectImage(child)}
+                  >
+                    {IMAGE_KIND_LABEL[child.kind] ?? child.kind}
+                    {scale > 1 ? ` ×${scale}` : ''} · {child.width}×{child.height}
+                  </Button>
+                )
+              })}
+            </div>
+          )}
         </div>
+      )}
 
-        {/* ===== 父子关系（§十九）：来源原图 / 派生版本，直接点击切换 ===== */}
-        {(versions?.parent || (versions?.children.length ?? 0) > 0) && (
-          <div className="version-links">
-            {versions?.parent && (
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm"
-                onClick={() => onSelectImage(versions.parent as ImageDTO)}
-              >
-                来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看
-              </button>
-            )}
-            {(versions?.children.length ?? 0) > 0 && (
-              <div className="version-links__children">
-                <span className="muted">派生版本：</span>
-                {versions!.children.map((child) => {
-                  const scale = image.width > 0 ? Math.round(child.width / image.width) : 0
-                  return (
-                    <button
-                      key={child.id}
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => onSelectImage(child)}
-                    >
-                      {IMAGE_KIND_LABEL[child.kind] ?? child.kind}
-                      {scale > 1 ? ` ×${scale}` : ''} · {child.width}×{child.height}
-                    </button>
-                  )
-                })}
+      <div className="gal-actions">
+        <Button
+          size="sm" variant={displayStatus === 'KEEP' || displayStatus === 'ARCHIVED' ? 'primary' : 'secondary'}
+          disabled={busy}
+          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'KEEP' }), '已保留') }}
+        >
+          保留 (K)
+        </Button>
+        <Button
+          size="sm" variant={displayStatus === 'REJECT' ? 'primary' : 'secondary'}
+          disabled={busy}
+          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'REJECT' }), '已淘汰') }}
+        >
+          淘汰 (R)
+        </Button>
+        {displayStatus !== 'NEW' && (
+          <Button
+            size="sm" variant="ghost" disabled={busy}
+            onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'NEW' }), '已恢复为待审核') }}
+          >
+            取消审核
+          </Button>
+        )}
+        <Button
+          size="sm" variant="ghost" disabled={busy}
+          onClick={() => { onFavoriteStart(image.favorite); void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏') }}
+        >
+          {image.favorite ? '★ 已收藏' : '☆ 收藏 (F)'}
+        </Button>
+      </div>
+
+      {provenance && (
+        <div>
+          <dl className="gal-fields">
+            <dt>来源任务</dt>
+            <dd>{provenance.job_id ? shortJobId(provenance.job_id) : '外部导入'}</dd>
+            <dt>Seed</dt>
+            <dd>{provenance.seed ?? '—'}</dd>
+            <dt>管线</dt>
+            <dd>
+              {!provenance.job_id
+                ? '外部导入'
+                : provenance.kind === 'upscaled'
+                  ? `基础生成 → 高清${provenance.scale && provenance.scale > 1 ? ` ×${provenance.scale}` : ''}`
+                  : MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id ?? '—'}
+            </dd>
+          </dl>
+          <details>
+            <summary className="muted">高级信息（来源原图 / Stage / Workflow 版本）</summary>
+            <dl className="gal-fields">
+              <dt>来源原图</dt>
+              <dd>{provenance.parent_image_id ?? '（本身为原图）'}</dd>
+              <dt>Stage</dt>
+              <dd>{provenance.stage_index ?? '—'}</dd>
+              <dt>模块</dt>
+              <dd>{provenance.module_id ?? '—'}{provenance.module_version ? ` ${provenance.module_version}` : ''}</dd>
+              <dt>引擎 / Binding</dt>
+              <dd>{provenance.provider ?? '—'}{provenance.binding_version ? ` ${provenance.binding_version}` : ''}</dd>
+              <dt>workflow_hash</dt>
+              <dd>{provenance.workflow_hash ?? '—'}</dd>
+              <dt>binding_hash</dt>
+              <dd>{provenance.binding_hash ?? '—'}</dd>
+            </dl>
+          </details>
+        </div>
+      )}
+
+      <div className="gal-actions">
+        <Button size="sm" variant="primary" disabled={!image.job_id} onClick={() => openInWorkbench(false)}>
+          在生成工作台中打开
+        </Button>
+        <Button size="sm" variant="secondary" disabled={!image.job_id} onClick={() => openInWorkbench(true)}>
+          使用原图 Seed
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => onUseAsInput(image)}>
+          用作输入图片
+        </Button>
+        <Button size="sm" variant="secondary" onClick={startImg2Img}>
+          以此图进行图生图
+        </Button>
+        <Button size="sm" variant="secondary" disabled={upscaling} onClick={() => onUpscale(image.id)}>
+          {upscaling ? '提交中…' : '高清放大'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void copyPrompt()}>
+          复制 Prompt
+        </Button>
+      </div>
+
+      {message && <p className="ds-notice ds-notice--success" role="status">{message}</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
+
+      <dl className="gal-fields">
+        <dt>Prompt</dt>
+        <dd><pre>{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
+        <dt>Negative</dt>
+        <dd><pre>{job?.negative_prompt_snapshot || '（无）'}</pre></dd>
+        <dt>Seed</dt>
+        <dd>{image.seed ?? '—'}</dd>
+        <dt>任务</dt>
+        <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
+        <dt>类型</dt>
+        <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
+        <dt>来源</dt>
+        <dd>{IMAGE_SOURCE_LABEL[image.source] ?? image.source}</dd>
+        <dt>时间</dt>
+        <dd>{formatDateTime(image.created_at)}</dd>
+        <dt>尺寸</dt>
+        <dd>{image.width} × {image.height}</dd>
+        <dt>审核</dt>
+        <dd>{IMAGE_STATUS_LABEL[displayStatus]}</dd>
+      </dl>
+
+      {/* 从图库创建素材（§四十八） */}
+      <section className="gal-asset-edit">
+        <h4 className="gal-section-title">创建素材（独立资产文件，图片以后被清理不影响素材）</h4>
+        <Field label="类型">
+          <Select
+            value={assetType}
+            onChange={(event) => setAssetType(event.target.value as AssetType)}
+            options={ASSET_TYPES.map(({ key, label }) => ({ value: key, label }))}
+          />
+        </Field>
+        <Field label="名称">
+          <Input value={assetName} onChange={(event) => setAssetName(event.target.value)} />
+        </Field>
+        <Button
+          size="sm" variant="primary"
+          disabled={busy || !assetName.trim()}
+          onClick={() => void createAsset()}
+        >
+          创建素材
+        </Button>
+      </section>
+
+      {/* Phase 0.11：设为 Prompt 封面 */}
+      <section className="gal-asset-edit">
+        <h4 className="gal-section-title">设为 Prompt 封面</h4>
+        {promptChoices.length === 0 ? (
+          <Button size="sm" variant="secondary" disabled={busy} onClick={openPromptChooser}>
+            选择 Prompt
+          </Button>
+        ) : (
+          <>
+            <Field label="Prompt">
+              <Select
+                value={coverPromptId}
+                onChange={(event) => setCoverPromptId(event.target.value)}
+                options={[{ value: '', label: '（请选择）' }, ...promptChoices.map((p) => ({ value: p.id, label: p.name }))]}
+              />
+            </Field>
+            <Button size="sm" variant="primary" disabled={busy || !coverPromptId} onClick={() => void applyPromptCover()}>
+              设为封面
+            </Button>
+          </>
+        )}
+      </section>
+
+      {/* Phase 0.11.1：删除语义——普通图仅淘汰(REJECT)；仅 REJECT 图才永久物理删除 */}
+      <section className="gal-asset-edit">
+        <h4 className="gal-section-title">{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h4>
+        {displayStatus !== 'REJECT' ? (
+          <>
+            <p className="muted">仅将状态置为 REJECT（文件保留），之后可在「清理废片」中永久删除。</p>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => void softReject()}>
+              {busy ? '处理中…' : '淘汰此图'}
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="muted">删除前会检查引用；被 Prompt / 素材 / 配方引用的图片将被保护，不会删除。</p>
+            {!deleteArm ? (
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleteArm(true)}>
+                永久删除此废片
+              </Button>
+            ) : (
+              <div className="gal-actions">
+                <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
+                  {busy ? '处理中…' : '确认删除（不可恢复）'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>
+                  取消
+                </Button>
               </div>
             )}
-          </div>
+          </>
         )}
-
-        <div className="drawer__meta-actions">
-          <button
-            type="button"
-            className={`btn btn--sm${image.review_status === 'KEPT' ? ' btn--primary' : ''}`}
-            disabled={busy}
-            onClick={() => {
-              onReviewStart(image.review_status)
-              void run(() => imageApi.review(image.id, 'KEPT'), '已保留')
-            }}
-          >
-            保留 (K)
-          </button>
-          <button
-            type="button"
-            className={`btn btn--sm${image.review_status === 'REJECTED' ? ' btn--primary' : ''}`}
-            disabled={busy}
-            onClick={() => {
-              onReviewStart(image.review_status)
-              void run(() => imageApi.review(image.id, 'REJECTED'), '已淘汰')
-            }}
-          >
-            淘汰 (R)
-          </button>
-          {image.review_status !== 'UNREVIEWED' && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm"
-              disabled={busy}
-              onClick={() => {
-                onReviewStart(image.review_status)
-                void run(() => imageApi.review(image.id, 'UNREVIEWED'), '已恢复为未审核')
-              }}
-            >
-              取消审核
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            disabled={busy}
-            onClick={() => {
-              onFavoriteStart(image.favorite)
-              void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏')
-            }}
-          >
-            {image.favorite ? '★ 已收藏' : '☆ 收藏 (F)'}
-          </button>
-        </div>
-
-        {/* ===== 溯源（Task10）：默认简洁展示，高级信息折叠 ===== */}
-        {provenance && (
-          <div className="provenance">
-            <dl className="asset-detail__fields">
-              <dt>来源任务</dt>
-              <dd>{provenance.job_id ? shortJobId(provenance.job_id) : '外部导入'}</dd>
-              <dt>Seed</dt>
-              <dd>{provenance.seed ?? '—'}</dd>
-              <dt>管线</dt>
-              <dd>
-                {!provenance.job_id
-                  ? '外部导入'
-                  : provenance.kind === 'upscaled'
-                    ? `基础生成 → 高清${provenance.scale && provenance.scale > 1 ? ` ×${provenance.scale}` : ''}`
-                    : MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id ?? '—'}
-              </dd>
-            </dl>
-            <details className="provenance__advanced">
-              <summary className="muted">高级信息（来源原图 / Stage / Workflow 版本）</summary>
-              <dl className="asset-detail__fields">
-                <dt>来源原图</dt>
-                <dd>{provenance.parent_image_id ?? '（本身为原图）'}</dd>
-                <dt>Stage</dt>
-                <dd>{provenance.stage_index ?? '—'}</dd>
-                <dt>模块</dt>
-                <dd>
-                  {provenance.module_id ?? '—'}
-                  {provenance.module_version ? ` ${provenance.module_version}` : ''}
-                </dd>
-                <dt>引擎 / Binding</dt>
-                <dd>
-                  {provenance.provider ?? '—'}
-                  {provenance.binding_version ? ` ${provenance.binding_version}` : ''}
-                </dd>
-                <dt>workflow_hash</dt>
-                <dd>{provenance.workflow_hash ?? '—'}</dd>
-                <dt>binding_hash</dt>
-                <dd>{provenance.binding_hash ?? '—'}</dd>
-              </dl>
-            </details>
-          </div>
-        )}
-
-        <div className="drawer__meta-actions">
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            disabled={!image.job_id}
-            onClick={() => openInWorkbench(false)}
-          >
-            在生成工作台中打开
-          </button>
-          <button
-            type="button"
-            className="btn btn--sm"
-            // Task7：Seed 取根生成图（result.seed），高清图/派生图自身可能为 null
-            disabled={!image.job_id}
-            onClick={() => openInWorkbench(true)}
-          >
-            使用原图 Seed
-          </button>
-          {/* §二十二：外部导入图也能用作输入图片（整个系统统一 image_id） */}
-          <button
-            type="button"
-            className="btn btn--sm"
-            onClick={() => onUseAsInput(image)}
-            title="把这张图设为生成工作台的输入图片"
-          >
-            用作输入图片
-          </button>
-          {/* Phase 5.1：以此图进行图生图（生成上下文恢复原 Prompt；外部导入 Prompt 为空） */}
-          <button
-            type="button"
-            className="btn btn--sm"
-            onClick={startImg2Img}
-            title="打开图片生成工作台：mode=image、input_image=当前图、Primary Module=可用图生图模块"
-          >
-            以此图进行图生图
-          </button>
-          <button
-            type="button"
-            className="btn btn--sm"
-            disabled={upscaling}
-            onClick={() => onUpscale(image.id)}
-            title="创建高清任务（不重复生成原图）"
-          >
-            {upscaling ? '提交中…' : '高清放大'}
-          </button>
-        </div>
-
-        {message && <p className="notice notice--ok" role="status">{message}</p>}
-        {error && <p className="notice notice--error">{error}</p>}
-
-        <dl className="asset-detail__fields">
-          <dt>Prompt</dt>
-          <dd><pre className="asset-detail__prompt">{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
-          <dt>Negative</dt>
-          <dd><pre className="asset-detail__prompt">{job?.negative_prompt_snapshot || '（无）'}</pre></dd>
-          <dt>Seed</dt>
-          <dd>{image.seed ?? '—'}</dd>
-          <dt>任务</dt>
-          <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
-          <dt>类型</dt>
-          <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
-          <dt>来源</dt>
-          <dd>{IMAGE_SOURCE_LABEL[image.source] ?? image.source}</dd>
-          <dt>时间</dt>
-          <dd>{formatDateTime(image.created_at)}</dd>
-          <dt>尺寸</dt>
-          <dd>{image.width} × {image.height}</dd>
-          <dt>审核</dt>
-          <dd>{REVIEW_STATUS_LABEL[image.review_status]}</dd>
-        </dl>
-
-        {/* ===== 从图库创建素材（§四十八：独立素材文件 + source_image_id） ===== */}
-        <section className="asset-edit">
-          <h4 className="version-history__title">创建素材（独立资产文件，图片以后被清理不影响素材）</h4>
-          <div className="field">
-            <label className="field__label" htmlFor="gallery-asset-type">类型</label>
-            <select
-              id="gallery-asset-type"
-              className="input"
-              value={assetType}
-              onChange={(event) => setAssetType(event.target.value as AssetType)}
-            >
-              {ASSET_TYPES.map(({ key, label }) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field__label" htmlFor="gallery-asset-name">名称</label>
-            <input
-              id="gallery-asset-name"
-              className="input"
-              value={assetName}
-              onChange={(event) => setAssetName(event.target.value)}
-            />
-          </div>
-          <div className="modal__actions">
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              disabled={busy || !assetName.trim()}
-              onClick={() => void createAsset()}
-            >
-              创建素材
-            </button>
-          </div>
-        </section>
-      </aside>
-    </div>
+      </section>
+    </Drawer>
   )
 }

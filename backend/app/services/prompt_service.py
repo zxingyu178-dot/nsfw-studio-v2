@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.ids import PROMPT, PROMPT_VERSION, new_id
 from app.models import Prompt, PromptVersion
+from app.services import image_service
 from app.services.prompt_composer import compose_structured, dumps_structured
 
 PROMPT_MODES = ("structured", "full")
@@ -101,6 +102,23 @@ def update_prompt_meta(
         prompt.name = name.strip()
     if favorite is not None:
         prompt.favorite = favorite
+    session.commit()
+    return prompt
+
+
+def set_preview_image(session: Session, prompt_id: str, image_id: str) -> Prompt:
+    """设置 / 更换封面预览图：属【元数据】，绝不创建 PromptVersion（规范 §十一）。"""
+    prompt = get_prompt(session, prompt_id)
+    image_service.get_image(session, image_id)  # 图片不存在 → IMAGE_NOT_FOUND
+    prompt.preview_image_id = image_id
+    session.commit()
+    return prompt
+
+
+def clear_preview_image(session: Session, prompt_id: str) -> Prompt:
+    """清除封面预览图：置 None，不创建 PromptVersion。"""
+    prompt = get_prompt(session, prompt_id)
+    prompt.preview_image_id = None
     session.commit()
     return prompt
 

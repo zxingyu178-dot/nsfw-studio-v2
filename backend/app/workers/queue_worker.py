@@ -84,6 +84,8 @@ class SingleQueueWorker:
         self._queue_paused = False
         self._queue_paused_reason: str | None = None
         self._current_job_id: str | None = None
+        # §十：本次全局暂停（USER_REQUEST）所暂停的那个 RUNNING job id；resume 时用于排首恢复
+        self._user_paused_job_id: str | None = None
 
     # ===== 生命周期 =====
     def start(self) -> None:
@@ -130,10 +132,24 @@ class SingleQueueWorker:
             "adapter": self._adapter.name,
         }
 
-    def resume_queue(self) -> None:
-        """用户处理系统性失败后恢复队列。"""
+    def resume_queue(self) -> str | None:
+        """恢复队列；返回并清空本次全局暂停所暂停的 job id（若有）。"""
+        target_id = self._user_paused_job_id
         self._queue_paused = False
         self._queue_paused_reason = None
+        self._user_paused_job_id = None
+        return target_id
+
+    def pause_queue(self, reason: str = "USER_REQUEST") -> None:
+        """用户手动暂停整个队列（§十：全局安全暂停）。
+
+        仅设置标志位，不直接改 Job 状态；当前 RUNNING Job 由 API 层置 pause_requested，
+        Worker 在安全边界将其落 PAUSED 并记录 ``_user_paused_job_id``。
+        """
+        self._queue_paused = True
+        self._queue_paused_reason = reason
+        self._user_paused_job_id = None
+        logger.info("队列已由用户暂停: %s", reason)
 
     def _pause_queue(self, reason: str) -> None:
         self._queue_paused = True
@@ -201,6 +217,8 @@ class SingleQueueWorker:
                     job.status = "PAUSED"
                     job_service.record_event(session, job.id, "JOB_PAUSED")
                     session.commit()
+                    if self._queue_paused and self._queue_paused_reason == "USER_REQUEST":
+                        self._user_paused_job_id = job.id
                     return "PAUSED"
                 stage_status = stage.status
             if stage_status == "COMPLETED":
@@ -265,6 +283,8 @@ class SingleQueueWorker:
                     job.status = "PAUSED"
                     job_service.record_event(session, job.id, "JOB_PAUSED")
                     session.commit()
+                    if self._queue_paused and self._queue_paused_reason == "USER_REQUEST":
+                        self._user_paused_job_id = job.id
                     return "PAUSED"
 
             result = await self._run_stage_item(job_id, stage_id, stage_item_id)

@@ -47,14 +47,21 @@ import type {
   AssetType,
   AssetVersionDTO,
   ComposeResult,
+  EngineRuntimeDTO,
   EngineStatusDTO,
   HistoryBucket,
   HistoryResponseDTO,
   ImageDTO,
   ImageImportResponseDTO,
+  ImageJobGroupDTO,
+  ImagePage,
   ImageProvenanceDTO,
   ImageReferencesDTO,
+  ImageReviewStatus,
+  ImageSort,
   ImageVersionsDTO,
+  CleanupRejectedResult,
+  ThumbnailBackfillStatusDTO,
   JobDTO,
   JobEventDTO,
   ListResponse,
@@ -126,6 +133,12 @@ export const promptApi = {
   },
   restore(id: string): Promise<PromptDTO> {
     return request(`/api/v1/prompts/${id}/restore`, jsonInit('POST', {}))
+  },
+  setPreviewImage(id: string, image_id: string): Promise<PromptDTO> {
+    return request(`/api/v1/prompts/${id}/preview-image`, jsonInit('PUT', { image_id }))
+  },
+  clearPreviewImage(id: string): Promise<PromptDTO> {
+    return request(`/api/v1/prompts/${id}/preview-image`, jsonInit('DELETE', {}))
   },
   compose(body: { mode: PromptMode; positive_prompt?: string; structured?: unknown }): Promise<ComposeResult> {
     return request('/api/v1/prompts/compose', jsonInit('POST', body))
@@ -238,11 +251,30 @@ export const jobApi = {
   reorder(orderedJobIds: string[]): Promise<QueueDTO> {
     return request('/api/v1/queue/reorder', jsonInit('POST', { ordered_job_ids: orderedJobIds }))
   },
-  resumeQueue(): Promise<{ queue_paused: boolean }> {
+  pauseQueue(): Promise<QueueDTO> {
+    return request('/api/v1/queue/pause', jsonInit('POST', {}))
+  },
+  resumeQueue(): Promise<QueueDTO> {
     return request('/api/v1/queue/resume', jsonInit('POST', {}))
   },
   engineStatus(): Promise<EngineStatusDTO> {
     return request('/api/v1/engine/status')
+  },
+}
+
+// ===== 生图引擎运行时控制（Task4：启停/重启 ComfyUI 子进程） =====
+export const engineRuntimeApi = {
+  get(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime')
+  },
+  start(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/start', jsonInit('POST', {}))
+  },
+  stop(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/stop', jsonInit('POST', {}))
+  },
+  restart(): Promise<EngineRuntimeDTO> {
+    return request('/api/v1/engine/runtime/restart', jsonInit('POST', {}))
   },
 }
 
@@ -260,9 +292,17 @@ export const historyApi = {
   },
 }
 
-// ===== Image / Gallery（Phase 2C） =====
+// ===== Image / Gallery（Phase 2C；Phase 0.11 分页 + 状态 + 缩略图） =====
 export interface ImageListParams {
   job_id?: string | null
+  /** Phase 0.11 新审核状态筛选 */
+  status?: ImageReviewStatus | null
+  /** Phase 0.11 排序 */
+  sort?: ImageSort | null
+  /** Phase 0.11 分页（page 从 1 起） */
+  page?: number
+  page_size?: number
+  // —— 旧参数（ImagePickerDrawer / ResultPane 仍在用，保持向后兼容） ——
   review_status?: ReviewStatus | null
   favorite?: boolean | null
   source?: string | null
@@ -274,7 +314,9 @@ export interface ImageListParams {
 }
 
 export const imageApi = {
-  list(params: ImageListParams = {}): Promise<ListResponse<ImageDTO>> {
+  /** Phase 0.11：分页图库（返回 {items,total,page,page_size,has_next}）。
+   *  同时兼容旧 limit/offset/review_status（选择器 / 生成结果面板）。 */
+  list(params: ImageListParams = {}): Promise<ImagePage<ImageDTO>> {
     return request(`/api/v1/images${buildQuery(params)}`)
   },
   get(id: string): Promise<ImageDTO> {
@@ -285,6 +327,41 @@ export const imageApi = {
   },
   favorite(id: string, favorite: boolean): Promise<ImageDTO> {
     return request(`/api/v1/images/${id}/favorite`, jsonInit('PATCH', { favorite }))
+  },
+  /** Phase 0.11.1：更新单张图片审核状态（仅 NEW/KEEP/REJECT/ARCHIVED；收藏请用 favorite()） */
+  setStatus(id: string, body: { status: ImageReviewStatus; note?: string }): Promise<ImageDTO> {
+    return request(`/api/v1/images/${id}/status`, jsonInit('PATCH', body))
+  },
+  /** Phase 0.11.1：渐进预览图 URL（长边 1536 WebP）。供 <img src> / Lightbox / ReviewMode 首屏。 */
+  preview(id: string): string {
+    return `/api/v1/images/${id}/preview`
+  },
+  /** Phase 0.11：批量审核（Review Mode / 多选） */
+  batchStatus(body: {
+    image_ids: string[]
+    status: ImageReviewStatus
+    note?: string
+  }): Promise<{ updated: number; items: ImageDTO[] }> {
+    return request('/api/v1/images/batch-status', jsonInit('POST', body))
+  },
+  /** Phase 0.11：废片清理（两阶段）。confirm=false 预览候选/占用/保护数；confirm=true 真删。
+   *  可带 image_ids 清理指定图（单图删除也走这里，复用引用保护）。 */
+  cleanupRejected(body: { image_ids?: string[]; confirm: boolean }): Promise<CleanupRejectedResult> {
+    return request('/api/v1/images/cleanup-rejected', jsonInit('POST', body))
+  },
+  /** Phase 0.11.1：按任务聚合分页（替代逐 Job summary 的 N+1；可翻到早期任务） */
+  jobGroups(params: { page?: number; page_size?: number } = {}): Promise<ImagePage<ImageJobGroupDTO>> {
+    return request(`/api/v1/images/job-groups${buildQuery(params)}`)
+  },
+  /** Phase 0.11.1：后台回填历史缩略图（单 worker / 低并发，不占 GPU） */
+  startBackfill(body: { kind?: string; limit?: number } = {}): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill', jsonInit('POST', body))
+  },
+  backfillStatus(): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill/status')
+  },
+  stopBackfill(): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill/stop', jsonInit('POST', {}))
   },
   workbench(id: string): Promise<{ image_id: string; seed: number | null; snapshot: WorkbenchSnapshot }> {
     return request(`/api/v1/images/${id}/workbench`)

@@ -1,0 +1,89 @@
+/* ===== Phase 0.11 Review Mode（摄影选片式全屏审核） ===== */
+
+.rv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.92);
+  color: var(--text);
+}
+
+.rv-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+}
+.rv-progress { font-weight: var(--weight-semibold); }
+.rv-stats { font-size: var(--text-sm); }
+.rv-top > button { margin-left: auto; }
+
+.rv-error {
+  margin: 0 var(--space-4);
+  padding: var(--space-1) var(--space-2);
+  background: var(--danger);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.rv-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-2) var(--space-4);
+}
+.rv-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+  transition: transform 0.15s ease;
+}
+.rv-img--zoomed {
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  cursor: zoom-out;
+}
+.rv-nav {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rv-nav:disabled { opacity: 0.3; cursor: default; }
+
+.rv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  flex-wrap: wrap;
+}
+.rv-actions { display: flex; gap: var(--space-2); }
+.rv-btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.rv-btn:disabled { opacity: 0.5; cursor: default; }
+.rv-btn--keep { border-color: var(--ok, #3fb950); }
+.rv-btn--fav { border-color: var(--warn, #d29922); }
+.rv-btn--reject { border-color: var(--danger); }

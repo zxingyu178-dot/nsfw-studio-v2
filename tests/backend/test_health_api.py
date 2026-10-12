@@ -12,6 +12,12 @@ def test_health_returns_ok(client, settings):
 def test_root_info(client):
     response = client.get("/")
     assert response.status_code == 200
-    body = response.json()
-    assert body["name"] == "NSFW Studio"
-    assert body["api"] == "/api/v1/health"
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type:
+        # 开发/测试模式：dist 缺失，GET / 返回 JSON 应用信息
+        body = response.json()
+        assert body["name"] == "NSFW Studio"
+        assert body["api"] == "/api/v1/health"
+    else:
+        # 日用模式：dist 存在，FastAPI 直接托管 React 构建产物 index.html
+        assert "text/html" in content_type

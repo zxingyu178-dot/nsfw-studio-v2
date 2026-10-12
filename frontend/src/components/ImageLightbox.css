@@ -1,0 +1,98 @@
+/* 共享全屏 Lightbox（Generate / Gallery 共用） */
+.lb-overlay {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: stretch;
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.lb-body {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.lb-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: default;
+  touch-action: none;
+}
+
+.lb-stage--zoomed {
+  cursor: grab;
+}
+
+.lb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.lb-toolbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.75);
+  color: #fff;
+}
+
+.lb-toolbar button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.lb-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lb-count {
+  font-size: var(--text-sm, 13px);
+  margin-right: 4px;
+  opacity: 0.8;
+}
+
+/* Phase 0.11 右侧信息栏容器（仅 Gallery 传入时出现） */
+.lb-side-wrap {
+  flex: 0 0 340px;
+  width: 340px;
+  max-width: 40vw;
+  display: flex;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.lb-side-wrap > .lb-side {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .lb-side-wrap {
+    flex-basis: 280px;
+    width: 280px;
+    max-width: 46vw;
+  }
+}

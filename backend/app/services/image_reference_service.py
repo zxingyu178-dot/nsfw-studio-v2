@@ -23,6 +23,7 @@ from app.models import (
     Job,
     JobStage,
     JobStageItem,
+    Prompt,
     Recipe,
     RecipeVersion,
 )
@@ -69,6 +70,11 @@ def count_references(session: Session, image_id: str) -> dict:
         select(Image.id).where(Image.parent_image_id == image_id)
     ).scalars().all())
 
+    # 5) Prompt 封面预览图（prompts.preview_image_id 属元数据引用，删除前需识别）
+    prompt_preview_ids = sorted(session.execute(
+        select(Prompt.id).where(Prompt.preview_image_id == image_id)
+    ).scalars().all())
+
     references = {
         "recipe_ids": recipe_ids,
         "stage_item_ids": stage_item_ids,
@@ -76,10 +82,11 @@ def count_references(session: Session, image_id: str) -> dict:
         "reference_asset_ids": reference_asset_ids,
         "source_asset_ids": source_asset_ids,
         "derived_image_ids": derived_image_ids,
+        "prompt_preview_ids": prompt_preview_ids,
     }
     total = (
         len(recipe_ids) + len(stage_item_ids) + len(reference_asset_ids)
-        + len(source_asset_ids) + len(derived_image_ids)
+        + len(source_asset_ids) + len(derived_image_ids) + len(prompt_preview_ids)
     )
     return {
         "image_id": image_id,

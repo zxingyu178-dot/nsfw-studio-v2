@@ -39,6 +39,8 @@ DEFAULT_LAYOUT: tuple[str, ...] = (
     "images/originals",
     "images/upscaled",
     "images/processed",
+    "images/thumbnails",
+    "images/previews",
     "images/temp",
     "assets/face",
     "assets/clothing",
@@ -92,6 +94,7 @@ class Settings:
     workflow: WorkflowConfig
     config_dir: Path
     comfyui: dict[str, Any] = field(default_factory=dict)  # 本机 ComfyUI 配置（config.local.yaml）
+    engine_runtime: dict[str, Any] = field(default_factory=dict)  # 受管 ComfyUI 运行时配置
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -146,4 +149,5 @@ def load_settings(config_dir: Path | None = None) -> Settings:
         workflow=WorkflowConfig(raw=workflow_cfg),
         config_dir=cfg_dir,
         comfyui=merged_cfg.get("comfyui", {}) or {},
+        engine_runtime=merged_cfg.get("engine_runtime", {}) or {},
     )

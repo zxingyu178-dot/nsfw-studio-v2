@@ -192,6 +192,15 @@ export async function reorderQueue(orderedJobIds: string[]): Promise<void> {
   }
 }
 
+export async function pauseQueue(): Promise<void> {
+  try {
+    await jobApi.pauseQueue()
+    void refreshJobs()
+  } catch (error) {
+    setState({ lastError: error instanceof ApiRequestError ? error.message : '暂停队列失败' })
+  }
+}
+
 export async function resumeQueue(): Promise<void> {
   try {
     await jobApi.resumeQueue()

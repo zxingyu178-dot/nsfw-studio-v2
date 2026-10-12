@@ -168,11 +168,44 @@ def reorder_queue(
     )
 
 
-@router.post("/queue/resume", summary="恢复队列（系统性失败暂停后，由用户确认恢复）")
-def resume_queue(request: Request) -> dict:
+@router.post("/queue/pause", response_model=QueueResponse, summary="全局暂停队列（当前图安全完成后暂停，后续任务不再开始）")
+def pause_queue(request: Request, session: Session = Depends(get_session)) -> QueueResponse:
     worker = request.app.state.worker
-    worker.resume_queue()
-    return {"queue_paused": False}
+    if worker is not None:
+        worker.pause_queue()
+        current_job_id = worker.status().get("current_job_id")
+        if current_job_id:
+            try:
+                job_service.pause_job(session, current_job_id)
+            except ValidationError:
+                pass  # 暂停瞬间当前张已完成/终态——无需再置 pause_requested
+    queue = job_service.get_queue(session)
+    return QueueResponse(
+        worker=worker.status() if worker else {"running": False},
+        running=job_response(queue["running"]) if queue["running"] else None,
+        queued=[job_response(job) for job in queue["queued"]],
+        paused=[job_response(job) for job in queue["paused"]],
+    )
+
+
+@router.post("/queue/resume", response_model=QueueResponse, summary="恢复队列（自动暂停或手动暂停后继续）")
+def resume_queue(request: Request, session: Session = Depends(get_session)) -> QueueResponse:
+    worker = request.app.state.worker
+    target_id: str | None = worker.resume_queue() if worker is not None else None
+    if target_id:
+        try:
+            job = job_service.get_job(session, target_id)
+            if job.status == "PAUSED":
+                job_service.resume_job_front(session, target_id)
+        except ValidationError:
+            pass  # target 已不在 PAUSED（如已完成/取消）——仅清 flag 即可
+    queue = job_service.get_queue(session)
+    return QueueResponse(
+        worker=worker.status() if worker else {"running": False},
+        running=job_response(queue["running"]) if queue["running"] else None,
+        queued=[job_response(job) for job in queue["queued"]],
+        paused=[job_response(job) for job in queue["paused"]],
+    )
 
 
 @router.get("/engine/status", summary="引擎健康状态（真实 Engine，独立于 Studio 状态）")

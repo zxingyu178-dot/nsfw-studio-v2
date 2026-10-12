@@ -19,6 +19,10 @@ class PromptMetaUpdateRequest(BaseModel):
     favorite: bool | None = None
 
 
+class PreviewImageRequest(BaseModel):
+    image_id: str
+
+
 class PromptVersionCreateRequest(BaseModel):
     mode: PromptMode = "structured"
     positive_prompt: str = ""
@@ -52,6 +56,7 @@ class PromptResponse(BaseModel):
     name: str
     favorite: bool
     archived: bool
+    preview_image_id: str | None
     created_at: str
     updated_at: str
     current_version: PromptVersionResponse | None
@@ -83,6 +88,7 @@ def prompt_response(prompt: Prompt, current_version: PromptVersion | None) -> Pr
         name=prompt.name,
         favorite=prompt.favorite,
         archived=prompt.archived,
+        preview_image_id=prompt.preview_image_id,
         created_at=prompt.created_at,
         updated_at=prompt.updated_at,
         current_version=prompt_version_response(current_version) if current_version else None,

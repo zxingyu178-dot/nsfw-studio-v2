@@ -2,6 +2,60 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.11.0] — 2026-10-12
+
+### Added（Phase 0.11：图片资产管理系统）
+
+- **图库分页与无限滚动**：`GET /api/v1/images` 标准分页（`page` / `page_size=40` /
+  `sort=created_desc|created_asc|favorite|size` / `status`），返回
+  `{items,total,page,page_size,has_next}`；前端 IntersectionObserver 哨兵无限滚动，
+  图片进入 viewport+300px 才懒加载，含占位与错误态；历史图片可完整翻到最早。
+- **Image Variant 与 Thumbnail 系统（迁移 0015）**：新增 `image_variants` 表
+  （同一逻辑 Image 的 thumbnail / preview rendition，不污染 Image 表）；新增
+  `images/thumbnails` 目录，规格 512px / WebP / q80；图库只载 thumbnail，
+  Lightbox 才载 original；历史缺失缩略图按需/回填生成、不阻塞浏览。
+- **图片审核状态（迁移 0016）**：Image 增加 `status / reviewed_at / review_note`；
+  Gallery 提供「全部 / 待审核 / 收藏 / 归档」筛选。
+- **Review Mode**：摄影选片式全屏大图，←/→ 切换、A 保留、D 淘汰、F 收藏、
+  Space 放大；顶部进度与 待审/保留/收藏/淘汰 统计；工具栏与任务分组均有「开始审核」。
+- **Job 审核入口**：生成完成后「开始审核」，显示本次 总数/未审核/保留/淘汰 统计。
+- **废片清理**：两阶段 NEW→REJECT→「清理废片」批量确认；预览数量/占用/预计释放；
+  删除 original+thumbnail+DB；删除前经 ImageReferenceService 检查，被
+  Prompt/Asset/Recipe 引用的图片禁止删除。
+- **图片→素材 / Prompt 联动 / 详情增强**：图片详情「创建素材」（复用 Asset API、
+  记录 source_image_id）、「设为 Prompt 封面」；在现有 Lightbox 上扩展右侧信息栏
+  （尺寸/时间/Seed/Prompt/来源 Job/Recipe）与 复制 Prompt / 打开 Workbench /
+  创建素材 / 删除 操作。
+
+### Changed（Phase 0.11.1：加固与发布收口）
+
+- **统一审核状态语义（迁移 0017）**：收敛为审核状态 `NEW/KEEP/REJECT/ARCHIVED`
+  + 独立 `favorite:bool`（允许 KEEP+favorite、ARCHIVED+favorite、NEW+favorite）；
+  `status=FAVORITE` 归一为 KEEP 且 favorite=1，应用层停止写 FAVORITE（传 FAVORITE
+  到 status 接口返回 400 `IMAGE_STATUS_DEPRECATED`）；旧 `/review`、`/favorite`
+  与新 `/status` 走同一领域写入口，消除双系统分裂；Job summary / ReviewMode /
+  Badge / Detail 状态一致。
+- **单图删除语义**：普通图按钮为「淘汰此图」（置 REJECT、保留文件）；仅 REJECT
+  显示「永久删除此废片」，核对 `deleted_count===1` 才从 UI 移除，杜绝假成功。
+- **物理删除事务安全（trash staging）**：文件先 `os.replace` 原子移入
+  `images/temp/delete_staging/<cleanup_id>/<image_id>/`，再开 DB 事务清指针→删
+  variants→删 Image→commit；commit 成功才清 staging，失败 rollback 并把文件原子
+  移回；启动时清理/报告 stale staging；不再用吞 OSError 的 safe_delete 做关键删除。
+- **全历史导航闭环**：Lightbox / Review / Job Review / ImagePicker 支持分页跨页与
+  接近末尾预取（移除 Job page_size=100、Picker limit=120 上限）；Job 分组改后端
+  聚合 `GET /images/job-groups`，避免 N+1；ImagePicker 改标准分页 + thumbnail。
+- **Thumbnail 生产链**：新图入库后 best-effort 主动生成；历史图经
+  `POST /images/thumbnails/backfill`（单 worker、可停、进度查询）低并发回填；
+  `get_or_create` 加 per-image 锁、临时文件 + 原子替换、唯一冲突后 re-read；
+  新增 preview rendition（长边 1536 / WebP q85），ReviewMode/Lightbox 默认 preview、
+  放大才载 original，实现快速切图。
+- **分页竞态与清理 UI**：loadNext 增加 request sequence 守卫、append 前按 id 去重、
+  排序补稳定 tie-breaker；清理预览展示 candidate/deletable/protected/占用，确认按钮
+  按实际可删数计数、protected 可查看原因。
+- **连接池**：SQLite 引擎连接池扩至 pool_size=10 / max_overflow=20，避免突发
+  rendition 请求排队超时被误报为 500。
+- **版本收口**：`configs/app.yaml` 与 `frontend/package.json` 及关于页统一为 0.11.0。
+
 ## [0.9.0] — 2026-10-09
 
 ### Added（Phase 7：可靠性收口 + Reference 能力 Gate）

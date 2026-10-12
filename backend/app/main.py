@@ -20,6 +20,7 @@ from app.api.v1.router import api_v1_router
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.core.events import EventBroker
+from app.core.static_hosting import register_static_hosting
 from app.database.base import make_engine, make_session_factory
 from app.engine.factory import create_engine_adapter
 from app.models import Job, JobItem, JobStageItem
@@ -90,6 +91,17 @@ async def lifespan(application: FastAPI):
     application.state.adapter = adapter
     application.state.worker = worker
 
+    # Phase 0.11.1 P1-3：thumbnail/preview 后台回填单例（单 worker、进程内状态）
+    from app.services.backfill_runner import ThumbnailBackfillRunner
+
+    application.state.backfill_runner = ThumbnailBackfillRunner(session_factory, storage)
+
+    # 受管 ComfyUI 运行时单例（生命周期独立于 Job；应用关闭时不主动停 managed，
+    # 也绝不杀 external）
+    from app.services.engine_runtime_service import EngineRuntimeService
+
+    application.state.engine_runtime = EngineRuntimeService(settings)
+
     # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
     recovered = await worker.recover_interrupted()
 
@@ -102,6 +114,16 @@ async def lifespan(application: FastAPI):
     except Exception:
         logger.warning("引擎输入缓存清理失败（忽略）", exc_info=True)
 
+    # Phase 0.11.1：清理陈旧的 delete_staging 残留隔离区（失败只 warning，不阻断启动）
+    try:
+        from app.services.cleanup_service import cleanup_stale_staging
+
+        stale_removed = cleanup_stale_staging(storage)
+        if stale_removed:
+            logger.info("清理 stale delete staging: %s 个残留目录", stale_removed)
+    except Exception:
+        logger.warning("清理 stale delete staging 失败（忽略）", exc_info=True)
+
     worker.start()
 
     logging.getLogger(__name__).info(
@@ -109,6 +131,7 @@ async def lifespan(application: FastAPI):
         settings.app.version, report.data_root, adapter.name, len(recovered),
     )
     yield
+    application.state.backfill_runner.shutdown()
     await worker.stop()
     engine.dispose()
     logging.getLogger(__name__).info("后端停止")
@@ -150,9 +173,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(api_v1_router)
 
-    @application.get("/", include_in_schema=False)
-    def root() -> dict[str, str]:
-        return {"name": settings.app.name, "version": settings.app.version, "api": "/api/v1/health"}
+    # 日用模式：dist 存在时 FastAPI 直接托管 React 构建产物（/assets + SPA catch-all）；
+    # dist 缺失（开发/测试）时不启用，保留下方 JSON 根路由，Vite(5173 + proxy) 不受影响。
+    spa_enabled = register_static_hosting(application)
+    if not spa_enabled:
+
+        @application.get("/", include_in_schema=False)
+        def root() -> dict[str, str]:
+            return {"name": settings.app.name, "version": settings.app.version, "api": "/api/v1/health"}
 
     return application
 

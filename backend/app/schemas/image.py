@@ -3,10 +3,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.models import Image
+from app.models import IMAGE_STATUSES, Image
 import json
 
 ReviewStatus = Literal["UNREVIEWED", "KEPT", "REJECTED"]
+# Phase 0.11 新审核体系（images.status）
+ImageStatus = Literal["NEW", "KEEP", "FAVORITE", "REJECT", "ARCHIVED"]
+# Phase 0.11 图库分页排序枚举（合同冻结）
+ImageSort = Literal["created_desc", "created_asc", "favorite", "size"]
 
 
 class ImageReviewRequest(BaseModel):
@@ -15,6 +19,83 @@ class ImageReviewRequest(BaseModel):
 
 class ImageFavoriteRequest(BaseModel):
     favorite: bool
+
+
+class ImageStatusRequest(BaseModel):
+    """Phase 0.11：PATCH /images/{id}/status 入参。
+
+    status 为新审核体系状态；note 可选审核备注（写 images.review_note）。
+    """
+
+    status: ImageStatus
+    note: str | None = None
+
+
+class ImageBatchStatusRequest(BaseModel):
+    """Phase 0.11：POST /images/batch-status 入参（批量审核）。"""
+
+    image_ids: list[str] = Field(min_length=1, max_length=500)
+    status: ImageStatus
+    note: str | None = None
+
+
+class ImageBatchStatusResponse(BaseModel):
+    updated: int
+    items: list["ImageResponse"]
+
+
+class ImageCleanupRejectedRequest(BaseModel):
+    """Phase 0.11：POST /images/cleanup-rejected 入参。
+
+    image_ids 为空 → 作用于全部 REJECT 图；confirm 非 True → 仅预览不删除。
+    """
+
+    image_ids: list[str] = Field(default_factory=list, max_length=1000)
+    confirm: bool = False
+
+
+class ImageBackfillRequest(BaseModel):
+    """Phase 0.11.1：POST /images/thumbnails/backfill 入参。
+
+    kind=thumbnail（默认）/preview；limit 限制本次最多补多少张（上限 2000）。
+    """
+
+    kind: Literal["thumbnail", "preview"] = "thumbnail"
+    limit: int | None = Field(default=None, ge=1, le=2000)
+
+
+class ImageBackfillStatus(BaseModel):
+    """回填任务状态：total=待处理总数、done=完成、failed=失败跳过数。"""
+
+    running: bool
+    done: int
+    total: int
+    failed: int
+    kind: Literal["thumbnail", "preview"]
+
+
+class ImageCleanupProtectedItem(BaseModel):
+    """Phase 0.11.1：被引用保护而跳过的单图及原因摘要。"""
+
+    image_id: str
+    reasons: list[str]
+
+
+class ImageCleanupPreview(BaseModel):
+    # 向后兼容保留 candidate_count / total_bytes / protected_count
+    candidate_count: int
+    deletable_count: int
+    protected_count: int
+    total_bytes: int
+    protected_items: list[ImageCleanupProtectedItem]
+
+
+class ImageCleanupResult(BaseModel):
+    deleted_count: int
+    deleted_bytes: int
+    protected_count: int
+    deletable_count: int
+    failed: list[dict[str, Any]]
 
 
 class ImageUpscaleRequest(BaseModel):
@@ -44,16 +125,23 @@ class ImageResponse(BaseModel):
     review_status: str
     favorite: bool
     source: str
+    # Phase 0.11 新审核体系（0016）
+    status: str
+    reviewed_at: str | None
+    review_note: str
     metadata: dict[str, Any]
     created_at: str
     updated_at: str
 
 
 class ImageListResponse(BaseModel):
+    """Phase 0.11 标准分页响应（合同冻结：items/total/page/page_size/has_next）。"""
+
     items: list[ImageResponse]
     total: int
-    limit: int
-    offset: int
+    page: int
+    page_size: int
+    has_next: bool
 
 
 class ImageImportItem(BaseModel):
@@ -140,6 +228,7 @@ def image_response(image: Image) -> ImageResponse:
         parent_image_id=image.parent_image_id, kind=image.kind, file_path=image.file_path,
         width=image.width, height=image.height, seed=image.seed,
         review_status=image.review_status, favorite=image.favorite, source=image.source,
+        status=image.status, reviewed_at=image.reviewed_at, review_note=image.review_note or "",
         metadata=json.loads(image.metadata_json or "{}"),
         created_at=image.created_at, updated_at=image.updated_at,
     )

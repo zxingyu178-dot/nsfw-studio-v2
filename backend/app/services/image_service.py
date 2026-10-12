@@ -13,12 +13,13 @@ ComfyUI output 目录不作为 Studio 永久图库；数据库只存 DataRoot �
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,8 +32,9 @@ from app.core.filetypes import (
     validate_image_upload,
 )
 from app.core.ids import IMAGE, new_id
+from app.core.timeutil import utc_now_iso
 from app.engine.base import EngineError, EngineOutputFile
-from app.models import Image, Job, JobItem, JobStage, JobStageItem
+from app.models import IMAGE_STATUSES, Image, Job, JobItem, JobStage, JobStageItem
 from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
 
@@ -41,6 +43,26 @@ IMAGE_KIND_DIRS = {
     "original": "images/originals",
     "upscaled": "images/upscaled",
     "processed": "images/processed",
+}
+
+logger = logging.getLogger(__name__)
+
+# Phase 0.11.1 统一审核状态语义：
+# - 审核 status 只有 NEW/KEEP/REJECT/ARCHIVED；favorite 是独立 bool，可与任意状态共存。
+# - FAVORITE 不再作为应用层写入的 status（DB CHECK 保留 FAVORITE 兼容历史，不重写 0016）；
+#   收藏一律走 favorite 列。新旧列必须同源双写，杜绝"旧接口只改旧字段"的分裂。
+# 新 status → 旧 review_status（ARCHIVED 在旧体系按"保留"计）
+_STATUS_TO_LEGACY_REVIEW = {
+    "NEW": "UNREVIEWED",
+    "KEEP": "KEPT",
+    "REJECT": "REJECTED",
+    "ARCHIVED": "KEPT",
+}
+# 旧 review_status → 新 status（旧 PATCH /review 接口仍需与新 status 同源）
+_LEGACY_REVIEW_TO_STATUS = {
+    "UNREVIEWED": "NEW",
+    "KEPT": "KEEP",
+    "REJECTED": "REJECT",
 }
 
 
@@ -357,6 +379,7 @@ def import_outputs_transaction(
         for image in images:
             session.add(image)
         session.commit()
+        _best_effort_thumbnail(session, storage, images, prepared)
         return images
     except Exception:
         session.rollback()
@@ -365,6 +388,27 @@ def import_outputs_transaction(
         for directory in created_dirs:
             storage.safe_delete(directory)
         raise
+
+
+def _best_effort_thumbnail(
+    session: Session, storage: StorageManager,
+    images: list[Image], prepared: list[PreparedImageOutput],
+) -> None:
+    """Phase 0.11.1 P1-3：新图入库后 best-effort 主动生成 thumbnail。
+
+    - 用**已在内存的输出字节**渲染（绝不重新读盘）；
+    - 同步且轻量；失败仅 log warning，**绝不向调用方抛错、绝不回滚/拖慢 Job 或 import**；
+    - preview 不在入库时同步生成（留给按需/回填，避免每张大图额外开销）。
+    """
+    for image, entry in zip(images, prepared):
+        try:
+            from app.services.thumbnail_service import produce_thumbnail_from_bytes
+
+            produce_thumbnail_from_bytes(session, storage, image, entry.data)
+        except Exception:  # noqa: BLE001 —— 缩略图失败绝不影响落库
+            session.rollback()
+            logger.warning("入库后主动生成缩略图失败 image_id=%s（忽略，留待回填）",
+                           image.id)
 
 
 def import_engine_output(
@@ -529,6 +573,8 @@ def list_images(
     search: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    status: str | None = None,
+    sort: str = "created_desc",
     limit: int = 100,
     offset: int = 0,
 ) -> tuple[list[Image], int]:
@@ -538,6 +584,10 @@ def list_images(
         raise ValidationError("offset 不能为负")
     if review_status is not None and review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
         raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
+    if status is not None and status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    if sort not in ("created_desc", "created_asc", "favorite", "size"):
+        raise ValidationError(f"非法排序: {sort}", code="IMAGE_SORT_INVALID")
 
     query = select(Image)
     if job_id is not None:
@@ -546,6 +596,8 @@ def list_images(
         query = query.where(Image.review_status == review_status)
     if favorite is not None:
         query = query.where(Image.favorite == favorite)
+    if status is not None:
+        query = query.where(Image.status == status)
     if source is not None:
         query = query.where(Image.source == source)
     if kind is not None:
@@ -559,43 +611,188 @@ def list_images(
         query = query.where(Image.created_at <= date_to)
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
-    items = list(session.execute(query.order_by(Image.created_at.desc()).limit(limit).offset(offset)).scalars())
+
+    # Phase 0.11 排序：
+    # - created_desc/created_asc：按生成时间；
+    # - favorite：精品优先，再按时间倒序；
+    # - size：按像素数（width*height）倒序，大尺寸优先（图片无文件字节列，
+    #   像素数由列直接可得、确定性可排序，避免为排序而全库读文件）。
+    # Phase 0.11.1：所有排序补稳定 tie-breaker（created_at, id），
+    # 保证连续页无重复/遗漏（同 created_at 时按 id 确定性排序）。
+    if sort == "created_asc":
+        order_by = (Image.created_at.asc(), Image.id.asc())
+    elif sort == "favorite":
+        order_by = (Image.favorite.desc(), Image.created_at.desc(), Image.id.desc())
+    elif sort == "size":
+        order_by = ((Image.width * Image.height).desc(), Image.created_at.desc(), Image.id.desc())
+    else:
+        order_by = (Image.created_at.desc(), Image.id.desc())
+
+    items = list(session.execute(
+        query.order_by(*order_by).limit(limit).offset(offset)
+    ).scalars())
     return items, int(total)
 
 
 def set_review(session: Session, image_id: str, review_status: str) -> Image:
+    """旧审核接口（PATCH /images/{id}/review）——与新 status 同源，绝不第二套逻辑。
+
+    旧值 → 新 status：UNREVIEWED→NEW（清 reviewed_at）、KEPT→KEEP、REJECTED→REJECT；
+    同步写 status / review_status / reviewed_at；**绝不改 favorite**。
+    """
     if review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
         raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
     image = get_image(session, image_id)
+    new_status = _LEGACY_REVIEW_TO_STATUS[review_status]
     image.review_status = review_status
+    image.status = new_status
+    image.reviewed_at = None if new_status == "NEW" else utc_now_iso()
     session.commit()
     return image
 
 
 def set_favorite(session: Session, image_id: str, favorite: bool) -> Image:
+    """收藏切换（PATCH /images/{id}/favorite）——只写 favorite，**绝不改 status/review_status/reviewed_at**。
+
+    收藏与审核状态相互独立：KEEP+favorite、ARCHIVED+favorite、NEW+favorite 都合法。
+    """
     image = get_image(session, image_id)
     image.favorite = favorite
     session.commit()
     return image
 
 
+def set_image_status(session: Session, image_id: str, status: str,
+                     note: str | None = None) -> Image:
+    """新审核状态流转（NEW/KEEP/REJECT/ARCHIVED）。
+
+    语义（Phase 0.11.1 合同冻结）：
+    - 置 status、review_note；除 NEW 外置 reviewed_at=now，回到 NEW 则清空；
+    - **FAVORITE 不再作为可写入状态**：传入即 IMAGE_STATUS_DEPRECATED(400)，提示收藏请用
+      favorite（PATCH /images/{id}/favorite）；DB CHECK 仍保留 FAVORITE 兼容历史；
+    - 同步双写旧 review_status（NEW→UNREVIEWED、KEEP/ARCHIVED→KEPT、REJECT→REJECTED），
+      保证按旧列聚合的统计随新状态实时变化（旧列保留兼容，不做删除）；
+    - **绝不改 favorite**：切审核状态不得偷偷覆盖用户收藏。
+    """
+    if status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    if status == "FAVORITE":
+        raise ValidationError(
+            "FAVORITE 不再作为审核状态写入；收藏请使用 favorite（PATCH /images/{id}/favorite）",
+            code="IMAGE_STATUS_DEPRECATED",
+        )
+    image = get_image(session, image_id)
+    image.status = status
+    image.review_note = note or ""
+    image.reviewed_at = None if status == "NEW" else utc_now_iso()
+    image.review_status = _STATUS_TO_LEGACY_REVIEW[status]
+    session.commit()
+    return image
+
+
+def batch_set_status(session: Session, image_ids: list[str], status: str,
+                    note: str | None = None) -> list[Image]:
+    """Phase 0.11 批量审核（POST /images/batch-status）。
+
+    逐个调用 set_image_status（单图事务）；任一 id 不存在即 404 中止，不静默跳过。
+    FAVORITE 与单图接口同样被拒绝（IMAGE_STATUS_DEPRECATED）。
+    """
+    if status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    if status == "FAVORITE":
+        raise ValidationError(
+            "FAVORITE 不再作为审核状态写入；收藏请使用 favorite",
+            code="IMAGE_STATUS_DEPRECATED",
+        )
+    return [set_image_status(session, image_id, status, note) for image_id in image_ids]
+
+
 def job_gallery_summary(session: Session, job_id: str) -> dict:
-    """按 Job 统计（规范 §四十九：未审核 / 保留 / 收藏 / 淘汰）。"""
-    rows = session.execute(
-        select(Image.review_status, func.count())
-        .where(Image.job_id == job_id)
-        .group_by(Image.review_status)
-    ).all()
-    counts = {status: int(count) for status, count in rows}
-    favorites = session.execute(
-        select(func.count()).select_from(Image)
-        .where(Image.job_id == job_id, Image.favorite.is_(True))
-    ).scalar_one()
+    """按 Job 统计（规范 §四十九：未审核 / 保留 / 收藏 / 淘汰）。
+
+    Phase 0.11.1 口径（以新 status + favorite 为准，旧 review_status 仅兼容）：
+    - unreviewed = count(status='NEW')；
+    - rejected   = count(status='REJECT')；
+    - kept       = count(status IN ('KEEP','ARCHIVED'))（ARCHIVED 视为已保留，保证
+      unreviewed+kept+rejected == total）；
+    - favorites  = count(favorite=true)（独立交叉计数，**不可**并入 kept/rejected）；
+    - total      = 该 job 全部图。
+    """
+    def _count(*clauses) -> int:
+        query = select(func.count()).select_from(Image).where(Image.job_id == job_id)
+        for clause in clauses:
+            query = query.where(clause)
+        return int(session.execute(query).scalar_one())
+
+    total = _count()
+    unreviewed = _count(Image.status == "NEW")
+    rejected = _count(Image.status == "REJECT")
+    kept = _count(Image.status.in_(("KEEP", "ARCHIVED")))
+    favorites = _count(Image.favorite.is_(True))
     return {
         "job_id": job_id,
-        "total": sum(counts.values()),
-        "unreviewed": counts.get("UNREVIEWED", 0),
-        "kept": counts.get("KEPT", 0),
-        "rejected": counts.get("REJECTED", 0),
-        "favorites": int(favorites),
+        "total": total,
+        "unreviewed": unreviewed,
+        "kept": kept,
+        "rejected": rejected,
+        "favorites": favorites,
     }
+
+
+def list_job_groups(
+    session: Session, *, page: int = 1, page_size: int = 20,
+) -> tuple[list[dict], int]:
+    """Phase 0.11.1 P1-2：按 Job 聚合图库统计（单次 GROUP BY，避免 N+1）。
+
+    口径与 ``job_gallery_summary`` 完全一致：
+    - unreviewed = count(status='NEW')；rejected = count(status='REJECT')；
+    - kept = count(status IN ('KEEP','ARCHIVED'))；favorites = count(favorite=true)。
+    只含 status='COMPLETED' 且有产出图的 Job；按 Job created_at 倒序（id 兜底）。
+    返回 (groups, total_groups)。
+    """
+    agg = (
+        select(
+            Image.job_id.label("job_id"),
+            func.count().label("total"),
+            func.coalesce(func.sum(case((Image.status == "NEW", 1), else_=0)), 0).label("unreviewed"),
+            func.coalesce(func.sum(case((Image.status == "REJECT", 1), else_=0)), 0).label("rejected"),
+            func.coalesce(func.sum(case((Image.status.in_(("KEEP", "ARCHIVED")), 1), else_=0)), 0).label("kept"),
+            func.coalesce(func.sum(case((Image.favorite.is_(True), 1), else_=0)), 0).label("favorites"),
+        )
+        .where(Image.job_id.isnot(None))
+        .group_by(Image.job_id)
+        .subquery()
+    )
+    query = (
+        select(
+            agg.c.job_id,
+            Job.module_id.label("module_id"),
+            Job.created_at.label("created_at"),
+            agg.c.total,
+            agg.c.unreviewed,
+            agg.c.kept,
+            agg.c.rejected,
+            agg.c.favorites,
+        )
+        .join(Job, Job.id == agg.c.job_id)
+        .where(Job.status == "COMPLETED")
+    )
+    total = int(session.execute(select(func.count()).select_from(query.subquery())).scalar_one())
+    rows = session.execute(
+        query.order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(page_size).offset((page - 1) * page_size)
+    ).all()
+    groups = [
+        {
+            "job_id": row.job_id,
+            "module_id": row.module_id,
+            "created_at": row.created_at,
+            "total": int(row.total),
+            "unreviewed": int(row.unreviewed),
+            "kept": int(row.kept),
+            "rejected": int(row.rejected),
+            "favorites": int(row.favorites),
+        }
+        for row in rows
+    ]
+    return groups, total

@@ -1,14 +1,21 @@
-// 历史 Tab（Phase 4 Task5/6）：正式接 Job 系统，来源 = jobs（不另建 History 表）。
-// 任务族两级归组：原任务 + 续跑任务；Drawer 提供完整 Prompt / 结构化字段 / 尺寸 / Seed /
-// Workflow stages / 版本 / 错误 / 生成图片，以及"在生成工作台打开 / 在图库查看 / 继续剩余图片"。
+// 历史 Tab：来源 = jobs（不另建 History 表）。任务族两级归组：原任务 + 续跑任务；
+// Drawer 提供完整 Prompt / 结构化字段 / 尺寸 / Seed / Workflow stages / 版本 / 错误 /
+// 生成图片，以及“在生成工作台打开 / 在图库查看 / 继续剩余图片”。
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError, historyApi, imageApi, jobApi, moduleApi } from '../../api/client'
+import {
+  Badge,
+  Button,
+  Drawer,
+  Select,
+  StatusBadge,
+  Tabs,
+} from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
 import {
   HISTORY_BUCKET_LABEL,
   JOB_SOURCE_LABEL,
-  JOB_STATUS_LABEL,
   MODULE_LABEL,
   STRUCTURED_FIELDS,
   imageContentUrl,
@@ -44,7 +51,7 @@ function canResumeRemaining(job: JobDTO): boolean {
   return RESUMABLE_STATUSES.includes(job.status) && job.completed_count < job.requested_count
 }
 
-/** Task9：从历史 Job 恢复 → 携带**完整执行身份**（含双指纹），提交时固定原版本 */
+/** Task9：从历史 Job 恢复 → 携带完整执行身份（含双指纹） */
 function snapshotFromJob(job: JobDTO): WorkbenchSnapshot {
   const modules = (job.workflow_snapshot?.modules ?? []) as WorkflowModuleRef[]
   const identity: WorkflowModuleRef[] = modules.length > 0
@@ -89,50 +96,43 @@ export function HistoryTab() {
   }, [load])
 
   return (
-    <div className="history">
-      <div className="tabs" role="tablist" aria-label="历史筛选">
-        {(Object.keys(HISTORY_BUCKET_LABEL) as HistoryBucket[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={bucket === key}
-            className={`tabs__item${bucket === key ? ' tabs__item--active' : ''}`}
-            onClick={() => setBucket(key)}
-          >
-            {HISTORY_BUCKET_LABEL[key]}
-          </button>
-        ))}
-        <span className="toolbar__spacer" />
-        <select
-          className="input input--inline"
+    <div>
+      <div className="pp-toolbar">
+        <Tabs
+          ariaLabel="历史筛选"
+          active={bucket}
+          onChange={(key) => setBucket(key as HistoryBucket)}
+          items={(Object.keys(HISTORY_BUCKET_LABEL) as HistoryBucket[]).map((key) => ({
+            key,
+            label: HISTORY_BUCKET_LABEL[key],
+          }))}
+        />
+        <span className="pp-toolbar__spacer" />
+        <Select
+          aria-label="按来源筛选"
           value={source ?? ''}
           onChange={(event) => setSource(event.target.value || null)}
-          aria-label="按来源筛选"
-        >
-          {SOURCE_FILTERS.map(({ key, label }) => (
-            <option key={label} value={key ?? ''}>{label}</option>
-          ))}
-        </select>
+          options={SOURCE_FILTERS.map(({ key, label }) => ({ value: key ?? '', label }))}
+        />
       </div>
 
-      {error && <p className="notice notice--error">{error}</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
       {loading && <p className="muted">加载中…</p>}
 
       {!loading && items.length === 0 && (
-        <div className="empty-state">
-          <h1 className="empty-state__title">暂无生成历史</h1>
-          <p className="empty-state__desc">在工作台提交生成任务后，历史会自动记录在这里。</p>
+        <div className="pp-empty">
+          <h2 className="pp-empty__title">暂无生成历史</h2>
+          <p className="muted">在工作台提交生成任务后，历史会自动记录在这里。</p>
         </div>
       )}
 
-      {!loading && items.length > 0 && <p className="muted">共 {total} 个任务</p>}
-      <div className="history-list">
+      {!loading && items.length > 0 && <p className="pp-count">共 {total} 个任务</p>}
+      <div className="pp-hist-list">
         {items.map((entry) => (
-          <div key={entry.root_job_id} className="history-family">
+          <div key={entry.root_job_id} className="pp-family">
             <HistoryJobCard job={entry.root} onOpen={setDetailJob} />
             {entry.resumes.length > 0 && (
-              <div className="history-family__resumes">
+              <div className="pp-family__resumes">
                 {entry.resumes.map((resume) => (
                   <HistoryJobCard key={resume.id} job={resume} isResume onOpen={setDetailJob} />
                 ))}
@@ -153,8 +153,6 @@ export function HistoryTab() {
   )
 }
 
-// ===== 任务卡（Task5：创建时间 / 来源 / Prompt 摘要 / 状态 / 数量 / Pipeline / 是否续跑） =====
-
 function HistoryJobCard({ job, isResume, onOpen }: {
   job: JobDTO
   isResume?: boolean
@@ -164,22 +162,20 @@ function HistoryJobCard({ job, isResume, onOpen }: {
   return (
     <button
       type="button"
-      className={`history-card card card--clickable${isResume ? ' history-card--resume' : ''}`}
+      className={`pp-hist-card${isResume ? ' pp-hist-card--resume' : ''}`}
       onClick={() => onOpen(job)}
     >
-      <div className="history-card__head">
-        <span className={`status-chip status-chip--${job.status.toLowerCase()}`}>
-          {JOB_STATUS_LABEL[job.status]}
-        </span>
-        <span className="badge badge--mode">{JOB_SOURCE_LABEL[job.source] ?? job.source}</span>
-        {isResume && <span className="badge badge--mode">续跑</span>}
-        <span className="toolbar__spacer" />
+      <div className="pp-hist-card__head">
+        <StatusBadge status={job.status} />
+        <Badge tone="accent">{JOB_SOURCE_LABEL[job.source] ?? job.source}</Badge>
+        {isResume && <Badge tone="accent">续跑</Badge>}
+        <span className="pp-toolbar__spacer" />
         <span className="muted">{shortJobId(job.id)} · {formatDateTime(job.created_at)}</span>
       </div>
-      <p className="history-card__title" title={excerpt}>
+      <p className="pp-hist-card__title" title={excerpt}>
         {excerpt.length > 72 ? `${excerpt.slice(0, 72)}…` : excerpt}
       </p>
-      <p className="history-card__meta muted">
+      <p className="pp-hist-card__meta muted">
         {job.job_kind === 'process' ? '处理型' : '生成'} · 完成 {job.completed_count} / {job.requested_count} 张 ·{' '}
         {pipelineText(job)}
         {canResumeRemaining(job) ? ' · 有剩余可续跑' : ''}
@@ -187,8 +183,6 @@ function HistoryJobCard({ job, isResume, onOpen }: {
     </button>
   )
 }
-
-// ===== 详情 Drawer（Task5：完整信息 + 操作） =====
 
 function HistoryDetailDrawer({ job, onClose, onResumed }: {
   job: JobDTO
@@ -205,19 +199,12 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
     let cancelled = false
     imageApi
       .list({ job_id: job.id, limit: 200 })
-      .then((page) => {
-        if (!cancelled) setImages(page.items)
-      })
-      .catch(() => {
-        // 图片缺失不阻塞任务详情
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((page) => { if (!cancelled) setImages(page.items) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [job.id])
 
-  /** Task9（Phase 6）：尺寸语义——explicit 显示 generation_settings；
-      size_mode=input 显示"跟随输入图 + 实际 Stage 输入尺寸"（不展示 Workbench 遗留的假宽高） */
+  /** 尺寸语义：explicit 显示 generation_settings；size_mode=input 显示跟随输入图 */
   const [sizeText, setSizeText] = useState('—')
 
   useEffect(() => {
@@ -230,9 +217,7 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
     const stage0 = job.stages?.[0]
     const inputId = stage0?.items.find((item) => item.input_image_id)?.input_image_id ?? null
     if (!stage0 || !inputId) {
-      return () => {
-        cancelled = true
-      }
+      return () => { cancelled = true }
     }
     moduleApi
       .list()
@@ -245,16 +230,10 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
           .then((image) => {
             if (!cancelled) setSizeText(`跟随输入图 ${image.width}×${image.height}`)
           })
-          .catch(() => {
-            if (!cancelled) setSizeText('跟随输入图')
-          })
+          .catch(() => { if (!cancelled) setSizeText('跟随输入图') })
       })
-      .catch(() => {
-        // 目录不可用：保持 explicit 展示，不阻塞任务详情
-      })
-    return () => {
-      cancelled = true
-    }
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [job])
 
   const seeds = job.items.map((item) => item.seed).filter((seed): seed is number => seed !== null)
@@ -287,124 +266,105 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
   }
 
   return (
-    <div className="drawer-backdrop" role="presentation" onClick={onClose}>
-      <aside
-        className="drawer drawer--wide"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="drawer__header">
-          <h3 className="drawer__title">任务详情 {shortJobId(job.id)}</h3>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={onClose} aria-label="关闭">
-            ✕
-          </button>
-        </header>
+    <Drawer open onClose={onClose} width="wide" title={`任务详情 ${shortJobId(job.id)}`}>
+      <div className="pp-toolbar">
+        <StatusBadge status={job.status} />
+        <Badge tone="accent">{JOB_SOURCE_LABEL[job.source] ?? job.source}</Badge>
+        <span className="muted">{formatDateTime(job.created_at)}</span>
+      </div>
 
-        <div className="drawer__meta-actions">
-          <span className={`status-chip status-chip--${job.status.toLowerCase()}`}>
-            {JOB_STATUS_LABEL[job.status]}
-          </span>
-          <span className="badge badge--mode">{JOB_SOURCE_LABEL[job.source] ?? job.source}</span>
-          <span className="muted">{formatDateTime(job.created_at)}</span>
-        </div>
+      <div className="pp-toolbar">
+        <Button size="sm" variant="primary" onClick={openInWorkbench}>
+          在生成工作台打开
+        </Button>
+        <Button size="sm" variant="secondary" onClick={viewInGallery}>
+          在图库查看
+        </Button>
+        <Button
+          size="sm" variant="secondary"
+          disabled={!resumable || busy}
+          title={resumable ? undefined : '仅失败/取消/中断且仍有未完成图片时可续跑'}
+          onClick={() => void resumeRemaining()}
+        >
+          {busy ? '提交中…' : '继续剩余图片'}
+        </Button>
+      </div>
 
-        <div className="drawer__meta-actions">
-          <button type="button" className="btn btn--primary btn--sm" onClick={openInWorkbench}>
-            在生成工作台打开
-          </button>
-          <button type="button" className="btn btn--sm" onClick={viewInGallery}>
-            在图库查看
-          </button>
-          <button
-            type="button"
-            className="btn btn--sm"
-            disabled={!resumable || busy}
-            title={resumable ? undefined : '仅失败/取消/中断且仍有未完成图片时可续跑'}
-            onClick={() => void resumeRemaining()}
-          >
-            {busy ? '提交中…' : '继续剩余图片'}
-          </button>
-        </div>
+      {message && <p className="ds-notice ds-notice--success" role="status">{message}</p>}
+      {error && <p className="ds-notice ds-notice--error">{error}</p>}
 
-        {message && <p className="notice notice--ok" role="status">{message}</p>}
-        {error && <p className="notice notice--error">{error}</p>}
-
-        <dl className="asset-detail__fields">
-          <dt>完整 Prompt</dt>
-          <dd><pre className="asset-detail__prompt">{job.positive_prompt_snapshot || '（无）'}</pre></dd>
-          <dt>Negative</dt>
-          <dd><pre className="asset-detail__prompt">{job.negative_prompt_snapshot || '（无）'}</pre></dd>
-          {structuredFields.length > 0 && (
-            <>
-              <dt>结构化 Prompt</dt>
-              <dd>
-                {structuredFields.map(({ key, label }) => (
-                  <div key={key}>
-                    <span className="muted">{label}：</span>
-                    {job.structured_prompt[key]}
-                  </div>
-                ))}
-              </dd>
-            </>
-          )}
-          <dt>尺寸</dt>
-          <dd>{sizeText}</dd>
-          <dt>Seed</dt>
-          <dd>{seeds.length > 0 ? seeds.join(', ') : '—（不使用 Seed）'}</dd>
-          <dt>数量</dt>
-          <dd>完成 {job.completed_count} / {job.requested_count} 张</dd>
-          {job.resume_of_job_id && (
-            <>
-              <dt>续跑自</dt>
-              <dd>{shortJobId(job.resume_of_job_id)}</dd>
-            </>
-          )}
-          {job.error_message && (
-            <>
-              <dt>错误</dt>
-              <dd>{job.error_type}：{job.error_message}</dd>
-            </>
-          )}
-        </dl>
-
-        {/* ===== Workflow stages（含版本与执行指纹） ===== */}
-        <section className="version-history">
-          <h4 className="version-history__title">Workflow</h4>
-          <ul className="history-stages">
-            {job.stages.map((stage) => (
-              <li key={stage.id} className="history-stages__item">
-                <span className="history-stages__name">
-                  {stage.stage_index + 1}. {MODULE_LABEL[stage.module_id] ?? stage.module_id} ·{' '}
-                  {stage.status} · {stage.completed_count} / {stage.total_count}
-                </span>
-                <span className="muted history-stages__version">
-                  {stage.module_version} / binding {stage.binding_version ?? '—'}
-                  {stage.workflow_hash ? ` · wf ${stage.workflow_hash.slice(0, 8)}` : ''}
-                  {stage.binding_hash ? ` · bd ${stage.binding_hash.slice(0, 8)}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* ===== 生成图片 ===== */}
-        {images.length > 0 && (
-          <section className="version-history">
-            <h4 className="version-history__title">生成图片（{images.length}）</h4>
-            <div className="history-thumbs">
-              {images.map((image) => (
-                <div key={image.id} className="history-thumbs__item">
-                  <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
-                  <span className="history-thumbs__badge">
-                    {image.kind === 'upscaled' ? 'HD' : image.kind === 'original' ? '原图' : '处理'}
-                  </span>
+      <dl className="pp-fields">
+        <dt>完整 Prompt</dt>
+        <dd><pre>{job.positive_prompt_snapshot || '（无）'}</pre></dd>
+        <dt>Negative</dt>
+        <dd><pre>{job.negative_prompt_snapshot || '（无）'}</pre></dd>
+        {structuredFields.length > 0 && (
+          <>
+            <dt>结构化 Prompt</dt>
+            <dd>
+              {structuredFields.map(({ key, label }) => (
+                <div key={key}>
+                  <span className="muted">{label}：</span>
+                  {job.structured_prompt[key]}
                 </div>
               ))}
-            </div>
-          </section>
+            </dd>
+          </>
         )}
-      </aside>
-    </div>
+        <dt>尺寸</dt>
+        <dd>{sizeText}</dd>
+        <dt>Seed</dt>
+        <dd>{seeds.length > 0 ? seeds.join(', ') : '—（不使用 Seed）'}</dd>
+        <dt>数量</dt>
+        <dd>完成 {job.completed_count} / {job.requested_count} 张</dd>
+        {job.resume_of_job_id && (
+          <>
+            <dt>续跑自</dt>
+            <dd>{shortJobId(job.resume_of_job_id)}</dd>
+          </>
+        )}
+        {job.error_message && (
+          <>
+            <dt>错误</dt>
+            <dd>{job.error_type}：{job.error_message}</dd>
+          </>
+        )}
+      </dl>
+
+      <section className="pp-versions">
+        <h4 className="pp-versions__title">Workflow</h4>
+        <ul className="pp-stages">
+          {job.stages.map((stage) => (
+            <li key={stage.id} className="pp-stages__item">
+              <span>
+                {stage.stage_index + 1}. {MODULE_LABEL[stage.module_id] ?? stage.module_id} ·{' '}
+                {stage.status} · {stage.completed_count} / {stage.total_count}
+              </span>
+              <span className="muted">
+                {stage.module_version} / binding {stage.binding_version ?? '—'}
+                {stage.workflow_hash ? ` · wf ${stage.workflow_hash.slice(0, 8)}` : ''}
+                {stage.binding_hash ? ` · bd ${stage.binding_hash.slice(0, 8)}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {images.length > 0 && (
+        <section className="pp-versions">
+          <h4 className="pp-versions__title">生成图片（{images.length}）</h4>
+          <div className="pp-thumbs">
+            {images.map((image) => (
+              <div key={image.id} className="pp-thumbs__item">
+                <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
+                <span className="pp-thumbs__badge">
+                  {image.kind === 'upscaled' ? 'HD' : image.kind === 'original' ? '原图' : '处理'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </Drawer>
   )
 }
