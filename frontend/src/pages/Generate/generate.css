@@ -396,6 +396,22 @@
 .wb-footer { display: flex; gap: var(--space-2); }
 .wb-footer .ds-btn { flex: 1; }
 
+/* ===== 数量自由输入（Phase 0.13.1：1–64，含常用档 chips） ===== */
+.wb-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.wb-count .ds-input {
+  width: 72px;
+  flex: 0 0 auto;
+}
+.wb-count__chips {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
 /* ===== 素材 / 图片选择网格（Drawer 内） ===== */
 .wb-asset-search { margin-bottom: var(--space-2); }
 .wb-asset-grid,
