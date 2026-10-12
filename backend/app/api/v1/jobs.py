@@ -154,6 +154,12 @@ def get_queue(request: Request, session: Session = Depends(get_session)) -> Queu
     )
 
 
+@router.post("/queue/clear-stale", summary="清理陈旧任务/清空排队（用户显式触发）")
+def clear_stale_jobs(session: Session = Depends(get_session)) -> dict:
+    """v0.13.2：把所有非终态 Job 置 CANCELLED（供前端"清理陈旧任务"入口）。"""
+    return job_service.clear_stale_jobs(session)
+
+
 @router.post("/queue/reorder", response_model=QueueResponse, summary="拖拽排序（仅等待任务）")
 def reorder_queue(
     body: QueueReorderRequest, session: Session = Depends(get_session)

@@ -181,17 +181,14 @@ def test_v032_database_backfill_and_queued_job_still_runs(settings, monkeypatch)
         assert conn.execute(text("SELECT seed FROM images WHERE id = 'img_done_1'")).scalar_one() == 4242
     engine.dispose()
 
-    # ===== 4) 升级后的应用启动：QUEUED Job 被同一 Worker 真实执行 =====
+    # ===== 4) 升级后的应用启动：v0.13.2 起 QUEUED/PAUSED 一律判 stale（INTERRUPTED），不自动重提引擎 =====
     app = create_app(mock_settings(settings))
     with TestClient(app) as client:
-        final = wait_for(client, "job_queued", lambda j: j["status"] == "COMPLETED")
-        assert final["completed_count"] == 1
-        assert final["stages"][0]["status"] == "COMPLETED"
-        assert final["stages"][0]["items"][0]["output_image_id"], "执行完必须有真实输出图片"
-        images = client.get("/api/v1/images", params={"job_id": "job_queued"}).json()["items"]
-        assert len(images) == 1 and images[0]["kind"] == "original"
+        # QUEUED Job 不再自动执行 → 启动恢复为 INTERRUPTED（等用户显式 resume）
+        queued = client.get("/api/v1/jobs/job_queued").json()
+        assert queued["status"] == "INTERRUPTED", "v0.13.2: 启动不自动重放遗留 QUEUED"
 
-        # 其他历史 Job 状态不被升级/启动过程破坏
+        # 其他历史 Job：COMPLETED 不变；PAUSED 同样判 stale → INTERRUPTED
         assert client.get("/api/v1/jobs/job_done").json()["status"] == "COMPLETED"
-        assert client.get("/api/v1/jobs/job_paused").json()["status"] == "PAUSED"
+        assert client.get("/api/v1/jobs/job_paused").json()["status"] == "INTERRUPTED"
         assert client.get("/api/v1/jobs/job_interrupted").json()["status"] == "INTERRUPTED"

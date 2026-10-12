@@ -926,30 +926,72 @@ def reorder_queue(session: Session, ordered_job_ids: list[str]) -> list[Job]:
 
 # ===== 崩溃恢复（规范 §三十七） =====
 
+# v0.13.2 事故修复：跨进程重启遗留的 QUEUED/RUNNING/PAUSED 一律判 stale（INTERRUPTED），
+# 不自动重提引擎；必须用户在界面显式"继续/重试"。
+_STARTUP_STALE_JOB_STATUSES = ("RUNNING", "QUEUED", "PAUSED")
+
+
 def mark_interrupted_at_startup(session: Session) -> list[str]:
-    """启动时把遗留 RUNNING Job/Stage/Item 转为 INTERRUPTED（不重新排队；Phase 3 §八）。"""
+    """启动时把遗留 RUNNING/QUEUED/PAUSED Job/Stage/Item 转为 INTERRUPTED（不重新排队）。
+
+    v0.13.2：原只翻 RUNNING，导致遗留 QUEUED 被 worker 启动后自动重放（10-10 事故根因）。
+    现在 QUEUED/PAUSED 也判 stale，等用户显式 resume/cancel。
+    """
     interrupted_jobs: list[str] = []
-    for job in session.execute(select(Job).where(Job.status == "RUNNING")).scalars():
+    for job in session.execute(
+        select(Job).where(Job.status.in_(_STARTUP_STALE_JOB_STATUSES))
+    ).scalars():
+        stale_reason = "startup_recovery"
         job.status = "INTERRUPTED"
         interrupted_jobs.append(job.id)
         for item in session.execute(select(JobItem).where(
-            JobItem.job_id == job.id, JobItem.status == "RUNNING"
+            JobItem.job_id == job.id, JobItem.status.in_(("RUNNING", "QUEUED"))
         )).scalars():
             item.status = "INTERRUPTED"
         for stage in session.execute(select(JobStage).where(
-            JobStage.job_id == job.id, JobStage.status == "RUNNING"
+            JobStage.job_id == job.id, JobStage.status.in_(("RUNNING", "QUEUED", "PAUSED"))
         )).scalars():
             stage.status = "INTERRUPTED"
         for stage_item in session.execute(
             select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
-            .where(JobStage.job_id == job.id, JobStageItem.status == "RUNNING")
+            .where(JobStage.job_id == job.id,
+                   JobStageItem.status.in_(("RUNNING", "QUEUED")))
         ).scalars():
             stage_item.status = "INTERRUPTED"
-        record_event(session, job.id, "JOB_INTERRUPTED", payload={"reason": "startup_recovery"})
+        record_event(session, job.id, "JOB_INTERRUPTED",
+                     payload={"reason": stale_reason, "stale_status": "QUEUED_OR_PAUSED"})
     session.commit()
     for job_id in interrupted_jobs:
         _publish("JOB_UPDATED", job_id, payload={"status": "INTERRUPTED"})
     return interrupted_jobs
+
+
+def clear_stale_jobs(session: Session) -> dict:
+    """后端"清理陈旧任务/清空排队"：把所有非终态 Job 置 CANCELLED（供前端入口调用）。
+
+    只在用户显式触发时调用，启动流程不自动调用。
+    """
+    active = session.execute(
+        select(Job).where(Job.status.in_(
+            ("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED")
+        ))
+    ).scalars().all()
+    ids = [j.id for j in active]
+    for job in active:
+        job.status = "CANCELLED"
+        for item in session.execute(select(JobItem).where(
+            JobItem.job_id == job.id, JobItem.status.in_(("QUEUED", "RUNNING"))
+        )).scalars():
+            item.status = "CANCELLED"
+        for stage in session.execute(select(JobStage).where(
+            JobStage.job_id == job.id, JobStage.status.in_(("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED"))
+        )).scalars():
+            stage.status = "CANCELLED"
+        record_event(session, job.id, "JOB_CANCELLED", payload={"reason": "clear_stale"})
+    session.commit()
+    for job_id in ids:
+        _publish("JOB_UPDATED", job_id, payload={"status": "CANCELLED"})
+    return {"cancelled": len(ids), "job_ids": ids}
 
 
 def classify_item_error(message: str) -> str:
