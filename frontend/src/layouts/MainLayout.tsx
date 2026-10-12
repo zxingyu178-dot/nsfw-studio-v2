@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { TopNav } from '../components/TopNav'
 import { startJobStore, stopJobStore } from '../stores/jobStore'
 
@@ -10,10 +10,17 @@ export function MainLayout() {
     return () => stopJobStore()
   }, [])
 
+  const location = useLocation()
+  // Generate 工作台：从根上禁止 main 撑长（overflow:hidden），整页不滚动，
+  // 三栏/单栏在 body 内各自滚动。其它路由保持 main 默认纵向文档滚动。
+  const isWorkspace = location.pathname.startsWith('/generate')
+
   return (
     <div className="app-shell">
       <TopNav />
-      <main className="app-shell__main">
+      <main
+        className={`app-shell__main${isWorkspace ? ' app-shell__main--workspace' : ''}`.trim()}
+      >
         <Outlet />
       </main>
     </div>
