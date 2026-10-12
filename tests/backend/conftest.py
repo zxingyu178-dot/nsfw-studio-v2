@@ -1,12 +1,57 @@
 """后端测试夹具：全部用例使用临时 DataRoot，绝不触碰真实数据目录。"""
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
+
+# ===== Hermetic 护栏（v0.13.2 事故教训） =====
+# 测试全程强制 hermetic：绝不允许任何测试进程向真实 127.0.0.1:8188 / 8000 / 8767 发起连接或 POST。
+# - 置位 NSFW_STUDIO_HERMETIC=1，供真实集成测试自检并 skip；
+# - 清空代理 env，避免 httpx 因 socks 代理在构造期报错（干扰护栏验证）；
+# - 包一层 httpx Client/AsyncClient.send，凡目标是这些端口的请求直接抛错（fail fast）。
+os.environ["NSFW_STUDIO_HERMETIC"] = "1"
+for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+    os.environ.pop(_k, None)
+os.environ["NO_PROXY"] = "*"
+
+_BLOCKED_HOSTS_PORTS = {(("127.0.0.1"), p) for p in (8188, 8000, 8767)}
+
+
+def _install_httpx_guard() -> None:
+    """在 Client/AsyncClient.send 层拦截到真实 8188/8000/8767 的请求（最可靠）。"""
+    try:
+        import httpx
+    except Exception:
+        return
+
+    def _block(request):
+        host = request.url.host
+        port = request.url.port
+        if (host, port) in _BLOCKED_HOSTS_PORTS:
+            raise RuntimeError(
+                f"[hermetic guard] 测试禁止连接真实 {host}:{port} "
+                f"（method={request.method} url={request.url}）"
+            )
+
+    orig_send = httpx.Client.send
+    def send_guarded(self, request, **kw):  # noqa: ANN001
+        _block(request)
+        return orig_send(self, request, **kw)
+    httpx.Client.send = send_guarded
+
+    orig_async_send = httpx.AsyncClient.send
+    async def async_send_guarded(self, request, **kw):  # noqa: ANN001
+        _block(request)
+        return await orig_async_send(self, request, **kw)
+    httpx.AsyncClient.send = async_send_guarded
+
+
+_install_httpx_guard()
 
 from app.core.config import Settings, load_settings
 from app.main import create_app
