@@ -29,6 +29,7 @@ from app.schemas.image import (
     ImageReferencesResponse,
     ImageResponse,
     ImageReviewRequest,
+    ImageStatsResponse,
     ImageStatusRequest,
     ImageUpscaleRequest,
     ImageVersionsResponse,
@@ -168,6 +169,33 @@ def list_job_groups(
         "items": groups, "total": total, "page": page, "page_size": page_size,
         "has_next": (page - 1) * page_size + len(groups) < total,
     }
+
+
+@router.get("/stats", response_model=ImageStatsResponse,
+            summary="全局图库统计（与 GET /images 相同过滤口径；SQL 单行聚合）")
+def image_stats(
+    job_id: str | None = Query(default=None),
+    review_status: str | None = Query(default=None),
+    favorite: bool | None = Query(default=None),
+    source: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    search: str | None = Query(default=None, description="按导入文件名搜索"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    session: Session = Depends(get_session),
+) -> ImageStatsResponse:
+    """返回命中过滤条件后的**全局**计数 {total, new, keep, reject, archived, favorites}。
+
+    - 过滤参数与 GET /api/v1/images 完全一致（共用同一套过滤构造，口径绝不漂移）；
+    - favorites = favorite=true 的独立交叉计数，不并入任一审核状态；
+    - 用于 Gallery 顶部与 ReviewMode 的全局统计（替代"分母 server total、分子本地 list"的假全局）。
+    """
+    return ImageStatsResponse(**image_service.image_stats(
+        session, job_id=job_id, review_status=review_status, favorite=favorite,
+        source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
+        status=status,
+    ))
 
 
 @router.get("/{image_id}", response_model=ImageResponse, summary="图片详情")

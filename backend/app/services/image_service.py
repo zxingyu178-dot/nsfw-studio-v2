@@ -130,6 +130,21 @@ def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
             ).scalars().first()
     stage = session.get(JobStage, stage_item.job_stage_id) if stage_item is not None else None
 
+    # Phase 0.12 Task12：轻量 Image Provenance —— 工作台最初从哪个 Recipe 打开。
+    # 经 Image → Job.workbench_snapshot_json 读出；旧 Job / 非 Recipe 来源 → None（前端据此隐藏该行）。
+    source_recipe_id = None
+    source_recipe_version_id = None
+    if image.job_id:
+        job = session.get(Job, image.job_id)
+        if job is not None:
+            try:
+                snapshot = json.loads(job.workbench_snapshot_json or "{}")
+            except ValueError:
+                snapshot = {}
+            if isinstance(snapshot, dict):
+                source_recipe_id = snapshot.get("source_recipe_id")
+                source_recipe_version_id = snapshot.get("source_recipe_version_id")
+
     scale = None
     if parent is not None and parent.width > 0 and image.width > 0 and parent.width != image.width:
         scale = max(1, round(image.width / parent.width))
@@ -151,6 +166,8 @@ def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
         "workflow_hash": stage.workflow_hash if stage is not None else metadata.get("workflow_hash"),
         "binding_hash": stage.binding_hash if stage is not None else metadata.get("binding_hash"),
         "seed": image.seed,
+        "source_recipe_id": source_recipe_id,
+        "source_recipe_version_id": source_recipe_version_id,
     }
 
 
@@ -562,6 +579,51 @@ def load_input_image_ref(session: Session, storage: StorageManager, image_id: st
     )
 
 
+def _validate_filter_values(*, review_status: str | None, status: str | None) -> None:
+    """图库列表 / 统计共用的过滤参数校验（两处口径必须完全一致）。"""
+    if review_status is not None and review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
+        raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
+    if status is not None and status not in IMAGE_STATUSES:
+        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+
+
+def _apply_image_filters(
+    query,
+    *,
+    job_id: str | None = None,
+    review_status: str | None = None,
+    favorite: bool | None = None,
+    source: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+):
+    """把图库过滤条件统一叠加到 select(Image) 查询上（list_images 与 image_stats 共用，
+    保证列表与统计的过滤口径完全一致——禁止为统计另写一套不一致的过滤）。"""
+    if job_id is not None:
+        query = query.where(Image.job_id == job_id)
+    if review_status is not None:
+        query = query.where(Image.review_status == review_status)
+    if favorite is not None:
+        query = query.where(Image.favorite == favorite)
+    if status is not None:
+        query = query.where(Image.status == status)
+    if source is not None:
+        query = query.where(Image.source == source)
+    if kind is not None:
+        query = query.where(Image.kind == kind)
+    if search:
+        # Phase 5：按导入文件名搜索（生成图没有文件名，自然不命中）
+        query = query.where(Image.imported_filename.like(f"%{search.strip()}%"))
+    if date_from is not None:
+        query = query.where(Image.created_at >= date_from)
+    if date_to is not None:
+        query = query.where(Image.created_at <= date_to)
+    return query
+
+
 def list_images(
     session: Session,
     *,
@@ -582,33 +644,15 @@ def list_images(
         raise ValidationError("limit 取值范围为 1-200")
     if offset < 0:
         raise ValidationError("offset 不能为负")
-    if review_status is not None and review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
-        raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
-    if status is not None and status not in IMAGE_STATUSES:
-        raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    _validate_filter_values(review_status=review_status, status=status)
     if sort not in ("created_desc", "created_asc", "favorite", "size"):
         raise ValidationError(f"非法排序: {sort}", code="IMAGE_SORT_INVALID")
 
-    query = select(Image)
-    if job_id is not None:
-        query = query.where(Image.job_id == job_id)
-    if review_status is not None:
-        query = query.where(Image.review_status == review_status)
-    if favorite is not None:
-        query = query.where(Image.favorite == favorite)
-    if status is not None:
-        query = query.where(Image.status == status)
-    if source is not None:
-        query = query.where(Image.source == source)
-    if kind is not None:
-        query = query.where(Image.kind == kind)
-    if search:
-        # Phase 5：按导入文件名搜索（生成图没有文件名，自然不命中）
-        query = query.where(Image.imported_filename.like(f"%{search.strip()}%"))
-    if date_from is not None:
-        query = query.where(Image.created_at >= date_from)
-    if date_to is not None:
-        query = query.where(Image.created_at <= date_to)
+    query = _apply_image_filters(
+        select(Image),
+        job_id=job_id, review_status=review_status, favorite=favorite, source=source,
+        kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+    )
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
 
@@ -632,6 +676,56 @@ def list_images(
         query.order_by(*order_by).limit(limit).offset(offset)
     ).scalars())
     return items, int(total)
+
+
+def image_stats(
+    session: Session,
+    *,
+    job_id: str | None = None,
+    review_status: str | None = None,
+    favorite: bool | None = None,
+    source: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+) -> dict[str, int]:
+    """全局图库统计（Phase 0.12 Task5/ReviewMode）：与 list_images 完全相同的过滤口径。
+
+    用一次 SQL 条件聚合（COUNT/GROUP BY 单行），绝不把全部行 load 进内存。
+    口径（Phase 0.11.1 冻结）：
+    - new/keep/reject/archived = images.status 各状态计数；
+    - favorites = favorite=true 的独立交叉计数（不并入任一审核状态，可与任意状态共存）；
+    - total = 命中过滤条件的全部图片数（前端 ReviewMode 的"分母"必须来自这里，
+      而非本地已加载 list，避免把局部统计误认为全局统计）。
+    """
+    _validate_filter_values(review_status=review_status, status=status)
+    agg = (
+        select(
+            func.count().label("total"),
+            func.coalesce(func.sum(case((Image.status == "NEW", 1), else_=0)), 0).label("new"),
+            func.coalesce(func.sum(case((Image.status == "KEEP", 1), else_=0)), 0).label("keep"),
+            func.coalesce(func.sum(case((Image.status == "REJECT", 1), else_=0)), 0).label("reject"),
+            func.coalesce(func.sum(case((Image.status == "ARCHIVED", 1), else_=0)), 0).label("archived"),
+            func.coalesce(func.sum(case((Image.favorite.is_(True), 1), else_=0)), 0).label("favorites"),
+        )
+        .select_from(Image)
+    )
+    agg = _apply_image_filters(
+        agg,
+        job_id=job_id, review_status=review_status, favorite=favorite, source=source,
+        kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+    )
+    row = session.execute(agg).one()
+    return {
+        "total": int(row.total),
+        "new": int(row.new),
+        "keep": int(row.keep),
+        "reject": int(row.reject),
+        "archived": int(row.archived),
+        "favorites": int(row.favorites),
+    }
 
 
 def set_review(session: Session, image_id: str, review_status: str) -> Image:

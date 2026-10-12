@@ -144,6 +144,22 @@ class ImageListResponse(BaseModel):
     has_next: bool
 
 
+class ImageStatsResponse(BaseModel):
+    """Phase 0.12 全局图库统计（与 GET /images 完全相同的过滤口径；SQL 单行聚合）。
+
+    用于修正 ReviewMode "分母=server total、分子=本地已加载 list" 的假全局统计：
+    各状态计数与收藏计数都是命中过滤条件后的**全局**数字。
+    favorites 是 favorite=true 的独立交叉计数（不并入任一审核状态）。
+    """
+
+    total: int
+    new: int
+    keep: int
+    reject: int
+    archived: int
+    favorites: int
+
+
 class ImageImportItem(BaseModel):
     """成功导入的图片（含原始文件名）。"""
 
@@ -220,6 +236,9 @@ class ImageProvenanceResponse(BaseModel):
     workflow_hash: str | None
     binding_hash: str | None
     seed: int | None
+    # Phase 0.12 Task12：工作台最初从哪个 Recipe 打开（轻量 provenance；None=非 Recipe 来源）
+    source_recipe_id: str | None
+    source_recipe_version_id: str | None
 
 
 def image_response(image: Image) -> ImageResponse:
