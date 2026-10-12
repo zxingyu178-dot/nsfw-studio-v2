@@ -1,4 +1,5 @@
-import { Button, Checkbox, Field, Select } from '../../../components/ui'
+import { useEffect, useState } from 'react'
+import { Button, Checkbox, Field, Input, Select } from '../../../components/ui'
 import { useJobStore } from '../../../stores/jobStore'
 import {
   hasUpscaleModule,
@@ -95,13 +96,7 @@ export function GenerationControls() {
 
       {/* ===== 输出：数量 / Seed ===== */}
       <CollapsibleSection id="output" title="输出">
-        <Field label="数量">
-          <Select
-            value={state.count}
-            onChange={(event) => setCount(Number(event.target.value))}
-            options={[1, 2, 4, 6, 8].map((n) => ({ value: n, label: String(n) }))}
-          />
-        </Field>
+        <CountField value={state.count} />
 
         <Field label="Seed">
           {state.seedMode === 'fixed' && state.seed !== null ? (
@@ -116,6 +111,71 @@ export function GenerationControls() {
         </Field>
       </CollapsibleSection>
     </>
+  )
+}
+
+/**
+ * 输出数量：后端权威口径 WorkbenchSnapshotModel.count ∈ [1,64]（schemas/workbench.py）。
+ * 允许任意整数自由输入；常用档 1/2/4/6/8 作为快捷小按钮。
+ * 输入非数字 / 越界在 blur（或回车）时钳制到 1–64，并由 Field hint 提示范围。
+ * setCount 内既有“固定 Seed + count>1 自动切回随机”逻辑保持不变。
+ */
+const COUNT_MIN = 1
+const COUNT_MAX = 64
+const QUICK_COUNTS = [1, 2, 4, 6, 8]
+
+function clampCount(n: number): number {
+  if (!Number.isFinite(n)) return COUNT_MIN
+  return Math.min(COUNT_MAX, Math.max(COUNT_MIN, Math.round(n)))
+}
+
+function CountField({ value }: { value: number }) {
+  const [draft, setDraft] = useState(String(value))
+  // 外部同步（如固定 Seed 自动把 count 收敛为 1）时刷新草稿。
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  const commit = () => {
+    const parsed = Number.parseInt(draft, 10)
+    const clamped = clampCount(Number.isNaN(parsed) ? COUNT_MIN : parsed)
+    if (clamped !== value) setCount(clamped)
+    setDraft(String(clamped))
+  }
+
+  return (
+    <Field label="数量" htmlFor="gen-count" hint="1–64 张">
+      <div className="wb-count">
+        <Input
+          id="gen-count"
+          type="number"
+          inputMode="numeric"
+          min={COUNT_MIN}
+          max={COUNT_MAX}
+          value={draft}
+          aria-label="数量"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit()
+          }}
+        />
+        <div className="wb-count__chips" role="group" aria-label="常用数量">
+          {QUICK_COUNTS.map((n) => (
+            <Button
+              key={n}
+              type="button"
+              size="xs"
+              variant={n === value ? 'secondary' : 'ghost'}
+              aria-pressed={n === value}
+              onClick={() => setCount(n)}
+            >
+              {n}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </Field>
   )
 }
 
