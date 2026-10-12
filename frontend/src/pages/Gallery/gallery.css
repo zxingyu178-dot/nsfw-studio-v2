@@ -209,7 +209,7 @@ button.gal-group__main {
 .gal-group__main:hover .gal-group__title { color: var(--accent); }
 
 /* Phase 0.11.1：独立收藏徽标 / 清理受保护列表 */
-.gal-card__fav { color: #f5a623; font-size: var(--text-sm); line-height: 1; }
+.gal-card__fav { color: var(--favorite); font-size: var(--text-sm); line-height: 1; }
 .gal-protected-list { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
 .gal-protected-list li { margin: var(--space-1) 0; }
 .gal-protected__id { margin-right: var(--space-2); font-weight: 600; }
