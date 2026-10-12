@@ -27,18 +27,18 @@ import {
   type AssetType,
   type CleanupRejectedResult,
   type ImageDTO,
+  type ImageJobGroupDTO,
   type ImageProvenanceDTO,
   type ImageReviewStatus,
   type ImageSort,
   type ImageVersionsDTO,
   type JobDTO,
   type PromptDTO,
-  type ReviewStatus,
   type WorkbenchSnapshot,
 } from '../../types/workbench'
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
-import { ReviewMode } from './ReviewMode'
+import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
 import './gallery.css'
 
 /**
@@ -75,18 +75,9 @@ const SUB_STATUS_OPTIONS: { value: '' | ImageReviewStatus; label: string }[] = [
 
 interface UndoEntry {
   imageId: string
-  review?: ReviewStatus
+  status?: ImageReviewStatus
   favorite?: boolean
   label: string
-}
-
-interface JobSummary {
-  job_id: string
-  total: number
-  unreviewed: number
-  kept: number
-  rejected: number
-  favorites: number
 }
 
 export default function GalleryPage() {
@@ -108,8 +99,11 @@ export default function GalleryPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [detail, setDetail] = useState<ImageDTO | null>(null)
-  const [groups, setGroups] = useState<{ job: JobDTO; summary: JobSummary }[]>([])
+  // Phase 0.11.1：按任务分组改为 job-groups 后端聚合分页（替代逐 Job summary 的 N+1）
+  const [groups, setGroups] = useState<ImageJobGroupDTO[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
+  const [groupsPage, setGroupsPage] = useState(1)
+  const [groupsHasNext, setGroupsHasNext] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [upscaling, setUpscaling] = useState(false)
@@ -121,8 +115,12 @@ export default function GalleryPage() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const detailTimer = useRef<number | null>(null)
 
-  // Phase 0.11：Review Mode / 清理废片
-  const [reviewImages, setReviewImages] = useState<ImageDTO[] | null>(null)
+  // Phase 0.11.1：Review Session（分页 loader，全历史审核）
+  const [reviewSession, setReviewSession] = useState<{
+    loader: ReviewPageLoader
+    title?: string
+    total?: number
+  } | null>(null)
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
   const [cleanupBusy, setCleanupBusy] = useState(false)
 
@@ -130,12 +128,29 @@ export default function GalleryPage() {
   const requestSeq = useRef(0)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  function statusParam(): ImageReviewStatus | null {
-    if (subStatus) return subStatus
-    if (tab === 'NEW') return 'NEW'
-    if (tab === 'FAVORITE') return 'FAVORITE'
-    if (tab === 'ARCHIVED') return 'ARCHIVED'
-    return null
+  // Phase 0.11.1：收藏是独立 boolean（FAVORITE 不再是审核状态）。
+  // 「收藏」Tab 通过 favorite=true 过滤；其余 Tab 按 status 过滤。
+  function listQuery(page: number = 1): {
+    job_id: string | null | undefined
+    sort: ImageSort
+    page: number
+    page_size: number
+    status?: ImageReviewStatus | null
+    favorite?: boolean
+  } {
+    const query: {
+      job_id: string | null | undefined
+      sort: ImageSort
+      page: number
+      page_size: number
+      status?: ImageReviewStatus | null
+      favorite?: boolean
+    } = { job_id: jobFilter, sort, page, page_size: PAGE_SIZE }
+    if (subStatus) query.status = subStatus
+    else if (tab === 'NEW') query.status = 'NEW'
+    else if (tab === 'ARCHIVED') query.status = 'ARCHIVED'
+    else if (tab === 'FAVORITE') query.favorite = true
+    return query
   }
 
   // 第一页 / 切筛选或排序 → 重置列表
@@ -144,7 +159,7 @@ export default function GalleryPage() {
     setLoading(true)
     setError(null)
     imageApi
-      .list({ job_id: jobFilter, status: statusParam(), sort, page: 1, page_size: PAGE_SIZE })
+      .list(listQuery())
       .then((page) => {
         if (seq !== requestSeq.current) return
         setItems(page.items)
@@ -162,24 +177,28 @@ export default function GalleryPage() {
     loadFirst()
   }, [loadFirst])
 
-  // 追加下一页（无限滚动）
+  // 追加下一页（无限滚动）。带请求序号：切 tab/sort/job 后旧 loadNext 响应不得 append 到新列表；
+  // append 前按 image.id 去重。
   const loadNext = useCallback(() => {
     if (loadingMore || loading || !hasNext) return
+    const seq = requestSeq.current
     setLoadingMore(true)
     imageApi
-      .list({
-        job_id: jobFilter,
-        status: statusParam(),
-        sort,
-        page: Math.floor(items.length / PAGE_SIZE) + 1,
-        page_size: PAGE_SIZE,
-      })
+      .list(listQuery(Math.floor(items.length / PAGE_SIZE) + 1))
       .then((page) => {
-        setItems((prev) => [...prev, ...page.items])
+        if (seq !== requestSeq.current) return
+        setItems((prev) => {
+          const known = new Set(prev.map((img) => img.id))
+          const fresh = page.items.filter((img) => !known.has(img.id))
+          return [...prev, ...fresh]
+        })
         setHasNext(page.has_next)
+        setTotal(page.total)
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载更多失败'))
-      .finally(() => setLoadingMore(false))
+      .finally(() => {
+        if (seq === requestSeq.current) setLoadingMore(false)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter])
 
@@ -197,35 +216,24 @@ export default function GalleryPage() {
     return () => obs.disconnect()
   }, [loadNext])
 
+  const loadGroups = useCallback((page: number) => {
+    setGroupsLoading(true)
+    imageApi
+      .jobGroups({ page, page_size: 20 })
+      .then((result) => {
+        setGroups((prev) => (page === 1 ? result.items : [...prev, ...result.items]))
+        setGroupsPage(page)
+        setGroupsHasNext(result.has_next)
+      })
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组'))
+      .finally(() => setGroupsLoading(false))
+  }, [])
+
   useEffect(() => {
     if (view !== 'group' || jobFilter) return
-    let cancelled = false
-    setGroupsLoading(true)
-    jobApi
-      .list({ limit: 50 })
-      .then(async (page) => {
-        const candidates = page.items.filter((job) => job.completed_count > 0).slice(0, 20)
-        const summaries = await Promise.all(
-          candidates.map((job) => imageApi.jobSummary(job.id).catch(() => null)),
-        )
-        if (cancelled) return
-        setGroups(
-          candidates.flatMap((job, index) => {
-            const summary = summaries[index]
-            return summary ? [{ job, summary }] : []
-          }),
-        )
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组')
-      })
-      .finally(() => {
-        if (!cancelled) setGroupsLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [view, jobFilter])
+    setGroups([])
+    loadGroups(1)
+  }, [view, jobFilter, loadGroups])
 
   function applyJobFilter(jobId: string | null): void {
     const next = new URLSearchParams(searchParams)
@@ -237,7 +245,6 @@ export default function GalleryPage() {
   function handleUpdated(updated: ImageDTO): void {
     setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
     setDetail((current) => (current && current.id === updated.id ? updated : current))
-    setReviewImages((prev) => (prev ? prev.map((img) => (img.id === updated.id ? updated : img)) : prev))
   }
 
   function toggleSelect(imageId: string): void {
@@ -343,13 +350,8 @@ export default function GalleryPage() {
     setCanUndo(undoStack.current.length > 0)
     if (!entry) return
     try {
-      if (entry.review !== undefined) {
-        setDetail((current) =>
-          current && current.id === entry.imageId
-            ? { ...current, review_status: entry.review as ReviewStatus }
-            : current,
-        )
-        handleUpdated(await imageApi.review(entry.imageId, entry.review))
+      if (entry.status !== undefined) {
+        handleUpdated(await imageApi.setStatus(entry.imageId, { status: entry.status }))
       }
       if (entry.favorite !== undefined) {
         handleUpdated(await imageApi.favorite(entry.imageId, entry.favorite))
@@ -360,12 +362,13 @@ export default function GalleryPage() {
     }
   }
 
-  async function quickReview(status: 'KEPT' | 'REJECTED'): Promise<void> {
+  async function quickReview(status: 'KEEP' | 'REJECT'): Promise<void> {
     if (!detail) return
-    recordUndo({ imageId: detail.id, review: detail.review_status, label: status === 'KEPT' ? '保留' : '淘汰' })
+    const prev = normalizeImageStatus(detail)
+    recordUndo({ imageId: detail.id, status: prev, label: status === 'KEEP' ? '保留' : '淘汰' })
     try {
-      handleUpdated(await imageApi.review(detail.id, status))
-      setNotice({ text: `已${status === 'KEPT' ? '保留' : '淘汰'}`, undoable: true })
+      handleUpdated(await imageApi.setStatus(detail.id, { status }))
+      setNotice({ text: `已${status === 'KEEP' ? '保留' : '淘汰'}`, undoable: true })
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : '操作失败')
     }
@@ -389,7 +392,7 @@ export default function GalleryPage() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
-      if (lightboxIndex !== null || reviewImages !== null) return
+      if (lightboxIndex !== null || reviewSession !== null) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault()
         void undoLast()
@@ -403,8 +406,8 @@ export default function GalleryPage() {
         if (next >= 0 && next < items.length) setDetail(items[next])
         return
       }
-      if (event.key === 'k' || event.key === 'K') void quickReview('KEPT')
-      if (event.key === 'r' || event.key === 'R') void quickReview('REJECTED')
+      if (event.key === 'k' || event.key === 'K') void quickReview('KEEP')
+      if (event.key === 'r' || event.key === 'R') void quickReview('REJECT')
       if (event.key === 'f' || event.key === 'F') void quickFavorite()
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -419,22 +422,32 @@ export default function GalleryPage() {
     navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
 
-  /** Phase 0.11：打开当前筛选集合的 Review Mode */
+  /** Phase 0.11.1：以当前筛选为查询打开 Review Session（首屏一页、接近末尾预取直到 has_next=false） */
   function startReview(): void {
-    if (items.length === 0) return
-    setReviewImages(items)
+    const query = listQuery(1)
+    setReviewSession({
+      title: '图库审核',
+      total,
+      loader: {
+        loadPage: (page) =>
+          imageApi
+            .list({ ...query, page })
+            .then((p) => ({ items: p.items, has_next: p.has_next, total: p.total })),
+      },
+    })
   }
 
-  /** Phase 0.11：按任务打开 Review Mode（仅该 Job 的图） */
+  /** Phase 0.11.1：按 Job 打开 Review Mode——取消 page_size=100 上限，分页拉全直到 has_next=false */
   function startReviewJob(jobId: string): void {
-    // page_size 上限 100（后端冻结）；单 Job 图片通常 ≤100。超过 100 的 Job 第一版只审前 100，
-    // 后续如需可改为分页拉全。
-    imageApi
-      .list({ job_id: jobId, page_size: 100, sort: 'created_asc' })
-      .then((page) => {
-        if (page.items.length > 0) setReviewImages(page.items)
-      })
-      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载该任务图片'))
+    setReviewSession({
+      title: `任务 ${shortJobId(jobId)}`,
+      loader: {
+        loadPage: (page) =>
+          imageApi
+            .list({ job_id: jobId, sort: 'created_asc', page, page_size: PAGE_SIZE })
+            .then((p) => ({ items: p.items, has_next: p.has_next, total: p.total })),
+      },
+    })
   }
 
   /** Phase 0.11：废片清理——先预览（confirm=false） */
@@ -567,25 +580,29 @@ export default function GalleryPage() {
           {!groupsLoading && groups.length === 0 && (
             <p className="muted">还没有完成过的生成任务。</p>
           )}
-          {groups.map(({ job, summary }) => (
-            <div key={job.id} className="gal-group">
-              <button type="button" className="gal-group__main" onClick={() => applyJobFilter(job.id)}>
+          {groups.map((g) => (
+            <div key={g.job_id} className="gal-group">
+              <button type="button" className="gal-group__main" onClick={() => applyJobFilter(g.job_id)}>
                 <div className="gal-group__head">
-                  <span className="gal-group__id">{shortJobId(job.id)}</span>
-                  <span className="muted">{summary.total} 张 · {formatDateTime(job.created_at)}</span>
+                  <span className="gal-group__id">{shortJobId(g.job_id)}</span>
+                  <span className="muted">{g.total} 张 · {formatDateTime(g.created_at)}</span>
                 </div>
-                <p className="gal-group__title">
-                  {job.positive_prompt_snapshot.trim().slice(0, 42) || '（无 Prompt）'}
-                </p>
                 <p className="gal-group__counts muted">
-                  未审核 {summary.unreviewed} · 保留 {summary.kept} · 收藏 {summary.favorites} · 淘汰 {summary.rejected}
+                  未审核 {g.unreviewed} · 保留 {g.kept} · 收藏 {g.favorites} · 淘汰 {g.rejected}
                 </p>
               </button>
-              <Button size="sm" variant="primary" onClick={() => startReviewJob(job.id)}>
+              <Button size="sm" variant="primary" onClick={() => startReviewJob(g.job_id)}>
                 开始审核
               </Button>
             </div>
           ))}
+          {groupsHasNext && (
+            <div className="gal-group">
+              <Button size="sm" variant="secondary" disabled={groupsLoading} onClick={() => loadGroups(groupsPage + 1)}>
+                {groupsLoading ? '加载中…' : '加载更多任务'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -616,6 +633,7 @@ export default function GalleryPage() {
                   <span className="gal-card__badges">
                     {image.kind === 'upscaled' && <span className="gal-card__hd">HD</span>}
                     {selectedIds.includes(image.id) && <Badge tone="accent">✓</Badge>}
+                    {image.favorite && <span className="gal-card__fav" title="收藏">★</span>}
                     {status !== 'NEW' && <StatusBadge status={status} />}
                   </span>
                 </button>
@@ -640,7 +658,7 @@ export default function GalleryPage() {
           onUpscale={(imageId) => void submitUpscale([imageId])}
           upscaling={upscaling}
           onUseAsInput={useAsInput}
-          onReviewStart={(prev) => recordUndo({ imageId: detail.id, review: prev, label: '审核修改' })}
+          onReviewStart={(prev) => recordUndo({ imageId: detail.id, status: prev, label: '审核修改' })}
           onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}
           onPreviewLightbox={() => openLightboxAt(detail)}
           onDeleted={() => { setDetail(null); loadFirst() }}
@@ -651,6 +669,9 @@ export default function GalleryPage() {
         <ImageLightbox
           images={items}
           index={lightboxIndex}
+          hasMore={hasNext}
+          onLoadMore={() => loadNext()}
+          loadingMore={loadingMore}
           onClose={() => setLightboxIndex(null)}
           onNavigate={(next) => setLightboxIndex(next)}
           renderSidePanel={(img) => (
@@ -658,19 +679,21 @@ export default function GalleryPage() {
               image={img}
               onUpdated={(u) =>
                 setItems((previous) => previous.map((it) => (it.id === u.id ? u : it)))}
-              onDeleted={() => {
+              onDeleted={(deletedId) => {
+                setItems((previous) => previous.filter((it) => it.id !== deletedId))
                 setLightboxIndex(null)
-                loadFirst()
               }}
             />
           )}
         />
       )}
 
-      {reviewImages !== null && (
+      {reviewSession !== null && (
         <ReviewMode
-          images={reviewImages}
-          onClose={() => setReviewImages(null)}
+          loader={reviewSession.loader}
+          total={reviewSession.total}
+          title={reviewSession.title}
+          onClose={() => setReviewSession(null)}
           onChanged={handleUpdated}
         />
       )}
@@ -685,21 +708,43 @@ export default function GalleryPage() {
             <Button size="sm" variant="secondary" onClick={() => setCleanupPreview(null)}>
               取消
             </Button>
-            <Button size="sm" variant="danger" disabled={cleanupBusy} onClick={() => void confirmCleanup()}>
-              {cleanupBusy ? '删除中…' : `确认删除 ${cleanupPreview?.candidate_count ?? 0} 张`}
+            <Button
+              size="sm" variant="danger"
+              disabled={cleanupBusy || (cleanupPreview?.deletable_count ?? 0) === 0}
+              onClick={() => void confirmCleanup()}
+            >
+              {cleanupBusy ? '删除中…' : `确认删除 ${cleanupPreview?.deletable_count ?? 0} 张`}
             </Button>
           </>
         }
       >
-        <p className="muted">将永久删除以下 REJECT 图片的 original + thumbnail 及数据库记录（不可恢复）。</p>
+        <p className="muted">将永久删除可删 REJECT 图片的 original + thumbnail 及数据库记录（不可恢复）。</p>
         <dl className="gal-fields">
-          <dt>候选数量</dt>
+          <dt>候选（全部 REJECT）</dt>
           <dd>{cleanupPreview?.candidate_count ?? 0} 张</dd>
-          <dt>占用空间</dt>
+          <dt>实际可删</dt>
+          <dd>{cleanupPreview?.deletable_count ?? 0} 张</dd>
+          <dt>预计释放</dt>
           <dd>{formatBytes(cleanupPreview?.total_bytes ?? 0)}</dd>
           <dt>被引用保护</dt>
           <dd>{cleanupPreview?.protected_count ?? 0} 张（被 Prompt / 素材 / 配方引用，不会删除）</dd>
         </dl>
+        {(cleanupPreview?.protected_items?.length ?? 0) > 0 && (
+          <details>
+            <summary className="muted">查看受保护图片及原因</summary>
+            <ul className="gal-protected-list">
+              {cleanupPreview?.protected_items?.map((item) => (
+                <li key={item.image_id}>
+                  <span className="gal-protected__id">{shortJobId(item.image_id)}</span>
+                  <span className="muted">{item.reasons.join('；')}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {(cleanupPreview?.deletable_count ?? 0) >= 500 && (
+          <p className="muted" role="status">数量较多，删除可能需要数十秒，请勿关闭页面。</p>
+        )}
       </Modal>
     </>
   )
@@ -771,7 +816,7 @@ interface DetailDrawerProps {
   onUpscale: (imageId: string) => void
   upscaling: boolean
   onUseAsInput: (image: ImageDTO) => void
-  onReviewStart: (previous: ReviewStatus) => void
+  onReviewStart: (previous: ImageReviewStatus) => void
   onFavoriteStart: (previous: boolean) => void
   onPreviewLightbox: () => void
   onDeleted: () => void
@@ -948,7 +993,24 @@ function GalleryDetailDrawer({
     }
   }
 
-  /** 单图删除：复用 cleanup-rejected + 引用保护（confirm=false 预览 → 真删）。 */
+  /** Phase 0.11.1：普通图（非 REJECT）“淘汰此图”——仅置 REJECT、保留文件，不物理删除。 */
+  async function softReject(): Promise<void> {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      onReviewStart(displayStatus)
+      onUpdated(await imageApi.setStatus(image.id, { status: 'REJECT' }))
+      setMessage('已移入废片（REJECT），文件仍保留；可在「清理废片」中永久删除。')
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Phase 0.11.1：仅 REJECT 图“永久删除此废片”——先引用保护预览，确认后真删；
+   *  只有 deleted_count===1 才真正从 UI 移除，杜绝假成功。 */
   async function deleteImage(): Promise<void> {
     if (!deleteArm) return
     setBusy(true)
@@ -957,12 +1019,18 @@ function GalleryDetailDrawer({
     try {
       const preview = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: false })
       if ((preview.protected_count ?? 0) > 0) {
-        setError('该图片被 Prompt / 素材 / 配方引用，禁止删除（已保护）。')
+        const reason = preview.protected_items?.[0]?.reasons?.join('；')
+        setError(`该图片被引用，禁止删除（已保护）${reason ? `：${reason}` : ''}。`)
         setDeleteArm(false)
         return
       }
-      await imageApi.cleanupRejected({ image_ids: [image.id], confirm: true })
-      onDeleted()
+      const result = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: true })
+      if ((result.deleted_count ?? 0) === 1) {
+        onDeleted()
+      } else {
+        setError(`后端实际删除 ${result.deleted_count ?? 0} 张（预期 1），未从列表移除。`)
+        setDeleteArm(false)
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : '删除失败')
     } finally {
@@ -980,7 +1048,7 @@ function GalleryDetailDrawer({
       title={
         <>
           图片详情
-          {displayStatus === 'FAVORITE' && <span title="收藏"> ★</span>}
+          {image.favorite && <span title="收藏"> ★</span>}
         </>
       }
     >
@@ -1019,23 +1087,23 @@ function GalleryDetailDrawer({
 
       <div className="gal-actions">
         <Button
-          size="sm" variant={image.review_status === 'KEPT' ? 'primary' : 'secondary'}
+          size="sm" variant={displayStatus === 'KEEP' || displayStatus === 'ARCHIVED' ? 'primary' : 'secondary'}
           disabled={busy}
-          onClick={() => { onReviewStart(image.review_status); void run(() => imageApi.review(image.id, 'KEPT'), '已保留') }}
+          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'KEEP' }), '已保留') }}
         >
           保留 (K)
         </Button>
         <Button
-          size="sm" variant={image.review_status === 'REJECTED' ? 'primary' : 'secondary'}
+          size="sm" variant={displayStatus === 'REJECT' ? 'primary' : 'secondary'}
           disabled={busy}
-          onClick={() => { onReviewStart(image.review_status); void run(() => imageApi.review(image.id, 'REJECTED'), '已淘汰') }}
+          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'REJECT' }), '已淘汰') }}
         >
           淘汰 (R)
         </Button>
-        {image.review_status !== 'UNREVIEWED' && (
+        {displayStatus !== 'NEW' && (
           <Button
             size="sm" variant="ghost" disabled={busy}
-            onClick={() => { onReviewStart(image.review_status); void run(() => imageApi.review(image.id, 'UNREVIEWED'), '已恢复为未审核') }}
+            onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'NEW' }), '已恢复为待审核') }}
           >
             取消审核
           </Button>
@@ -1174,23 +1242,34 @@ function GalleryDetailDrawer({
         )}
       </section>
 
-      {/* Phase 0.11：删除（引用保护） */}
+      {/* Phase 0.11.1：删除语义——普通图仅淘汰(REJECT)；仅 REJECT 图才永久物理删除 */}
       <section className="gal-asset-edit">
-        <h4 className="gal-section-title">删除图片</h4>
-        <p className="muted">删除前会检查引用；被 Prompt / 素材 / 配方引用的图片将被保护，不会删除。</p>
-        {!deleteArm ? (
-          <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleteArm(true)}>
-            删除此图片
-          </Button>
+        <h4 className="gal-section-title">{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h4>
+        {displayStatus !== 'REJECT' ? (
+          <>
+            <p className="muted">仅将状态置为 REJECT（文件保留），之后可在「清理废片」中永久删除。</p>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => void softReject()}>
+              {busy ? '处理中…' : '淘汰此图'}
+            </Button>
+          </>
         ) : (
-          <div className="gal-actions">
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
-              {busy ? '处理中…' : '确认删除（不可恢复）'}
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>
-              取消
-            </Button>
-          </div>
+          <>
+            <p className="muted">删除前会检查引用；被 Prompt / 素材 / 配方引用的图片将被保护，不会删除。</p>
+            {!deleteArm ? (
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleteArm(true)}>
+                永久删除此废片
+              </Button>
+            ) : (
+              <div className="gal-actions">
+                <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
+                  {busy ? '处理中…' : '确认删除（不可恢复）'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>
+                  取消
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </Drawer>
