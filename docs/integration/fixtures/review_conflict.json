@@ -1,0 +1,28 @@
+{
+  "success": false,
+  "data": null,
+  "error": {
+    "code": "REVIEW_CONFLICT",
+    "message": "图片状态已被他处修改",
+    "details": {
+      "image": {
+        "image_id": "img_0001",
+        "width": 1024,
+        "height": 768,
+        "created_at": "2026-10-12T09:59:00.000Z",
+        "updated_at": "2026-10-12T10:02:00.000Z",
+        "status": "KEEP",
+        "is_favorite": false,
+        "kind": "original",
+        "job_id": "job_0001",
+        "seed": 12345,
+        "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+        "preview_url": "/mobile/images/img_0001/preview",
+        "original_url": "/mobile/images/img_0001/original"
+      },
+      "current_status": "KEEP",
+      "current_updated_at": "2026-10-12T10:02:00.000Z"
+    }
+  },
+  "request_id": "00000000-0000-0000-0000-000000000008"
+}

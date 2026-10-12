@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "index": 0,
+        "seen": false,
+        "image": {
+          "image_id": "img_0001",
+          "width": 1024,
+          "height": 768,
+          "created_at": "2026-10-12T09:59:00.000Z",
+          "updated_at": "2026-10-12T09:59:00.000Z",
+          "status": "NEW",
+          "is_favorite": false,
+          "kind": "original",
+          "job_id": "job_0001",
+          "seed": 12345,
+          "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+          "preview_url": "/mobile/images/img_0001/preview",
+          "original_url": "/mobile/images/img_0001/original"
+        }
+      },
+      {
+        "index": 1,
+        "seen": false,
+        "image": {
+          "image_id": "img_0002",
+          "width": 800,
+          "height": 600,
+          "created_at": "2026-10-12T09:58:00.000Z",
+          "updated_at": "2026-10-12T09:58:00.000Z",
+          "status": "NEW",
+          "is_favorite": false,
+          "kind": "original",
+          "job_id": "job_0001",
+          "seed": null,
+          "thumbnail_url": "/mobile/images/img_0002/thumbnail",
+          "preview_url": "/mobile/images/img_0002/preview",
+          "original_url": "/mobile/images/img_0002/original"
+        }
+      }
+    ],
+    "total": 3,
+    "page": 1,
+    "page_size": 50
+  },
+  "error": null,
+  "request_id": "00000000-0000-0000-0000-000000000005"
+}

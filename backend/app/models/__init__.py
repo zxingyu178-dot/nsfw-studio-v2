@@ -21,6 +21,12 @@ from app.models.job import (
     JobStageItem,
 )
 from app.models.prompt import Prompt, PromptVersion
+from app.models.mobile_review import (
+    ImageReviewSession,
+    ImageReviewSessionItem,
+    MobileReviewDevice,
+    MobileReviewPairingCode,
+)
 from app.models.recipe import Recipe, RecipeAssetSnapshot, RecipeVersion
 from app.models.system import SystemInfo
 
@@ -35,6 +41,10 @@ __all__ = [
     "REVIEW_STATUSES",
     "Image",
     "ImageVariant",
+    "ImageReviewSession",
+    "ImageReviewSessionItem",
+    "MobileReviewDevice",
+    "MobileReviewPairingCode",
     "VARIANT_TYPES",
     "JOB_ITEM_STATUSES",
     "JOB_KINDS",

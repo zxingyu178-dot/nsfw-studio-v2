@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "product": "nsfw-studio",
+    "version": "0.13.0",
+    "api_contract": 1,
+    "capabilities": ["image_review", "review_session", "favorite", "thumbnail", "preview", "original"]
+  },
+  "error": null,
+  "request_id": "00000000-0000-0000-0000-000000000001"
+}

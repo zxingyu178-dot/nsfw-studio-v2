@@ -17,10 +17,13 @@ class AppError(Exception):
     code = "APP_ERROR"
     message = "请求处理失败"
 
-    def __init__(self, message: str | None = None, *, code: str | None = None) -> None:
+    def __init__(self, message: str | None = None, *, code: str | None = None,
+                 details: dict | None = None) -> None:
         self.message = message or self.message
         if code:
             self.code = code
+        # 可选结构化详情（Mobile Bridge envelope 的 error.details；Desktop 不使用）
+        self.details = details
         super().__init__(self.message)
 
 

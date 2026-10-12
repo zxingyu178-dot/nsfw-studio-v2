@@ -12,3 +12,13 @@
 # 本机想把数据放到其他盘：新建 configs/config.local.yaml 写入：
 #   data_root: "<盘符>:/NSFW-Studio-Data"
 # 并保持其不被提交——换电脑 clone 后无需任何修改即可启动。
+
+# Mobile Review Bridge（局域网手机审核桥，Phase 0.13）。
+# 安全红线：主 Studio 端口始终只听回环地址，绝不变；本 Bridge 独立端口 8767，
+# 只暴露审核相关 API（健康/配对/图片/审核），绝不 include 生成/引擎/清理等模块。
+# enabled=false 时 Studio 不自动拉起 Bridge；真机配置（是否启用、绑定地址）
+# 写在 config.local.yaml，本公共模板只给机器无关的默认值。
+mobile_review:
+  enabled: false
+  host: "0.0.0.0"
+  port: 8767

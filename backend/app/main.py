@@ -102,6 +102,11 @@ async def lifespan(application: FastAPI):
 
     application.state.engine_runtime = EngineRuntimeService(settings)
 
+    # Phase 0.13：Mobile Review Bridge 受管运行时（独立 8767；enabled=false 时只探测不自启）
+    from app.services.mobile_review_runtime_service import MobileReviewRuntimeService
+
+    application.state.mobile_review_runtime = MobileReviewRuntimeService(settings)
+
     # 崩溃恢复（规范 §三十七、§三十八）：RUNNING → INTERRUPTED，并向引擎核对
     recovered = await worker.recover_interrupted()
 

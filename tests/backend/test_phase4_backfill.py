@@ -128,7 +128,7 @@ def test_v032_database_backfill_and_queued_job_still_runs(settings, monkeypatch)
         "0010_image_inputs", "0011_image_import_dedup_unique", "0012_stage_item_reuse_trace",
         "0013_client_request_fingerprint", "0014_prompt_preview_image",
         "0015_image_variant_system", "0016_image_review_status",
-        "0017_image_review_semantics",
+        "0017_image_review_semantics", "0018_mobile_review_bridge",
     ]
 
     # ===== 3) Stage / StageItem 回填正确 =====

@@ -51,3 +51,38 @@ def png_bytes() -> bytes:
         "01f15c4890000000d49444154789c6260000000060005"
         "27de3bbb0000000049454e44ae426082"
     )
+
+
+@pytest.fixture()
+def mobile_client(settings: Settings):
+    """Mobile Review Bridge 独立 app 的 TestClient（与 Desktop 8000 完全隔离）。"""
+    from app.mobile_main import create_mobile_app
+
+    app = create_mobile_app(settings)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def make_mobile_image(session_factory, settings):
+    """在共享 DB 里造一张 status=NEW 的图（手机/桌面桥共用同一 ImageReviewSessionService）。"""
+    from app.services import image_service
+    from app.storage.manager import StorageManager
+
+    def _make(count: int = 1):
+        from PIL import Image as PILImage
+        import io
+        storage = StorageManager(settings)
+        images = []
+        with session_factory() as session:
+            for i in range(count):
+                buf = io.BytesIO()
+                PILImage.new("RGB", (800 + i, 600), (10 + i, 20, 30)).save(buf, format="PNG")
+                img = image_service.import_engine_output(
+                    session, storage, data=buf.getvalue(),
+                    original_filename=f"img{i}.png", source="comfyui",
+                )
+                images.append(img)
+        return images
+
+    return _make

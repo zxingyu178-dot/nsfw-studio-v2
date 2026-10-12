@@ -1,0 +1,188 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NSFW Studio Mobile Review Bridge",
+    "version": "0.13.0",
+    "description": "局域网手机审核桥（独立端口 8767）。仅暴露审核相关 API；8000 始终 loopback。所有 JSON 响应统一 envelope：{success,data,error:{code,message,details},request_id}。"
+  },
+  "servers": [
+    { "url": "http://{host}:8767", "description": "Bridge（同网段局域网）" }
+  ],
+  "security": [{ "BearerAuth": [] }],
+  "paths": {
+    "/mobile/system/health": {
+      "get": {
+        "summary": "健康（开放，无需 Bearer）",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "固定能力集",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "status": "ok",
+                    "product": "nsfw-studio",
+                    "version": "0.13.0",
+                    "api_contract": 1,
+                    "capabilities": ["image_review", "review_session", "favorite", "thumbnail", "preview", "original"]
+                  },
+                  "error": null,
+                  "request_id": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/pairing/status": {
+      "get": {
+        "summary": "是否存在有效配对码（开放）",
+        "security": [],
+        "responses": { "200": { "description": "pairing_available bool" } }
+      }
+    },
+    "/mobile/pairing/verify": {
+      "post": {
+        "summary": "配对码换 Bearer token（开放，一次性）",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "installation_id": "device-fingerprint",
+                "device_name": "Pixel",
+                "code": "123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "返回 Bearer token（仅此一次）" },
+          "400": { "description": "PAIRING_CODE_INVALID" }
+        }
+      }
+    },
+    "/mobile/review/sessions": {
+      "post": {
+        "summary": "创建冻结审核会话",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": { "filter": { "status": "NEW", "sort": "created_desc" } }
+            }
+          }
+        },
+        "responses": { "201": { "description": "session summary" } }
+      }
+    },
+    "/mobile/review/sessions/latest": {
+      "get": {
+        "summary": "恢复最近会话（不重建）",
+        "responses": {
+          "200": { "description": "session summary" },
+          "404": { "description": "REVIEW_SESSION_NOT_FOUND" }
+        }
+      }
+    },
+    "/mobile/review/sessions/{session_id}/queue": {
+      "get": {
+        "summary": "分页取冻结队列（绝对 index 不压缩）",
+        "parameters": [
+          { "name": "session_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "page_size", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } }
+        ],
+        "responses": { "200": { "description": "{items:[{index,seen,image}],total,page,page_size}" } }
+      }
+    },
+    "/mobile/review/sessions/{session_id}/decision": {
+      "post": {
+        "summary": "一次 decision（同事务）：KEEP/REJECT/favorite/RESET",
+        "parameters": [
+          { "name": "session_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "item_index": 0,
+                "action": "KEEP",
+                "favorite": null,
+                "expected_status": "NEW",
+                "expected_updated_at": "2026-10-12T09:59:00.000Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "更新后的 session + image" },
+          "409": { "description": "REVIEW_CONFLICT + 当前权威 Image" }
+        }
+      }
+    },
+    "/mobile/review/sessions/{session_id}/position": {
+      "post": {
+        "summary": "记录浏览位置（断点续看）",
+        "parameters": [
+          { "name": "session_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": { "application/json": { "example": { "item_index": 0 } } }
+        },
+        "responses": { "200": { "description": "session summary" } }
+      }
+    },
+    "/mobile/review/sessions/{session_id}/complete": {
+      "post": {
+        "summary": "标记完成（仍有未审则返回 remaining_count，不强完成）",
+        "parameters": [
+          { "name": "session_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "{completed,remaining_count,...}" } }
+      }
+    },
+    "/mobile/images/{image_id}/thumbnail": {
+      "get": {
+        "summary": "缩略图 512 WebP",
+        "parameters": [
+          { "name": "image_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "image/webp；含 ETag / Cache-Control:private / X-Content-Type-Options:nosniff"
+          }
+        }
+      }
+    },
+    "/mobile/images/{image_id}/preview": {
+      "get": {
+        "summary": "预览 1536 WebP（默认档位）",
+        "parameters": [
+          { "name": "image_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "image/webp" } }
+      }
+    },
+    "/mobile/images/{image_id}/original": {
+      "get": {
+        "summary": "原图（仅放大/详情，谨慎）",
+        "parameters": [
+          { "name": "image_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "image/*" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "配对成功后获得的设备 token；仅开放端点无需此头。"
+      }
+    }
+  }
+}
