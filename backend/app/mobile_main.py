@@ -49,6 +49,18 @@ def _envelope(success: bool, data=None, *, code: str | None = None,
     }
 
 
+# 框架 HTTP 错误 → 语义化 code（Starlette HTTPException 不带业务 code）
+_CODE_FOR_STATUS = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    405: "METHOD_NOT_ALLOWED",
+    409: "CONFLICT",
+    422: "VALIDATION_ERROR",
+}
+
+
 async def _parent_watch(stop_event: asyncio.Event) -> None:
     """父 PID 守护：主 Studio 退出 → 本 Bridge 自行退出（Orphan 防护）。"""
     raw = os.environ.get(PARENT_PID_ENV)
@@ -99,7 +111,16 @@ async def lifespan(application: FastAPI):
 
 def create_mobile_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
-    application = FastAPI(title="NSFW Studio Mobile Review Bridge", version="0.13.0", lifespan=lifespan)
+    # 安全硬化 O2：8767 在 LAN 暴露，关闭 /docs /redoc /openapi.json；
+    # 对外合同产物以已提交的 docs/integration/openapi-mobile-review.json 为准。
+    application = FastAPI(
+        title="NSFW Studio Mobile Review Bridge",
+        version="0.13.0",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
     application.state.settings = settings
 
     application.add_middleware(
@@ -128,19 +149,22 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
             return response
         body = b"".join([chunk async for chunk in response.body_iterator])
         if response.status_code >= 400:
-            # 已是错误 JSON（异常 handler 之外的框架错误）：透传其 code/message
+            # 框架错误（Starlette HTTPException，如 404/405）没有业务 code：
+            # 按 HTTP 状态映射成语义化 code，HTTP 状态码不变。
             try:
                 import json as _json
                 err = _json.loads(body.decode("utf-8"))
             except Exception:
                 err = {}
             inner = err.get("error", err) if isinstance(err, dict) else {}
+            code = inner.get("code") or _CODE_FOR_STATUS.get(response.status_code, "INTERNAL_ERROR")
+            message = inner.get("message") or inner.get("detail") or "请求失败"
             return JSONResponse(
                 status_code=response.status_code,
                 content=_envelope(
                     False,
-                    code=inner.get("code", "INTERNAL_ERROR"),
-                    message=inner.get("message", "请求失败"),
+                    code=code,
+                    message=message,
                     details=inner.get("details"),
                     request_id=request_id,
                 ),

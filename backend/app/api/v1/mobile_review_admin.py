@@ -25,6 +25,16 @@ def create_pairing_code(session: Session = Depends(get_session)) -> dict:
     return {"code": code, "expires_in_seconds": mobile_pairing_service.PAIRING_CODE_TTL_SECONDS}
 
 
+@router.get("/devices", summary="已配对设备列表（脱敏，不含 token_hash）")
+def list_devices(session: Session = Depends(get_session)) -> dict:
+    return {"devices": mobile_pairing_service.list_devices(session)}
+
+
+@router.post("/devices/{device_ref}/revoke", summary="吊销设备（按主键 id 或 installation_id）")
+def revoke_device(device_ref: str, session: Session = Depends(get_session)) -> dict:
+    return mobile_pairing_service.revoke_device(session, device_ref)
+
+
 @router.get("/runtime", summary="Bridge 受管运行时状态")
 async def runtime_status(request: Request) -> dict:
     svc = request.app.state.mobile_review_runtime

@@ -94,3 +94,28 @@ def test_complete_requires_all_seen(mobile_client, session_factory, make_mobile_
     r2 = mobile_client.post(f"/mobile/review/sessions/{sid}/complete", headers=h)
     assert r2.json()["data"]["completed"] is True
     assert r2.json()["data"]["status"] == "COMPLETED"
+
+
+def test_freeze_supports_job_id(mobile_client, session_factory, make_mobile_image):
+    """按任务审核：freeze filter 支持 job_id，队列只含该 job 的图。"""
+    make_mobile_image(1)  # 其它 job（job_id=None）
+    from app.models.image import Image
+    from app.models.job import Job
+    with session_factory() as session:
+        session.add(Job(id="jobA", source="web", status="COMPLETED", prompt_mode="structured",
+                        workbench_snapshot_json="{}", generation_settings_json="{}",
+                        requested_count=1))
+        session.commit()
+        imgs = session.query(Image).order_by(Image.created_at.desc()).all()
+        imgs[0].job_id = "jobA"
+        session.commit()
+    jobA_ids = [imgs[0].id]
+
+    h = _auth(mobile_client, session_factory)
+    r = mobile_client.post("/mobile/review/sessions",
+                           json={"filter": {"status": "NEW", "job_id": "jobA"}}, headers=h)
+    assert r.status_code == 201, r.text
+    q = mobile_client.get(f"/mobile/review/sessions/{r.json()['data']['id']}/queue",
+                         headers=h).json()["data"]
+    assert q["total"] == 1
+    assert q["items"][0]["image"]["image_id"] == jobA_ids[0]

@@ -73,6 +73,10 @@ def _freeze_query(f: dict[str, Any]):
     status = f.get("status")
     if status is not None:
         query = query.where(Image.status == status)
+    job_id = f.get("job_id")
+    if job_id is not None:
+        # Gallery「按任务审核」：冻结某 job 产出图的稳定队列（口径对齐 image list）
+        query = query.where(Image.job_id == job_id)
     sort = f.get("sort", "created_desc")
     if sort == "created_asc":
         order_by = (Image.created_at.asc(), Image.id.asc())

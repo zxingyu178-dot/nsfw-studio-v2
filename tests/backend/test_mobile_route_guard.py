@@ -66,3 +66,18 @@ def test_mobile_route_table_only_audit():
     business = {p for p in paths if not p.startswith(("/docs", "/openapi.json", "/redoc"))}
     for p in business:
         assert p.startswith("/mobile/"), f"Bridge 业务路径必须在 /mobile/ 命名空间: {p}"
+
+
+def test_mobile_docs_disabled():
+    """安全硬化 O2：8767 在 LAN，关闭 /docs /redoc /openapi.json。"""
+    from app.core.config import load_settings
+    import os, tempfile
+    os.environ["NSFW_STUDIO_DATA_ROOT"] = tempfile.mkdtemp()
+    application = create_mobile_app(load_settings())
+    assert application.docs_url is None
+    assert application.redoc_url is None
+    assert application.openapi_url is None
+    paths = _all_paths(application)
+    assert "/docs" not in paths
+    assert "/redoc" not in paths
+    assert "/openapi.json" not in paths

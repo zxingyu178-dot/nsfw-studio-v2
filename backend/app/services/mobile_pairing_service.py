@@ -165,3 +165,50 @@ def authenticate_token(session: Session, token: str) -> MobileReviewDevice:
     device.last_seen_at = utc_now_iso()
     session.commit()
     return device
+
+
+# ---- Desktop loopback 设备管理（绝不下发 token_hash / token） ----
+
+
+def list_devices(session: Session) -> list[dict]:
+    """返回全部已配对设备（脱敏：不含 token_hash / token）。"""
+    rows = session.execute(
+        select(MobileReviewDevice).order_by(MobileReviewDevice.paired_at.desc())
+    ).scalars().all()
+    return [
+        {
+            "id": d.id,
+            "installation_id": d.installation_id,
+            "name": d.name,
+            "paired_at": d.paired_at,
+            "last_seen_at": d.last_seen_at,
+            "revoked": bool(d.revoked),
+        }
+        for d in rows
+    ]
+
+
+class DeviceNotFound(NotFoundError):
+    status_code = 404
+    code = "DEVICE_NOT_FOUND"
+    message = "设备不存在"
+
+
+def revoke_device(session: Session, device_ref: str) -> dict:
+    """按主键 id 或 installation_id 吊销设备（token 立即 401 DEVICE_REVOKED）。"""
+    device = session.get(MobileReviewDevice, device_ref)
+    if device is None:
+        device = session.execute(
+            select(MobileReviewDevice).where(
+                MobileReviewDevice.installation_id == device_ref
+            )
+        ).scalars().first()
+    if device is None:
+        raise DeviceNotFound()
+    device.revoked = True
+    session.commit()
+    return {
+        "id": device.id,
+        "installation_id": device.installation_id,
+        "revoked": True,
+    }

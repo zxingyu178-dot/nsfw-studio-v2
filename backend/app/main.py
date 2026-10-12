@@ -33,8 +33,11 @@ from app.workflows.pipeline import PipelineExecutor
 logger = logging.getLogger(__name__)
 
 
-def _error_response(status_code: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"error": {"code": code, "message": message}})
+def _error_response(status_code: int, code: str, message: str, details=None) -> JSONResponse:
+    err = {"code": code, "message": message}
+    if details is not None:
+        err["details"] = details
+    return JSONResponse(status_code=status_code, content={"error": err})
 
 
 def _make_output_importer(session_factory, storage: StorageManager):
@@ -162,7 +165,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ===== 统一错误格式（Phase 1 规范 §三十六） =====
     @application.exception_handler(AppError)
     def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        return _error_response(exc.status_code, exc.code, exc.message)
+        return _error_response(exc.status_code, exc.code, exc.message,
+                              details=getattr(exc, "details", None))
 
     @application.exception_handler(RequestValidationError)
     def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
