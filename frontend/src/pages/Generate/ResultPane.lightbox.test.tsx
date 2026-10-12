@@ -74,8 +74,8 @@ describe('ResultPane 双击主图打开 Lightbox', () => {
 
     const lightbox = await screen.findByRole('dialog', { name: '图片预览' })
     expect(lightbox).toBeInTheDocument()
-    // 定位到 shown（img_b，index 1）
-    expect(lightbox.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+    // 定位到 shown（img_b，index 1）；Lightbox 渐进加载默认 preview
+    expect(lightbox.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
     expect(lightbox.querySelectorAll('img')).toHaveLength(1)
 
     // ESC 关闭

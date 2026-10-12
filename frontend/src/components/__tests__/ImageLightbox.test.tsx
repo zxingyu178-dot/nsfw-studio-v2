@@ -18,11 +18,12 @@ function renderAt(index: number, onNavigate = vi.fn()) {
 }
 
 describe('ImageLightbox 共享看图 Lightbox', () => {
-  it('打开时只渲染当前这一张大图的 content URL，不批量预载其余原图', () => {
+  it('打开时只渲染当前这一张的 preview URL，不批量预载其余原图', () => {
     const { container } = renderAt(0)
     const imgs = container.querySelectorAll('img')
     expect(imgs).toHaveLength(1)
-    expect(imgs[0].getAttribute('src')).toBe('/api/v1/images/img_a/content')
+    // 渐进加载：默认 preview（长边 1536），不是完整 original
+    expect(imgs[0].getAttribute('src')).toBe('/api/v1/images/img_a/preview')
     // 其余两张的原图 URL 不得出现在 DOM 中（无批量请求）
     expect(container.innerHTML).not.toContain('/api/v1/images/img_b/content')
     expect(container.innerHTML).not.toContain('/api/v1/images/img_c/content')
@@ -45,7 +46,7 @@ describe('ImageLightbox 共享看图 Lightbox', () => {
     )
     const imgs = utils.container.querySelectorAll('img')
     expect(imgs).toHaveLength(1)
-    expect(imgs[0].getAttribute('src')).toBe('/api/v1/images/img_b/content')
+    expect(imgs[0].getAttribute('src')).toBe('/api/v1/images/img_b/preview')
     expect(utils.container.innerHTML).not.toContain('/api/v1/images/img_c/content')
 
     fireEvent.keyDown(document, { key: 'ArrowLeft' })
@@ -124,7 +125,21 @@ describe('ImageLightbox 共享看图 Lightbox', () => {
       <ImageLightbox images={images} index={1} onClose={vi.fn()} onNavigate={vi.fn()} />
     )
     const img2 = container.querySelector('.lb-img') as HTMLImageElement
-    expect(img2.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+    // 切图后缩放复位 → 回到 preview
+    expect(img2.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
     expect(img2.style.transform).toBe('')
+
+    // 点 100% → 切换为 original content
+    fireEvent.click(screen.getByRole('button', { name: '100%' }))
+    expect(container.querySelector('.lb-img')?.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+  })
+
+  it('hasMore/onLoadMore：到末尾按下一张触发加载更多而非禁用', () => {
+    const onLoadMore = vi.fn()
+    render(
+      <ImageLightbox images={images} index={2} onClose={vi.fn()} onNavigate={vi.fn()} hasMore onLoadMore={onLoadMore} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '加载更多' }))
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
   })
 })

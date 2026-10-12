@@ -16,6 +16,7 @@ vi.mock('../../api/client', () => ({
     workbench: vi.fn(),
     importFiles: vi.fn(),
     jobSummary: vi.fn(),
+    jobGroups: vi.fn(),
   },
   jobApi: { list: vi.fn(), get: vi.fn() },
   assetApi: { create: vi.fn() },
@@ -46,6 +47,7 @@ beforeEach(() => {
   vi.mocked(imageApi.list).mockResolvedValue({ items: [], total: 0 } as never)
   vi.mocked(imageApi.versions).mockRejectedValue(new Error('none'))
   vi.mocked(imageApi.provenance).mockRejectedValue(new Error('none'))
+  vi.mocked(imageApi.jobGroups).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, has_next: false } as never)
   vi.mocked(jobApi.list).mockResolvedValue({ items: [] } as never)
 })
 
@@ -93,9 +95,9 @@ describe('GalleryPage 图库', () => {
     expect(screen.getByRole('button', { name: '高清放大' })).toBeDisabled()
   })
 
-  it('切换到按任务查看时加载任务分组', async () => {
+  it('切换到按任务查看时通过 jobGroups 聚合加载任务分组', async () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: '按任务查看' }))
-    await waitFor(() => expect(jobApi.list).toHaveBeenCalled())
+    await waitFor(() => expect(imageApi.jobGroups).toHaveBeenCalled())
   })
 })

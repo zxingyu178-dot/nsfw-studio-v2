@@ -80,8 +80,8 @@ describe('Gallery 单击抽屉 / 双击 Lightbox 区分', () => {
     // Lightbox 立即打开（双击取消了抽屉定时器）
     const lightbox = await screen.findByRole('dialog', { name: '图片预览' })
     expect(lightbox).toBeInTheDocument()
-    // 当前显示第二张（index 1）
-    expect(lightbox.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+    // 当前显示第二张（index 1），渐进加载默认 preview
+    expect(lightbox.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
     // Detail Drawer 未打开
     expect(screen.queryByText('图片详情')).not.toBeInTheDocument()
 

@@ -12,11 +12,11 @@ vi.mock('../../api/client', () => ({
     provenance: vi.fn(),
     review: vi.fn(),
     favorite: vi.fn(),
+    setStatus: vi.fn(),
     upscale: vi.fn(),
     workbench: vi.fn(),
     importFiles: vi.fn(),
     jobSummary: vi.fn(),
-    setStatus: vi.fn(),
     cleanupRejected: vi.fn(),
   },
   jobApi: { list: vi.fn(), get: vi.fn() },
@@ -75,7 +75,8 @@ describe('ImageDetail 详情信息栏与操作', () => {
     expect(screen.getByText('a beautiful cat, masterpiece')).toBeInTheDocument()
     // 操作入口
     expect(screen.getByRole('button', { name: '复制 Prompt' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '删除此图片' })).toBeInTheDocument()
+    // 普通图（非 REJECT）显示「淘汰此图」，而非物理删除
+    expect(screen.getByRole('button', { name: '淘汰此图' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择 Prompt' })).toBeInTheDocument()
   })
 
@@ -97,21 +98,43 @@ describe('ImageDetail 详情信息栏与操作', () => {
     )
   })
 
-  it('删除时被引用保护则禁止删除并提示', async () => {
+  it('REJECT 图永久删除时被引用保护则禁止删除并提示（不真删）', async () => {
+    vi.mocked(imageApi.list).mockResolvedValue({
+      items: [{ ...image, status: 'REJECT', review_status: 'REJECTED' }],
+      total: 1, page: 1, page_size: 40, has_next: false,
+    } as never)
     vi.mocked(imageApi.cleanupRejected).mockResolvedValue({
       candidate_count: 1,
-      total_bytes: 1234,
+      deletable_count: 0,
       protected_count: 1,
+      total_bytes: 1234,
+      protected_items: [{ image_id: 'img_detail', reasons: ['被 Prompt prm_9 引用'] }],
     } as never)
     const { container } = renderPage()
     await screen.findByText('共 1 张')
     fireEvent.click(container.querySelector('.gal-card') as HTMLElement)
     await screen.findByText('图片详情')
 
-    fireEvent.click(screen.getByRole('button', { name: '删除此图片' }))
+    // REJECT 图才显示「永久删除此废片」
+    fireEvent.click(screen.getByRole('button', { name: '永久删除此废片' }))
     fireEvent.click(screen.getByRole('button', { name: /确认删除/ }))
 
     expect(await screen.findByText(/禁止删除/)).toBeInTheDocument()
     expect(imageApi.cleanupRejected).not.toHaveBeenCalledWith(expect.objectContaining({ confirm: true }))
+  })
+
+  it('非 REJECT 图点「淘汰此图」仅置 REJECT，不调用物理删除', async () => {
+    vi.mocked(imageApi.setStatus).mockResolvedValue({ ...image, status: 'REJECT' } as never)
+    const { container } = renderPage()
+    await screen.findByText('共 1 张')
+    fireEvent.click(container.querySelector('.gal-card') as HTMLElement)
+    await screen.findByText('图片详情')
+
+    fireEvent.click(screen.getByRole('button', { name: '淘汰此图' }))
+    await waitFor(() =>
+      expect(imageApi.setStatus).toHaveBeenCalledWith('img_detail', { status: 'REJECT' }),
+    )
+    // 不调用 cleanupRejected 物理删除
+    expect(imageApi.cleanupRejected).not.toHaveBeenCalled()
   })
 })
