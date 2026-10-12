@@ -66,6 +66,7 @@ class SingleQueueWorker:
         engine_poll_ms: int = 200,
         seed_upper: int = 2**31 - 1,
         stage_timeout_seconds: float = DEFAULT_STAGE_TIMEOUT_SECONDS,
+        stall_timeout_seconds: float = 600.0,
     ) -> None:
         self._session_factory = session_factory
         self._adapter = adapter
@@ -79,6 +80,8 @@ class SingleQueueWorker:
         self._engine_poll = engine_poll_ms / 1000
         self._seed_upper = seed_upper
         self._stage_timeout = float(stage_timeout_seconds)
+        # v0.13.2 (b) stall 收敛：引擎在线但 progress 持续 0 超过此时长 → 判 stall（RTX3060 eager 冷加载留足余量）
+        self._stall_timeout = float(stall_timeout_seconds)
         self._task: asyncio.Task | None = None
         self._running = False
         self._queue_paused = False
@@ -406,6 +409,10 @@ class SingleQueueWorker:
 
         # 轮询进度（§十：执行总超时，绝不无限 RUNNING）
         cancel_sent = False
+        # v0.13.2 (b) stall 收敛：记录"最后进度/最后 stage 变化时间"，progress/stage 不动超 stall_timeout → 判卡死
+        last_progress_time = time.monotonic()
+        last_progress_value: float = -1.0
+        last_stage: str | None = None
         while True:
             await asyncio.sleep(self._engine_poll)
             if timeout_seconds and (time.monotonic() - started) > timeout_seconds:
@@ -444,6 +451,33 @@ class SingleQueueWorker:
                 return self._stage_item_failed(job_id, stage_item_id, "ENGINE_NETWORK", error.message)
 
             self._update_stage_item_progress(job_id, stage_item_id, status)
+
+            # v0.13.2 (b) stall 收敛：引擎在线、任务 running、progress/stage 长时间不动 → 判卡死
+            progress_now = getattr(status, "progress", None)
+            stage_now = getattr(status, "stage", None)
+            moving = False
+            if progress_now is not None and progress_now != last_progress_value:
+                moving = True
+            if stage_now is not None and stage_now != last_stage:
+                moving = True
+            if moving:
+                last_progress_value = progress_now if progress_now is not None else last_progress_value
+                if stage_now is not None:
+                    last_stage = stage_now
+                last_progress_time = time.monotonic()
+            elif status.state == "running" and progress_now == 0.0 and self._stall_timeout > 0:
+                stalled_for = time.monotonic() - last_progress_time
+                if stalled_for >= self._stall_timeout:
+                    # 向引擎 interrupt（best-effort，只这一个 prompt）
+                    try:
+                        await self._adapter.cancel_job(engine_job_id)
+                    except Exception:
+                        logger.warning("stall 清理时 cancel_job 失败（忽略）", exc_info=True)
+                    return self._stage_item_failed(
+                        job_id, stage_item_id, "ENGINE_STALLED",
+                        f"引擎在线但 progress 持续为 0 超过 {int(self._stall_timeout)} 秒"
+                        f"（已 {int(stalled_for)} 秒无进展），判为卡死并释放队列头",
+                    )
 
             if status.state == "succeeded":
                 # §一（P0）：Engine succeeded 只是必要条件——必须成功取回输出并导入 Studio Image

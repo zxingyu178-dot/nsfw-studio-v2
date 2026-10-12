@@ -10,14 +10,25 @@
 精确归属与终止 Studio 自己启动的进程树，避免 ``taskkill /IM python.exe`` 误杀外部 ComfyUI
 或其他 Python 进程。**严禁 taskkill /IM、严禁杀所有 Python、严禁杀 external。**
 
+v0.13.2 健壮化（兼容 uv venv launcher re-exec）：
+- uv 0.12 的 ``venv/Scripts/python.exe`` 是 ~45KB 的 launcher 桩，启动时 re-exec 到 uv 自管理
+  cpython（``%APPDATA%\\uv\\python\\cpython-3.12-...\\python.exe main.py``），**实际 LISTEN 8188 的
+  是这个 uv base 孙进程**，而不是我们 spawn 返回的直接子 pid。因此：
+  - 归属不再以"直接子 pid 是否存活/是否监听"为唯一判据，而以"**本会话是否在端口空闲时发起过启动**
+    （``_managed_active``）+ 端口 HTTP 健康"为准；
+  - 启动期（冷启约 3 分钟）即使受管 pid 还在、端口没起，也只报 **STARTING**，不再误判 ERROR；
+  - ``status()`` 以实际探活为准，``_managed_active`` 下探活恢复可从 STOPPED/ERROR/STARTING 自动回
+    RUNNING_MANAGED（顶栏引擎灯与真实一致）；
+  - stop 清理集合 = 原始 spawn 根进程树 + 当前 LISTEN 8188 且匹配 app 的进程递归子树（含 uv 孙）。
+
 状态机::
 
-    STOPPED ──start──▶ STARTING ──健康探测成功──▶ RUNNING_MANAGED
-                          │
-                          └──超时失败──▶ ERROR（并清理自己刚启动的进程树，不留孤儿）
+    STOPPED ──start(端口空闲)──▶ STARTING ──HTTP /system_stats 200──▶ RUNNING_MANAGED
+                                    │
+                                    └──根与匹配监听都消失/超时──▶ ERROR（清理自己的树）
 
     RUNNING_MANAGED ──stop/restart──▶ STOPPING ──▶ STOPPED
-    外部 ComfyUI 占用 8188 ──▶ RUNNING_EXTERNAL（owned=false，不可杀）
+    外部 ComfyUI 已占用 8188 ──▶ RUNNING_EXTERNAL（owned=false，不 spawn、不杀）
     8188 被非 ComfyUI 占用 ──▶ PORT_CONFLICT
 
 start/stop/restart 均为同步阻塞实现（subprocess/psutil/httpx），API 层用
@@ -56,9 +67,9 @@ STATE_PORT_CONFLICT = "PORT_CONFLICT"
 STATE_ERROR = "ERROR"
 
 # 启动后轮询健康的节奏
-# 默认健康等待上限：需覆盖 ComfyUI 冷启动（含 ComfyUI-Manager prestartup/网络重试）的真实耗时。
-# 可被 engine_runtime.health_timeout_seconds 覆盖（见 __init__），不再写死。
-DEFAULT_HEALTH_TIMEOUT_S = 240.0
+# 默认健康等待上限：需覆盖 ComfyUI 冷启动（含 ComfyUI-Manager prestartup/网络重试 + uv re-exec）
+# 的真实耗时（真机约 3 分钟）。v0.13.2 由 240 提到 300，可被 engine_runtime.health_timeout_seconds 覆盖。
+DEFAULT_HEALTH_TIMEOUT_S = 300.0
 START_HEALTH_INTERVAL_S = 1.0
 # stop 时 terminate 的宽限期，超时再 kill
 TERMINATE_GRACE_S = 10.0
@@ -143,7 +154,7 @@ class EngineRuntimeService:
         self.entrypoint = str(cfg.get("entrypoint", "main.py"))
         self.extra_args = [str(a) for a in (cfg.get("extra_args") or [])]
         self.launch_command = cfg.get("launch_command") or None
-        # 受管启动健康等待上限（秒）：可配置，默认覆盖慢冷启动；其余状态/幂等/进程树逻辑不变
+        # 受管启动健康等待上限（秒）：可配置，默认覆盖慢冷启动（含 uv re-exec）；其余状态/幂等/进程树逻辑不变
         self.health_timeout = float(cfg.get("health_timeout_seconds", DEFAULT_HEALTH_TIMEOUT_S))
 
         logs_dir = settings.storage.data_root / "logs" / "engine"
@@ -151,11 +162,15 @@ class EngineRuntimeService:
         self.log_location = str(logs_dir / "comfyui-managed.log")
 
         # 受管进程记录
-        self._pid: int | None = None
+        self._pid: int | None = None       # 原始 spawn 根（venv shim），仅用于清理根树
         self._cmd: list[str] = []
         self._cwd: str | None = None
         self._started_at: str | None = None
         self._state: str = STATE_STOPPED
+        # v0.13.2：归属以"本会话是否在端口空闲时发起过启动"为准（兼容 re-exec 孙进程监听）
+        self._managed_active: bool = False
+        # v0.13.2：start() 阻塞健康轮询窗口内，并发 status()/_recompute_state 一律报 STARTING
+        self._starting: bool = False
 
     # ===== 探测 / 进程树：以下为可替换 seam（测试 monkeypatch） =====
 
@@ -176,6 +191,48 @@ class EngineRuntimeService:
             version = str(data.get("system", {}).get("comfyui_version", ""))
             return _Probe(online=True, responded=True, version=version)
         return _Probe(online=False, responded=True)
+
+    def _listening_pids(self) -> list[int]:
+        """当前 LISTEN 本服务端口的进程 pid 列表（psutil seam，测试可 monkeypatch）。"""
+        pids: list[int] = []
+        try:
+            for conn in psutil.net_connections(kind="tcp"):
+                if conn.status != psutil.CONN_LISTEN:
+                    continue
+                if conn.laddr and conn.laddr.port == self.port:
+                    if conn.pid:
+                        pids.append(conn.pid)
+        except psutil.Error:
+            pass
+        return pids
+
+    def _pid_matches_app(self, pid: int) -> bool:
+        """判断某 pid 是否为 ComfyUI app（cmdline 含 main.py 且 cwd 指向配置 working_dir）。
+
+        用于"定位与清理"，而非唯一归属判据（cmdline/cwd 匹配无法区分我们拉的 vs 用户手动起的）。
+        """
+        try:
+            p = psutil.Process(pid)
+            cmd = " ".join(p.cmdline() or [])
+            cwd = ""
+            try:
+                cwd = p.cwd() or ""
+            except psutil.Error:
+                cwd = ""
+        except psutil.Error:
+            return False
+        if self.entrypoint not in cmd:
+            return False
+        if self.working_dir:
+            norm_cwd = os.path.normcase(os.path.abspath(cwd))
+            norm_wd = os.path.normcase(os.path.abspath(self.working_dir))
+            if norm_cwd != norm_wd:
+                return False
+        return True
+
+    def _matching_listener_pids(self) -> list[int]:
+        """LISTEN 本端口且匹配 app 的 pid（含 uv re-exec 孙进程）。"""
+        return [pid for pid in self._listening_pids() if self._pid_matches_app(pid)]
 
     def _pid_alive(self, pid: int) -> bool:
         try:
@@ -233,17 +290,26 @@ class EngineRuntimeService:
 
     def _snapshot(self, probe: _Probe | None = None) -> RuntimeSnapshot:
         probe = probe or self._probe()
+        # 展示用 pid：优先取当前匹配监听进程（re-exec 后真正绑定端口的那个），否则回退到 spawn 根
+        show_pid = self._pid
+        if self._state == STATE_RUNNING_MANAGED:
+            matches = self._matching_listener_pids()
+            if matches:
+                show_pid = matches[0]
         health = {
             "online": probe.online,
             "engine_name": "comfyui",
             "engine_version": probe.version,
         }
+        owned = self._state in (STATE_RUNNING_MANAGED,) or (
+            self._state in (STATE_STARTING, STATE_STOPPED) and self._managed_active
+        )
         return RuntimeSnapshot(
             state=self._state,
             host=self.host,
             port=self.port,
-            owned=self._pid is not None,
-            pid=self._pid,
+            owned=owned,
+            pid=show_pid,
             started_at=self._started_at,
             detail=self._detail_for(probe),
             log_location=self.log_location,
@@ -251,8 +317,10 @@ class EngineRuntimeService:
         )
 
     def _detail_for(self, probe: _Probe) -> str:
+        if self._state == STATE_STARTING:
+            return "受管 ComfyUI 启动中（冷启约数分钟，可后台等待）"
         if self._state == STATE_RUNNING_MANAGED:
-            return f"受管 ComfyUI 运行中 (pid={self._pid})"
+            return f"受管 ComfyUI 运行中 @ {self.host}:{self.port}"
         if self._state == STATE_RUNNING_EXTERNAL:
             return f"检测到外部 ComfyUI @ {self.host}:{self.port}"
         if self._state == STATE_PORT_CONFLICT:
@@ -264,32 +332,52 @@ class EngineRuntimeService:
         return f"{self.host}:{self.port} 无响应"
 
     def _recompute_state(self) -> _Probe:
-        """根据受管进程存活 + 端口探测推导当前状态。"""
+        """根据"本会话是否发起过启动"+ 端口探活推导当前状态（兼容 re-exec 孙进程监听）。"""
+        # start() 阻塞健康轮询窗口内：并发 status() 一律报 STARTING，不翻 ERROR（修复冷启误报）
+        if self._starting:
+            probe = self._probe()
+            if probe.online:
+                self._state = STATE_RUNNING_MANAGED
+            else:
+                self._state = STATE_STARTING
+            return probe
+
         probe = self._probe()
-        managed_alive = self._pid is not None and self._pid_alive(self._pid)
-        if managed_alive and probe.online:
-            self._state = STATE_RUNNING_MANAGED
-        elif probe.online:
-            # 端口健康，但不是我们启动的（或受管进程已消失）
-            self._state = STATE_RUNNING_EXTERNAL
-            self._clear_record()
+        if probe.online:
+            if self._managed_active:
+                # 本会话拉起的（无论监听 pid 是 shim 还是 uv 孙）一律 owned
+                self._state = STATE_RUNNING_MANAGED
+            else:
+                # 端口健康但不是本会话拉的（Studio 刚重启 / 用户手动起的 carrier）→ external，不杀
+                self._state = STATE_RUNNING_EXTERNAL
+                self._clear_record(keep_active=False)
         elif probe.responded:
             self._state = STATE_PORT_CONFLICT
         else:
             # 端口关闭
-            if managed_alive:
-                # 受管进程还活着但端口没起来：视为异常（启动未完成 / 已僵死）
-                self._state = STATE_ERROR
+            if self._managed_active:
+                # 我们曾发起启动但端口暂未/不再监听：不主动翻 STOPPED 清记录，
+                # 保持 managed_active，使下次探活恢复可自动回 RUNNING_MANAGED（自恢复）。
+                self._state = STATE_STOPPED
             else:
                 self._state = STATE_STOPPED
-                self._clear_record()
+                self._clear_record(keep_active=False)
         return probe
 
-    def _clear_record(self) -> None:
+    def _clear_record(self, *, keep_active: bool = True) -> None:
         self._pid = None
         self._cmd = []
         self._cwd = None
         self._started_at = None
+        if not keep_active:
+            self._managed_active = False
+        self._starting = False
+
+    def _root_or_listener_alive(self) -> bool:
+        """启动轮询期：受管根树或匹配监听是否还活着（用于尽早判真失败）。"""
+        if self._pid is not None and self._pid_alive(self._pid):
+            return True
+        return bool(self._matching_listener_pids())
 
     # ===== 公共操作 =====
 
@@ -306,15 +394,19 @@ class EngineRuntimeService:
             raise EnginePortConflict()
 
         self._state = STATE_STARTING
+        self._starting = True
+        self._managed_active = True
         try:
             self._pid = self._spawn()
             self._started_at = _utc_iso()
         except Exception as error:  # noqa: BLE001
             logger.warning("受管 ComfyUI 启动失败: %s", error)
+            self._starting = False
+            self._managed_active = False
             self._state = STATE_ERROR
             return self._snapshot(_Probe())
 
-        # 轮询健康（截止由可配置的 self.health_timeout 决定，默认 240s 覆盖慢冷启动）
+        # 轮询健康（截止由可配置的 self.health_timeout 决定，默认 300s 覆盖慢冷启 + re-exec）
         deadline = time.monotonic() + self.health_timeout
         healthy = False
         while time.monotonic() < deadline:
@@ -322,48 +414,69 @@ class EngineRuntimeService:
             if probe.online:
                 healthy = True
                 break
+            # 真失败：根与匹配监听都消失 → 不必等满超时
+            if not self._root_or_listener_alive():
+                logger.warning("受管 ComfyUI 根进程与匹配监听均消失，提前判失败 pid=%s", self._pid)
+                break
             time.sleep(START_HEALTH_INTERVAL_S)
 
         if healthy:
+            self._starting = False
             self._state = STATE_RUNNING_MANAGED
             return self._snapshot(self._probe())
 
-        # 失败：清理自己刚启动的进程树，不留孤儿
-        logger.warning("受管 ComfyUI 健康探测超时，清理 pid=%s", self._pid)
-        try:
-            self._terminate_tree(self._pid)
-        except Exception:  # noqa: BLE001
-            logger.warning("清理受管 ComfyUI 进程树失败", exc_info=True)
-        self._clear_record()
+        # 失败：清理自己刚启动的进程树（含 uv 孙），不留孤儿
+        logger.warning("受管 ComfyUI 健康探测超时/失败，清理 pid=%s", self._pid)
+        self._cleanup_managed_tree()
+        self._starting = False
+        self._managed_active = False
+        self._clear_record(keep_active=False)
         self._state = STATE_ERROR
         return self._snapshot(_Probe())
+
+    def _cleanup_managed_tree(self) -> None:
+        """终止集合 = 原始 spawn 根树 + 当前 LISTEN 8188 且匹配 app 的进程递归子树（含 uv 孙）。"""
+        seen: set[int] = set()
+        targets: list[int] = []
+        if self._pid is not None:
+            targets.append(self._pid)
+        for pid in self._matching_listener_pids():
+            if pid not in seen:
+                targets.append(pid)
+                seen.add(pid)
+        for pid in targets:
+            try:
+                self._terminate_tree(pid)
+            except Exception:  # noqa: BLE001
+                logger.warning("清理受管 ComfyUI 进程树失败 pid=%s", pid, exc_info=True)
 
     def stop(self) -> RuntimeSnapshot:
         current = self._recompute_state()
         if self._state == STATE_RUNNING_EXTERNAL:
             raise EngineNotOwned()
-        if self._state in (STATE_STOPPED, STATE_PORT_CONFLICT, STATE_ERROR) and self._pid is None:
+        # 既无受管记录、端口也健康但非 managed_active → 视为已外部停止，幂等返回
+        if not self._managed_active and self._pid is None and not self._starting:
             return self._snapshot(current)
 
         self._state = STATE_STOPPING
-        if self._pid is not None:
-            try:
-                self._terminate_tree(self._pid)
-            finally:
-                self._clear_record()
-        self._state = STATE_STOPPED
-        return self._snapshot(_Probe(responded=False))
+        try:
+            self._cleanup_managed_tree()
+        finally:
+            self._clear_record(keep_active=False)
+        # 复核端口已释放
+        probe = self._probe()
+        self._state = STATE_STOPPED if not probe.online else STATE_RUNNING_MANAGED
+        return self._snapshot(probe)
 
     def restart(self) -> RuntimeSnapshot:
         current = self._recompute_state()
         if self._state == STATE_RUNNING_EXTERNAL:
             raise EngineNotOwned()
-        # 先停掉 owned 的受管进程
-        if self._pid is not None:
+        if self._pid is not None or self._managed_active or self._starting:
             self._state = STATE_STOPPING
             try:
-                self._terminate_tree(self._pid)
+                self._cleanup_managed_tree()
             finally:
-                self._clear_record()
+                self._clear_record(keep_active=False)
             self._state = STATE_STOPPED
         return self.start()

@@ -291,8 +291,9 @@
 .wb-job__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* ===== 队列 ===== */
-.wb-queue__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.wb-queue__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); gap: var(--space-2); }
 .wb-queue__head-left { display: flex; align-items: baseline; gap: var(--space-2); }
+.wb-queue__head-right { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .wb-queue__title { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
 .wb-queue__count { font-size: var(--text-xs); color: var(--text-secondary); }
 .wb-queue-list {

@@ -99,10 +99,10 @@ describe('EngineControlPopover 生图引擎控制', () => {
     expect(await screen.findByRole('dialog', { name: '生图引擎控制' })).toBeInTheDocument()
   })
 
-  it('RUNNING_MANAGED 显示"已运行"与停止/重启按钮', async () => {
+  it('RUNNING_MANAGED 显示"运行中·本程序托管"与停止/重启按钮', async () => {
     getMock.mockResolvedValue(rt('RUNNING_MANAGED'))
     renderPopover()
-    expect(await screen.findByText('已运行')).toBeInTheDocument()
+    expect(await screen.findByText(/运行中 · 本程序托管/)).toBeInTheDocument()
     expect(screen.getByText('ComfyUI · 8188')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '停止引擎' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重启' })).toBeInTheDocument()
@@ -179,29 +179,31 @@ describe('EngineControlPopover 生图引擎控制', () => {
     expect(stopMock).not.toHaveBeenCalled()
   })
 
-  it('RUNNING_EXTERNAL：不显示停止/重启，显示 not-owned 说明', async () => {
+  it('RUNNING_EXTERNAL：不显示停止/重启，显示外部实例说明', async () => {
     getMock.mockResolvedValue(rt('RUNNING_EXTERNAL'))
     renderPopover()
-    expect(await screen.findByText(/外部 ComfyUI · 8188/)).toBeInTheDocument()
+    expect(await screen.findByText(/运行中 · 外部实例/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '停止引擎' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重启' })).not.toBeInTheDocument()
     expect(
-      screen.getByText(/当前 ComfyUI 不是由 Studio 启动/),
+      screen.getByText(/Studio 不控制其停止\/重启，也不会重复拉起/),
     ).toBeInTheDocument()
   })
 
-  it('PORT_CONFLICT：显示端口冲突文案，不出现 8189 自动换口', async () => {
+  it('PORT_CONFLICT：明确中文提示端口被非 ComfyUI 程序占用，请释放', async () => {
     getMock.mockResolvedValue(rt('PORT_CONFLICT'))
     renderPopover()
-    expect(await screen.findByText('端口冲突')).toBeInTheDocument()
-    expect(screen.getByText(/8188 已被其他程序占用/)).toBeInTheDocument()
+    expect(await screen.findByText('端口被占用')).toBeInTheDocument()
+    expect(screen.getByText(/8188 已被非 ComfyUI 程序占用，请释放该端口后再启动引擎/)).toBeInTheDocument()
     expect(screen.queryByText(/8189/)).not.toBeInTheDocument()
   })
 
-  it('STARTING / STOPPING：按钮禁用', async () => {
-    getMock.mockResolvedValue(rt('STARTING'))
+  it('STARTING：中性"引擎启动中"文案 + 冷启提示，不显示"启动失败"', async () => {
+    getMock.mockResolvedValue(rt('STARTING', { detail: '受管 ComfyUI 启动中（冷启约数分钟，可后台等待）' }))
     renderPopover()
-    expect(await screen.findByText('正在启动…')).toBeInTheDocument()
+    expect(await screen.findByText('引擎启动中')).toBeInTheDocument()
+    expect(screen.getByText(/冷启约数分钟/)).toBeInTheDocument()
+    expect(screen.queryByText('启动失败')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '启动生图引擎' })).toBeDisabled()
   })
 
