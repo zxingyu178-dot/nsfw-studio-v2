@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError, assetApi } from '../../api/client'
 import {
@@ -18,40 +18,42 @@ import {
 } from '../../types/workbench'
 import { AssetGrid } from './AssetGrid'
 import { AssetDetailDrawer } from './AssetDetailDrawer'
+import { useInfiniteList } from '../Prompt/useInfiniteList'
 import './assets.css'
 
 /** 素材页（§四十一-§四十三、§五十四、§五十五）。 */
 export default function AssetsPage() {
   const navigate = useNavigate()
-  const [items, setItems] = useState<AssetDTO[]>([])
   const [assetType, setAssetType] = useState<AssetType | 'all'>('all')
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    assetApi
-      .list({
+  // Phase 0.12：移除前端 limit=100 的隐形上限，改为 offset 分页 + 搜索 stale guard。
+  const fetcher = useCallback(
+    (limit: number, offset: number) =>
+      assetApi.list({
         type: assetType === 'all' ? null : assetType,
         search: search.trim() || undefined,
         archived: showArchived ? null : false,
-        limit: 100,
-      })
-      .then((page) => setItems(page.items))
-      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
-  }, [assetType, search, showArchived])
+        limit,
+        offset,
+      }),
+    [assetType, search, showArchived],
+  )
 
-  useEffect(() => {
-    const timer = window.setTimeout(load, 250)
-    return () => window.clearTimeout(timer)
-  }, [load])
+  const {
+    items,
+    total,
+    hasMore,
+    initialLoading: loading,
+    loadingMore,
+    error,
+    reload: load,
+    loadMore,
+  } = useInfiniteList<AssetDTO>({ pageSize: 60, fetcher, reloadDeps: [fetcher] })
 
   function handleUseInWorkbench(assetId: string): void {
     assetApi
@@ -109,6 +111,19 @@ export default function AssetsPage() {
       )}
 
       <AssetGrid items={items} onOpen={setDetailId} />
+
+      {!loading && !error && items.length > 0 && (
+        <div className="as-loadmore">
+          {hasMore ? (
+            <Button variant="secondary" loading={loadingMore} disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </Button>
+          ) : (
+            <span className="muted">已加载全部 {total} 条</span>
+          )}
+          <span className="muted">已加载 {items.length} / 共 {total}</span>
+        </div>
+      )}
 
       {uploadOpen && (
         <UploadDialog

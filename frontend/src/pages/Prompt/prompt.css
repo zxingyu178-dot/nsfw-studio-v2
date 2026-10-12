@@ -227,3 +227,13 @@
   padding: 0 6px;
   border-radius: var(--radius-sm);
 }
+
+/* ===== 加载更多（offset 分页） ===== */
+.pp-loadmore {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+.pp-loadmore .muted { font-size: var(--text-sm); color: var(--text-secondary); }

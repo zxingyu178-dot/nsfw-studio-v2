@@ -13,6 +13,7 @@ import {
   Tabs,
 } from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
+import { useInfiniteList } from './useInfiniteList'
 import {
   HISTORY_BUCKET_LABEL,
   JOB_SOURCE_LABEL,
@@ -72,28 +73,30 @@ function snapshotFromJob(job: JobDTO): WorkbenchSnapshot {
 export function HistoryTab() {
   const [bucket, setBucket] = useState<HistoryBucket>('all')
   const [source, setSource] = useState<string | null>(null)
-  const [items, setItems] = useState<HistoryEntryDTO[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [detailJob, setDetailJob] = useState<JobDTO | null>(null)
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    historyApi
-      .list({ bucket, source, limit: 100 })
-      .then((page) => {
-        setItems(page.items)
-        setTotal(page.total)
-      })
-      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载历史失败'))
-      .finally(() => setLoading(false))
-  }, [bucket, source])
+  // Phase 0.12：移除 limit=100 假全集。按 root family 稳定 offset 分页（resumes 随 root 一起返回）。
+  const fetcher = useCallback(
+    (limit: number, offset: number) => historyApi.list({ bucket, source, limit, offset }),
+    [bucket, source],
+  )
 
-  useEffect(() => {
-    load()
-  }, [load])
+  const {
+    items,
+    total,
+    hasMore,
+    initialLoading: loading,
+    loadingMore,
+    error,
+    reload,
+    loadMore,
+  } = useInfiniteList<HistoryEntryDTO>({
+    pageSize: 30,
+    fetcher,
+    reloadDeps: [fetcher],
+    debounceMs: 0,
+    fallbackError: '加载历史失败',
+  })
 
   return (
     <div>
@@ -142,11 +145,24 @@ export function HistoryTab() {
         ))}
       </div>
 
+      {!loading && items.length > 0 && (
+        <div className="pp-loadmore">
+          {hasMore ? (
+            <Button variant="secondary" loading={loadingMore} disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </Button>
+          ) : (
+            <span className="muted">已加载全部 {total} 个任务族</span>
+          )}
+          <span className="muted">已加载 {items.length} / 共 {total}</span>
+        </div>
+      )}
+
       {detailJob && (
         <HistoryDetailDrawer
           job={detailJob}
           onClose={() => setDetailJob(null)}
-          onResumed={load}
+          onResumed={reload}
         />
       )}
     </div>
