@@ -9,6 +9,18 @@ vi.mock('../../api/client', () => ({
   systemApi: { status: vi.fn() },
   engineRuntimeApi: { get: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn() },
   imageApi: { startBackfill: vi.fn(), backfillStatus: vi.fn(), stopBackfill: vi.fn() },
+  mobileReviewApi: {
+    runtime: vi.fn().mockResolvedValue({
+      state: 'STOPPED', host: '0.0.0.0', port: 8767, owned: true, pid: null,
+      parent_pid: null, started_at: null, detail: '', log_location: null, health: {},
+    }),
+    start: vi.fn(),
+    stop: vi.fn(),
+    restart: vi.fn(),
+    createPairingCode: vi.fn(),
+    devices: vi.fn().mockResolvedValue([]),
+    revokeDevice: vi.fn(),
+  },
 }))
 
 function makeStatus(overrides: Partial<SystemStatus> = {}): SystemStatus {
