@@ -22,7 +22,13 @@ export function useGallerySelection() {
     })
   }, [])
 
+  // 显式退出选择模式（批量操作完成 / 取消选择）
+  const exitSelect = useCallback(() => {
+    setSelectMode(false)
+    setSelectedIds([])
+  }, [])
+
   const clearSelection = useCallback(() => setSelectedIds([]), [])
 
-  return { selectMode, selectedIds, toggleSelect, toggleSelectMode, clearSelection, setSelectedIds }
+  return { selectMode, selectedIds, toggleSelect, toggleSelectMode, exitSelect, clearSelection, setSelectedIds }
 }

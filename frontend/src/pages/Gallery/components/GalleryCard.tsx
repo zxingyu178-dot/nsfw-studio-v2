@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, StatusBadge } from '../../../components/ui'
 import {
   IMAGE_KIND_LABEL,
   IMAGE_STATUS_LABEL,
@@ -10,18 +9,21 @@ import {
 } from '../../../types/workbench'
 
 /**
- * Phase 0.12 Task9：单张图库卡片（从 GalleryPage 抽取，行为不变）。
- * 单击打开详情（父组件带延迟）、双击打开 Lightbox；进入选择模式时切换选中。
+ * Phase 0.12 Task6：单张图库卡片。
+ * - 左上：HD/processed 徽标；右上：收藏 ★（多选模式改为 checkbox/选中态）；
+ * - 底部 hover overlay：尺寸 + 审核状态。
+ * 进入选择模式后才显示 checkbox，平时不打扰浏览。
  */
 
 interface GalleryCardProps {
   image: ImageDTO
   selected: boolean
+  selectMode: boolean
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
 }
 
-export function GalleryCard({ image, selected, onCardClick, onCardDoubleClick }: GalleryCardProps) {
+export function GalleryCard({ image, selected, selectMode, onCardClick, onCardDoubleClick }: GalleryCardProps) {
   const status = normalizeImageStatus(image)
   return (
     <button
@@ -32,11 +34,18 @@ export function GalleryCard({ image, selected, onCardClick, onCardDoubleClick }:
       title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${IMAGE_STATUS_LABEL[status]}`}
     >
       <GalleryThumb image={image} />
-      <span className="gal-card__badges">
-        {image.kind === 'upscaled' && <span className="gal-card__hd">HD</span>}
-        {selected && <Badge tone="accent">✓</Badge>}
-        {image.favorite && <span className="gal-card__fav" title="收藏">★</span>}
-        {status !== 'NEW' && <StatusBadge status={status} />}
+      {image.kind === 'upscaled' && <span className="gal-card__hd">HD</span>}
+      <span className="gal-card__corner">
+        {selectMode && (
+          <span className={`gal-card__check${selected ? ' gal-card__check--on' : ''}`} aria-hidden="true">
+            {selected ? '✓' : ''}
+          </span>
+        )}
+        {!selectMode && image.favorite && <span className="gal-card__fav" title="收藏">★</span>}
+      </span>
+      <span className="gal-card__overlay">
+        <span className="gal-card__overlay-size">{image.width}×{image.height}</span>
+        <span className="gal-card__overlay-status">{IMAGE_STATUS_LABEL[status]}</span>
       </span>
     </button>
   )

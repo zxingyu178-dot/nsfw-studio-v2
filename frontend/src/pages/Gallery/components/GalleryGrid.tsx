@@ -1,10 +1,11 @@
 import type { MutableRefObject } from 'react'
 import type { ImageDTO } from '../../../types/workbench'
+import type { GalleryDensity, GalleryFit } from '../hooks/useGalleryPrefs'
 import { GalleryCard } from './GalleryCard'
 
 /**
- * Phase 0.12 Task9：图片网格（从 GalleryPage 抽取，行为不变）。
- * 含加载态 / 空态 / 计数 / 卡片网格 / 无限滚动哨兵。
+ * Phase 0.12 Task6：图片网格。密度（小/中/大）与适应方式（contain/cover）作为
+ * 修饰类作用于 .gal-grid，CSS 据此切换 minmax 列宽与媒体框高度/object-fit。
  */
 
 interface GalleryGridProps {
@@ -14,14 +15,17 @@ interface GalleryGridProps {
   loading: boolean
   loadingMore: boolean
   selectedIds: string[]
+  selectMode: boolean
+  density: GalleryDensity
+  fit: GalleryFit
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
   sentinelRef: MutableRefObject<HTMLDivElement | null>
 }
 
 export function GalleryGrid({
-  items, total, hasNext, loading, loadingMore, selectedIds,
-  onCardClick, onCardDoubleClick, sentinelRef,
+  items, total, hasNext, loading, loadingMore, selectedIds, selectMode,
+  density, fit, onCardClick, onCardDoubleClick, sentinelRef,
 }: GalleryGridProps) {
   return (
     <>
@@ -33,12 +37,13 @@ export function GalleryGrid({
         </div>
       )}
       <p className="gal-count">共 {total} 张</p>
-      <div className="gal-grid">
+      <div className={`gal-grid gal-grid--${density} gal-grid--fit-${fit}`}>
         {items.map((image) => (
           <GalleryCard
             key={image.id}
             image={image}
             selected={selectedIds.includes(image.id)}
+            selectMode={selectMode}
             onCardClick={onCardClick}
             onCardDoubleClick={onCardDoubleClick}
           />

@@ -15,6 +15,7 @@ import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
 import { useGalleryQuery } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
+import { useGalleryPrefs } from './hooks/useGalleryPrefs'
 import { GalleryToolbar } from './components/GalleryToolbar'
 import { GalleryGrid } from './components/GalleryGrid'
 import { GallerySelectionBar } from './components/GallerySelectionBar'
@@ -45,6 +46,7 @@ export default function GalleryPage() {
 
   const query = useGalleryQuery(jobFilter)
   const selection = useGallerySelection()
+  const prefs = useGalleryPrefs()
 
   const [detail, setDetail] = useState<ImageDTO | null>(null)
   const detailTimer = useRef<number | null>(null)
@@ -126,14 +128,44 @@ export default function GalleryPage() {
     try {
       const job = await imageApi.upscale(imageIds)
       setNotice({ text: `已创建高清任务 ${shortJobId(job.id)}（${imageIds.length} 张），完成后可在图库查看高清版本` })
-      selection.clearSelection()
-      selection.toggleSelectMode()
+      selection.exitSelect()
       return job
     } catch (err) {
       query.setError(err instanceof ApiRequestError ? err.message : '创建高清任务失败')
       return null
     } finally {
       setUpscaling(false)
+    }
+  }
+
+  /** Phase 0.12：批量审核（多选条）。保留/淘汰走 batchStatus；收藏逐条 favorite。 */
+  async function batchReview(status: 'KEEP' | 'REJECT'): Promise<void> {
+    const ids = selection.selectedIds
+    if (ids.length === 0) return
+    setNotice(null)
+    try {
+      const result = await imageApi.batchStatus({ image_ids: ids, status })
+      setNotice({ text: `已批量${status === 'KEEP' ? '保留' : '淘汰'} ${result.updated ?? ids.length} 张` })
+      query.loadFirst()
+      selection.exitSelect()
+    } catch (err) {
+      query.setError(err instanceof ApiRequestError ? err.message : '批量操作失败')
+    }
+  }
+
+  async function batchFavorite(): Promise<void> {
+    const ids = selection.selectedIds
+    if (ids.length === 0) return
+    setNotice(null)
+    try {
+      for (const id of ids) {
+        // eslint-disable-next-line no-await-in-loop
+        handleUpdated(await imageApi.favorite(id, true))
+      }
+      setNotice({ text: `已收藏 ${ids.length} 张` })
+      selection.exitSelect()
+    } catch (err) {
+      query.setError(err instanceof ApiRequestError ? err.message : '批量收藏失败')
     }
   }
 
@@ -324,14 +356,18 @@ export default function GalleryPage() {
       <GalleryToolbar
         tab={query.tab}
         onTabChange={query.setTab}
+        view={view}
+        onToggleView={() => setView(view === 'group' ? 'flat' : 'group')}
         subStatus={query.subStatus}
         onSubStatusChange={query.setSubStatus}
         sort={query.sort}
         onSortChange={query.setSort}
+        density={prefs.density}
+        onDensityChange={prefs.setDensity}
+        fit={prefs.fit}
+        onFitChange={prefs.setFit}
         selectMode={selection.selectMode}
         onToggleSelect={selection.toggleSelectMode}
-        view={view}
-        onToggleView={() => setView(view === 'group' ? 'flat' : 'group')}
         onStartReview={startReview}
         cleanupBusy={cleanupBusy}
         onOpenCleanup={() => void openCleanup()}
@@ -345,6 +381,10 @@ export default function GalleryPage() {
           count={selection.selectedIds.length}
           upscaling={upscaling}
           onUpscale={() => void submitUpscale(selection.selectedIds)}
+          onBatchKeep={() => void batchReview('KEEP')}
+          onBatchReject={() => void batchReview('REJECT')}
+          onBatchFavorite={() => void batchFavorite()}
+          onExitSelect={selection.exitSelect}
         />
       )}
 
@@ -392,6 +432,9 @@ export default function GalleryPage() {
           loading={query.loading}
           loadingMore={query.loadingMore}
           selectedIds={selection.selectedIds}
+          selectMode={selection.selectMode}
+          density={prefs.density}
+          fit={prefs.fit}
           onCardClick={handleCardClick}
           onCardDoubleClick={handleCardDoubleClick}
           sentinelRef={query.sentinelRef}
