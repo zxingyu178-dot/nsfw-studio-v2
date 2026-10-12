@@ -55,6 +55,7 @@ const CATALOG = [
     module_id: 'img2img',
     available: true,
     input_required: true,
+    can_start_from_image: true,
     output_kind: 'processed',
     size_mode: 'input',
     parameters: [
@@ -75,6 +76,7 @@ const CATALOG = [
     module_id: 'reference_generate',
     available: true,
     input_required: true,
+    can_start_from_image: true,
     output_kind: 'processed',
     size_mode: 'input',
     parameters: [{ name: 'strength', type: 'float', configurable: true, default: 0.7, min: 0, max: 1, step: 0.05 }],
@@ -281,10 +283,9 @@ try {
       input_images: [{ role: 'source', image_id: 'img_0001' }],
       workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
     }))
-    // 未来 Reference 模块：仅凭 catalog 声明即可出现在选择器候选（前端零改动）
-    const imageCandidates = CATALOG.filter(
-      (module) => module.available && module.input_required && module.output_kind === 'processed',
-    )
+    // 未来 Reference 模块：仅凭 catalog 声明即可出现在选择器候选（前端零改动）。
+    // 能力判断与产品一致，使用 store.isImageStartModule（§21，取代旧 output_kind==='processed'）。
+    const imageCandidates = CATALOG.filter(store.isImageStartModule)
     assert.deepEqual(imageCandidates.map((module) => module.module_id), ['img2img', 'reference_generate'])
 
     store.setPrimaryModule('reference_generate')

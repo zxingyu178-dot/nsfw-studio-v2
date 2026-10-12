@@ -25,7 +25,7 @@ export default function SettingsPage() {
       <section className="st-panel">
         <h2 className="st-panel__title">关于</h2>
         <p className="st-panel__text">
-          NSFW Studio V2（v0.8.0）。本地家庭媒体生成与批阅工作台。
+          NSFW Studio V2（v0.11.0）。本地家庭媒体生成与批阅工作台。
         </p>
       </section>
     </>
