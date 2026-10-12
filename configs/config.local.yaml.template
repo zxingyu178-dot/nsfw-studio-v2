@@ -20,3 +20,7 @@ engine_runtime:
   extra_args: <LOCAL_ONLY [--port, 8188]>
   # 可选：完整启动命令（设置后优先于 python_exe+entrypoint+extra_args）
   # launch_command: <LOCAL_ONLY [path/to/python.exe, main.py, --port, 8188]>
+  # 可选：受管启动的健康等待上限（秒）。默认足够覆盖本机 ComfyUI 冷启动（含
+  # ComfyUI-Manager prestartup/网络重试）；仅当冷启动更慢导致受管启动误报失败时，
+  # 才按本机实际冷启耗时覆盖。未设置时使用后端默认值，此处不写真实数值。
+  # health_timeout_seconds: <LOCAL_ONLY seconds>

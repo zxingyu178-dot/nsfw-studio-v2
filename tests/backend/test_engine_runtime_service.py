@@ -144,3 +144,44 @@ def test_idempotent_start_no_double_spawn(tmp_path, monkeypatch):
     assert first.state == "RUNNING_MANAGED"
     assert second.state == "RUNNING_MANAGED"
     assert len(spawned) == 1
+
+
+def test_default_health_timeout_is_240(tmp_path):
+    """健康等待上限默认为 240s（覆盖慢冷启动），不再写死 60。"""
+    svc = _make_service(tmp_path)
+    assert svc.health_timeout == 240.0
+
+
+def test_health_timeout_is_configurable(tmp_path):
+    """可通过 engine_runtime.health_timeout_seconds 覆盖默认值。"""
+    svc = _make_service(tmp_path, health_timeout_seconds=7.5)
+    assert svc.health_timeout == 7.5
+
+
+def test_start_times_out_after_configurable_health_timeout(tmp_path, monkeypatch):
+    """探针始终离线时，start() 应在“可配置的”健康等待上限后判 ERROR，并清理自己起的进程树。
+
+    把 health_timeout_seconds 设得很小：start() 必须在远小于旧写死 60s 的时间内返回 ERROR，
+    证明截止时间已由配置决定（不再写死 60）。
+    """
+    import time
+
+    svc = _make_service(tmp_path, health_timeout_seconds=0.2)
+    spawned: list[int] = []
+    monkeypatch.setattr(svc, "_spawn", lambda: spawned.append(4242) or 4242)
+    monkeypatch.setattr(svc, "_pid_alive", lambda pid: True)
+    # 始终离线：永远不会健康
+    monkeypatch.setattr(svc, "_probe", lambda: _Probe(online=False, responded=False))
+    terminated: list[int] = []
+    monkeypatch.setattr(svc, "_terminate_tree", lambda pid: terminated.append(pid))
+
+    t0 = time.monotonic()
+    snap = svc.start()
+    elapsed = time.monotonic() - t0
+
+    assert len(spawned) == 1            # 确实拉起了受管进程
+    assert snap.state == "ERROR"        # 超时判失败
+    assert terminated == [4242]        # 清理自己刚启动的进程树（不留孤儿）
+    assert svc._pid is None
+    # 关键：可配置小超时生效，远小于历史写死的 60s（轮询间隔 1s，故这里 ~1s 量级）
+    assert elapsed < 10.0

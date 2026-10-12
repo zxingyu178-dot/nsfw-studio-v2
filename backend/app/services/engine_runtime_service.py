@@ -56,7 +56,9 @@ STATE_PORT_CONFLICT = "PORT_CONFLICT"
 STATE_ERROR = "ERROR"
 
 # 启动后轮询健康的节奏
-START_HEALTH_TIMEOUT_S = 60.0
+# 默认健康等待上限：需覆盖 ComfyUI 冷启动（含 ComfyUI-Manager prestartup/网络重试）的真实耗时。
+# 可被 engine_runtime.health_timeout_seconds 覆盖（见 __init__），不再写死。
+DEFAULT_HEALTH_TIMEOUT_S = 240.0
 START_HEALTH_INTERVAL_S = 1.0
 # stop 时 terminate 的宽限期，超时再 kill
 TERMINATE_GRACE_S = 10.0
@@ -141,6 +143,8 @@ class EngineRuntimeService:
         self.entrypoint = str(cfg.get("entrypoint", "main.py"))
         self.extra_args = [str(a) for a in (cfg.get("extra_args") or [])]
         self.launch_command = cfg.get("launch_command") or None
+        # 受管启动健康等待上限（秒）：可配置，默认覆盖慢冷启动；其余状态/幂等/进程树逻辑不变
+        self.health_timeout = float(cfg.get("health_timeout_seconds", DEFAULT_HEALTH_TIMEOUT_S))
 
         logs_dir = settings.storage.data_root / "logs" / "engine"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -310,8 +314,8 @@ class EngineRuntimeService:
             self._state = STATE_ERROR
             return self._snapshot(_Probe())
 
-        # 轮询健康
-        deadline = time.monotonic() + START_HEALTH_TIMEOUT_S
+        # 轮询健康（截止由可配置的 self.health_timeout 决定，默认 240s 覆盖慢冷启动）
+        deadline = time.monotonic() + self.health_timeout
         healthy = False
         while time.monotonic() < deadline:
             probe = self._probe()
