@@ -3,7 +3,9 @@
 .generate {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* Phase 0.12：填满 main 高度；三栏内部各自滚动，整页不随右栏变长。 */
+  height: 100%;
+  min-height: 0;
 }
 
 .generate__modebar {
@@ -12,8 +14,10 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
   position: sticky;
-  top: 0;
-  z-index: var(--z-dropdown);
+  /* Phase 0.12：sticky 起点下移一个 topnav 高度，禁止盖一级导航。 */
+  top: var(--topnav-height);
+  /* 页内 sticky 永远低于 TopNav（--z-nav:100 > --z-page-sticky:50）。 */
+  z-index: var(--z-page-sticky);
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -322,9 +326,39 @@
   white-space: nowrap;
 }
 
-/* ===== 响应式：窄屏退单列，内容自然展开 ===== */
-@media (max-width: 1100px) {
-  .generate__columns { grid-template-columns: 1fr; overflow: visible; }
-  .wb-pane { overflow: visible; }
-  .wb-pane__body { overflow: visible; }
+/* ===== 响应式：三档断点（Phase 0.12） =====
+   ≥1320        完整三栏（5fr 4fr 3fr）
+   1180~1319    压缩三栏：中心预览最低宽度优先，左右两栏先压
+   <1180        单栏堆叠，整页自然滚动（不做手机端优化）
+*/
+
+/* 1180~1319：压缩三栏，中间预览保留最小宽度 */
+@media (max-width: 1319px) {
+  .generate__columns {
+    grid-template-columns: minmax(0, 3fr) minmax(360px, 5fr) minmax(0, 2.5fr);
+  }
+}
+
+/* <1180：单栏堆叠，解除高度锁，三栏内容自然展开 */
+@media (max-width: 1179px) {
+  .generate {
+    height: auto;
+    min-height: 100%;
+  }
+  .generate__modebar {
+    position: static;
+  }
+  .generate__columns {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .wb-pane {
+    overflow: visible;
+  }
+  .wb-pane__body {
+    overflow: visible;
+  }
+  .prompt-preview__pre {
+    max-height: none;
+  }
 }
