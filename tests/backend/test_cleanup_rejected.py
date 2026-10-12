@@ -117,3 +117,87 @@ def test_preview_via_api(client, settings):
 
     confirmed = client.post("/api/v1/images/cleanup-rejected", json={"confirm": True}).json()
     assert confirmed["deleted_count"] == 2
+
+
+# ===== Phase 0.11.1：预览增强 + 单图删除语义 =====
+
+def test_preview_reports_deletable_and_protected_reasons(session, settings):
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    deletable_img = _import_real(session, storage)
+    _reject(session, storage, deletable_img, make_thumbnail=False)
+
+    protected_img = _import_real(session, storage)
+    _reject(session, storage, protected_img, make_thumbnail=False)
+    child = _import_real(session, storage)
+    child.parent_image_id = protected_img.id  # 派生引用 → protected
+    session.commit()
+
+    preview = cleanup_service.preview(session, storage)
+    assert preview["candidate_count"] == 2
+    assert preview["deletable_count"] == 1
+    assert preview["protected_count"] == 1
+    assert preview["total_bytes"] > 0
+    items = preview["protected_items"]
+    assert len(items) == 1
+    assert items[0]["image_id"] == protected_img.id
+    assert "derivative" in items[0]["reasons"]
+
+
+def test_single_reject_unprotected_deleted(session, settings):
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    image = _import_real(session, storage)
+    _reject(session, storage, image, make_thumbnail=False)
+    result = cleanup_service.execute(session, storage, [image.id])
+    assert result["deleted_count"] == 1
+    assert result["deletable_count"] == 1
+    assert result["protected_count"] == 0
+
+
+def test_non_reject_single_delete_zero(session, settings):
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    keep = _import_real(session, storage)
+    image_service.set_image_status(session, keep.id, "KEEP")
+    result = cleanup_service.execute(session, storage, [keep.id])
+    assert result["deleted_count"] == 0
+    assert result["deletable_count"] == 0
+    assert storage.absolutize(keep.file_path).is_file()
+
+
+def test_single_reject_protected_counted(session, settings):
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    protected = _import_real(session, storage)
+    _reject(session, storage, protected, make_thumbnail=False)
+    child = _import_real(session, storage)
+    child.parent_image_id = protected.id
+    session.commit()
+
+    result = cleanup_service.execute(session, storage, [protected.id])
+    assert result["deleted_count"] == 0
+    assert result["protected_count"] == 1
+    assert result["deletable_count"] == 0
+    assert storage.absolutize(protected.file_path).is_file()
+
+
+def test_preview_via_api_includes_new_fields(client, settings):
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(client.app.state.settings)
+    with client.app.state.session_factory() as s:
+        image = _import_real(s, storage)
+        _reject(s, storage, image, make_thumbnail=False)
+
+    preview = client.post("/api/v1/images/cleanup-rejected",
+                          json={"confirm": False}).json()
+    assert preview["candidate_count"] == 1
+    assert preview["deletable_count"] == 1
+    assert preview["protected_count"] == 0
+    assert preview["protected_items"] == []
+    assert preview["total_bytes"] > 0

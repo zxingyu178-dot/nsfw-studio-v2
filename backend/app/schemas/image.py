@@ -54,16 +54,27 @@ class ImageCleanupRejectedRequest(BaseModel):
     confirm: bool = False
 
 
+class ImageCleanupProtectedItem(BaseModel):
+    """Phase 0.11.1：被引用保护而跳过的单图及原因摘要。"""
+
+    image_id: str
+    reasons: list[str]
+
+
 class ImageCleanupPreview(BaseModel):
+    # 向后兼容保留 candidate_count / total_bytes / protected_count
     candidate_count: int
-    total_bytes: int
+    deletable_count: int
     protected_count: int
+    total_bytes: int
+    protected_items: list[ImageCleanupProtectedItem]
 
 
 class ImageCleanupResult(BaseModel):
     deleted_count: int
     deleted_bytes: int
     protected_count: int
+    deletable_count: int
     failed: list[dict[str, Any]]
 
 

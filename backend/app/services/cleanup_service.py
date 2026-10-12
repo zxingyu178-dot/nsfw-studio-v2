@@ -68,22 +68,57 @@ def _image_disk_bytes(session: Session, storage: StorageManager, image: Image) -
     return total
 
 
+# count_references 返回的引用分类键 → protected 原因摘要（按服务实际返回的键名派生）
+_REASON_KEYS = {
+    "prompt_preview_ids": "prompt_preview",
+    "reference_asset_ids": "asset_reference",
+    "source_asset_ids": "asset_source",
+    "recipe_ids": "recipe",
+    "stage_item_ids": "stage_input",
+    "job_ids": "job_input",
+    "derived_image_ids": "derivative",
+}
+
+
+def _protected_reasons(refs: dict) -> list[str]:
+    """从 count_references 结果派生 protected 原因摘要（非空分类才计入）。"""
+    reasons: list[str] = []
+    references = refs.get("references", {})
+    for key, reason in _REASON_KEYS.items():
+        if references.get(key):
+            reasons.append(reason)
+    if refs.get("active_job_ids"):
+        reasons.append("active_job")
+    return reasons
+
+
 def preview(session: Session, storage: StorageManager,
             image_ids: list[str] | None = None) -> dict:
-    """两阶段之一：只统计不删除。protected 图不计入预计释放字节。"""
+    """两阶段之一：只统计不删除。protected 图不计入预计释放字节。
+
+    返回（向后兼容保留 candidate_count/total_bytes/protected_count）：
+    - candidate_count：全部 REJECT 候选；
+    - deletable_count：引用检查通过、实际可删的数量；
+    - protected_count：被引用保护而跳过的数量；
+    - total_bytes：仅 deletable 的预计释放字节；
+    - protected_items：[{image_id, reasons:[...]}]，reasons 取自 count_references 的非空分类。
+    """
     candidates = _candidates(session, image_ids)
     total_bytes = 0
-    protected_count = 0
+    protected_items: list[dict] = []
     for image in candidates:
         refs = image_reference_service.count_references(session, image.id)
-        if refs["total"] > 0:
-            protected_count += 1
+        reasons = _protected_reasons(refs)
+        if reasons:
+            protected_items.append({"image_id": image.id, "reasons": reasons})
             continue
         total_bytes += _image_disk_bytes(session, storage, image)
     return {
         "candidate_count": len(candidates),
+        "deletable_count": len(candidates) - len(protected_items),
+        "protected_count": len(protected_items),
         "total_bytes": total_bytes,
-        "protected_count": protected_count,
+        "protected_items": protected_items,
     }
 
 
@@ -211,6 +246,8 @@ def execute(session: Session, storage: StorageManager,
         "deleted_count": deleted_count,
         "deleted_bytes": deleted_bytes,
         "protected_count": protected_count,
+        # 本轮引用检查通过、尝试删除的数量（成功 deleted + 失败 failed）
+        "deletable_count": len(candidates) - protected_count,
         "failed": failed,
     }
 
