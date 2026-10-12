@@ -16,6 +16,7 @@ import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
 import { useGalleryQuery } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
 import { useGalleryPrefs } from './hooks/useGalleryPrefs'
+import { createReviewSessionAdapter, type ReviewSessionAdapter } from './hooks/useReviewSession'
 import { GalleryToolbar } from './components/GalleryToolbar'
 import { GalleryGrid } from './components/GalleryGrid'
 import { GallerySelectionBar } from './components/GallerySelectionBar'
@@ -62,6 +63,7 @@ export default function GalleryPage() {
   // Phase 0.11.1：Review Session（分页 loader，全历史审核）
   const [reviewSession, setReviewSession] = useState<{
     loader: ReviewPageLoader
+    adapter?: ReviewSessionAdapter
     title?: string
     total?: number
     statsParams?: ImageStatsParams
@@ -288,18 +290,16 @@ export default function GalleryPage() {
     navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
 
-  /** Phase 0.11.1：以当前筛选为查询打开 Review Session（首屏一页、接近末尾预取直到 has_next=false） */
+  /** Phase 0.13：开始审核 → 冻结式审核会话（/api/v1/review/*，与手机桥共用 ImageReviewSessionService）。
+   *  绝对 index 队列替代 status=NEW 动态 offset 翻页；GET sessions/latest 断点续看。 */
   function startReview(): void {
-    const queryParams = query.listQuery(1)
+    const adapter = createReviewSessionAdapter({ status: 'NEW', sort: 'created_desc' })
     setReviewSession({
       title: '图库审核',
-      total: query.total,
-      statsParams: query.buildStatsParams(),
+      statsParams: { status: 'NEW' },
+      adapter,
       loader: {
-        loadPage: (page) =>
-          imageApi
-            .list({ ...queryParams, page })
-            .then((p) => ({ items: p.items, has_next: p.has_next, total: p.total })),
+        loadPage: (page) => adapter.loadPage(page),
       },
     })
   }
@@ -490,6 +490,7 @@ export default function GalleryPage() {
           loader={reviewSession.loader}
           total={reviewSession.total}
           statsParams={reviewSession.statsParams}
+          sessionAdapter={reviewSession.adapter}
           title={reviewSession.title}
           onClose={() => setReviewSession(null)}
           onChanged={handleUpdated}
