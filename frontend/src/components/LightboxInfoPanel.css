@@ -1,0 +1,62 @@
+/* Phase 0.11 Lightbox 右侧信息栏 */
+.lb-side {
+  padding: 14px 16px 24px;
+  color: var(--fg);
+  font-size: var(--text-sm, 13px);
+}
+
+.lb-side__fields {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 6px 10px;
+  margin: 0 0 12px;
+}
+
+.lb-side__fields dt {
+  color: var(--fg-muted);
+  font-weight: 600;
+}
+
+.lb-side__fields dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.lb-side__fields pre {
+  margin: 0;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.lb-side__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.lb-side__block {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.lb-side__block h5 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lb-side__block .ds-field,
+.lb-side__block label {
+  margin-bottom: 8px;
+}
+
+.lb-side .ds-notice {
+  margin-top: 8px;
+}

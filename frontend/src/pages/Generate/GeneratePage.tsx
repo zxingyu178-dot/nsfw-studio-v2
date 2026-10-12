@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { moduleApi } from '../../api/client'
+import { SegmentedControl } from '../../components/ui'
 import { PromptEditorPane } from './PromptEditorPane'
 import { ResultPane } from './ResultPane'
 import { SettingsPane } from './SettingsPane'
@@ -13,6 +14,7 @@ import {
   useWorkbench,
 } from '../../stores/workbenchStore'
 import type { WorkbenchNavigationState } from './workbenchNavigation'
+import './generate.css'
 
 export default function GeneratePage() {
   const location = useLocation()
@@ -47,28 +49,17 @@ export default function GeneratePage() {
   }, [])
 
   return (
-    <section className="workbench" aria-label="生成工作台">
-      <div className="workbench__modebar">
-        <div className="segmented" role="tablist" aria-label="生成模式">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={state.mode === 'text'}
-            className={`segmented__item${state.mode === 'text' ? ' segmented__item--active' : ''}`}
-            onClick={() => setWorkbenchMode('text')}
-          >
-            文生图
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={state.mode === 'image'}
-            className={`segmented__item${state.mode === 'image' ? ' segmented__item--active' : ''}`}
-            onClick={() => setWorkbenchMode('image')}
-          >
-            图片生成
-          </button>
-        </div>
+    <div className="generate" aria-label="生成工作台">
+      <div className="generate__modebar">
+        <SegmentedControl
+          value={state.mode}
+          onChange={(v) => setWorkbenchMode(v as typeof state.mode)}
+          options={[
+            { value: 'text', label: '文生图' },
+            { value: 'image', label: '图片生成' },
+          ]}
+          ariaLabel="生成模式"
+        />
         {state.mode === 'image' && (
           <span className="muted">
             {imageGenAvailable === null
@@ -79,17 +70,11 @@ export default function GeneratePage() {
           </span>
         )}
       </div>
-      <div className="workbench__columns">
-        <div className="workbench__col workbench__col--editor">
-          <PromptEditorPane />
-        </div>
-        <div className="workbench__col workbench__col--result">
-          <ResultPane />
-        </div>
-        <div className="workbench__col workbench__col--settings">
-          <SettingsPane imageGenAvailable={imageGenAvailable} />
-        </div>
+      <div className="generate__columns">
+        <PromptEditorPane />
+        <ResultPane />
+        <SettingsPane imageGenAvailable={imageGenAvailable} />
       </div>
-    </section>
+    </div>
   )
 }

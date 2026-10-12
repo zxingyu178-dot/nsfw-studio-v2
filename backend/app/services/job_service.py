@@ -686,6 +686,27 @@ def resume_job(session: Session, job_id: str) -> Job:
     return job
 
 
+def resume_job_front(session: Session, job_id: str) -> Job:
+    """§十：全局暂停后恢复被暂停的那张——排到队首（queue_position=0），优先于普通队列执行。
+
+    与 ``resume_job``（追加到队尾）不同：被全局暂停的那张应最先继续，
+    其余原有 QUEUED 任务顺延一位。
+    """
+    job = get_job(session, job_id)
+    if job.status != "PAUSED":
+        raise ValidationError(f"状态 {job.status} 不允许继续", code="INVALID_JOB_STATE")
+    job.pause_requested = False
+    job.status = "QUEUED"
+    # 现有 QUEUED 任务全部后移一位，保证被暂停的 job 排第 0
+    for queued in session.execute(select(Job).where(Job.status == "QUEUED")).scalars():
+        queued.queue_position = (queued.queue_position or 0) + 1
+    job.queue_position = 0
+    record_event(session, job.id, "JOB_RESUMED")
+    session.commit()
+    _publish("JOB_UPDATED", job.id, payload={"status": job.status, "queue_position": job.queue_position})
+    return job
+
+
 def cancel_job(session: Session, job_id: str) -> Job:
     """取消（规范 §十九）：终态 CANCELLED；QUEUED/PAUSED 立即取消，RUNNING 由 Worker 在边界处理。"""
     job = get_job(session, job_id)

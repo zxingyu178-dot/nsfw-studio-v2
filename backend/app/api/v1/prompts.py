@@ -14,6 +14,7 @@ from app.schemas.prompt import (
     PromptResponse,
     PromptVersionCreateRequest,
     PromptVersionResponse,
+    PreviewImageRequest,
     prompt_response,
     prompt_version_response,
 )
@@ -80,6 +81,20 @@ def update_prompt_meta(
     prompt_id: str, request: PromptMetaUpdateRequest, session: Session = Depends(get_session)
 ) -> PromptResponse:
     prompt = prompt_service.update_prompt_meta(session, prompt_id, name=request.name, favorite=request.favorite)
+    return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
+
+
+@router.put("/{prompt_id}/preview-image", response_model=PromptResponse, summary="设置 / 更换封面预览图（元数据，不产生版本）")
+def set_prompt_preview_image(
+    prompt_id: str, request: PreviewImageRequest, session: Session = Depends(get_session)
+) -> PromptResponse:
+    prompt = prompt_service.set_preview_image(session, prompt_id, request.image_id)
+    return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
+
+
+@router.delete("/{prompt_id}/preview-image", response_model=PromptResponse, summary="清除封面预览图（元数据，不产生版本）")
+def clear_prompt_preview_image(prompt_id: str, session: Session = Depends(get_session)) -> PromptResponse:
+    prompt = prompt_service.clear_preview_image(session, prompt_id)
     return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
 
 

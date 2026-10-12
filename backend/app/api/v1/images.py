@@ -12,6 +12,13 @@ from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.errors import NotFoundError, ValidationError
 from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
 from app.schemas.image import (
+    ImageBatchStatusRequest,
+    ImageBatchStatusResponse,
+    ImageBackfillRequest,
+    ImageBackfillStatus,
+    ImageCleanupPreview,
+    ImageCleanupRejectedRequest,
+    ImageCleanupResult,
     ImageFavoriteRequest,
     ImageImportDuplicate,
     ImageImportFailure,
@@ -22,19 +29,27 @@ from app.schemas.image import (
     ImageReferencesResponse,
     ImageResponse,
     ImageReviewRequest,
+    ImageStatusRequest,
     ImageUpscaleRequest,
     ImageVersionsResponse,
     ImageWorkbenchResponse,
     image_response,
 )
 from app.schemas.job import JobResponse, job_response
-from app.services import image_reference_service, image_service, job_service
+from app.services import (
+    cleanup_service,
+    image_reference_service,
+    image_service,
+    job_service,
+    thumbnail_service,
+)
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/images", tags=["images"])
 
 
-@router.get("", response_model=ImageListResponse, summary="图库列表（job/review/favorite/source/date 过滤）")
+@router.get("", response_model=ImageListResponse,
+            summary="图库列表（Phase 0.11 标准分页：page/page_size/sort/status）")
 def list_images(
     job_id: str | None = Query(default=None),
     review_status: str | None = Query(default=None),
@@ -44,17 +59,36 @@ def list_images(
     search: str | None = Query(default=None, description="按导入文件名搜索"),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=40, ge=1, le=100),
+    # 兼容旧调用方（Phase 0.11 前用 limit/offset 一次性拉取）；
+    # 一旦提供 limit 即以其为页大小，旧语义不变；否则走标准 page/page_size。
+    limit: int | None = Query(default=None, ge=1, le=200, include_in_schema=False),
+    offset: int = Query(default=0, ge=0, include_in_schema=False),
     session: Session = Depends(get_session),
 ) -> ImageListResponse:
+    if limit is not None:
+        eff_limit = limit
+        eff_offset = offset
+        eff_page = (offset // limit) + 1 if limit else 1
+        eff_page_size = limit
+    else:
+        eff_limit = page_size
+        eff_offset = (page - 1) * page_size
+        eff_page = page
+        eff_page_size = page_size
+
     items, total = image_service.list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
-        limit=limit, offset=offset,
+        status=status, sort=sort, limit=eff_limit, offset=eff_offset,
     )
+    has_next = (eff_offset + len(items)) < total
     return ImageListResponse(
-        items=[image_response(image) for image in items], total=total, limit=limit, offset=offset
+        items=[image_response(image) for image in items], total=total,
+        page=eff_page, page_size=eff_page_size, has_next=has_next,
     )
 
 
@@ -93,6 +127,49 @@ def _display_name(filename: str | None) -> str:
     return filename or "(未命名)"
 
 
+@router.post("/thumbnails/backfill", response_model=ImageBackfillStatus,
+             summary="启动历史缩略图/预览回填（单 worker 低并发，立即返回状态）")
+def backfill_thumbnails(request: Request, body: ImageBackfillRequest) -> ImageBackfillStatus:
+    """启动（或复用）一个后台回填任务，立即返回状态；同一时间只允许一个回填任务。
+
+    - kind=thumbnail（默认）/preview；limit 限制本次最多补多少张；
+    - 重复调用返回当前任务，不重复起；单张失败跳过不阻断；
+    - 不占 GPU；Studio 重启后再次调用可重算缺失（进程内状态，无持久化任务）。
+    """
+    runner = request.app.state.backfill_runner
+    return ImageBackfillStatus(**runner.start(kind=body.kind, limit=body.limit))
+
+
+@router.get("/thumbnails/backfill/status", response_model=ImageBackfillStatus,
+            summary="回填任务状态（running/done/total/failed/kind）")
+def backfill_thumbnails_status(request: Request) -> ImageBackfillStatus:
+    return ImageBackfillStatus(**request.app.state.backfill_runner.status())
+
+
+@router.post("/thumbnails/backfill/stop", response_model=ImageBackfillStatus,
+             summary="请求停止回填（当前张完成后停止），返回最终状态")
+def backfill_thumbnails_stop(request: Request) -> ImageBackfillStatus:
+    return ImageBackfillStatus(**request.app.state.backfill_runner.stop())
+
+
+@router.get("/job-groups", summary="按 Job 聚合图库统计（单次 GROUP BY，避免 N+1；可分页到早期 Job）")
+def list_job_groups(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_session),
+) -> dict:
+    """只含 completed/有产出图的 Job；按 Job created_at 倒序。
+
+    每个 Job 返回 {job_id, module_id, created_at, total, unreviewed, kept, rejected,
+    favorites}；计数口径与 by-job/{job_id}/summary 完全一致。
+    """
+    groups, total = image_service.list_job_groups(session, page=page, page_size=page_size)
+    return {
+        "items": groups, "total": total, "page": page, "page_size": page_size,
+        "has_next": (page - 1) * page_size + len(groups) < total,
+    }
+
+
 @router.get("/{image_id}", response_model=ImageResponse, summary="图片详情")
 def get_image(image_id: str, session: Session = Depends(get_session)) -> ImageResponse:
     return image_response(image_service.get_image(session, image_id))
@@ -109,6 +186,33 @@ def get_image_content(image_id: str, session: Session = Depends(get_session),
     return FileResponse(absolute, media_type=mime_for_suffix(suffix))
 
 
+@router.get("/{image_id}/thumbnail", summary="缩略图（512px WebP q80；缺失则按需生成并落 ImageVariant）")
+def get_image_thumbnail(image_id: str, session: Session = Depends(get_session),
+                       storage: StorageManager = Depends(get_storage)) -> FileResponse:
+    """图库只加载缩略图；Lightbox 才加载 original。
+
+    - 若该图已有 thumbnail variant 且文件在 → 直接返回；
+    - 缺失 → 轻量 resize 生成 WebP 并写 ImageVariant 后返回（不阻塞整库）；
+    - 历史缺图由回填脚本批量补齐，浏览不依赖回填完成。
+    """
+    image = image_service.get_image(session, image_id)
+    absolute, _variant = thumbnail_service.get_or_create_thumbnail(session, storage, image)
+    return FileResponse(absolute, media_type="image/webp")
+
+
+@router.get("/{image_id}/preview", summary="预览图（长边 1536 WebP q85；缺失则按需生成）")
+def get_image_preview(image_id: str, session: Session = Depends(get_session),
+                      storage: StorageManager = Depends(get_storage)) -> FileResponse:
+    """Review Mode / Lightbox 渐进加载用 preview（比 thumbnail 清晰、比 original 轻量）。
+
+    - 最长边 1536（落在 1280~1600）、WebP q85、仅下采样、保留 alpha；
+    - 落 images/previews/<image_id>/preview.webp，并发安全（与 thumbnail 同一生产链）。
+    """
+    image = image_service.get_image(session, image_id)
+    absolute, _variant = thumbnail_service.get_or_create_preview(session, storage, image)
+    return FileResponse(absolute, media_type="image/webp")
+
+
 @router.patch("/{image_id}/review", response_model=ImageResponse, summary="审核状态（保留/淘汰/未审核）")
 def review_image(image_id: str, body: ImageReviewRequest, session: Session = Depends(get_session)) -> ImageResponse:
     return image_response(image_service.set_review(session, image_id, body.review_status))
@@ -117,6 +221,45 @@ def review_image(image_id: str, body: ImageReviewRequest, session: Session = Dep
 @router.patch("/{image_id}/favorite", response_model=ImageResponse, summary="收藏切换")
 def favorite_image(image_id: str, body: ImageFavoriteRequest, session: Session = Depends(get_session)) -> ImageResponse:
     return image_response(image_service.set_favorite(session, image_id, body.favorite))
+
+
+@router.patch("/{image_id}/status", response_model=ImageResponse,
+              summary="新审核状态（NEW/KEEP/FAVORITE/REJECT/ARCHIVED）")
+def status_image(image_id: str, body: ImageStatusRequest,
+                 session: Session = Depends(get_session)) -> ImageResponse:
+    """置 images.status + review_note；除 NEW 外置 reviewed_at。
+
+    FAVORITE 同步 favorite=1，离开 FAVORITE 同步 favorite=0（语义一致）。
+    """
+    return image_response(image_service.set_image_status(session, image_id, body.status, body.note))
+
+
+@router.post("/batch-status", response_model=ImageBatchStatusResponse,
+             summary="批量审核（同一状态批量应用到多张图）")
+def batch_status_images(body: ImageBatchStatusRequest,
+                       session: Session = Depends(get_session)) -> ImageBatchStatusResponse:
+    images = image_service.batch_set_status(session, body.image_ids, body.status, body.note)
+    return ImageBatchStatusResponse(
+        updated=len(images), items=[image_response(image) for image in images]
+    )
+
+
+@router.post("/cleanup-rejected",
+             summary="废片清理（REJECT；两阶段：confirm 非 true 仅预览，true 才真删）")
+def cleanup_rejected(body: ImageCleanupRejectedRequest,
+                    session: Session = Depends(get_session),
+                    storage: StorageManager = Depends(get_storage)
+                    ) -> ImageCleanupPreview | ImageCleanupResult:
+    """REJECT 图两阶段清理：
+
+    - confirm != true → 预览 {candidate_count, total_bytes(预计释放), protected_count}，不删除；
+    - confirm == true → 删除未受保护的 REJECT 图的 original+全部 variants 文件与 DB 记录；
+      被 Prompt/Asset/Recipe/派生图/活跃 Job 引用的图跳过并计入 protected，绝不留悬空。
+    """
+    ids = body.image_ids or None
+    if not body.confirm:
+        return ImageCleanupPreview(**cleanup_service.preview(session, storage, ids))
+    return ImageCleanupResult(**cleanup_service.execute(session, storage, ids))
 
 
 @router.get("/{image_id}/workbench", response_model=ImageWorkbenchResponse,

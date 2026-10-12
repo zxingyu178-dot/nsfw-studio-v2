@@ -1,0 +1,26 @@
+# 本机私有配置模板（复制为 config.local.yaml 后填写，config.local.yaml 已 gitignore）。
+#
+# engine_runtime：Studio 后端“自己的” ComfyUI 进程管理（固定端口 8188，禁止自动换口）。
+# 所有 <LOCAL_ONLY ...> 占位符必须替换为本机真实值后才生效；本模板不得含真实绝对路径、
+# 盘符或字面回环地址（守卫测试 config.yaml/workflow.yaml 不允许这些，本文件同样遵循）。
+engine_runtime:
+  # 是否由 Studio 托管启停（false 时 Studio 只做状态探测，不启动/停止）
+  managed: <LOCAL_ONLY true|false>
+  # 探测/托管目标主机（保持回环；这里不写字面 IP，按本机约定）
+  host: <LOCAL_ONLY host>
+  # 固定 8188，禁止改成 8189 等其他端口
+  port: 8188
+  # ComfyUI 安装目录（受管子进程的工作目录）
+  working_dir: <LOCAL_ONLY path/to/ComfyUI>
+  # 用于启动受管 ComfyUI 的解释器（建议与 ComfyUI 自身 venv 的 python 一致）
+  python_exe: <LOCAL_ONLY path/to/python.exe>
+  # 入口脚本（默认 main.py）
+  entrypoint: <LOCAL_ONLY main.py>
+  # 额外启动参数（列表形式，例如 --port 8188 / --preview-resolution 等）
+  extra_args: <LOCAL_ONLY [--port, 8188]>
+  # 可选：完整启动命令（设置后优先于 python_exe+entrypoint+extra_args）
+  # launch_command: <LOCAL_ONLY [path/to/python.exe, main.py, --port, 8188]>
+  # 可选：受管启动的健康等待上限（秒）。默认足够覆盖本机 ComfyUI 冷启动（含
+  # ComfyUI-Manager prestartup/网络重试）；仅当冷启动更慢导致受管启动误报失败时，
+  # 才按本机实际冷启耗时覆盖。未设置时使用后端默认值，此处不写真实数值。
+  # health_timeout_seconds: <LOCAL_ONLY seconds>

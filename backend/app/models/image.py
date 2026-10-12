@@ -14,6 +14,10 @@ from app.database.base import Base
 
 IMAGE_KINDS = ("original", "upscaled", "processed")
 REVIEW_STATUSES = ("UNREVIEWED", "KEPT", "REJECTED")
+# Phase 0.11 新审核体系（images.status）：
+# NEW 未审核（默认）；KEEP 普通保留；FAVORITE 精品（用于素材/封面/Reference）；
+# REJECT 淘汰（不立即删除，进入废片清理）；ARCHIVED 长期保存
+IMAGE_STATUSES = ("NEW", "KEEP", "FAVORITE", "REJECT", "ARCHIVED")
 # comfyui / mock：真实引擎产物；engine：非 comfyui/mock 的未来引擎产物（不允许错标成 import）；
 # import：仅表示外部导入（Phase 7 Task8）
 IMAGE_SOURCES = ("comfyui", "mock", "import", "engine")
@@ -37,6 +41,10 @@ class Image(Base):
     # Phase 5：外部导入文件哈希（去重）与原始文件名（仅导入来源有值）
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     imported_filename: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 0.11 新审核体系（0016）；旧 review_status 列保留兼容
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="NEW", index=True)
+    reviewed_at: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso, onupdate=utc_now_iso)

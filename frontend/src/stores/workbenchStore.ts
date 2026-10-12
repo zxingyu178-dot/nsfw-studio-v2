@@ -94,11 +94,30 @@ export function hasUpscaleModule(modules: WorkflowModuleRef[]): boolean {
   return modules.some((module) => module.module_id === 'upscale')
 }
 
-/** Task7：可用的图片条件模块（input_required=true + output_kind=processed + available=true） */
+/**
+ * 计划 §21：图片条件 Primary Module 的能力判断（不再用 output_kind==='processed' 猜）。
+ *
+ * 一个模块能否作为“以已有图片为起点”的图片生成（process）Primary：
+ * - available === true（registered ≠ available）；
+ * - input_required === true（必须消费输入）；
+ * - 且具备图片起点能力：can_start_from_image===true，或声明了
+ *   source / reference / face_reference 角色的输入 slot；
+ * - 且允许 process：无 allowed_job_kinds 约束，或其包含 'process'。
+ */
+export function isImageStartModule(m: ModuleCapabilitiesDTO): boolean {
+  if (m.available !== true || m.input_required !== true) return false
+  const hasImageSlot = (m.input_slots ?? []).some(
+    (slot) => slot.role === 'source' || slot.role === 'reference' || slot.role === 'face_reference',
+  )
+  if (m.can_start_from_image !== true && !hasImageSlot) return false
+  const allowed = m.allowed_job_kinds
+  if (Array.isArray(allowed) && allowed.length > 0 && !allowed.includes('process')) return false
+  return true
+}
+
+/** Task7/§21：可用的图片条件模块（能力判断 isImageStartModule） */
 export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
-  return catalog
-    .filter((module) => module.available && module.input_required && module.output_kind === 'processed')
-    .map((module) => module.module_id)
+  return catalog.filter(isImageStartModule).map((module) => module.module_id)
 }
 
 /** Task6：primary module 是否消费输入图（图片生成模式提交前置条件） */
