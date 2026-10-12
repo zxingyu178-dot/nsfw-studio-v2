@@ -15,7 +15,8 @@
     可选：显式传入项目根。默认按脚本位置（scripts 的上一级）自动定位。
 #>
 param(
-    [string]$ProjectRoot = ""
+    [string]$ProjectRoot = "",
+    [int]$Port = 8000
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,7 +32,7 @@ $FrontendDir = Join-Path $ProjectRoot "frontend"
 $VenvPython  = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $DistIndex   = Join-Path $FrontendDir "dist\index.html"
 $StampFile   = Join-Path $FrontendDir "dist\.build_commit"
-$BaseUrl     = "http://127.0.0.1:8000"
+$BaseUrl     = "http://127.0.0.1:$Port"
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host "[NSFW Studio] 未找到虚拟环境：$VenvPython" -ForegroundColor Red
@@ -95,27 +96,79 @@ if ($needBuild) {
     Write-Host "[NSFW Studio] 前端构建完成：$newCommit" -ForegroundColor Green
 }
 
-# ---- 探测 8000 是否已在服务 ----
-function Test-StudioRunning {
-    foreach ($u in @("$BaseUrl/api/v1/health", "$BaseUrl/")) {
-        try {
-            Invoke-WebRequest -Uri $u -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop | Out-Null
-            return $true
-        } catch { }
-    }
-    return $false
+# ---- v0.13.2 (d) 端口预检：三分支判定（可 dot-source 复用） ----
+function Get-StudioPortStatus {
+    <#
+    .SYNOPSIS
+        判定 127.0.0.1:<Port> 当前占用情况，返回 'Free' | 'Ours' | 'Other'。
+        可 dot-source 本脚本后单独调用（此时 $Port 由调用方设置）。
+    #>
+    param([int]$Port)
+
+    # 1) 无 LISTEN → Free
+    $listen = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $listen) { return "Free" }
+
+    # 2) 有 LISTEN，短超时探本应用健康特征
+    $base = "http://127.0.0.1:$Port"
+    try {
+        $resp = Invoke-WebRequest -Uri "$base/api/v1/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+        $raw = $resp.Content
+        if ($raw -is [byte[]]) { $body = [System.Text.Encoding]::UTF8.GetString($raw) }
+        else { $body = [string]$raw }
+        if ($body -match '"app_version"' -or $body -match '"product"' -or $body -match '"status"') {
+            return "Ours"
+        }
+    } catch { }
+
+    # 3) 有 LISTEN 但非本应用 → Other，取占用进程信息
+    return "Other"
 }
 
-if (Test-StudioRunning) {
+function Get-PortOwnerInfo {
+    param([int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $conn) { return $null }
+    $pid_ = $conn.OwningProcess
+    try {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid_" -ErrorAction Stop
+        return [PSCustomObject]@{
+            Pid       = $pid_
+            Name      = $proc.Name
+            CommandLine = $proc.CommandLine
+        }
+    } catch {
+        return [PSCustomObject]@{ Pid = $pid_; Name = "(unknown)"; CommandLine = "" }
+    }
+}
+
+# ---- 探测端口状态 ----
+$portStatus = Get-StudioPortStatus -Port $Port
+
+if ($portStatus -eq "Ours") {
     Write-Host "[NSFW Studio] 后端已在运行（$BaseUrl），直接打开浏览器。" -ForegroundColor Green
     Start-Process $BaseUrl
     exit 0
 }
 
+if ($portStatus -eq "Other") {
+    $owner = Get-PortOwnerInfo -Port $Port
+    Write-Host "[NSFW Studio][端口冲突] 端口 $Port 被其他程序占用：" -ForegroundColor Red
+    if ($owner) {
+        Write-Host ("  PID: {0}" -f $owner.Pid) -ForegroundColor Red
+        Write-Host ("  程序: {0}" -f $owner.Name) -ForegroundColor Red
+        Write-Host ("  命令行: {0}" -f $owner.CommandLine) -ForegroundColor Red
+    }
+    Write-Host "[NSFW Studio] 请先关闭占用 $Port 的程序后再启动；本程序不会静默换口或抢占端口。" -ForegroundColor Red
+    exit 3
+}
+
+# Free → 继续启动 uvicorn
+
 # ---- 后台启动 uvicorn（独立进程，脚本退出后继续运行）----
-Write-Host "[NSFW Studio] 正在启动后端 uvicorn（127.0.0.1:8000）……"
+Write-Host "[NSFW Studio] 正在启动后端 uvicorn（127.0.0.1:$Port）……"
 Start-Process -FilePath $VenvPython `
-    -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000") `
+    -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port") `
     -WorkingDirectory $BackendDir `
     -WindowStyle Hidden
 
@@ -124,7 +177,7 @@ $deadline = (Get-Date).AddSeconds(40)
 $ok = $false
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 1
-    if (Test-StudioRunning) { $ok = $true; break }
+    if ((Get-StudioPortStatus -Port $Port) -eq "Ours") { $ok = $true; break }
 }
 if (-not $ok) {
     Fail-Step "后端启动超时（40 秒内健康检查未通过）。请手动查看 backend 日志排查。"
