@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { imageContentUrl, type ImageDTO } from '../types/workbench'
+import { imageContentUrl, imagePreviewUrl, type ImageDTO } from '../types/workbench'
 import { useFocusGuard } from './ui/useOverlay'
 import './ImageLightbox.css'
 
 /**
  * Generate 与 Gallery【共用】的单一全屏看图 Lightbox。
  *
- * - 只渲染当前 index 这一张大图（imageContentUrl），方向键/按钮切换时才加载下一张——
- *   绝不预载整个图库的原图。
+ * - 只渲染当前 index 这一张，方向键/按钮切换时才加载下一张——绝不预载整个图库。
+ * - 渐进加载：初开先载 preview（长边 1536），点「100%」或缩放倍率 ≥1 时才切换 original；
+ *   切图后缩放复位 → 回到 preview。快速切图不等待完整原图。
  * - 键盘：ESC 关闭；← / → 上一张 / 下一张；+/- 缩放。
- * - 鼠标：滚轮以中心为锚点缩放（clamp 0.25~4）；缩放后按住拖动平移；
- *   点击遮罩空白处关闭、点击图片不关闭。
- * - 默认适应窗口（contain）；切换图片后缩放/平移复位。
- * - Phase 0.11：可选 renderSidePanel（Gallery 传入右侧信息栏）；不传则维持纯看图布局。
+ * - 可选 hasMore/onLoadMore：到已加载末尾且还有下一页时，触发加载并 append（全历史导航闭环）。
+ *   不传这两个 props 的调用方（Generate/ResultPane 有限列表）维持原边界禁用行为。
  */
 
 export interface ImageLightboxProps {
@@ -22,6 +21,12 @@ export interface ImageLightboxProps {
   onNavigate: (index: number) => void
   // Gallery 传入的图片运行时即完整 ImageDTO；renderSidePanel 收到完整对象。
   renderSidePanel?: (image: ImageDTO) => ReactNode
+  /** 已加载末尾之后是否还有下一页（分页图库） */
+  hasMore?: boolean
+  /** 到末尾按下一张时触发加载下一页（append 后父组件更新 images） */
+  onLoadMore?: () => void
+  /** 后台正在加载下一页（展示加载态） */
+  loadingMore?: boolean
 }
 
 const MIN_SCALE = 0.25
@@ -33,7 +38,7 @@ const clampScale = (value: number): number =>
 
 const ZERO_OFFSET = { x: 0, y: 0 }
 
-export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePanel }: ImageLightboxProps) {
+export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePanel, hasMore = false, onLoadMore, loadingMore = false }: ImageLightboxProps) {
   // null = 适应窗口（contain）；数字 = 实际缩放倍率
   const [scale, setScale] = useState<number | null>(null)
   const [offset, setOffset] = useState<{ x: number; y: number }>(ZERO_OFFSET)
@@ -69,6 +74,9 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
         if (clampedIndex < images.length - 1) {
           event.preventDefault()
           onNavigate(clampedIndex + 1)
+        } else if (hasMore && onLoadMore) {
+          event.preventDefault()
+          onLoadMore()
         }
       } else if (event.key === '+' || event.key === '=') {
         event.preventDefault()
@@ -80,7 +88,7 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [clampedIndex, images.length, onClose, onNavigate, zoomBy])
+  }, [clampedIndex, images.length, onClose, onNavigate, zoomBy, hasMore, onLoadMore])
 
   // 打开期间锁定 body 滚动
   useEffect(() => {
@@ -130,8 +138,10 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
 
   if (images.length === 0) return null
   const current = images[clampedIndex]
-  // 仅渲染当前这一张的 content URL；其余图不请求
-  const src = imageContentUrl(current.id)
+  // 渐进加载：默认 preview（快速切图）；放大到 100% / 倍率≥1 才切换 original。其余图不请求。
+  const showOriginal = scale !== null && scale >= 1
+  const src = showOriginal ? imageContentUrl(current.id) : imagePreviewUrl(current.id)
+  const atEnd = clampedIndex >= images.length - 1
   const transform = scale === null ? undefined : `translate(${offset.x}px, ${offset.y}px) scale(${scale})`
 
   return (
@@ -177,10 +187,10 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
           <button type="button" onClick={zoomTo100}>100%</button>
           <button
             type="button"
-            onClick={() => onNavigate(clampedIndex + 1)}
-            disabled={clampedIndex >= images.length - 1}
+            onClick={() => (atEnd && hasMore && onLoadMore ? onLoadMore() : onNavigate(clampedIndex + 1))}
+            disabled={atEnd && !(hasMore && onLoadMore)}
           >
-            下一张
+            {atEnd && hasMore ? (loadingMore ? '加载中…' : '加载更多') : '下一张'}
           </button>
           <button type="button" onClick={onClose}>关闭</button>
         </div>

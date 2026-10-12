@@ -7,6 +7,7 @@ import {
   ASSET_TYPES,
   MODULE_LABEL,
   imageContentUrl,
+  normalizeImageStatus,
   shortJobId,
   type AssetType,
   type ImageDTO,
@@ -128,6 +129,26 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
     }
   }
 
+  async function runAction(action: () => Promise<ImageDTO>, okText: string): Promise<void> {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      onUpdated(await action())
+      setMessage(okText)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 普通图（非 REJECT）“淘汰此图”——仅置 REJECT、保留文件。 */
+  function softReject(): void {
+    void runAction(() => imageApi.setStatus(image.id, { status: 'REJECT' }), '已移入废片，可在清理废片中永久删除')
+  }
+
+  /** 仅 REJECT 图永久删除；只有 deleted_count===1 才从 UI 移除。 */
   async function deleteImage(): Promise<void> {
     if (!deleteArm) return
     setBusy(true)
@@ -136,20 +157,26 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
     try {
       const preview = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: false })
       if ((preview.protected_count ?? 0) > 0) {
-        setError('该图片被 Prompt / 素材 / 配方引用，禁止删除（已保护）。')
+        const reason = preview.protected_items?.[0]?.reasons?.join('；')
+        setError(`该图片被引用，禁止删除（已保护）${reason ? `：${reason}` : ''}。`)
         setDeleteArm(false)
         return
       }
       const result = await imageApi.cleanupRejected({ image_ids: [image.id], confirm: true })
-      onUpdated({ ...image })
-      onDeleted(image.id)
-      void result
+      if ((result.deleted_count ?? 0) === 1) {
+        onDeleted(image.id)
+      } else {
+        setError(`后端实际删除 ${result.deleted_count ?? 0} 张（预期 1），未从列表移除。`)
+        setDeleteArm(false)
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : '删除失败')
     } finally {
       setBusy(false)
     }
   }
+
+  const displayStatus = normalizeImageStatus(image)
 
   const moduleLabel = provenance?.module_id
     ? (MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id)
@@ -182,6 +209,40 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
           重新打开 Workbench
         </Button>
       </div>
+
+      <section className="lb-side__block">
+        <h5>审核</h5>
+        <div className="lb-side__actions">
+          <Button
+            size="sm" variant={displayStatus === 'KEEP' || displayStatus === 'ARCHIVED' ? 'primary' : 'secondary'}
+            disabled={busy}
+            onClick={() => void runAction(() => imageApi.setStatus(image.id, { status: 'KEEP' }), '已保留')}
+          >
+            保留
+          </Button>
+          <Button
+            size="sm" variant={displayStatus === 'REJECT' ? 'primary' : 'secondary'}
+            disabled={busy}
+            onClick={() => softReject()}
+          >
+            淘汰
+          </Button>
+          {displayStatus !== 'NEW' && (
+            <Button
+              size="sm" variant="ghost" disabled={busy}
+              onClick={() => void runAction(() => imageApi.setStatus(image.id, { status: 'NEW' }), '已恢复为待审核')}
+            >
+              取消审核
+            </Button>
+          )}
+          <Button
+            size="sm" variant="ghost" disabled={busy}
+            onClick={() => void runAction(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏')}
+          >
+            {image.favorite ? '★ 已收藏' : '☆ 收藏'}
+          </Button>
+        </div>
+      </section>
 
       <section className="lb-side__block">
         <h5>创建素材</h5>
@@ -221,16 +282,28 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
       </section>
 
       <section className="lb-side__block">
-        <h5>删除图片</h5>
-        {!deleteArm ? (
-          <Button size="sm" variant="danger" onClick={() => setDeleteArm(true)}>删除此图片</Button>
-        ) : (
-          <div className="lb-side__actions">
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
-              {busy ? '处理中…' : '确认删除（不可恢复）'}
+        <h5>{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h5>
+        {displayStatus !== 'REJECT' ? (
+          <>
+            <p className="muted">仅置 REJECT（文件保留），之后可在「清理废片」永久删除。</p>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => softReject()}>
+              淘汰此图
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>取消</Button>
-          </div>
+          </>
+        ) : (
+          <>
+            <p className="muted">删除前检查引用；被引用图片将被保护，不会删除。</p>
+            {!deleteArm ? (
+              <Button size="sm" variant="danger" onClick={() => setDeleteArm(true)}>永久删除此废片</Button>
+            ) : (
+              <div className="lb-side__actions">
+                <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
+                  {busy ? '处理中…' : '确认删除（不可恢复）'}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>取消</Button>
+              </div>
+            )}
+          </>
         )}
       </section>
 

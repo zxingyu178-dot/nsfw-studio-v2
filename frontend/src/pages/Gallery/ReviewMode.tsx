@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiRequestError, imageApi } from '../../api/client'
 import {
   imageContentUrl,
+  imagePreviewUrl,
   normalizeImageStatus,
   type ImageDTO,
   type ImageReviewStatus,
@@ -9,16 +10,32 @@ import {
 import './review-mode.css'
 
 /**
- * Phase 0.11 摄影选片式 Review Mode（全屏）。
+ * Phase 0.11.1 摄影选片式 Review Mode（全屏）。
  *
- * - 居中大图（载 original content）+ ←/→ 切换 + ✅保留 / ⭐收藏 / ❌淘汰；
+ * - 居中大图 + ←/→ 切换 + ✅保留 / ⭐收藏 / ❌淘汰；
  * - 快捷键：← 上一张、→ 下一张、A 保留、D 淘汰、F 收藏、Space 放大、ESC 关闭；
- * - 打标后自动跳到下一张；顶部显示进度（如 3 / 16）与 保留/收藏/淘汰/待审 统计。
+ * - 打标后自动跳到下一张；顶部显示进度与 待审/保留/淘汰/收藏 统计。
  *
- * 只在现有 ImageDTO / imageApi.setStatus 之上扩展，不触碰 Lightbox 本体。
+ * 两种数据来源：
+ * - static：传入固定 images（兼容旧调用 / 小集合）；
+ * - paged：传入 loader，首屏一页、接近末尾预取下一页，直到 has_next=false（全历史审核）。
+ *
+ * 语义：保留=status KEEP；淘汰=status REJECT；收藏=独立 favorite toggle（不改审核状态）。
+ * 渐进加载：默认载 preview，Space 放大时才载 original content。
  */
+
+/** 分页加载器：page 从 1 起。返回本页 items + 是否还有下一页 + 服务端 total。 */
+export interface ReviewPageLoader {
+  loadPage: (page: number) => Promise<{ items: ImageDTO[]; has_next: boolean; total: number }>
+}
+
 export interface ReviewModeProps {
-  images: ImageDTO[]
+  /** 静态集合模式（与 loader 二选一；优先） */
+  images?: ImageDTO[]
+  /** 分页会话模式 */
+  loader?: ReviewPageLoader
+  /** 服务端 total（用于进度分母；缺省用已加载数量） */
+  total?: number
   initialIndex?: number
   title?: string
   onClose: () => void
@@ -26,21 +43,96 @@ export interface ReviewModeProps {
   onChanged?: (image: ImageDTO) => void
 }
 
-export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged }: ReviewModeProps) {
-  const [list, setList] = useState<ImageDTO[]>(images)
-  const [index, setIndex] = useState(() => Math.min(Math.max(initialIndex, 0), Math.max(images.length - 1, 0)))
+interface Stats {
+  NEW: number
+  KEEP: number
+  REJECT: number
+  ARCHIVED: number
+  favorite: number
+}
+
+export function ReviewMode({ images, loader, total, initialIndex = 0, title, onClose, onChanged }: ReviewModeProps) {
+  const [list, setList] = useState<ImageDTO[]>(images ?? [])
+  const [index, setIndex] = useState(() =>
+    Math.min(Math.max(initialIndex, 0), Math.max((images?.length ?? 1) - 1, 0)),
+  )
   const [zoomed, setZoomed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasNext, setHasNext] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [serverTotal, setServerTotal] = useState<number | null>(total ?? null)
+
+  const loadedPageRef = useRef(0)
+  const prefetchSeqRef = useRef(0)
+
+  // 分页模式：首屏加载第一页
+  useEffect(() => {
+    if (!loader) return
+    let cancelled = false
+    setLoadingMore(true)
+    loader
+      .loadPage(1)
+      .then((page) => {
+        if (cancelled) return
+        loadedPageRef.current = 1
+        setList(page.items)
+        setHasNext(page.has_next)
+        setServerTotal(page.total)
+        setIndex(0)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '加载审核列表失败')
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMore(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const clamped = Math.min(Math.max(index, 0), Math.max(list.length - 1, 0))
   const current = list[clamped]
 
-  const stats = useMemo(() => {
-    const s = { NEW: 0, KEEP: 0, FAVORITE: 0, REJECT: 0, ARCHIVED: 0 }
-    for (const img of list) s[normalizeImageStatus(img)] += 1
+  const stats: Stats = useMemo(() => {
+    const s: Stats = { NEW: 0, KEEP: 0, REJECT: 0, ARCHIVED: 0, favorite: 0 }
+    for (const img of list) {
+      s[normalizeImageStatus(img)] += 1
+      if (img.favorite) s.favorite += 1
+    }
     return s
   }, [list])
+
+  // 接近末尾时预取下一页（去重 append）
+  const maybePrefetch = useCallback(() => {
+    if (!loader || !hasNext || loadingMore) return
+    if (clamped < list.length - 3) return
+    const seq = ++prefetchSeqRef.current
+    setLoadingMore(true)
+    loader
+      .loadPage(loadedPageRef.current + 1)
+      .then((page) => {
+        if (seq !== prefetchSeqRef.current) return
+        loadedPageRef.current += 1
+        setHasNext(page.has_next)
+        setServerTotal(page.total)
+        setList((prev) => {
+          const known = new Set(prev.map((img) => img.id))
+          const fresh = page.items.filter((img) => !known.has(img.id))
+          return [...prev, ...fresh]
+        })
+      })
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载下一页失败'))
+      .finally(() => {
+        if (seq === prefetchSeqRef.current) setLoadingMore(false)
+      })
+  }, [loader, hasNext, loadingMore, clamped, list.length])
+
+  useEffect(() => {
+    maybePrefetch()
+  }, [maybePrefetch])
 
   const goTo = useCallback(
     (next: number) => {
@@ -52,14 +144,21 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
     [list.length],
   )
 
-  // 打标请求队列：用户快速连按 A/D/F 时，PATCH 期间的按键不再被丢弃，
-  // 而是排队、逐张落标并自动前进（摄影选片场景的关键健壮性）。
+  // 打标请求队列：用户快速连按 A/D 时，PATCH 期间的按键排队、逐张落标并自动前进。
   const listRef = useRef<ImageDTO[]>(list)
   listRef.current = list
   const indexRef = useRef<number>(clamped)
   indexRef.current = clamped
   const queueRef = useRef<ImageReviewStatus[]>([])
   const processingRef = useRef(false)
+
+  const applyUpdated = useCallback(
+    (updated: ImageDTO) => {
+      setList((prev) => prev.map((img) => (img.id === updated.id ? updated : img)))
+      onChanged?.(updated)
+    },
+    [onChanged],
+  )
 
   const processQueue = useCallback(async () => {
     if (processingRef.current) return
@@ -73,8 +172,7 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
         const status = queueRef.current.shift() as ImageReviewStatus
         try {
           const updated = await imageApi.setStatus(cur.id, { status })
-          setList((prev) => prev.map((img) => (img.id === cur.id ? updated : img)))
-          onChanged?.(updated)
+          applyUpdated(updated)
         } catch (err) {
           setError(err instanceof ApiRequestError ? err.message : '审核状态更新失败')
           break // 出错即停，把队列留给用户看到错误后决定
@@ -89,7 +187,7 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
       processingRef.current = false
       setBusy(false)
     }
-  }, [onChanged])
+  }, [applyUpdated])
 
   const enqueueMark = useCallback(
     (status: ImageReviewStatus) => {
@@ -99,6 +197,19 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
     },
     [processQueue],
   )
+
+  // 收藏：独立 toggle favorite，不改审核状态
+  const toggleFavorite = useCallback(async () => {
+    const cur = listRef.current[indexRef.current]
+    if (!cur) return
+    setError(null)
+    try {
+      const updated = await imageApi.favorite(cur.id, !cur.favorite)
+      applyUpdated(updated)
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '收藏更新失败')
+    }
+  }, [applyUpdated])
 
   // 键盘：←/→ 切换；A 保留 / D 淘汰 / F 收藏；Space 放大；ESC 关闭
   useEffect(() => {
@@ -125,12 +236,12 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
         enqueueMark('REJECT')
       } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault()
-        enqueueMark('FAVORITE')
+        void toggleFavorite()
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [clamped, goTo, enqueueMark, onClose])
+  }, [clamped, goTo, enqueueMark, toggleFavorite, onClose])
 
   // 打开期间锁定 body 滚动
   useEffect(() => {
@@ -145,21 +256,25 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
     return (
       <div className="rv-overlay" role="dialog" aria-modal="true" aria-label="审核模式">
         <div className="rv-top">
-          <span className="rv-progress">没有可审核的图片</span>
+          <span className="rv-progress">{loadingMore ? '加载中…' : '没有可审核的图片'}</span>
           <button type="button" onClick={onClose}>关闭</button>
         </div>
       </div>
     )
   }
 
+  const denom = serverTotal ?? list.length
+  const imgSrc = zoomed ? imageContentUrl(current.id) : imagePreviewUrl(current.id)
+
   return (
     <div className="rv-overlay" role="dialog" aria-modal="true" aria-label="审核模式">
       <div className="rv-top">
         <span className="rv-progress" aria-live="polite">
-          {clamped + 1} / {list.length}{title ? ` · ${title}` : ''}
+          {clamped + 1} / {denom}{title ? ` · ${title}` : ''}
+          {loadingMore && ' · 加载更多…'}
         </span>
         <span className="rv-stats muted">
-          待审 {stats.NEW} · 保留 {stats.KEEP} · 收藏 {stats.FAVORITE} · 淘汰 {stats.REJECT}
+          待审 {stats.NEW} · 保留 {stats.KEEP} · 淘汰 {stats.REJECT} · 收藏 {stats.favorite}
         </span>
         <button type="button" onClick={onClose}>退出审核</button>
       </div>
@@ -177,7 +292,7 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
         </button>
         <img
           className={`rv-img${zoomed ? ' rv-img--zoomed' : ''}`}
-          src={imageContentUrl(current.id)}
+          src={imgSrc}
           alt=""
           onClick={() => setZoomed((z) => !z)}
         />
@@ -207,10 +322,10 @@ export function ReviewMode({ images, initialIndex = 0, title, onClose, onChanged
             ✅ 保留 (A)
           </button>
           <button
-            type="button" className="rv-btn rv-btn--fav" disabled={busy}
-            onClick={() => enqueueMark('FAVORITE')}
+            type="button" className="rv-btn rv-btn--fav"
+            onClick={() => void toggleFavorite()}
           >
-            ⭐ 收藏 (F)
+            {current.favorite ? '★ 已收藏 (F)' : '⭐ 收藏 (F)'}
           </button>
         </div>
       </div>
