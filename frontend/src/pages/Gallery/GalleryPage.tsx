@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiRequestError, imageApi } from '../../api/client'
+import { ApiRequestError, imageApi, type ImageStatsParams } from '../../api/client'
 import { emptyWorkbenchSnapshot } from '../../stores/workbenchStore'
 import { Badge, Button } from '../../components/ui'
 import {
@@ -64,6 +64,7 @@ export default function GalleryPage() {
     loader: ReviewPageLoader
     title?: string
     total?: number
+    statsParams?: ImageStatsParams
   } | null>(null)
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
   const [cleanupBusy, setCleanupBusy] = useState(false)
@@ -293,6 +294,7 @@ export default function GalleryPage() {
     setReviewSession({
       title: '图库审核',
       total: query.total,
+      statsParams: query.buildStatsParams(),
       loader: {
         loadPage: (page) =>
           imageApi
@@ -306,6 +308,7 @@ export default function GalleryPage() {
   function startReviewJob(jobId: string): void {
     setReviewSession({
       title: `任务 ${shortJobId(jobId)}`,
+      statsParams: { job_id: jobId },
       loader: {
         loadPage: (page) =>
           imageApi
@@ -486,6 +489,7 @@ export default function GalleryPage() {
         <ReviewMode
           loader={reviewSession.loader}
           total={reviewSession.total}
+          statsParams={reviewSession.statsParams}
           title={reviewSession.title}
           onClose={() => setReviewSession(null)}
           onChanged={handleUpdated}

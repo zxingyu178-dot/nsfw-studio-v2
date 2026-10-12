@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiRequestError, imageApi } from '../../../api/client'
+import { ApiRequestError, imageApi, type ImageStatsParams } from '../../../api/client'
 import type {
   ImageDTO,
   ImageJobGroupDTO,
@@ -137,6 +137,16 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
 
   const resetGroups = useCallback(() => setGroups([]), [])
 
+  // Phase 0.12：与 list 同口径的全局统计过滤参数（供 ReviewMode / Gallery 顶部 stats）。
+  function buildStatsParams(): ImageStatsParams {
+    const params: ImageStatsParams = { job_id: jobFilter ?? null }
+    if (subStatus) params.status = subStatus
+    else if (tab === 'NEW') params.status = 'NEW'
+    else if (tab === 'ARCHIVED') params.status = 'ARCHIVED'
+    else if (tab === 'FAVORITE') params.favorite = true
+    return params
+  }
+
   // 单张打标/收藏后，同步更新列表中对应图（保持徽标一致）
   const applyItemUpdated = useCallback((updated: ImageDTO) => {
     setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
@@ -156,7 +166,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
     total, hasNext, loading, loadingMore,
     error, setError,
     loadFirst, loadNext,
-    sentinelRef, listQuery,
+    sentinelRef, listQuery, buildStatsParams,
     applyItemUpdated, removeItem,
     // 分组
     groups, groupsLoading, groupsPage, groupsHasNext,
