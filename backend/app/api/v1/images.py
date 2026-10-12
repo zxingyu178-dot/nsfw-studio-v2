@@ -14,6 +14,8 @@ from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
 from app.schemas.image import (
     ImageBatchStatusRequest,
     ImageBatchStatusResponse,
+    ImageBackfillRequest,
+    ImageBackfillStatus,
     ImageCleanupPreview,
     ImageCleanupRejectedRequest,
     ImageCleanupResult,
@@ -125,6 +127,49 @@ def _display_name(filename: str | None) -> str:
     return filename or "(未命名)"
 
 
+@router.post("/thumbnails/backfill", response_model=ImageBackfillStatus,
+             summary="启动历史缩略图/预览回填（单 worker 低并发，立即返回状态）")
+def backfill_thumbnails(request: Request, body: ImageBackfillRequest) -> ImageBackfillStatus:
+    """启动（或复用）一个后台回填任务，立即返回状态；同一时间只允许一个回填任务。
+
+    - kind=thumbnail（默认）/preview；limit 限制本次最多补多少张；
+    - 重复调用返回当前任务，不重复起；单张失败跳过不阻断；
+    - 不占 GPU；Studio 重启后再次调用可重算缺失（进程内状态，无持久化任务）。
+    """
+    runner = request.app.state.backfill_runner
+    return ImageBackfillStatus(**runner.start(kind=body.kind, limit=body.limit))
+
+
+@router.get("/thumbnails/backfill/status", response_model=ImageBackfillStatus,
+            summary="回填任务状态（running/done/total/failed/kind）")
+def backfill_thumbnails_status(request: Request) -> ImageBackfillStatus:
+    return ImageBackfillStatus(**request.app.state.backfill_runner.status())
+
+
+@router.post("/thumbnails/backfill/stop", response_model=ImageBackfillStatus,
+             summary="请求停止回填（当前张完成后停止），返回最终状态")
+def backfill_thumbnails_stop(request: Request) -> ImageBackfillStatus:
+    return ImageBackfillStatus(**request.app.state.backfill_runner.stop())
+
+
+@router.get("/job-groups", summary="按 Job 聚合图库统计（单次 GROUP BY，避免 N+1；可分页到早期 Job）")
+def list_job_groups(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: Session = Depends(get_session),
+) -> dict:
+    """只含 completed/有产出图的 Job；按 Job created_at 倒序。
+
+    每个 Job 返回 {job_id, module_id, created_at, total, unreviewed, kept, rejected,
+    favorites}；计数口径与 by-job/{job_id}/summary 完全一致。
+    """
+    groups, total = image_service.list_job_groups(session, page=page, page_size=page_size)
+    return {
+        "items": groups, "total": total, "page": page, "page_size": page_size,
+        "has_next": (page - 1) * page_size + len(groups) < total,
+    }
+
+
 @router.get("/{image_id}", response_model=ImageResponse, summary="图片详情")
 def get_image(image_id: str, session: Session = Depends(get_session)) -> ImageResponse:
     return image_response(image_service.get_image(session, image_id))
@@ -152,6 +197,19 @@ def get_image_thumbnail(image_id: str, session: Session = Depends(get_session),
     """
     image = image_service.get_image(session, image_id)
     absolute, _variant = thumbnail_service.get_or_create_thumbnail(session, storage, image)
+    return FileResponse(absolute, media_type="image/webp")
+
+
+@router.get("/{image_id}/preview", summary="预览图（长边 1536 WebP q85；缺失则按需生成）")
+def get_image_preview(image_id: str, session: Session = Depends(get_session),
+                      storage: StorageManager = Depends(get_storage)) -> FileResponse:
+    """Review Mode / Lightbox 渐进加载用 preview（比 thumbnail 清晰、比 original 轻量）。
+
+    - 最长边 1536（落在 1280~1600）、WebP q85、仅下采样、保留 alpha；
+    - 落 images/previews/<image_id>/preview.webp，并发安全（与 thumbnail 同一生产链）。
+    """
+    image = image_service.get_image(session, image_id)
+    absolute, _variant = thumbnail_service.get_or_create_preview(session, storage, image)
     return FileResponse(absolute, media_type="image/webp")
 
 

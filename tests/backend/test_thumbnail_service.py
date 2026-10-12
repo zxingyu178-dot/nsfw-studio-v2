@@ -74,7 +74,14 @@ def test_backfill_missing_thumbnails(session, settings):
     storage = StorageManager(settings)
     img_a = _import(session, storage, 800, 600)
     img_b = _import(session, storage, 640, 480)
-    # 两张都尚未生成缩略图
+    # Phase 0.11.1：新图入库即主动生成 thumbnail；这里先删掉自动生成的 variant+文件，
+    # 制造"历史缺图"条件，再由回填补齐。
+    for img in (img_a, img_b):
+        variant = thumbnail_service.find_thumbnail_variant(session, img.id)
+        assert variant is not None  # 入库已主动生成
+        storage.absolutize(variant.path).unlink()
+        session.delete(variant)
+    session.commit()
     assert thumbnail_service.find_thumbnail_variant(session, img_a.id) is None
     assert thumbnail_service.find_thumbnail_variant(session, img_b.id) is None
 
@@ -93,7 +100,12 @@ def test_corrupt_original_raises_clean_error(session, settings):
 
     storage = StorageManager(settings)
     image = _import(session, storage)
-    # 把原图文件替换为垃圾内容（DB 行仍在）
+    # 入库已主动生成 thumbnail；删掉它（variant+文件），制造"需按需生成"条件，
+    # 再把原图替换为垃圾内容，按需生成应抛出 ValidationError。
+    variant = thumbnail_service.find_thumbnail_variant(session, image.id)
+    storage.absolutize(variant.path).unlink()
+    session.delete(variant)
+    session.commit()
     storage.absolutize(image.file_path).write_bytes(b"not an image")
 
     try:
@@ -101,6 +113,44 @@ def test_corrupt_original_raises_clean_error(session, settings):
         raise AssertionError("损坏原图应抛出 ValidationError")
     except ValidationError as error:
         assert error.code == "THUMBNAIL_FAILED"
+
+
+def test_new_image_import_auto_generates_thumbnail(session, settings):
+    """Phase 0.11.1 P1-3：新图入库后 thumbnail variant 已存在（用内存字节，未重读盘）。"""
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    image = _import(session, storage, 1024, 768)
+
+    variant = thumbnail_service.find_thumbnail_variant(session, image.id)
+    assert variant is not None, "入库后应已主动生成 thumbnail"
+    from app.storage.manager import StorageManager as _SM
+    assert _SM(settings).absolutize(variant.path).is_file()
+    with PILImage.open(_SM(settings).absolutize(variant.path)) as im:
+        assert im.format == "WEBP"
+
+
+def test_active_thumbnail_failure_does_not_break_import(session, settings, monkeypatch):
+    """缩略图渲染抛错时：落库仍成功、无异常泄漏（仅 warning）。"""
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+
+    def boom(_data, **_kw):
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(thumbnail_service, "render_webp", boom)
+
+    # 不应抛出
+    image = image_service.import_engine_output(
+        session, storage, data=_png_bytes(640, 480), original_filename="x.png",
+        source="comfyui",
+    )
+    assert image.id
+    # 图片行已落库（原图文件在）
+    assert storage.absolutize(image.file_path).is_file()
+    # thumbnail 未生成（但不影响落库）
+    assert thumbnail_service.find_thumbnail_variant(session, image.id) is None
 
 
 def test_api_thumbnail_endpoint(client):

@@ -54,6 +54,26 @@ class ImageCleanupRejectedRequest(BaseModel):
     confirm: bool = False
 
 
+class ImageBackfillRequest(BaseModel):
+    """Phase 0.11.1：POST /images/thumbnails/backfill 入参。
+
+    kind=thumbnail（默认）/preview；limit 限制本次最多补多少张（上限 2000）。
+    """
+
+    kind: Literal["thumbnail", "preview"] = "thumbnail"
+    limit: int | None = Field(default=None, ge=1, le=2000)
+
+
+class ImageBackfillStatus(BaseModel):
+    """回填任务状态：total=待处理总数、done=完成、failed=失败跳过数。"""
+
+    running: bool
+    done: int
+    total: int
+    failed: int
+    kind: Literal["thumbnail", "preview"]
+
+
 class ImageCleanupProtectedItem(BaseModel):
     """Phase 0.11.1：被引用保护而跳过的单图及原因摘要。"""
 

@@ -91,6 +91,11 @@ async def lifespan(application: FastAPI):
     application.state.adapter = adapter
     application.state.worker = worker
 
+    # Phase 0.11.1 P1-3：thumbnail/preview 后台回填单例（单 worker、进程内状态）
+    from app.services.backfill_runner import ThumbnailBackfillRunner
+
+    application.state.backfill_runner = ThumbnailBackfillRunner(session_factory, storage)
+
     # 受管 ComfyUI 运行时单例（生命周期独立于 Job；应用关闭时不主动停 managed，
     # 也绝不杀 external）
     from app.services.engine_runtime_service import EngineRuntimeService
@@ -126,6 +131,7 @@ async def lifespan(application: FastAPI):
         settings.app.version, report.data_root, adapter.name, len(recovered),
     )
     yield
+    application.state.backfill_runner.shutdown()
     await worker.stop()
     engine.dispose()
     logging.getLogger(__name__).info("后端停止")
