@@ -11,7 +11,7 @@ import {
   SegmentedControl,
   Textarea,
 } from '../../components/ui'
-import { STRUCTURED_FIELDS, imageContentUrl, type AssetType, type StructuredPrompt } from '../../types/workbench'
+import { STRUCTURED_FIELDS, imageThumbUrl, type AssetType, type StructuredPrompt } from '../../types/workbench'
 import {
   applyAssetToSlot,
   clearAssetFromSlot,
@@ -133,7 +133,7 @@ export function PromptEditorPane() {
               ) : (
                 <img
                   className="wb-input__thumb"
-                  src={imageContentUrl(inputImage.image_id)}
+                  src={imageThumbUrl(inputImage.image_id)}
                   alt="当前输入图片"
                 />
               )}
@@ -172,14 +172,17 @@ export function PromptEditorPane() {
                   {isSlot && (
                     <span className="wb-structured-field__actions">
                       {slotRef && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          title="移除已选素材（不影响素材本身）"
-                          onClick={() => clearAssetFromSlot(key as 'face')}
-                        >
-                          已选: {slotRef.name} ✕
-                        </Button>
+                        <span className="wb-chip" title="已选素材（点击 ✕ 移除，不影响素材本身）">
+                          <span className="wb-chip__name">{slotRef.name}</span>
+                          <button
+                            type="button"
+                            className="wb-chip__remove"
+                            aria-label={`移除已选素材 ${slotRef.name}`}
+                            onClick={() => clearAssetFromSlot(key as 'face')}
+                          >
+                            ✕
+                          </button>
+                        </span>
                       )}
                       <Button size="xs" variant="ghost" onClick={() => setPickerSlot(key as AssetType)}>
                         选择素材
@@ -207,7 +210,7 @@ export function PromptEditorPane() {
         </Field>
       )}
 
-      <Field label="Negative Prompt">
+      <Field label="Negative Prompt" className="wb-negative">
         <Textarea
           rows={3}
           value={state.negativePrompt}

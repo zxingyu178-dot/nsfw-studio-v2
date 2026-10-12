@@ -43,7 +43,12 @@ export function QueuePanel() {
   return (
     <section className="wb-queue">
       <div className="wb-queue__head">
-        <h3 className="wb-queue__title">队列</h3>
+        <div className="wb-queue__head-left">
+          <h3 className="wb-queue__title">队列</h3>
+          <span className="wb-queue__count" aria-label={`等待任务 ${queued.length + paused.length} 个`}>
+            · {queued.length + paused.length}
+          </span>
+        </div>
         {queueHasActivity && (
           store.queue?.worker.queue_paused ? (
             <Button size="xs" variant="primary" onClick={() => void resumeQueue()}>

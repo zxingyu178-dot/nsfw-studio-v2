@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi } from '../../api/client'
-import { EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
+import { Badge, Button, EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
@@ -14,7 +14,9 @@ import { overallProgress, stageProgressLines } from '../../utils/jobProgress'
 import { Pane } from './Pane'
 
 /**
- * 中栏（规范 §五十）：当前生成图片 + 本 Job 已完成缩略图。
+ * 中栏（规范 §五十；Phase 0.12 任务 5.2 视觉核心）：
+ * 当前生成大图舞台 + 生成中简洁状态（第 N/M · Stage · 已运行）+ 完成后动作
+ * （双击放大 / 收藏 / 保留 / 淘汰 / 去图库）+ 缩略条（选中态强化）+ HD/processed 统一 Badge。
  * 图片生成完成一张立即显示一张；父子 Job（续跑，§二十）合并展示。
  */
 export function ResultPane() {
@@ -40,17 +42,15 @@ export function ResultPane() {
     }
     let cancelled = false
     const ids = parentId ? [jobId, parentId] : [jobId]
-    Promise.all(ids.map((id) => imageApi.list({ job_id: id, limit: 200 })))
-      .then((pages) => {
-        if (cancelled) return
-        const merged = pages.flatMap((page) => page.items)
-        merged.sort((a, b) => a.created_at.localeCompare(b.created_at))
-        setImages(merged)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '无法加载图片')
-      })
+    // 分页拉全 Job family（Phase 0.12 任务 10.5：去掉硬编码 limit=200，循环到 has_next=false）
+    void fetchAllJobImages(ids).then((merged) => {
+      if (cancelled) return
+      merged.sort((a, b) => a.created_at.localeCompare(b.created_at))
+      setImages(merged)
+      setError(null)
+    }).catch((err: unknown) => {
+      if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '无法加载图片')
+    })
     return () => {
       cancelled = true
     }
@@ -70,13 +70,36 @@ export function ResultPane() {
     if (index >= 0) setLightboxIndex(index)
   }
 
+  /** 完成后动作：收藏 / 保留 / 淘汰——乐观更新本地当前图，不重拉整列。 */
+  const patchShown = useCallback((patch: Partial<ImageDTO>) => {
+    setImages((prev) => prev.map((image) => (image.id === shown?.id ? { ...image, ...patch } : image)))
+  }, [shown?.id])
+
+  async function handleToggleFavorite(): Promise<void> {
+    if (!shown) return
+    const next = !shown.favorite
+    patchShown({ favorite: next })
+    try {
+      await imageApi.favorite(shown.id, next)
+    } catch {
+      patchShown({ favorite: !next })
+    }
+  }
+
+  async function handleReview(status: 'KEEP' | 'REJECT'): Promise<void> {
+    if (!shown) return
+    patchShown({ status })
+    try {
+      await imageApi.setStatus(shown.id, { status })
+    } catch {
+      patchShown({ status: shown.status })
+    }
+  }
+
   return (
     <Pane title="预览" actions={job ? <StatusBadge status={job.status} /> : undefined}>
       {!job && (
-        <EmptyState
-          title="暂无生成结果"
-          description="填写 Prompt 并点击“生成”，结果与缩略图会实时显示在这里。"
-        />
+        <EmptyState title="暂无生成结果" description="填写 Prompt 并点击“生成”，结果会实时显示在这里。" />
       )}
 
       {job && (
@@ -88,7 +111,7 @@ export function ResultPane() {
             {stageLines.length > 0
               ? `原图生成 + 高清放大 · 已完成 ${job.completed_count} / ${job.requested_count}`
               : job.status === 'RUNNING' && runningItem
-                ? `正在生成第 ${runningItem.item_index + 1} 张 · ${progress}%${
+                ? `正在生成第 ${runningItem.item_index + 1}/${job.requested_count} 张 · ${progress}%${
                     runningItem.current_stage ? ` · ${STAGE_LABEL[runningItem.current_stage] ?? runningItem.current_stage}` : ''
                   }`
                 : `已完成 ${job.completed_count} / ${job.requested_count}`}
@@ -117,7 +140,11 @@ export function ResultPane() {
             {shown ? (
               <>
                 <img src={imageContentUrl(shown.id)} alt="生成结果" />
-                {shown.kind === 'upscaled' && <span className="result-stage__hd">HD</span>}
+                {(shown.kind === 'upscaled' || shown.kind === 'processed') && (
+                  <Badge tone="info" className="result-stage__hd">
+                    {shown.kind === 'upscaled' ? 'HD' : '处理图'}
+                  </Badge>
+                )}
               </>
             ) : (
               <div className="result-stage__placeholder">
@@ -132,6 +159,25 @@ export function ResultPane() {
               </div>
             )}
           </div>
+
+          {/* 完成后动作：双击放大 / 收藏 / 保留 / 淘汰 / 去图库 */}
+          {shown && (
+            <div className="wb-result-actions">
+              <Button size="xs" variant="ghost" onClick={() => openLightboxFor(shown)}>放大</Button>
+              <Button
+                size="xs"
+                variant={shown.favorite ? 'secondary' : 'ghost'}
+                onClick={() => void handleToggleFavorite()}
+              >
+                {shown.favorite ? '已收藏 ★' : '收藏'}
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => void handleReview('KEEP')}>保留</Button>
+              <Button size="xs" variant="ghost" onClick={() => void handleReview('REJECT')}>淘汰</Button>
+              <Link className="ds-btn ds-btn--ghost ds-btn--sm" to={`/gallery?job=${job.id}`}>
+                去图库
+              </Link>
+            </div>
+          )}
 
           {images.length > 0 && (
             <div className="wb-thumbs" role="list" aria-label="本任务已完成图片">
@@ -148,22 +194,19 @@ export function ResultPane() {
                   title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
                   <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
-                  {image.kind === 'upscaled' && <span className="wb-thumbs__hd">HD</span>}
+                  {(image.kind === 'upscaled' || image.kind === 'processed') && (
+                    <Badge tone="info" className="wb-thumbs__hd">
+                      {image.kind === 'upscaled' ? 'HD' : '处理'}
+                    </Badge>
+                  )}
                 </button>
               ))}
             </div>
           )}
-
-          <Link className="ds-btn ds-btn--ghost ds-btn--sm" to={`/gallery?job=${job.id}`}>
-            在图库中查看本任务
-          </Link>
         </>
       )}
 
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
-      <p className="muted">
-        图片来源于真实引擎输出，已导入 Studio 数据目录；全部完成后可在图库审核、保留或淘汰。
-      </p>
 
       {lightboxIndex !== null && (
         <ImageLightbox
@@ -178,3 +221,24 @@ export function ResultPane() {
 }
 
 export default ResultPane
+
+/**
+ * 分页拉全一个或多个 Job family 的图片（Phase 0.12 任务 10.5）。
+ * 旧实现硬编码 limit=200；这里按分页逐页拉到 has_next=false，契约上不再有隐形上限。
+ * 后端分页返回 { items, total, page, page_size, has_next }；旧 mock / 无 has_next 时单页即止。
+ */
+async function fetchAllJobImages(jobIds: string[]): Promise<ImageDTO[]> {
+  const PAGE_SIZE = 100
+  const merged: ImageDTO[] = []
+  for (const jobId of jobIds) {
+    let page = 1
+    // 安全阀：Job 图片即便异常膨胀也不会无限翻页（正常单 Job 产物远小于此）
+    for (let guard = 0; guard < 50; guard++) {
+      const res = await imageApi.list({ job_id: jobId, page, page_size: PAGE_SIZE })
+      merged.push(...res.items)
+      if (!res.has_next || res.items.length === 0) break
+      page += 1
+    }
+  }
+  return merged
+}
