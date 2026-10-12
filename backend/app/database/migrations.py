@@ -603,6 +603,29 @@ MIGRATIONS: tuple[Migration, ...] = (
             "UPDATE images SET status = 'REJECT' WHERE review_status = 'REJECTED'",
         ),
     ),
+    Migration(
+        migration_id="0017_image_review_semantics",
+        version="1.2.0",
+        description=(
+            "Phase 0.11.1：审核状态语义归一——favorite 恢复为独立 bool，与审核状态解耦；"
+            "FAVORITE 不再作为应用层写入的 status（DB CHECK 保留 FAVORITE 兼容历史，不从 CHECK 删除）。"
+            "status='FAVORITE' → 'KEEP' 且 favorite=1；历史 favorite=1 AND status='NEW' → 'KEEP'"
+            "（已收藏不应仍待审核）；归一后旧 review_status 与新 status 对齐、reviewed_at 对非 NEW 置位"
+        ),
+        statements=(
+            # 1) FAVORITE 行 → KEEP，并保证 favorite=1（旧代码进 FAVORITE 时 favorite 可能未同步）
+            "UPDATE images SET status = 'KEEP', favorite = 1 WHERE status = 'FAVORITE'",
+            # 2) 历史 favorite=1 AND status='NEW' → KEEP（已收藏不应仍待审核），favorite 保持 1
+            "UPDATE images SET status = 'KEEP' WHERE favorite = 1 AND status = 'NEW'",
+            # 3) 归一后旧 review_status 与新 status 对齐（KEEP/ARCHIVED→KEPT、REJECT→REJECTED、NEW→UNREVIEWED）
+            "UPDATE images SET review_status = 'KEPT' WHERE status IN ('KEEP', 'ARCHIVED')",
+            "UPDATE images SET review_status = 'REJECTED' WHERE status = 'REJECT'",
+            "UPDATE images SET review_status = 'UNREVIEWED' WHERE status = 'NEW'",
+            # 4) reviewed_at：非 NEW 置位（历史可能为 NULL，用 created_at 确定性回填）；NEW 清空
+            "UPDATE images SET reviewed_at = created_at WHERE status != 'NEW' AND reviewed_at IS NULL",
+            "UPDATE images SET reviewed_at = NULL WHERE status = 'NEW'",
+        ),
+    ),
 )
 
 

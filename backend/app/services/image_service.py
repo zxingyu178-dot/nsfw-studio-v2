@@ -44,6 +44,24 @@ IMAGE_KIND_DIRS = {
     "processed": "images/processed",
 }
 
+# Phase 0.11.1 统一审核状态语义：
+# - 审核 status 只有 NEW/KEEP/REJECT/ARCHIVED；favorite 是独立 bool，可与任意状态共存。
+# - FAVORITE 不再作为应用层写入的 status（DB CHECK 保留 FAVORITE 兼容历史，不重写 0016）；
+#   收藏一律走 favorite 列。新旧列必须同源双写，杜绝"旧接口只改旧字段"的分裂。
+# 新 status → 旧 review_status（ARCHIVED 在旧体系按"保留"计）
+_STATUS_TO_LEGACY_REVIEW = {
+    "NEW": "UNREVIEWED",
+    "KEEP": "KEPT",
+    "REJECT": "REJECTED",
+    "ARCHIVED": "KEPT",
+}
+# 旧 review_status → 新 status（旧 PATCH /review 接口仍需与新 status 同源）
+_LEGACY_REVIEW_TO_STATUS = {
+    "UNREVIEWED": "NEW",
+    "KEPT": "KEEP",
+    "REJECTED": "REJECT",
+}
+
 
 def _kind_dir(kind: str) -> str:
     directory = IMAGE_KIND_DIRS.get(kind)
@@ -590,15 +608,27 @@ def list_images(
 
 
 def set_review(session: Session, image_id: str, review_status: str) -> Image:
+    """旧审核接口（PATCH /images/{id}/review）——与新 status 同源，绝不第二套逻辑。
+
+    旧值 → 新 status：UNREVIEWED→NEW（清 reviewed_at）、KEPT→KEEP、REJECTED→REJECT；
+    同步写 status / review_status / reviewed_at；**绝不改 favorite**。
+    """
     if review_status not in ("UNREVIEWED", "KEPT", "REJECTED"):
         raise ValidationError(f"非法审核状态: {review_status}", code="REVIEW_STATUS_INVALID")
     image = get_image(session, image_id)
+    new_status = _LEGACY_REVIEW_TO_STATUS[review_status]
     image.review_status = review_status
+    image.status = new_status
+    image.reviewed_at = None if new_status == "NEW" else utc_now_iso()
     session.commit()
     return image
 
 
 def set_favorite(session: Session, image_id: str, favorite: bool) -> Image:
+    """收藏切换（PATCH /images/{id}/favorite）——只写 favorite，**绝不改 status/review_status/reviewed_at**。
+
+    收藏与审核状态相互独立：KEEP+favorite、ARCHIVED+favorite、NEW+favorite 都合法。
+    """
     image = get_image(session, image_id)
     image.favorite = favorite
     session.commit()
@@ -607,29 +637,28 @@ def set_favorite(session: Session, image_id: str, favorite: bool) -> Image:
 
 def set_image_status(session: Session, image_id: str, status: str,
                      note: str | None = None) -> Image:
-    """Phase 0.11 新审核状态流转（NEW/KEEP/FAVORITE/REJECT/ARCHIVED）。
+    """新审核状态流转（NEW/KEEP/REJECT/ARCHIVED）。
 
-    语义（合同冻结）：
+    语义（Phase 0.11.1 合同冻结）：
     - 置 status、review_note；除 NEW 外置 reviewed_at=now，回到 NEW 则清空；
-    - FAVORITE 同步 favorite=1，离开 FAVORITE（KEEP/REJECT/ARCHIVED/NEW）同步 favorite=0，
-      保持 status 与 favorite 语义一致（记录在代码注释）。
-    - 同步旧 review_status 列：job_gallery_summary 仍按旧列（UNREVIEWED/KEPT/REJECTED）聚合，
-      双写以保证 Job 审核统计随新状态实时变化（旧列保留兼容，不做删除）。
+    - **FAVORITE 不再作为可写入状态**：传入即 IMAGE_STATUS_DEPRECATED(400)，提示收藏请用
+      favorite（PATCH /images/{id}/favorite）；DB CHECK 仍保留 FAVORITE 兼容历史；
+    - 同步双写旧 review_status（NEW→UNREVIEWED、KEEP/ARCHIVED→KEPT、REJECT→REJECTED），
+      保证按旧列聚合的统计随新状态实时变化（旧列保留兼容，不做删除）；
+    - **绝不改 favorite**：切审核状态不得偷偷覆盖用户收藏。
     """
     if status not in IMAGE_STATUSES:
         raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
-    # 新状态 → 旧 review_status 映射（ARCHIVED/FAVORITE 在旧体系中按"保留"计）
-    legacy_review = {
-        "NEW": "UNREVIEWED", "KEEP": "KEPT", "FAVORITE": "KEPT",
-        "REJECT": "REJECTED", "ARCHIVED": "KEPT",
-    }
+    if status == "FAVORITE":
+        raise ValidationError(
+            "FAVORITE 不再作为审核状态写入；收藏请使用 favorite（PATCH /images/{id}/favorite）",
+            code="IMAGE_STATUS_DEPRECATED",
+        )
     image = get_image(session, image_id)
     image.status = status
     image.review_note = note or ""
     image.reviewed_at = None if status == "NEW" else utc_now_iso()
-    image.review_status = legacy_review[status]
-    # FAVORITE 语义同步：进入 FAVORITE → favorite=1；离开 → favorite=0
-    image.favorite = (status == "FAVORITE")
+    image.review_status = _STATUS_TO_LEGACY_REVIEW[status]
     session.commit()
     return image
 
@@ -639,29 +668,45 @@ def batch_set_status(session: Session, image_ids: list[str], status: str,
     """Phase 0.11 批量审核（POST /images/batch-status）。
 
     逐个调用 set_image_status（单图事务）；任一 id 不存在即 404 中止，不静默跳过。
+    FAVORITE 与单图接口同样被拒绝（IMAGE_STATUS_DEPRECATED）。
     """
     if status not in IMAGE_STATUSES:
         raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
+    if status == "FAVORITE":
+        raise ValidationError(
+            "FAVORITE 不再作为审核状态写入；收藏请使用 favorite",
+            code="IMAGE_STATUS_DEPRECATED",
+        )
     return [set_image_status(session, image_id, status, note) for image_id in image_ids]
 
 
 def job_gallery_summary(session: Session, job_id: str) -> dict:
-    """按 Job 统计（规范 §四十九：未审核 / 保留 / 收藏 / 淘汰）。"""
-    rows = session.execute(
-        select(Image.review_status, func.count())
-        .where(Image.job_id == job_id)
-        .group_by(Image.review_status)
-    ).all()
-    counts = {status: int(count) for status, count in rows}
-    favorites = session.execute(
-        select(func.count()).select_from(Image)
-        .where(Image.job_id == job_id, Image.favorite.is_(True))
-    ).scalar_one()
+    """按 Job 统计（规范 §四十九：未审核 / 保留 / 收藏 / 淘汰）。
+
+    Phase 0.11.1 口径（以新 status + favorite 为准，旧 review_status 仅兼容）：
+    - unreviewed = count(status='NEW')；
+    - rejected   = count(status='REJECT')；
+    - kept       = count(status IN ('KEEP','ARCHIVED'))（ARCHIVED 视为已保留，保证
+      unreviewed+kept+rejected == total）；
+    - favorites  = count(favorite=true)（独立交叉计数，**不可**并入 kept/rejected）；
+    - total      = 该 job 全部图。
+    """
+    def _count(*clauses) -> int:
+        query = select(func.count()).select_from(Image).where(Image.job_id == job_id)
+        for clause in clauses:
+            query = query.where(clause)
+        return int(session.execute(query).scalar_one())
+
+    total = _count()
+    unreviewed = _count(Image.status == "NEW")
+    rejected = _count(Image.status == "REJECT")
+    kept = _count(Image.status.in_(("KEEP", "ARCHIVED")))
+    favorites = _count(Image.favorite.is_(True))
     return {
         "job_id": job_id,
-        "total": sum(counts.values()),
-        "unreviewed": counts.get("UNREVIEWED", 0),
-        "kept": counts.get("KEPT", 0),
-        "rejected": counts.get("REJECTED", 0),
-        "favorites": int(favorites),
+        "total": total,
+        "unreviewed": unreviewed,
+        "kept": kept,
+        "rejected": rejected,
+        "favorites": favorites,
     }

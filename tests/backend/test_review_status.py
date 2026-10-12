@@ -43,18 +43,27 @@ def test_patch_status_sets_fields(client, png_bytes):
         assert image.reviewed_at is not None
 
 
-def test_favorite_sync_on_favorite_and_leave(client, png_bytes):
-    """status=FAVORITE → favorite=1；离开 FAVORITE（置 KEEP）→ favorite=0。"""
+def test_favorite_independent_of_status(client, png_bytes):
+    """Phase 0.11.1：收藏与审核状态相互独立——set status 不再触碰 favorite；
+    FAVORITE 作为审核状态写入被拒绝（收藏请走 favorite）。"""
     image_id = _import_one(client, png_bytes)
 
-    fav = client.patch(f"/api/v1/images/{image_id}/status", json={"status": "FAVORITE"}).json()
+    # 收藏：只写 favorite，审核状态仍为 NEW
+    fav = client.patch(f"/api/v1/images/{image_id}/favorite", json={"favorite": True}).json()
     assert fav["favorite"] is True
+    assert fav["status"] == "NEW", "收藏不应改变审核状态"
+    assert fav["review_status"] == "UNREVIEWED"
 
+    # 置 KEEP：favorite 保持，且新 status=KEEP 与旧 review_status=KEPT 同源双写
     keep = client.patch(f"/api/v1/images/{image_id}/status", json={"status": "KEEP"}).json()
-    assert keep["favorite"] is False
+    assert keep["status"] == "KEEP"
+    assert keep["review_status"] == "KEPT"
+    assert keep["favorite"] is True, "置 KEEP 不得清除收藏"
 
-    reject = client.patch(f"/api/v1/images/{image_id}/status", json={"status": "REJECT"}).json()
-    assert reject["favorite"] is False
+    # FAVORITE 作为审核状态写入 → 400 IMAGE_STATUS_DEPRECATED
+    resp = client.patch(f"/api/v1/images/{image_id}/status", json={"status": "FAVORITE"})
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "IMAGE_STATUS_DEPRECATED"
 
 
 def test_back_to_new_clears_reviewed_at(client, png_bytes):

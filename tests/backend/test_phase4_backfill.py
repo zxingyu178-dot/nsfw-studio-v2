@@ -120,7 +120,7 @@ def test_v032_database_backfill_and_queued_job_still_runs(settings, monkeypatch)
         _insert_legacy_item(conn, "item_i_1", "job_interrupted", 0, "INTERRUPTED",
                             engine_job_id="comfy_old_1")
 
-    # ===== 2) 升级：0007 + 0008 + 0009 + 0010 + 0011 + 0012 + 0013 + 0014 =====
+    # ===== 2) 升级：0007 + 0008 + 0009 + 0010 + 0011 + 0012 + 0013 + 0014 + 0015 + 0016 + 0017 =====
     monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
     applied = init_database(engine)
     assert [m.migration_id for m in applied] == [
@@ -128,6 +128,7 @@ def test_v032_database_backfill_and_queued_job_still_runs(settings, monkeypatch)
         "0010_image_inputs", "0011_image_import_dedup_unique", "0012_stage_item_reuse_trace",
         "0013_client_request_fingerprint", "0014_prompt_preview_image",
         "0015_image_variant_system", "0016_image_review_status",
+        "0017_image_review_semantics",
     ]
 
     # ===== 3) Stage / StageItem 回填正确 =====
