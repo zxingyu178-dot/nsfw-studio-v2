@@ -308,18 +308,25 @@ export function imageThumbUrl(imageId: string): string {
   return `/api/v1/images/${imageId}/thumbnail`
 }
 
+/** Phase 0.11.1：渐进预览图（长边 1536 WebP，仅下采样）。
+ *  ReviewMode / Lightbox 初次打开先载 preview，放大到 100% 才切换 original content。 */
+export function imagePreviewUrl(imageId: string): string {
+  return `/api/v1/images/${imageId}/preview`
+}
+
 // ===== Phase 2：Job / Queue / Image =====
 export type JobStatus =
   | 'QUEUED' | 'RUNNING' | 'PAUSED' | 'INTERRUPTED' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
 export type ReviewStatus = 'UNREVIEWED' | 'KEPT' | 'REJECTED'
 
 /**
- * Phase 0.11 图片审核状态（新体系，单字段取代旧 review_status + favorite）。
- * NEW=待审（默认）；KEEP=普通保留；FAVORITE=精品素材/封面/Reference；
- * REJECT=废片（不立即删除，经「清理废片」才真删）；ARCHIVED=长期归档。
+ * Phase 0.11.1 图片审核状态（应用层收敛后的语义）。
+ * NEW=待审（默认）；KEEP=普通保留；REJECT=废片（不立即删除，经「清理废片」才真删）；
+ * ARCHIVED=长期归档。
+ * 注意：FAVORITE 不再是审核状态——收藏是独立的 favorite: boolean，可与任意状态共存。
  * 旧 review_status / favorite 字段保留在 DTO 上，不删。
  */
-export type ImageReviewStatus = 'NEW' | 'KEEP' | 'FAVORITE' | 'REJECT' | 'ARCHIVED'
+export type ImageReviewStatus = 'NEW' | 'KEEP' | 'REJECT' | 'ARCHIVED'
 
 /** Phase 0.11 图库排序（GET /api/v1/images?sort=） */
 export type ImageSort = 'created_desc' | 'created_asc' | 'favorite' | 'size'
@@ -333,14 +340,45 @@ export interface ImagePage<T> {
   has_next: boolean
 }
 
-/** Phase 0.11 废片清理：预览（confirm=false）与执行（confirm=true）两种结果 */
+/** Phase 0.11.1 废片清理：被引用保护的图片及其原因摘要 */
+export interface CleanupProtectedItem {
+  image_id: string
+  reasons: string[]
+}
+
+/** Phase 0.11 废片清理：预览（confirm=false）与执行（confirm=true）两种结果。
+ *  预览：candidate=全部 REJECT；deletable=可安全删除；protected=被引用；total_bytes=仅可删项字节。
+ *  执行：deleted_count=实际删除数；只有 deleted_count===1（单图）才允许 UI 移除该图。 */
 export interface CleanupRejectedResult {
   candidate_count?: number
-  total_bytes?: number
+  deletable_count?: number
   protected_count?: number
+  total_bytes?: number
+  protected_items?: CleanupProtectedItem[]
   deleted_count?: number
   deleted_bytes?: number
   failed?: { image_id: string; error: string }[]
+}
+
+/** Phase 0.11.1 按任务聚合的图库分组（GET /images/job-groups 分页项，替代逐 Job summary 的 N+1） */
+export interface ImageJobGroupDTO {
+  job_id: string
+  module_id: string | null
+  created_at: string
+  total: number
+  unreviewed: number
+  kept: number
+  rejected: number
+  favorites: number
+}
+
+/** Phase 0.11.1 缩略图后台回填进度 */
+export interface ThumbnailBackfillStatusDTO {
+  running: boolean
+  done: number
+  total: number
+  failed: number
+  kind: string | null
 }
 
 export interface JobItemDTO {
@@ -581,24 +619,27 @@ export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
   REJECTED: '淘汰',
 }
 
-/** Phase 0.11 新审核状态中文标签 */
+/** Phase 0.11 新审核状态中文标签（收藏不在此列：favorite 是独立 ★ 标记） */
 export const IMAGE_STATUS_LABEL: Record<ImageReviewStatus, string> = {
   NEW: '待审核',
   KEEP: '保留',
-  FAVORITE: '收藏',
   REJECT: '淘汰',
   ARCHIVED: '归档',
 }
 
 /**
- * Phase 0.11：归一化图片展示状态。
- * 优先取新 status 字段；旧数据无 status 时由 review_status / favorite 回推（平滑迁移）。
+ * Phase 0.11.1：归一化图片展示审核状态。
+ * 只依据审核状态字段：优先新 status；缺失时由旧 review_status 回推
+ * （KEPT→KEEP、REJECTED→REJECT、UNREVIEWED→NEW）。
+ * 收藏（favorite）是独立 boolean，绝不再据此返回 FAVORITE 状态。
+ * 兼容历史脏数据：运行时若仍读到 status='FAVORITE'（迁移 0017 前），按 KEEP 展示。
  */
 export function normalizeImageStatus(image: ImageDTO): ImageReviewStatus {
-  if (image.status) return image.status
+  const raw = image.status as string | undefined
+  if (raw === 'FAVORITE') return 'KEEP'
+  if (raw) return raw as ImageReviewStatus
   if (image.review_status === 'KEPT') return 'KEEP'
   if (image.review_status === 'REJECTED') return 'REJECT'
-  if (image.favorite) return 'FAVORITE'
   return 'NEW'
 }
 

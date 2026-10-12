@@ -53,6 +53,7 @@ import type {
   HistoryResponseDTO,
   ImageDTO,
   ImageImportResponseDTO,
+  ImageJobGroupDTO,
   ImagePage,
   ImageProvenanceDTO,
   ImageReferencesDTO,
@@ -60,6 +61,7 @@ import type {
   ImageSort,
   ImageVersionsDTO,
   CleanupRejectedResult,
+  ThumbnailBackfillStatusDTO,
   JobDTO,
   JobEventDTO,
   ListResponse,
@@ -326,9 +328,13 @@ export const imageApi = {
   favorite(id: string, favorite: boolean): Promise<ImageDTO> {
     return request(`/api/v1/images/${id}/favorite`, jsonInit('PATCH', { favorite }))
   },
-  /** Phase 0.11：更新单张图片审核状态（NEW/KEEP/FAVORITE/REJECT/ARCHIVED） */
+  /** Phase 0.11.1：更新单张图片审核状态（仅 NEW/KEEP/REJECT/ARCHIVED；收藏请用 favorite()） */
   setStatus(id: string, body: { status: ImageReviewStatus; note?: string }): Promise<ImageDTO> {
     return request(`/api/v1/images/${id}/status`, jsonInit('PATCH', body))
+  },
+  /** Phase 0.11.1：渐进预览图 URL（长边 1536 WebP）。供 <img src> / Lightbox / ReviewMode 首屏。 */
+  preview(id: string): string {
+    return `/api/v1/images/${id}/preview`
   },
   /** Phase 0.11：批量审核（Review Mode / 多选） */
   batchStatus(body: {
@@ -342,6 +348,20 @@ export const imageApi = {
    *  可带 image_ids 清理指定图（单图删除也走这里，复用引用保护）。 */
   cleanupRejected(body: { image_ids?: string[]; confirm: boolean }): Promise<CleanupRejectedResult> {
     return request('/api/v1/images/cleanup-rejected', jsonInit('POST', body))
+  },
+  /** Phase 0.11.1：按任务聚合分页（替代逐 Job summary 的 N+1；可翻到早期任务） */
+  jobGroups(params: { page?: number; page_size?: number } = {}): Promise<ImagePage<ImageJobGroupDTO>> {
+    return request(`/api/v1/images/job-groups${buildQuery(params)}`)
+  },
+  /** Phase 0.11.1：后台回填历史缩略图（单 worker / 低并发，不占 GPU） */
+  startBackfill(body: { kind?: string; limit?: number } = {}): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill', jsonInit('POST', body))
+  },
+  backfillStatus(): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill/status')
+  },
+  stopBackfill(): Promise<ThumbnailBackfillStatusDTO> {
+    return request('/api/v1/images/thumbnails/backfill/stop', jsonInit('POST', {}))
   },
   workbench(id: string): Promise<{ image_id: string; seed: number | null; snapshot: WorkbenchSnapshot }> {
     return request(`/api/v1/images/${id}/workbench`)
