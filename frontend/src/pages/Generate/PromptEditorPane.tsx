@@ -16,6 +16,8 @@ import {
   applyAssetToSlot,
   clearAssetFromSlot,
   clearInputImage,
+  inputRoleLabel,
+  requiredInputSlot,
   setFullPrompt,
   setInputImage,
   setNegativePrompt,
@@ -119,13 +121,27 @@ export function PromptEditorPane() {
         />
       }
     >
-      {/* ===== 输入图片（§七：独立区域，仅“图片生成”模式） ===== */}
-      {state.mode === 'image' && (
+      {/* ===== 输入图片（§七：独立区域，仅“图片生成”模式）。
+          Phase 0.12 任务 11：标题随 Primary Module input_slots 动态——
+          源图 / 参考图 / 人脸参考图，并展示 capability description。 */}
+      {state.mode === 'image' && (() => {
+        const primaryModuleId = state.workflowModules[0]?.module_id
+        const primaryCapabilities = state.moduleCatalog.find((m) => m.module_id === primaryModuleId)
+        const required = requiredInputSlot(primaryCapabilities)
+        const inputTitle = required ? inputRoleLabel(required.role) : '输入图片'
+        const mismatch = inputImage && required && inputImage.role !== required.role
+        return (
         <section className="wb-input" aria-label="输入图片">
           <div className="wb-input__label-row">
-            <span className="ds-field__label">输入图片</span>
+            <span className="ds-field__label">{inputTitle}</span>
             <span className="muted">（{inputImage ? '1 / 1' : '0 / 1'}）</span>
           </div>
+          {required?.description && <p className="muted wb-input__desc">{required.description}</p>}
+          {mismatch && (
+            <p className="ds-notice ds-notice--warning" role="alert">
+              当前工作流需要「{inputRoleLabel(required.role)}」，当前输入为「{inputRoleLabel(inputImage.role)}」，已自动重映射；如不符请重新选择。
+            </p>
+          )}
           {inputImage ? (
             <div className="wb-input__body">
               {inputImage.missing ? (
@@ -158,7 +174,8 @@ export function PromptEditorPane() {
             onChange={(event) => void handleUploadFile(event)}
           />
         </section>
-      )}
+        )
+      })()}
 
       {structuredEditable ? (
         <div className="wb-structured">

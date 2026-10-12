@@ -115,9 +115,62 @@ export function isImageStartModule(m: ModuleCapabilitiesDTO): boolean {
   return true
 }
 
-/** Task7/§21：可用的图片条件模块（能力判断 isImageStartModule） */
+/**
+ * Phase 0.12 任务 11：模块是否声明了需要一张图片作为输入
+ * （source / reference / face_reference）。与 allowed_job_kinds 无关——
+ * reference_generate 允许 generate（含 reference 输入），同样是合法的图片生成 Primary。
+ */
+export function declaresImageInput(m: ModuleCapabilitiesDTO): boolean {
+  return (m.input_slots ?? []).some(
+    (slot) => slot.role === 'source' || slot.role === 'reference' || slot.role === 'face_reference',
+  )
+}
+
+export interface RequiredInputSlot {
+  role: 'source' | 'reference' | 'face_reference'
+  required: boolean
+  max_count: number
+  description?: string
+}
+
+/**
+ * Phase 0.12 任务 11：从模块 input_slots 读取 Primary Module 要求的输入图片角色。
+ * - img2img → source；reference_generate → reference；未来人脸参考 → face_reference；
+ * - 文生图（basic_generate，无 input_slots）→ null（不需要输入图）。
+ * 左栏输入标题 / setInputImage / 切模块重映射全部以此为唯一依据，
+ * 不再把 role 硬编码为 source。
+ */
+export function requiredInputSlot(
+  capabilities: ModuleCapabilitiesDTO | null | undefined,
+): RequiredInputSlot | null {
+  if (!capabilities) return null
+  const slot = (capabilities.input_slots ?? []).find(
+    (candidate) =>
+      candidate.role === 'source' || candidate.role === 'reference' || candidate.role === 'face_reference',
+  )
+  if (!slot) return null
+  return {
+    role: slot.role as RequiredInputSlot['role'],
+    required: slot.required,
+    max_count: slot.max_count,
+    description: slot.description,
+  }
+}
+
+/** 角色 → 左栏输入标题文案（源图 / 参考图 / 人脸参考图）。 */
+export function inputRoleLabel(role: 'source' | 'reference' | 'face_reference'): string {
+  if (role === 'reference') return '参考图'
+  if (role === 'face_reference') return '人脸参考图'
+  return '输入图片（源图）'
+}
+
+/** Task7/§21：可用的图片条件 Primary（能力判断）。
+ *  Phase 0.12 任务 11：同时纳入声明了图片输入 slot 的模块（reference_generate 等），
+ *  使 Recipe / History / 图库恢复出的 reference Primary 不被 normalize 静默替换。 */
 export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
-  return catalog.filter(isImageStartModule).map((module) => module.module_id)
+  return catalog
+    .filter((module) => module.available === true && (isImageStartModule(module) || declaresImageInput(module)))
+    .map((module) => module.module_id)
 }
 
 /** Task6：primary module 是否消费输入图（图片生成模式提交前置条件） */
@@ -328,19 +381,38 @@ export function setPrimaryModuleConfig(patch: Record<string, unknown>): void {
  * 切换 Primary Module（Phase 6 Task8：轻量选择器）：
  * 新选择为裸 {module_id}（身份由后端按当前默认版本解析）；
  * 非 Primary 模块（高清等）保持原顺序与完整身份。
+ *
+ * Phase 0.12 任务 11：切换时按新模块 input_slots 重映射已有输入图的 role——
+ * 单张输入图自动 source ↔ reference 迁移，不静默丢图；
+ * 若新模块不再接受输入图（required=null），保留图片不删除（由左栏标题明确提示）。
  */
 export function setPrimaryModule(moduleId: string): void {
   const [, ...rest] = state.workflowModules
-  setState({ workflowModules: [{ module_id: moduleId }, ...rest].map((module) => ({ ...module })) })
+  const nextModule = state.moduleCatalog.find((module) => module.module_id === moduleId)
+  const required = requiredInputSlot(nextModule)
+  let inputImages = state.inputImages
+  if (required && inputImages.length > 0) {
+    inputImages = [{ ...inputImages[0], role: required.role }]
+  }
+  setState({
+    workflowModules: [{ module_id: moduleId }, ...rest].map((module) => ({ ...module })),
+    inputImages,
+  })
 }
 
-/** 设置输入图片（§七：max=1，选择新图即替换；来源必须是 Gallery image_id） */
+/** 设置输入图片（§七：max=1，选择新图即替换；来源必须是 Gallery image_id）。
+ *  Phase 0.12 任务 11：role 不再硬编码 source——先按 image 模式归一化 Primary Module，
+ *  再按该 Primary 的 input_slots 读取 role（img2img=source / reference_generate=reference）。 */
 export function setInputImage(imageId: string): void {
+  // 切到图片生成 → Primary Module 同步为可用图片模块（Task6）
+  const modules = normalizeModules(state.workflowModules, 'image', state.moduleCatalog)
+  const resolvedPrimary = modules[0]?.module_id
+  const resolvedCap = state.moduleCatalog.find((module) => module.module_id === resolvedPrimary)
+  const role = requiredInputSlot(resolvedCap)?.role ?? 'source'
   setState({
-    inputImages: [{ role: 'source', image_id: imageId }],
+    inputImages: [{ role, image_id: imageId }],
     mode: 'image',
-    // 切到图片生成 → Primary Module 同步为可用图片模块（Task6）
-    workflowModules: normalizeModules(state.workflowModules, 'image', state.moduleCatalog),
+    workflowModules: modules,
   })
 }
 

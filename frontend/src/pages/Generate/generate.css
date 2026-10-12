@@ -436,3 +436,4 @@
 }
 
 .wb-asset-more { display: flex; justify-content: center; margin-top: var(--space-3); }
+.wb-input__desc { margin: 0 0 var(--space-2); font-size: var(--text-xs); }
