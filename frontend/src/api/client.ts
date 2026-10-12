@@ -266,6 +266,10 @@ export const jobApi = {
   resumeQueue(): Promise<QueueDTO> {
     return request('/api/v1/queue/resume', jsonInit('POST', {}))
   },
+  /** v0.13.2：清理跨重启遗留的陈旧任务（QUEUED/RUNNING/PAUSED/INTERRUPTED → CANCELLED，不删图） */
+  clearStale(): Promise<{ cancelled: number; job_ids: string[] }> {
+    return request('/api/v1/queue/clear-stale', jsonInit('POST', {}))
+  },
   engineStatus(): Promise<EngineStatusDTO> {
     return request('/api/v1/engine/status')
   },

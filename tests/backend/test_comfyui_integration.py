@@ -22,6 +22,10 @@ _COMFY_URL = "http://127.0.0.1:8188"
 
 
 def _comfy_available() -> bool:
+    import os
+    # Hermetic 模式（tests/conftest.py 置位）：即使本机 8188 在线也绝不跑真实 POST /prompt
+    if os.environ.get("NSFW_STUDIO_HERMETIC"):
+        return False
     try:
         adapter = ComfyUIAdapter({}, {"url": _COMFY_URL})
         return asyncio.run(adapter.health()).online

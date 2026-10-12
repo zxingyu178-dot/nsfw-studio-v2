@@ -197,7 +197,7 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
     header = (
       <div className="ep__title">
         <span className="ep__dot ep__dot--ok" aria-hidden="true" />
-        已运行
+        运行中 · 本程序托管
       </div>
     )
     note = <div className="ep__sub">ComfyUI · {port}</div>
@@ -236,10 +236,16 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
       </div>
     )
   } else if (state === 'STARTING') {
+    // 冷启是正常过渡态：中性文案 + 后端 detail（冷启约数分钟），绝不报"启动失败"
     header = (
       <div className="ep__title">
         <span className="ep__dot ep__dot--busy" aria-hidden="true" />
-        正在启动…
+        引擎启动中
+      </div>
+    )
+    note = (
+      <div className="ep__note">
+        {runtime?.detail ?? '冷启约需数分钟，可在后台等待，无需重复点击启动。'}
       </div>
     )
     actions = (
@@ -270,22 +276,30 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
     header = (
       <div className="ep__title">
         <span className="ep__dot ep__dot--ok" aria-hidden="true" />
-        外部 ComfyUI · {port}
+        运行中 · 外部实例
       </div>
     )
     note = (
-      <div className="ep__note">
-        当前 ComfyUI 不是由 Studio 启动，不能从这里停止或重启。
+      <div
+        className="ep__note"
+        title="外部启动的 ComfyUI，Studio 不控制其启停"
+      >
+        当前 ComfyUI 不是由 Studio 启动（{port}），Studio 不控制其停止/重启，也不会重复拉起。
       </div>
     )
   } else if (state === 'PORT_CONFLICT') {
     header = (
       <div className="ep__title ep__title--warn">
         <span className="ep__dot ep__dot--warn" aria-hidden="true" />
-        端口冲突
+        端口被占用
       </div>
     )
-    note = <div className="ep__sub">{port} 已被其他程序占用</div>
+    note = (
+      <div className="ep__note">
+        {port} 已被非 ComfyUI 程序占用，请释放该端口后再启动引擎。
+        {runtime?.detail ? `（${runtime.detail}）` : ''}
+      </div>
+    )
   } else if (state === 'ERROR') {
     header = (
       <div className="ep__title ep__title--warn">
@@ -293,7 +307,12 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
         启动失败
       </div>
     )
-    note = runtime?.detail ? <div className="ep__note">{runtime.detail}</div> : null
+    note = (
+      <div className="ep__note">
+        {runtime?.detail ?? '受管 ComfyUI 启动失败'}
+        {runtime?.log_location ? ` 日志：${runtime.log_location}` : ''}
+      </div>
+    )
     actions = (
       <div className="ep__actions">
         <Button variant="primary" size="sm" loading={acting} onClick={() => void handleStart()}>

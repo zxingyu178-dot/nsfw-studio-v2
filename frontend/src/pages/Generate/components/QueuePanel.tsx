@@ -1,7 +1,8 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import { Button, StatusBadge } from '../../../components/ui'
+import { Button, ConfirmModal, StatusBadge } from '../../../components/ui'
 import {
   cancelJob,
+  clearStaleJobs,
   pauseJob,
   pauseQueue,
   reorderQueue,
@@ -14,15 +15,23 @@ import { MODULE_LABEL, shortJobId, type JobDTO } from '../../../types/workbench'
 /**
  * 队列面板（规范 §五十四）：队列标题 + 全局暂停/继续 + 自动暂停提示 + 固定高度内部滚动列表。
  * 拖拽排序（draggable + DnD handlers）、优先/暂停/取消与队列暂停/继续全部保留。
- * 从 SettingsPane.tsx 纯拆分（Phase 0.12 任务 9：只重构，不改行为 / API）。
+ * v0.13.2：新增"清理陈旧任务"（跨重启遗留 QUEUED/RUNNING/PAUSED/INTERRUPTED → CANCELLED，不删图）。
  */
 export function QueuePanel() {
   const store = useJobStore()
   const [dragJobId, setDragJobId] = useState<string | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearNotice, setClearNotice] = useState<string | null>(null)
 
   const queued = store.queue?.queued ?? []
   const paused = store.queue?.paused ?? []
   const queueHasActivity = Boolean(store.queue?.running) || queued.length > 0
+
+  async function handleClearStale(): Promise<void> {
+    setConfirmClear(false)
+    const n = await clearStaleJobs()
+    setClearNotice(n > 0 ? `已清理 ${n} 个陈旧任务` : '没有需要清理的陈旧任务')
+  }
 
   function moveBefore(sourceId: string, targetId: string): void {
     const ids = (store.queue?.queued ?? []).map((item) => item.id)
@@ -49,18 +58,33 @@ export function QueuePanel() {
             · {queued.length + paused.length}
           </span>
         </div>
-        {queueHasActivity && (
-          store.queue?.worker.queue_paused ? (
-            <Button size="xs" variant="primary" onClick={() => void resumeQueue()}>
-              继续队列
-            </Button>
-          ) : (
-            <Button size="xs" variant="ghost" onClick={() => void pauseQueue()}>
-              暂停队列
-            </Button>
-          )
-        )}
+        <div className="wb-queue__head-right">
+          <Button
+            size="xs"
+            variant="ghost"
+            title="把上次未正常结束的排队/运行中任务标记为已中断（不会删除已生成图片）"
+            onClick={() => setConfirmClear(true)}
+          >
+            清理陈旧任务
+          </Button>
+          {queueHasActivity && (
+            store.queue?.worker.queue_paused ? (
+              <Button size="xs" variant="primary" onClick={() => void resumeQueue()}>
+                继续队列
+              </Button>
+            ) : (
+              <Button size="xs" variant="ghost" onClick={() => void pauseQueue()}>
+                暂停队列
+              </Button>
+            )
+          )}
+        </div>
       </div>
+      {clearNotice && (
+        <p className="muted" role="status" data-testid="clear-stale-notice" onClick={() => setClearNotice(null)}>
+          {clearNotice}
+        </p>
+      )}
       {store.queue?.worker.queue_paused && (
         <div className="ds-notice ds-notice--warning" role="alert">
           <p>队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}</p>
@@ -110,6 +134,15 @@ export function QueuePanel() {
           />
         ))}
       </ul>
+      <ConfirmModal
+        open={confirmClear}
+        title="清理陈旧任务？"
+        message="会把上次未正常结束的排队中 / 运行中 / 已暂停任务标记为已中断，不会删除已生成的图片。"
+        confirmText="清理"
+        cancelText="取消"
+        onConfirm={() => void handleClearStale()}
+        onCancel={() => setConfirmClear(false)}
+      />
     </section>
   )
 }

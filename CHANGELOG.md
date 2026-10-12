@@ -2,6 +2,48 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.13.2] — 2026-10-12
+
+> 真机“一键启动生图引擎”闭环补丁，并修复一次线上队列事故暴露的根因（patch）。
+> 不新增模型 / 节点 / AI 能力；无数据库迁移（沿用 0018）。
+
+### Fixed
+
+- **引擎一键启动健壮化**：进程归属改为跟随真正 LISTEN 8188 的进程，可跨 uv
+  创建的 venv“6MB 启动桩 → 基础解释器”重定向（无论监听者在受管进程树第几层、
+  是否为 uv 基础解释器），修复冷启后被误判 `RUNNING_EXTERNAL`(owned=false)；就绪
+  以 HTTP `/system_stats` 200 为充分条件，容忍启动期监听 pid 变化与短暂连接拒绝，
+  冷启窗口内状态为 `STARTING`（“引擎启动中（冷启约数分钟，可后台等待）”），不再
+  过早弹“启动失败”；探活恢复后状态自动回在线；停止时终止实际监听进程整棵树
+  （含 uv 子孙）并复核端口释放；外部已健康的 ComfyUI 识别为 `RUNNING_EXTERNAL`，
+  绝不重复拉起、也不可由 Studio 停止。默认健康等待 240s → 300s（可配
+  `engine_runtime.health_timeout_seconds`）。
+- **启动不再自动重放陈旧任务（事故根因）**：跨进程重启遗留的
+  QUEUED/RUNNING/PAUSED 任务在启动时一律标记为 INTERRUPTED，不再自动重新提交
+  引擎，需用户在界面显式续跑 / 重试；新增“清理陈旧任务”入口
+  （`POST /api/v1/queue/clear-stale`，仅置状态、不删图）。
+- **卡死收敛**：item 在引擎 running 但 progress 持续为 0 超过可配
+  `engine_runtime.stall_timeout_seconds`（默认 600s）判 `ENGINE_STALLED` 失败，
+  best-effort `/interrupt` 释放 worker 并推进队列头，禁止无限轮询 `/history`
+  阻塞后续；prompt 从队列与历史同时消失同样判失败。
+- **端口占用显式化**：启动器 `launch_studio` 预检 8000，被非本应用程序占用时
+  打印占用 PID / 程序 / 命令行并非零退出，不再静默端口错乱；本应用已在运行时
+  仅打开浏览器。
+- **前端**：引擎弹泡 STARTING / 托管 / 外部 / 端口冲突中文态收敛（外部实例禁用
+  停止 / 重启）；队列面板新增“清理陈旧任务”按钮（二次确认、明确不删图）；
+  `ENGINE_STALLED` 给出可读中文文案。
+- **测试 hermetic 护栏**：后端测试全程禁止连接真实 8188/8000/8767（httpx send
+  拦截 + 真机集成测试强制 skip），杜绝测试向真机引擎提交 prompt。
+
+### Notes
+
+- 真机确认所谓“re-exec 到 uv python”实为 uv 0.12 创建的 Windows venv“启动桩 →
+  基础解释器”正常重定向（`pyvenv.cfg` 的 home 指向 uv cpython），并非
+  comfy-aimdo / comfy-kitchen 等原生节点 re-exec；故保持默认 venv 解释器，归属 /
+  健康逻辑改为跨“桩 → base”跟随真实监听者。
+- ComfyUI 0.37 在当前 torch cu128 下仅 eager、优化 CUDA 后端关闭（日志提示需
+  cu130+）。是否升级 torch cu130 属较大环境变更，本补丁不执行，另行评估交用户决定。
+
 ## [0.13.1] — 2026-10-12
 
 > 真机日用反馈补丁（patch）。不新增模型 / 节点 / AI 能力；无数据库迁移（沿用 0018）。

@@ -85,6 +85,7 @@ async def lifespan(application: FastAPI):
         input_loader=_make_input_loader(session_factory, storage),
         poll_interval_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("worker_poll_interval_ms", 300)),
         engine_poll_ms=int(((settings.workflow.raw or {}).get("engine") or {}).get("options", {}).get("engine_poll_ms", 200)),
+        stall_timeout_seconds=float((settings.engine_runtime or {}).get("stall_timeout_seconds", 600.0)),
     )
 
     application.state.engine = engine

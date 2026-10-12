@@ -13,6 +13,7 @@ import {
   Tabs,
 } from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
+import { jobErrorText } from '../../utils/jobProgress'
 import { useInfiniteList } from './useInfiniteList'
 import {
   HISTORY_BUCKET_LABEL,
@@ -342,7 +343,7 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
         {job.error_message && (
           <>
             <dt>错误</dt>
-            <dd>{job.error_type}：{job.error_message}</dd>
+            <dd>{jobErrorText(job.error_type, job.error_message)}</dd>
           </>
         )}
       </dl>
