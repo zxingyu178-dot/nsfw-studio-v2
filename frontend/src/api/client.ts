@@ -5,11 +5,14 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 export class ApiRequestError extends Error {
   readonly code: string
   readonly status: number
+  /** 结构化错误详情（后端 error.details；桌面 8000 当前多数不回传，有则用） */
+  readonly details: unknown
 
-  constructor(code: string, message: string, status: number) {
+  constructor(code: string, message: string, status: number, details?: unknown) {
     super(message)
     this.code = code
     this.status = status
+    this.details = details
     this.name = 'ApiRequestError'
   }
 }
@@ -19,16 +22,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let code = `HTTP_${response.status}`
     let message = `请求失败（${response.status}）`
+    let details: unknown
     try {
-      const body = (await response.json()) as { error?: { code?: string; message?: string } }
+      const body = (await response.json()) as {
+        error?: { code?: string; message?: string; details?: unknown }
+      }
       if (body.error) {
         code = body.error.code ?? code
         message = body.error.message ?? message
+        details = body.error.details
       }
     } catch {
       // 非 JSON 错误体，保留默认信息
     }
-    throw new ApiRequestError(code, message, response.status)
+    throw new ApiRequestError(code, message, response.status, details)
   }
   return (await response.json()) as T
 }
@@ -450,6 +457,166 @@ export function subscribeJobEvents(
 export const systemApi = {
   status(): Promise<SystemStatus> {
     return request('/api/v1/system/status')
+  },
+}
+
+// ===== Mobile Review Bridge（Phase 0.13：局域网手机审核桥，独立 8767） =====
+/** Bridge 受管运行时状态机（与后端 MobileReviewRuntimeService 对齐） */
+export type MobileReviewRuntimeState =
+  | 'STOPPED'
+  | 'STARTING'
+  | 'RUNNING'
+  | 'STOPPING'
+  | 'PORT_CONFLICT'
+  | 'ERROR'
+
+export interface MobileReviewRuntimeDTO {
+  state: MobileReviewRuntimeState
+  host: string
+  port: number
+  owned: boolean
+  pid: number | null
+  parent_pid: number | null
+  started_at: string | null
+  detail: string
+  log_location: string | null
+  health: Record<string, unknown>
+}
+
+/** POST /mobile-review/pairing/code 返回：6 位一次性码 + 有效期秒数（后端固定 600s） */
+export interface MobilePairingCodeDTO {
+  code: string
+  expires_in_seconds: number
+}
+
+/** 已配对设备（桌面管理视图；token 绝不下发） */
+export interface PairedDeviceDTO {
+  device_id: string
+  installation_id: string
+  name: string
+  paired_at: string
+  last_seen_at?: string | null
+  revoked?: boolean
+}
+
+/**
+ * 手机审核桥桌面管理 API（全部走 8000 loopback，复用 EngineRuntime 同款启停语义，不写第二套 runtime）。
+ * 注意：设备列表 / 撤销设备依赖 /mobile-review/devices 管理端点；后端未就绪时本组件优雅降级为提示。
+ */
+export const mobileReviewApi = {
+  runtime(): Promise<MobileReviewRuntimeDTO> {
+    return request('/api/v1/mobile-review/runtime')
+  },
+  start(): Promise<MobileReviewRuntimeDTO> {
+    return request('/api/v1/mobile-review/runtime/start', jsonInit('POST', {}))
+  },
+  stop(): Promise<MobileReviewRuntimeDTO> {
+    return request('/api/v1/mobile-review/runtime/stop', jsonInit('POST', {}))
+  },
+  restart(): Promise<MobileReviewRuntimeDTO> {
+    return request('/api/v1/mobile-review/runtime/restart', jsonInit('POST', {}))
+  },
+  /** 生成 6 位一次性配对码（明文只返回这一次；10 分钟有效） */
+  createPairingCode(): Promise<MobilePairingCodeDTO> {
+    return request('/api/v1/mobile-review/pairing/code', jsonInit('POST', {}))
+  },
+  /** 已配对设备列表（桌面 loopback 管理端点） */
+  devices(): Promise<PairedDeviceDTO[]> {
+    return request('/api/v1/mobile-review/devices')
+  },
+  /** 吊销设备 token（此后该手机 Bearer 立即失效） */
+  revokeDevice(deviceId: string): Promise<unknown> {
+    return request(`/api/v1/mobile-review/devices/${deviceId}/revoke`, jsonInit('POST', {}))
+  },
+}
+
+// ===== 冻结式审核会话（Phase 0.13：桌面 / 手机共用 ImageReviewSessionService） =====
+/** SessionSummary（/review/* 无 envelope，直出） */
+export interface ReviewSessionSummaryDTO {
+  id: string
+  status: 'ACTIVE' | 'COMPLETED' | string
+  total_count: number
+  seen_count: number
+  current_index: number
+  created_at: string
+  updated_at: string
+  filter: Record<string, unknown>
+}
+
+/** MobileImageSummary DTO：字段与手机端一致（image_id / is_favorite，不是 id / favorite） */
+export interface ReviewQueueImageDTO {
+  image_id: string
+  width: number
+  height: number
+  created_at: string
+  updated_at: string
+  status: ImageReviewStatus
+  is_favorite: boolean
+  kind: string
+  job_id: string | null
+  seed: number | null
+  thumbnail_url?: string
+  preview_url?: string
+  original_url?: string
+}
+
+export interface ReviewQueueItemDTO {
+  /** 冻结的绝对队列下标（不随打标压缩） */
+  index: number
+  seen: boolean
+  image: ReviewQueueImageDTO
+}
+
+export interface ReviewQueuePageDTO {
+  items: ReviewQueueItemDTO[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface ReviewDecisionResultDTO {
+  session: ReviewSessionSummaryDTO
+  item_index: number
+  image: ReviewQueueImageDTO
+}
+
+export interface ReviewSessionCompleteDTO extends ReviewSessionSummaryDTO {
+  completed: boolean
+  remaining_count: number
+}
+
+export const reviewSessionApi = {
+  /** 创建冻结审核会话（filter 默认 status=NEW, created_desc） */
+  createSession(filter?: Record<string, unknown>): Promise<ReviewSessionSummaryDTO> {
+    return request('/api/v1/review/sessions', jsonInit('POST', { filter: filter ?? null }))
+  },
+  /** 恢复最近会话（不重建；无会话 404 REVIEW_SESSION_NOT_FOUND） */
+  latestSession(): Promise<ReviewSessionSummaryDTO> {
+    return request('/api/v1/review/sessions/latest')
+  },
+  queuePage(sessionId: string, page: number, pageSize = 50): Promise<ReviewQueuePageDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/queue${buildQuery({ page, page_size: pageSize })}`)
+  },
+  /** 一次 decision（同事务）：action=KEEP/REJECT/RESET；favorite 独立；乐观锁冲突 409 REVIEW_CONFLICT */
+  decide(
+    sessionId: string,
+    body: {
+      item_index: number
+      action?: 'KEEP' | 'REJECT' | 'RESET'
+      favorite?: boolean
+      expected_status?: string
+      expected_updated_at?: string
+    },
+  ): Promise<ReviewDecisionResultDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/decision`, jsonInit('POST', body))
+  },
+  /** 记录浏览位置（断点续看） */
+  reportPosition(sessionId: string, itemIndex: number): Promise<ReviewSessionSummaryDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/position`, jsonInit('POST', { item_index: itemIndex }))
+  },
+  /** 标记完成（仍有未审则返回 remaining_count，不强完成） */
+  complete(sessionId: string): Promise<ReviewSessionCompleteDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/complete`, jsonInit('POST', {}))
   },
 }
 
