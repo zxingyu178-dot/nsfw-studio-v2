@@ -60,3 +60,10 @@
 .lb-side .ds-notice {
   margin-top: 8px;
 }
+
+/* Phase 0.12：危险操作分组——左侧红色细条区分 */
+.lb-side__block--danger {
+  border-left: 3px solid var(--danger);
+  padding-left: 10px;
+  margin-left: -10px;
+}

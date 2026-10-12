@@ -360,6 +360,18 @@ export interface CleanupRejectedResult {
   failed?: { image_id: string; error: string }[]
 }
 
+/** Phase 0.12 全局图库统计（GET /images/stats；过滤口径与 GET /images 完全一致）。
+ *  各状态计数与收藏计数都是命中过滤条件后的**全局**数字（修正"分母=server total、分子=本地已加载"的假全局）。
+ *  favorites 是 favorite=true 的独立交叉计数，不并入任一审核状态。 */
+export interface ImageStatsResponse {
+  total: number
+  new: number
+  keep: number
+  reject: number
+  archived: number
+  favorites: number
+}
+
 /** Phase 0.11.1 按任务聚合的图库分组（GET /images/job-groups 分页项，替代逐 Job summary 的 N+1） */
 export interface ImageJobGroupDTO {
   job_id: string
@@ -545,6 +557,25 @@ export interface EngineRuntimeDTO {
   }
 }
 
+/** Phase 0.12 系统状态摘要（GET /api/v1/system/status；Settings 系统维护中心只读数据）。
+ *  绝不包含敏感配置内容；engine_runtime 复用现有 EngineRuntimeDTO 快照。 */
+export interface SystemStatus {
+  app_version: string
+  data_root: string
+  database_path: string
+  /** studio.db 文件字节数 */
+  database_size: number
+  /** DataRoot 所在磁盘总字节 */
+  disk_total: number
+  /** DataRoot 所在磁盘可用字节 */
+  disk_free: number
+  image_count: number
+  thumbnail_count: number
+  preview_count: number
+  latest_migration: string | null
+  engine_runtime: EngineRuntimeDTO
+}
+
 export interface JobEventDTO {
   type: string
   job_id: string
@@ -591,6 +622,9 @@ export interface ImageProvenanceDTO {
   workflow_hash: string | null
   binding_hash: string | null
   seed: number | null
+  /** Phase 0.12：工作台最初从哪个 Recipe 打开（轻量 provenance；缺省/null = 非 Recipe 来源） */
+  source_recipe_id?: string | null
+  source_recipe_version_id?: string | null
 }
 
 // ===== Phase 2 展示标签 =====

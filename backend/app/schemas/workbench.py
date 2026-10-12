@@ -116,6 +116,12 @@ class WorkbenchSnapshotModel(BaseModel):
     workflow_modules: list[WorkflowModuleRefModel] = Field(default_factory=list)
     source_prompt_id: str | None = None
     source_prompt_version_id: str | None = None
+    # Phase 0.12 Task12：轻量 Image Provenance —— 工作台最初从哪个 Recipe 打开。
+    # 语义为"最初来源提示"（非永久强绑定）：打开后用户可任意改 Prompt/参数再生成；
+    # Job 冻结 snapshot 时自然保留，经 Image→Job.workbench_snapshot 可读回。
+    # None = 非 Recipe 来源（前端 Lightbox 隐藏 Recipe 行）。
+    source_recipe_id: str | None = None
+    source_recipe_version_id: str | None = None
 
 
 def structured_model_from_json(raw: str | None) -> StructuredPromptModel:

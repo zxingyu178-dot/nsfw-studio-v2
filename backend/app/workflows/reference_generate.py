@@ -111,6 +111,9 @@ class ReferenceGenerateModule(WorkflowModule):
                 InputSlotSpec("reference", required=True, max_count=1,
                               description="参考图（人物/主体）；可直接使用 Face Asset 的参考图"),
             ),
+            # Phase 0.12 Task11：Reference 冷启动曾显著更久，声明推荐超时 7200s。
+            # QueueWorker 据此解析（不按 module_id 硬编码），无 Stage override 时采用此值。
+            recommended_timeout_seconds=7200.0,
         )
 
     # ===== config（模块参数唯一事实源） =====

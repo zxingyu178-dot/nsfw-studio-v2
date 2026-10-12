@@ -14,6 +14,7 @@ import {
   Textarea,
 } from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
+import { useInfiniteList } from './useInfiniteList'
 import {
   STRUCTURED_FIELDS,
   emptyStructured,
@@ -29,27 +30,32 @@ import {
 /** 我的 Prompt（§三十八-§四十、§四十九、§五十四、§五十五）。 */
 export function PromptTab() {
   const navigate = useNavigate()
-  const [items, setItems] = useState<PromptDTO[]>([])
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{ open: boolean; prompt: PromptDTO | null }>({ open: false, prompt: null })
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    promptApi
-      .list({ search: search.trim() || undefined, archived: showArchived ? null : false })
-      .then((page) => setItems(page.items))
-      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
-  }, [search, showArchived])
+  // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多（数据全可达）。
+  const fetcher = useCallback(
+    (limit: number, offset: number) =>
+      promptApi.list({
+        search: search.trim() || undefined,
+        archived: showArchived ? null : false,
+        limit,
+        offset,
+      }),
+    [search, showArchived],
+  )
 
-  useEffect(() => {
-    const timer = window.setTimeout(load, 250)
-    return () => window.clearTimeout(timer)
-  }, [load])
+  const {
+    items,
+    total,
+    hasMore,
+    initialLoading,
+    loadingMore,
+    error,
+    reload,
+    loadMore,
+  } = useInfiniteList<PromptDTO>({ pageSize: 50, fetcher, reloadDeps: [fetcher] })
 
   function openInWorkbench(prompt: PromptDTO): void {
     setDrawer({ open: false, prompt: null })
@@ -75,9 +81,9 @@ export function PromptTab() {
         </Button>
       </div>
 
-      {loading && <p className="muted">加载中…</p>}
+      {initialLoading && <p className="muted">加载中…</p>}
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
-      {!loading && !error && items.length === 0 && (
+      {!initialLoading && !error && items.length === 0 && (
         <div className="pp-empty">
           <h2 className="pp-empty__title">还没有 Prompt</h2>
           <p className="muted">点击“新建 Prompt”，或在工作台保存当前配置。</p>
@@ -90,11 +96,24 @@ export function PromptTab() {
         ))}
       </div>
 
+      {!initialLoading && !error && items.length > 0 && (
+        <div className="pp-loadmore">
+          {hasMore ? (
+            <Button variant="secondary" loading={loadingMore} disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </Button>
+          ) : (
+            <span className="muted">已加载全部 {total} 条</span>
+          )}
+          <span className="muted">已加载 {items.length} / 共 {total}</span>
+        </div>
+      )}
+
       {drawer.open && (
         <PromptEditorDrawer
           prompt={drawer.prompt}
           onClose={() => setDrawer({ open: false, prompt: null })}
-          onChanged={load}
+          onChanged={reload}
           onOpenInWorkbench={openInWorkbench}
         />
       )}

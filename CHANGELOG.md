@@ -2,6 +2,68 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.12.0] — 2026-10-12
+
+> Phase 0.12 — Product UX & Existing Capability Closure：产品体验收口、UI 体系修复、
+> 现有能力补齐。**不新增模型 / 节点 / AI 能力**。无数据库迁移（沿用 0017）。
+
+### Added
+
+- **全局统计接口** `GET /api/v1/images/stats`：与图库同口径过滤（job_id / status /
+  favorite / search / 日期等），服务端单行聚合返回 `{total,new,keep,reject,archived,
+  favorites}`，修正此前“分母为服务端总数、分子为本地已加载列表”的假全局统计。
+- **系统状态接口** `GET /api/v1/system/status`：只读返回 app_version / data_root /
+  database_path / database_size / disk_total / disk_free / image_count /
+  thumbnail_count / preview_count / latest_migration / engine_runtime，不泄露敏感配置。
+- **模块执行超时策略**：`ModuleCapabilities.recommended_timeout_seconds`（不对前端
+  暴露），QueueWorker 按“Stage 显式 override > 模块推荐 > 全局 1800s”三级解析，
+  reference_generate 推荐 7200s；移除按 module_id 的硬编码 if。
+- **工作台 Recipe 来源（Provenance）**：WorkbenchSnapshot 增加可选
+  source_recipe_id / source_recipe_version_id，从 Recipe 打开工作台时记录、Job
+  冻结 snapshot 保留、图片 provenance 可读；语义为“最初从哪个 Recipe 打开（生成前
+  可能已修改）”，非 Recipe 来源为空、不产生假信息。
+- **Reference 能力驱动的输入角色**：前端按模块 input_slots 的 requiredInputSlot
+  决定输入图 role（source / reference / face_reference），切换主模块时自动重映射、
+  不接受当前输入时明确提示而非静默丢图；输入标题与描述随能力动态显示。
+- **UI 偏好持久化（localStorage）**：图库密度、适应/填充、Lightbox 信息栏可见性、
+  Generate 分组折叠态；不写入数据库、不保存生产数据。
+
+### Changed
+
+- **Design Token 闭合**：tokens.css 增加统一 alias（--text / --text-secondary /
+  --text-tertiary / --success / --success-soft / --danger-soft / --on-accent /
+  --radius-xs / --weight-* / --font-mono / --leading-relaxed / --favorite 等），
+  收藏色停止写死 `#f5a623`；新增 design-token 守卫测试，未定义全局 token 即失败。
+- **App Shell / Sticky / 响应式**：新增 `--topnav-height:56px`，TopNav 层级高于
+  页内 sticky，Generate modebar 下移且不再遮盖一级导航；工作台锁定 100dvh、三栏
+  各自内部滚动、整页不随右栏变长；响应式 ≥1320 三栏、1180–1319 压缩三栏（中心
+  预览保留最小宽）、<1180 堆叠。
+- **Generate UI 2.0**：右栏收敛为工作流 / 画面 / 输出 / 任务与队列四组可折叠，
+  [生成][优先生成] 用 sticky action footer 随处可见；左栏紧凑素材 Chip、输入图用
+  缩略图、Negative 与最终 Preview 视觉区分；中栏舞台增大、生成中简洁状态、完成后
+  可收藏/保留/淘汰/去图库、HD/processed 统一 Badge；队列紧凑固定高度内滚。
+- **Gallery UI 2.0**：Toolbar 改两层（浏览模式 / 筛选操作），清理废片收进“更多/
+  维护”；默认“适应”模式完整展示横 / 方 / 竖图（object-fit:contain，不再 3:4 强裁），
+  提供 适应|填充 切换；网格密度 小/中/大（130/180/250）；多选使用 sticky 选择条
+  复用批量审核接口。
+- **Review Mode 2.0**：顶部使用服务端全局统计、显示“剩余待审 N”，新增 Ctrl+Z
+  撤销上一条（自维护 undo stack），结束态汇总 保留/淘汰/收藏 并可继续下一批；
+  保留 A / D / F / ←→ / Space 快捷键与跨分页预取。
+- **Lightbox / Detail**：右栏分组（生成信息 / 审核 / 复用 / 危险操作），信息栏可
+  折叠（折叠后图占满宽）；Recipe 行仅在存在来源 Recipe 时显示，否则移除；删除
+  沿用“普通图=淘汰、REJECT=永久删”语义。
+- **Settings 升级为系统与维护中心**：外观 / 生图引擎（复用 Engine Runtime API）/
+  图片缓存（计数 + 补齐缩略图/预览图 + 进度 + 停止）/ 存储（DataRoot、库大小、
+  剩余空间与阈值）/ 关于（版本、当前 migration）。
+- **取消隐形上限**：Prompt / Recipe 由 50 改为 offset 分页 + 加载更多；Assets 移除
+  前端 limit 100，改为分页 + 搜索 stale guard，AssetPickerDrawer 同步；History 移除
+  limit 100 假全集、按 root family 稳定分页；ResultPane 移除硬编码 limit 200、
+  分页拉全 Job family 图片。
+- **组件拆分（只重构不改行为）**：GalleryPage 拆为 Toolbar / Grid / Card /
+  GroupView / SelectionBar / DetailDrawer / CleanupDialog + hooks；SettingsPane 拆为
+  GenerationControls / CurrentJobCard / QueuePanel / ModuleParameterField；AssetsPage
+  拆为 Grid / Card / DetailDrawer / Editor。
+
 ## [0.11.0] — 2026-10-12
 
 ### Added（Phase 0.11：图片资产管理系统）

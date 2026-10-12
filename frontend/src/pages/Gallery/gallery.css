@@ -5,10 +5,43 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 .gal-toolbar .ds-tabs { border-bottom: none; margin-bottom: 0; }
 .gal-toolbar__spacer { flex: 1; }
+
+/* Phase 0.12：两层 Toolbar（第一层浏览模式 / 第二层筛选操作） */
+.gal-toolbar--filters { margin-bottom: var(--space-3); }
+
+.gal-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.gal-segmented .ds-btn { border: none; }
+.gal-segmented--xs .ds-btn--xs { padding: 2px 8px; }
+
+/* Phase 0.12：更多 ▾ 下拉（危险操作收进维护，不长期红色主按钮） */
+.gal-more { position: relative; }
+.gal-more__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 140px;
+}
+.gal-more__menu--closed { display: none; }
 
 .gal-count {
   font-size: var(--text-sm);
@@ -24,12 +57,16 @@
 
 .gal-undo-btn { margin-left: var(--space-2); }
 
-/* ===== 图片网格 ===== */
+/* ===== 图片网格（密度：小/中/大；适应：contain/cover） ===== */
 .gal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-3);
 }
+.gal-grid--compact { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.gal-grid--normal { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.gal-grid--large { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+
 .gal-card {
   position: relative;
   padding: 0;
@@ -42,22 +79,51 @@
 }
 .gal-card:hover { border-color: var(--accent); }
 .gal-card--selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 媒体框：统一高度，surface 背景；contain 默认完整构图，cover 裁切填充 */
+.gal-card__media {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  background: var(--surface-2);
+}
+.gal-grid--compact .gal-card__media { height: 100px; }
+.gal-grid--large .gal-card__media { height: 220px; }
+.gal-card__ph {
+  position: absolute;
+  inset: 0;
+  animation: gal-pulse 1.2s ease-in-out infinite;
+}
+@keyframes gal-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
 .gal-card__img {
   display: block;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
 }
-.gal-card__badges {
+.gal-grid--fit-cover .gal-card__img { object-fit: cover; }
+.gal-card__err {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  padding: var(--space-2);
+}
+
+/* Badge：左上 HD；右上收藏/checkbox */
+.gal-card__hd {
   position: absolute;
   top: 6px;
-  right: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-.gal-card__hd {
+  left: 6px;
+  z-index: 1;
   background: var(--info);
   color: var(--on-accent);
   font-size: var(--text-xs);
@@ -65,6 +131,55 @@
   padding: 1px 6px;
   border-radius: var(--radius-sm);
 }
+.gal-card__corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gal-card__fav {
+  color: var(--favorite);
+  font-size: var(--text-sm);
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.gal-card__check {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-xs);
+  border: 1.5px solid var(--on-accent);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--on-accent);
+  font-size: var(--text-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gal-card__check--on { background: var(--accent); border-color: var(--accent); }
+
+/* 底部 hover overlay：尺寸 + 审核状态 */
+.gal-card__overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  color: var(--on-accent);
+  font-size: var(--text-xs);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.gal-card:hover .gal-card__overlay,
+.gal-card--selected .gal-card__overlay { opacity: 1; }
 
 /* ===== 按任务分组 ===== */
 .gal-group-list { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -142,41 +257,6 @@
   gap: var(--space-3);
 }
 
-/* ===== Phase 0.11：卡片缩略图懒加载 ===== */
-.gal-card__media {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  background: var(--surface-2);
-}
-.gal-card__ph {
-  position: absolute;
-  inset: 0;
-  animation: gal-pulse 1.2s ease-in-out infinite;
-}
-@keyframes gal-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.9; }
-}
-.gal-card__img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.gal-card__err {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-align: center;
-  padding: var(--space-2);
-}
-
 /* ===== Phase 0.11：无限滚动哨兵 ===== */
 .gal-sentinel {
   height: 1px;
@@ -189,12 +269,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-  padding: var(--space-3) var(--space-4);
 }
 button.gal-group__main {
   flex: 1;
@@ -209,7 +283,24 @@ button.gal-group__main {
 .gal-group__main:hover .gal-group__title { color: var(--accent); }
 
 /* Phase 0.11.1：独立收藏徽标 / 清理受保护列表 */
-.gal-card__fav { color: #f5a623; font-size: var(--text-sm); line-height: 1; }
 .gal-protected-list { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
 .gal-protected-list li { margin: var(--space-1) 0; }
 .gal-protected__id { margin-right: var(--space-2); font-weight: 600; }
+
+/* ===== Phase 0.12：多选 sticky 操作条 ===== */
+.gal-selection-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-page-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.gal-selection-bar__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

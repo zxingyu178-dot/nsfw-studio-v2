@@ -59,6 +59,7 @@ import type {
   ImageReferencesDTO,
   ImageReviewStatus,
   ImageSort,
+  ImageStatsResponse,
   ImageVersionsDTO,
   CleanupRejectedResult,
   ThumbnailBackfillStatusDTO,
@@ -73,6 +74,7 @@ import type {
   RecipeDTO,
   RecipeVersionDTO,
   ReviewStatus,
+  SystemStatus,
   WorkbenchSnapshot,
 } from '../types/workbench'
 import type { HealthInfo } from './health'
@@ -313,11 +315,30 @@ export interface ImageListParams {
   offset?: number
 }
 
+/** Phase 0.12 全局图库统计过滤参数（与 GET /images 同口径；不含 sort/page/limit 分页参数）。 */
+export interface ImageStatsParams {
+  job_id?: string | null
+  review_status?: ReviewStatus | null
+  favorite?: boolean | null
+  source?: string | null
+  kind?: string | null
+  search?: string | null
+  date_from?: string | null
+  date_to?: string | null
+  /** 新审核状态过滤：NEW/KEEP/REJECT/ARCHIVED */
+  status?: ImageReviewStatus | null
+}
+
 export const imageApi = {
   /** Phase 0.11：分页图库（返回 {items,total,page,page_size,has_next}）。
    *  同时兼容旧 limit/offset/review_status（选择器 / 生成结果面板）。 */
   list(params: ImageListParams = {}): Promise<ImagePage<ImageDTO>> {
     return request(`/api/v1/images${buildQuery(params)}`)
+  },
+  /** Phase 0.12：全局图库统计（与 list 同过滤口径；SQL 单行聚合）。
+   *  各状态计数与收藏计数都是命中过滤后的全局数字；favorites 为独立 favorite=true 交叉计数。 */
+  stats(params: ImageStatsParams = {}): Promise<ImageStatsResponse> {
+    return request(`/api/v1/images/stats${buildQuery(params)}`)
   },
   get(id: string): Promise<ImageDTO> {
     return request(`/api/v1/images/${id}`)
@@ -423,6 +444,13 @@ export function subscribeJobEvents(
     }
   }
   return () => source.close()
+}
+
+// ===== 系统状态摘要（Phase 0.12 Task7：Settings 系统维护中心只读数据） =====
+export const systemApi = {
+  status(): Promise<SystemStatus> {
+    return request('/api/v1/system/status')
+  },
 }
 
 // ===== 健康检查 =====

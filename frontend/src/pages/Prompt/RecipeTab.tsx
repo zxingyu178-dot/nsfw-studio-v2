@@ -10,6 +10,7 @@ import {
   Input,
 } from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
+import { useInfiniteList } from './useInfiniteList'
 import {
   ASSET_TYPE_LABEL,
   emptyStructured,
@@ -22,27 +23,32 @@ import {
 /** 配方 Tab（§五十）：列表 + 版本历史 + 在生成工作台打开。 */
 export function RecipeTab() {
   const navigate = useNavigate()
-  const [items, setItems] = useState<RecipeDTO[]>([])
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{ open: boolean; recipe: RecipeDTO | null }>({ open: false, recipe: null })
 
-  const load = useCallback(() => {
-    setLoading(true)
-    setError(null)
-    recipeApi
-      .list({ search: search.trim() || undefined, archived: showArchived ? null : false })
-      .then((page) => setItems(page.items))
-      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
-  }, [search, showArchived])
+  // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多。
+  const fetcher = useCallback(
+    (limit: number, offset: number) =>
+      recipeApi.list({
+        search: search.trim() || undefined,
+        archived: showArchived ? null : false,
+        limit,
+        offset,
+      }),
+    [search, showArchived],
+  )
 
-  useEffect(() => {
-    const timer = window.setTimeout(load, 250)
-    return () => window.clearTimeout(timer)
-  }, [load])
+  const {
+    items,
+    total,
+    hasMore,
+    initialLoading,
+    loadingMore,
+    error,
+    reload,
+    loadMore,
+  } = useInfiniteList<RecipeDTO>({ pageSize: 50, fetcher, reloadDeps: [fetcher] })
 
   function openInWorkbench(recipe: RecipeDTO): void {
     setDrawer({ open: false, recipe: null })
@@ -68,9 +74,9 @@ export function RecipeTab() {
         <p className="muted">配方在生成工作台通过“保存为配方”创建</p>
       </div>
 
-      {loading && <p className="muted">加载中…</p>}
+      {initialLoading && <p className="muted">加载中…</p>}
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
-      {!loading && !error && items.length === 0 && (
+      {!initialLoading && !error && items.length === 0 && (
         <div className="pp-empty">
           <h2 className="pp-empty__title">还没有配方</h2>
           <p className="muted">在生成工作台配置 Prompt 与素材后，点击“保存为配方”。</p>
@@ -105,11 +111,24 @@ export function RecipeTab() {
         })}
       </div>
 
+      {!initialLoading && !error && items.length > 0 && (
+        <div className="pp-loadmore">
+          {hasMore ? (
+            <Button variant="secondary" loading={loadingMore} disabled={loadingMore} onClick={loadMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </Button>
+          ) : (
+            <span className="muted">已加载全部 {total} 条</span>
+          )}
+          <span className="muted">已加载 {items.length} / 共 {total}</span>
+        </div>
+      )}
+
       {drawer.open && drawer.recipe && (
         <RecipeDrawer
           recipe={drawer.recipe}
           onClose={() => setDrawer({ open: false, recipe: null })}
-          onChanged={load}
+          onChanged={reload}
           onOpenInWorkbench={openInWorkbench}
         />
       )}

@@ -135,6 +135,7 @@ describe('ImagePickerDrawer 筛选参数映射', () => {
 })
 
 describe('ImagePickerDrawer 历史可达（越过 120 张）', () => {
+  // 该用例刻意累计渲染 140 张卡片，整树负载下需要更长预算（与逻辑正确性无关）
   it('多页连续追加直到最早一张，has_next 最终 false、无重无漏', async () => {
     // 4 页 × 40 + 20 = 140 张（>120），前 3 页 has_next=true，末页 false
     const totalPages = 4
@@ -153,16 +154,21 @@ describe('ImagePickerDrawer 历史可达（越过 120 张）', () => {
 
     const { container } = renderDrawer()
 
-    // 逐次触发哨兵，直到没有更多页
-    for (let i = 0; i < totalPages + 2; i++) {
+    // 计数驱动：反复触发哨兵，每轮等待卡片数增长，直到 140/无更多（不依赖固定 sleep）
+    let count = 0
+    for (let round = 0; round < 30 && count < 140; round++) {
       triggerIntersection()
-      // 给追加留时间；若已到底，触发无副作用
-      await waitFor(() => {}, { timeout: 10 }).catch(() => {})
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 60))
+      await waitFor(
+        () => {
+          if (cards(container).length <= count) throw new Error('等待下一页追加')
+        },
+        { timeout: 1500 },
+        // eslint-disable-next-line no-await-in-loop
+      ).catch(() => {})
+      count = cards(container).length
     }
 
-    await waitFor(() => expect(cards(container)).toHaveLength(140), { timeout: 8000 })
+    expect(cards(container)).toHaveLength(140)
 
     // 请求到了第 4 页（最早一批），之后不再请求第 5 页
     const pagesCalled = vi.mocked(imageApi.list).mock.calls.map((c) => (c[0] as { page: number }).page)
@@ -174,7 +180,7 @@ describe('ImagePickerDrawer 历史可达（越过 120 张）', () => {
       (im as HTMLImageElement).getAttribute('src'),
     )
     expect(new Set(ids).size).toBe(140)
-  })
+  }, 20000)
 })
 
 describe('ImagePickerDrawer 请求竞态守卫', () => {

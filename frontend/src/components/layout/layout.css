@@ -1,10 +1,5 @@
 /* ===== 布局基元（feature/ui-v1-redesign） ===== */
 
-.app-shell__main {
-  flex: 1;
-  min-width: 0;
-}
-
 .ds-page {
   width: 100%;
   margin: 0 auto;
@@ -22,6 +17,34 @@
 
 .ds-page--full {
   max-width: none;
+}
+
+/* 全屏应用页（生成工作台）：填满 main 高度，内部三栏各自滚动，
+   使 [生成] 动作钉在视口内、整页不随右栏内容变长。 */
+.ds-page--fill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-6);
+}
+
+.ds-page--fill > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 窄屏（与 generate.css 的堆叠断点一致）：恢复为整页文档滚动 */
+@media (max-width: 1179px) {
+  .ds-page--fill {
+    height: auto;
+    display: block;
+    padding-bottom: var(--space-10);
+  }
+
+  .ds-page--fill > * {
+    flex: initial;
+    min-height: 0;
+  }
 }
 
 @media (max-width: 720px) {

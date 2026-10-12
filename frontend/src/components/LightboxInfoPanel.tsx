@@ -184,32 +184,39 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
 
   return (
     <aside className="lb-side" aria-label="图片信息">
-      <dl className="lb-side__fields">
-        <dt>尺寸</dt>
-        <dd>{image.width} × {image.height}</dd>
-        <dt>生成时间</dt>
-        <dd>{formatDateTime(image.created_at)}</dd>
-        <dt>Seed</dt>
-        <dd>{image.seed ?? '—'}</dd>
-        <dt>来源 Job</dt>
-        <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
-        <dt>模块</dt>
-        <dd>{moduleLabel}</dd>
-        <dt>Recipe</dt>
-        <dd className="muted">—（图片未直接关联配方快照）</dd>
-        <dt>Prompt</dt>
-        <dd><pre>{job?.positive_prompt_snapshot ?? '（不可用）'}</pre></dd>
-        <dt>Negative</dt>
-        <dd><pre>{job?.negative_prompt_snapshot ?? '（无）'}</pre></dd>
-      </dl>
+      {/* ===== 生成信息 ===== */}
+      <section className="lb-side__block">
+        <h5>生成信息</h5>
+        <dl className="lb-side__fields">
+          <dt>尺寸</dt>
+          <dd>{image.width} × {image.height}</dd>
+          <dt>生成时间</dt>
+          <dd>{formatDateTime(image.created_at)}</dd>
+          <dt>Seed</dt>
+          <dd>{image.seed ?? '—'}</dd>
+          <dt>来源 Job</dt>
+          <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
+          <dt>模块</dt>
+          <dd>{moduleLabel}</dd>
+          {/* Phase 0.12：仅当 provenance.source_recipe_id 存在才显示 Recipe 行；
+              为 null 时整行隐藏，禁止展示无法提供的数据。 */}
+          {provenance?.source_recipe_id ? (
+            <>
+              <dt>来源Recipe</dt>
+              <dd>
+                <div>{provenance.source_recipe_id}</div>
+                <div className="muted">（生成前可能已修改）</div>
+              </dd>
+            </>
+          ) : null}
+          <dt>Prompt</dt>
+          <dd><pre>{job?.positive_prompt_snapshot ?? '（不可用）'}</pre></dd>
+          <dt>Negative</dt>
+          <dd><pre>{job?.negative_prompt_snapshot ?? '（无）'}</pre></dd>
+        </dl>
+      </section>
 
-      <div className="lb-side__actions">
-        <Button size="sm" variant="ghost" onClick={() => void copyPrompt()}>复制 Prompt</Button>
-        <Button size="sm" variant="secondary" disabled={!image.job_id} onClick={openWorkbench}>
-          重新打开 Workbench
-        </Button>
-      </div>
-
+      {/* ===== 审核 ===== */}
       <section className="lb-side__block">
         <h5>审核</h5>
         <div className="lb-side__actions">
@@ -240,6 +247,17 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
             onClick={() => void runAction(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏')}
           >
             {image.favorite ? '★ 已收藏' : '☆ 收藏'}
+          </Button>
+        </div>
+      </section>
+
+      {/* ===== 复用 ===== */}
+      <section className="lb-side__block">
+        <h5>复用</h5>
+        <div className="lb-side__actions">
+          <Button size="sm" variant="ghost" onClick={() => void copyPrompt()}>复制 Prompt</Button>
+          <Button size="sm" variant="secondary" disabled={!image.job_id} onClick={openWorkbench}>
+            重新打开 Workbench
           </Button>
         </div>
       </section>
@@ -281,7 +299,8 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
         )}
       </section>
 
-      <section className="lb-side__block">
+      {/* ===== 危险操作（v0.11 二分删除语义） ===== */}
+      <section className="lb-side__block lb-side__block--danger">
         <h5>{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h5>
         {displayStatus !== 'REJECT' ? (
           <>
