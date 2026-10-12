@@ -108,6 +108,50 @@
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 
+/* =====================================================================
+   Phase 0.12 Product/UX 地基：统一语义 alias + App Shell token
+   只追加、不改名。深色为 :root 默认，浅色在 [data-theme='light'] 覆盖。
+   ===================================================================== */
+
+:root {
+  /* ---- 文本语义 alias ---- */
+  --text: var(--fg);
+  --text-primary: var(--fg);
+  --text-secondary: var(--fg-muted);
+  /* tertiary：比 muted 更暗一档，用于占位符、图标、辅助分隔线 */
+  --text-tertiary: #6b7280;
+
+  /* ---- 状态色 alias ---- */
+  --success: var(--ok);
+  --success-soft: var(--success-bg);
+  --danger-soft: var(--danger-bg);
+  --on-accent: #ffffff;
+
+  /* ---- 收藏色（替换历史硬编码 #f5a623） ---- */
+  --favorite: #f5a623;
+  --favorite-bg: rgba(245, 166, 35, 0.14);
+
+  /* ---- 圆角 ---- */
+  --radius-xs: 4px;
+
+  /* ---- 字重（统一别名，替代散落的 500/600/700 字面量） ---- */
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---- 等宽字体 ---- */
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  --mono: var(--font-mono);
+
+  /* ---- 行高 ---- */
+  --leading-relaxed: 1.75;
+
+  /* ---- App Shell ---- */
+  --topnav-height: 56px;
+  /* 页内 sticky（Generate modebar 等）：必须低于 --z-nav，禁止盖一级导航 */
+  --z-page-sticky: 50;
+}
+
 [data-theme='light'] {
   /* 语义状态色（浅色） */
   --danger: #d34242;
@@ -125,6 +169,11 @@
   --shadow-lg: 0 16px 40px rgba(28, 35, 51, 0.28);
 
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+  /* ---- Phase 0.12：浅色独立 tertiary / 收藏色 ---- */
+  --text-tertiary: #8a93a6;
+  --favorite: #c47a0a;
+  --favorite-bg: rgba(196, 122, 10, 0.12);
 }
 
 @media (prefers-reduced-motion: reduce) {

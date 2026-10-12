@@ -8,8 +8,8 @@ import PromptPage from '../pages/Prompt/PromptPage'
 import AssetsPage from '../pages/Assets/AssetsPage'
 import SettingsPage from '../pages/Settings/SettingsPage'
 
-function RoutedPage({ width = 'normal', children }: { width?: 'normal' | 'wide' | 'full'; children: ReactNode }) {
-  return <PageContainer width={width}>{children}</PageContainer>
+function RoutedPage({ width = 'normal', fill = false, children }: { width?: 'normal' | 'wide' | 'full'; fill?: boolean; children: ReactNode }) {
+  return <PageContainer width={width} fill={fill}>{children}</PageContainer>
 }
 
 export default function App() {
@@ -17,7 +17,7 @@ export default function App() {
     <Routes>
       <Route element={<MainLayout />}>
         <Route path="/" element={<Navigate to="/generate" replace />} />
-        <Route path="/generate" element={<RoutedPage width="wide"><GeneratePage /></RoutedPage>} />
+        <Route path="/generate" element={<RoutedPage width="wide" fill><GeneratePage /></RoutedPage>} />
         <Route path="/gallery" element={<RoutedPage width="wide"><GalleryPage /></RoutedPage>} />
         <Route path="/prompts" element={<RoutedPage width="normal"><PromptPage /></RoutedPage>} />
         <Route path="/assets" element={<RoutedPage width="wide"><AssetsPage /></RoutedPage>} />

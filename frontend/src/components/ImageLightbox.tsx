@@ -42,8 +42,28 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
   // null = 适应窗口（contain）；数字 = 实际缩放倍率
   const [scale, setScale] = useState<number | null>(null)
   const [offset, setOffset] = useState<{ x: number; y: number }>(ZERO_OFFSET)
+  // Phase 0.12：右侧信息栏可折叠——图占满宽；会话内保持 + localStorage 持久化
+  const [infoHidden, setInfoHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lightbox.infoHidden') === '1'
+    } catch {
+      return false
+    }
+  })
   const overlayRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
+
+  const toggleInfo = useCallback(() => {
+    setInfoHidden((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('lightbox.infoHidden', next ? '1' : '0')
+      } catch {
+        // localStorage 不可用（隐私模式）时仅会话内保持
+      }
+      return next
+    })
+  }, [])
 
   useFocusGuard(true, overlayRef)
 
@@ -147,7 +167,7 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
   return (
     <div
       ref={overlayRef}
-      className="ds-overlay ds-overlay--center lb-overlay"
+      className={`ds-overlay ds-overlay--center lb-overlay${infoHidden ? ' lb-overlay--no-side' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="图片预览"
@@ -193,10 +213,15 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
             {atEnd && hasMore ? (loadingMore ? '加载中…' : '加载更多') : '下一张'}
           </button>
           <button type="button" onClick={onClose}>关闭</button>
+          {renderSidePanel && (
+            <button type="button" onClick={toggleInfo}>
+              {infoHidden ? '显示信息' : '隐藏信息'}
+            </button>
+          )}
         </div>
       </div>
 
-      {renderSidePanel && (
+      {renderSidePanel && !infoHidden && (
         <div className="lb-side-wrap">{renderSidePanel(current as ImageDTO)}</div>
       )}
     </div>

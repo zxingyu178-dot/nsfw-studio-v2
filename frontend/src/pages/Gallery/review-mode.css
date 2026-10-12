@@ -87,3 +87,21 @@
 .rv-btn--keep { border-color: var(--ok, #3fb950); }
 .rv-btn--fav { border-color: var(--warn, #d29922); }
 .rv-btn--reject { border-color: var(--danger); }
+
+/* ===== Phase 0.12：结束态 ===== */
+.rv-done {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-6);
+}
+.rv-done__title { margin: 0; font-size: var(--text-lg); }
+.rv-done__counts { margin: 0; font-size: var(--text-md); }
+.rv-done__counts strong { font-size: var(--text-lg); margin: 0 var(--space-1); }
+.rv-done__remaining { margin: 0; font-size: var(--text-sm); }
+.rv-done__actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); }
+.rv-btn--secondary { border-color: var(--accent); }

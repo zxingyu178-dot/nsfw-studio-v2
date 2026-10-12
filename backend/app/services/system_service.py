@@ -1,16 +1,22 @@
-"""系统级业务逻辑：启动引导（数据目录 + 日志 + 数据库）。"""
+"""系统级业务逻辑：启动引导（数据目录 + 日志 + 数据库）与只读系统状态摘要。"""
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.logging import setup_logging
 from app.core.paths import ensure_data_root
 from app.database.base import init_database, make_engine, make_session_factory
+from app.models.image import Image
+from app.models.image_variant import ImageVariant
 from app.models.system import SystemInfo
 
 logger = logging.getLogger(__name__)
@@ -74,3 +80,63 @@ def _ensure_system_info(engine, version: str) -> str:
             session.commit()
             return "updated"
         return "unchanged"
+
+
+def _latest_applied_migration(session: Session) -> str | None:
+    """migration 表中最新一条 status='applied' 的 migration_id（无记录则 None）。"""
+    return session.execute(
+        text("SELECT migration_id FROM migration WHERE status = 'applied' "
+             "ORDER BY migration_id DESC LIMIT 1")
+    ).scalar()
+
+
+def collect_system_status(session: Session, settings: Settings, engine_runtime) -> dict[str, Any]:
+    """只读系统状态摘要（Phase 0.12 Task7 / Settings 系统维护中心）。
+
+    - 绝不返回任何敏感配置内容（token / 密码 / config.local）；
+    - database_size 用 os.stat；磁盘用量用 shutil.disk_usage（跨平台，同 jobs.check_disk_space）；
+    - thumbnail_count / preview_count 从 image_variants 按 variant_type 计数；
+    - engine_runtime 复用现有 EngineRuntimeService 状态摘要（不写第二套）。
+    """
+    database_path = settings.storage.database_path
+    try:
+        database_size = os.stat(database_path).st_size if database_path.is_file() else 0
+    except OSError:
+        database_size = 0
+
+    data_root = settings.storage.data_root
+    try:
+        disk = shutil.disk_usage(data_root)
+        disk_total, disk_free = disk.total, disk.free
+    except OSError:
+        disk_total, disk_free = 0, 0
+
+    image_count = int(session.execute(select(func.count()).select_from(Image)).scalar_one())
+
+    def _variant_count(variant_type: str) -> int:
+        return int(session.execute(
+            select(func.count()).select_from(ImageVariant)
+            .where(ImageVariant.variant_type == variant_type)
+        ).scalar_one())
+
+    runtime_summary: dict[str, Any] = {}
+    if engine_runtime is not None:
+        try:
+            runtime_summary = engine_runtime.status().to_dict()
+        except Exception:  # noqa: BLE001 —— 状态摘要失败不得拖垮整个只读端点
+            logger.warning("采集 engine_runtime 状态失败（忽略）", exc_info=True)
+            runtime_summary = {"state": "UNKNOWN"}
+
+    return {
+        "app_version": settings.app.version,
+        "data_root": str(data_root),
+        "database_path": str(database_path),
+        "database_size": database_size,
+        "disk_total": disk_total,
+        "disk_free": disk_free,
+        "image_count": image_count,
+        "thumbnail_count": _variant_count("thumbnail"),
+        "preview_count": _variant_count("preview"),
+        "latest_migration": _latest_applied_migration(session),
+        "engine_runtime": runtime_summary,
+    }

@@ -117,6 +117,10 @@ class ModuleCapabilities:
     # Phase 7 Task5：通用输入槽声明（source / reference / face_reference）；
     # 空 = 不消费任何输入图（旧模块的 input_required 兼容语义仍生效）
     input_slots: tuple[InputSlotSpec, ...] = ()
+    # Phase 0.12 Task11：模块推荐 Stage 执行超时（秒）。
+    # QueueWorker 决定 Stage timeout 的优先级：Stage 显式 override > 本推荐值 > 全局 fallback。
+    # None = 模块不声明，回落到全局。仅供执行策略内部使用，不向前端普通用户暴露。
+    recommended_timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)

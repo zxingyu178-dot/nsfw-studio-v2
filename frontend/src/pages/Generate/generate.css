@@ -3,7 +3,9 @@
 .generate {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* Phase 0.12：填满 main 高度；三栏内部各自滚动，整页不随右栏变长。 */
+  height: 100%;
+  min-height: 0;
 }
 
 .generate__modebar {
@@ -12,8 +14,10 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
   position: sticky;
-  top: 0;
-  z-index: var(--z-dropdown);
+  /* Phase 0.12：sticky 起点下移一个 topnav 高度，禁止盖一级导航。 */
+  top: var(--topnav-height);
+  /* 页内 sticky 永远低于 TopNav（--z-nav:100 > --z-page-sticky:50）。 */
+  z-index: var(--z-page-sticky);
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -62,6 +66,47 @@
   flex-direction: column;
   gap: var(--space-4);
 }
+/* Phase 0.12：固定底部操作区（Generate 的生成/优先生成），不随 body 滚动 */
+.wb-pane__footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+}
+
+/* ===== 右栏可折叠分组（Phase 0.12） ===== */
+.wb-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.wb-section__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.wb-section__caret { color: var(--text-tertiary); width: 1em; }
+.wb-section__title { font-weight: var(--weight-semibold); flex: 0 0 auto; }
+.wb-section__extra { margin-left: auto; }
+.wb-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+/* ===== sticky action footer ===== */
+.wb-action-footer { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-action-footer__gate { margin: 0; }
+.wb-action-footer__msg { margin: 0; }
 
 /* ===== 通用小部件 ===== */
 .wb-static {
@@ -126,30 +171,27 @@
 .wb-stages__done { color: var(--text-secondary); }
 .wb-stages__done::before { content: '●' !important; color: var(--success) !important; }
 
-/* ===== 主结果舞台 ===== */
+/* ===== 主结果舞台（Phase 0.12：中栏视觉核心，面积增大） ===== */
 .result-stage {
   position: relative;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  min-height: 240px;
+  min-height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.result-stage img { display: block; width: 100%; height: auto; max-height: 56vh; object-fit: contain; }
+.result-stage img { display: block; width: 100%; height: auto; max-height: 64vh; object-fit: contain; }
 .result-stage__hd {
   position: absolute;
   top: var(--space-2);
   left: var(--space-2);
-  background: var(--info);
-  color: var(--on-accent);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
 }
+
+/* 完成后动作行 */
+.wb-result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .result-stage__placeholder {
   display: flex;
   flex-direction: column;
@@ -174,17 +216,16 @@
   cursor: pointer;
 }
 .wb-thumbs__item img { width: 100%; height: 100%; object-fit: cover; }
-.wb-thumbs__item--active { border-color: var(--accent); }
+/* 选中态强化（Phase 0.12）：更粗的强调边框 + 轻微抬升 */
+.wb-thumbs__item--active {
+  border-color: var(--accent);
+  border-width: 3px;
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 8px var(--shadow-sm);
+}
 .wb-thumbs__hd {
   position: absolute;
   top: 2px;
   left: 2px;
-  background: var(--info);
-  color: var(--on-accent);
-  font-size: 9px;
-  font-weight: var(--weight-bold);
-  padding: 0 4px;
-  border-radius: var(--radius-xs);
 }
 .wb-jobline { font-size: var(--text-sm); margin: 0; }
 
@@ -209,7 +250,9 @@
 
 /* ===== 队列 ===== */
 .wb-queue__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.wb-queue__head-left { display: flex; align-items: baseline; gap: var(--space-2); }
 .wb-queue__title { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.wb-queue__count { font-size: var(--text-xs); color: var(--text-secondary); }
 .wb-queue-list {
   list-style: none;
   margin: 0;
@@ -273,7 +316,40 @@
 .wb-structured { display: flex; flex-direction: column; gap: var(--space-3); }
 .wb-structured-field { display: flex; flex-direction: column; gap: var(--space-1); }
 .wb-structured-field__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.wb-structured-field__actions { display: flex; gap: 2px; }
+.wb-structured-field__actions { display: flex; align-items: center; gap: 2px; }
+
+/* ===== 已选素材紧凑 Chip（Phase 0.12） ===== */
+.wb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 160px;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.wb-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-chip__remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1;
+  padding: 0 2px;
+}
+.wb-chip__remove:hover { color: var(--danger); }
+
+/* Negative Prompt 与结构化字段 / 最终预览视觉区分 */
+.wb-negative {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--surface-2);
+}
 
 .wb-footer { display: flex; gap: var(--space-2); }
 .wb-footer .ds-btn { flex: 1; }
@@ -322,9 +398,42 @@
   white-space: nowrap;
 }
 
-/* ===== 响应式：窄屏退单列，内容自然展开 ===== */
-@media (max-width: 1100px) {
-  .generate__columns { grid-template-columns: 1fr; overflow: visible; }
-  .wb-pane { overflow: visible; }
-  .wb-pane__body { overflow: visible; }
+/* ===== 响应式：三档断点（Phase 0.12） =====
+   ≥1320        完整三栏（5fr 4fr 3fr）
+   1180~1319    压缩三栏：中心预览最低宽度优先，左右两栏先压
+   <1180        单栏堆叠，整页自然滚动（不做手机端优化）
+*/
+
+/* 1180~1319：压缩三栏，中间预览保留最小宽度 */
+@media (max-width: 1319px) {
+  .generate__columns {
+    grid-template-columns: minmax(0, 3fr) minmax(360px, 5fr) minmax(0, 2.5fr);
+  }
 }
+
+/* <1180：单栏堆叠，解除高度锁，三栏内容自然展开 */
+@media (max-width: 1179px) {
+  .generate {
+    height: auto;
+    min-height: 100%;
+  }
+  .generate__modebar {
+    position: static;
+  }
+  .generate__columns {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .wb-pane {
+    overflow: visible;
+  }
+  .wb-pane__body {
+    overflow: visible;
+  }
+  .prompt-preview__pre {
+    max-height: none;
+  }
+}
+
+.wb-asset-more { display: flex; justify-content: center; margin-top: var(--space-3); }
+.wb-input__desc { margin: 0 0 var(--space-2); font-size: var(--text-xs); }

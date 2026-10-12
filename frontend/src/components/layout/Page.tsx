@@ -4,12 +4,15 @@ export interface PageContainerProps {
   children: ReactNode
   /** wide：生成 / 图库；normal：提示词 / 设置 */
   width?: 'normal' | 'wide' | 'full'
+  /** fill：全屏应用页（生成工作台），填满 main、内部各栏自滚，动作钉在视口内 */
+  fill?: boolean
   className?: string
 }
 
-export function PageContainer({ children, width = 'normal', className = '' }: PageContainerProps) {
+export function PageContainer({ children, width = 'normal', fill = false, className = '' }: PageContainerProps) {
+  const fillCls = fill ? 'ds-page--fill' : ''
   return (
-    <div className={`ds-page ds-page--${width} ${className}`.trim()}>
+    <div className={`ds-page ds-page--${width} ${fillCls} ${className}`.trim()}>
       {children}
     </div>
   )
