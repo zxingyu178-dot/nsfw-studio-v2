@@ -495,18 +495,40 @@ class SingleQueueWorker:
         return SYSTEM_RANDOM.randint(0, self._seed_upper)
 
     def _stage_timeout_for(self, stage: JobStage) -> float:
+        """解析本 Stage 的执行总超时（Phase 0.12 Task11 优先级，按序回落）：
+
+        1. Stage 显式 override（``config_json.execution_timeout``，必须为正数）；
+        2. 模块 ``capabilities().recommended_timeout_seconds``（从 registry 读取，
+           禁止在本类按 module_id 硬编码 if reference: 7200）；
+        3. 全局 fallback（构造时传入，默认 1800s）。
+        """
+        # 1) Stage 显式 override
         try:
             config = json.loads(stage.config_json or "{}")
         except ValueError:
             config = {}
-        value = config.get("execution_timeout")
-        if value is None:
-            return self._stage_timeout
+        raw_override = config.get("execution_timeout")
+        if raw_override is not None:
+            try:
+                override = float(raw_override)
+            except (TypeError, ValueError):
+                override = None
+            if override is not None and override > 0:
+                return override
+            # override 存在但非法/非正：视为无效 override，继续向下一级
+
+        # 2) 模块推荐超时（模块版本已不存在等 EngineError → 回落到全局）
         try:
-            timeout = float(value)
-        except (TypeError, ValueError):
-            return self._stage_timeout
-        return timeout if timeout > 0 else self._stage_timeout
+            recommended = self._pipeline.resolve_stage_module(
+                stage
+            ).capabilities().recommended_timeout_seconds
+        except EngineError:
+            recommended = None
+        if recommended is not None and recommended > 0:
+            return float(recommended)
+
+        # 3) 全局 fallback
+        return self._stage_timeout
 
     @staticmethod
     def _previous_output_image_id(session: Session, job_id: str, stage_index: int, item_index: int) -> str | None:
