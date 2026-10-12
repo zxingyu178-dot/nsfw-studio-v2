@@ -114,8 +114,12 @@ class MobileReviewRuntimeService:
     # ===== 可替换 seam（测试 monkeypatch） =====
 
     def _probe(self) -> dict[str, Any] | None:
-        """探测 host:port 是否为健康的 Bridge；返回 health dict 或 None。"""
-        url = f"http://{self.host}:{self.port}/mobile/system/health"
+        """探测 host:port 是否为健康的 Bridge；返回 health dict 或 None。
+
+        注意：bind host 可能是 0.0.0.0（监听所有网卡），但 0.0.0.0 在 Windows 上
+        不能作为连接目标；loopback 健康探测一律走 127.0.0.1。
+        """
+        url = f"http://127.0.0.1:{self.port}/mobile/system/health"
         try:
             resp = httpx.get(url, timeout=PROBE_TIMEOUT_S, trust_env=False)
         except httpx.HTTPError:
