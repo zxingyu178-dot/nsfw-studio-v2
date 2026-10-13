@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { ApiRequestError, engineRuntimeApi, jobApi } from '../api/client'
 import type { EngineRuntimeDTO, EngineRuntimeState } from '../types/workbench'
 import { Button, ConfirmModal } from './ui'
@@ -36,22 +43,31 @@ async function settleAfterAction(
   }
 }
 
+export interface EngineRuntimeBodyProps {
+  /** 面板容器 ref（焦点进入 + 点击外部判定都基于它） */
+  panelRef: RefObject<HTMLDivElement>
+  /** 触发元素的选择器：点击外部关闭时忽略它（避免点触发按钮立刻关掉面板） */
+  triggerSelector: string
+  onClose: () => void
+}
+
 /**
- * 生图引擎控制 Popover（计划 Task4）：
+ * 生图引擎运行时控制体（保留 v0.13.2 全部中文状态文案）：
  * - 打开即 GET /engine/runtime，停留期间每 3s 轮询；
  * - 按 7 种 state 渲染启停控件；
  * - 停止/重启前先查队列：有 RUNNING Job 时弹确认，确认后【先 pauseQueue 再 stop/restart】；
- * - RUNNING_EXTERNAL 不提供停止/重启按钮（后端会 409 ENGINE_NOT_OWNED）；
- * - ESC / 点击外部关闭；焦点进入面板、关闭后回到触发元素。
+ * - RUNNING_EXTERNAL 不提供停止/重启按钮（后端会 409 ENGINE_NOT_OWNED）。
+ *
+ * 由 EngineControlPopover（独立引擎面板）与 PowerMenu（统一 Runtime 面板）复用，
+ * 不在此渲染外层定位容器，只输出引擎区段内容 + 引擎停止/重启确认框。
  */
-export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
+export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: EngineRuntimeBodyProps) {
   const [runtime, setRuntime] = useState<EngineRuntimeDTO | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'stop' | 'restart' | null>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
 
-  // 焦点管理：打开时进入面板，关闭时回到触发元素
+  // 焦点管理：打开时进入面板，关闭后回到触发元素
   useFocusGuard(true, panelRef)
 
   // 打开即拉取 + 每 3s 轮询
@@ -84,12 +100,12 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
       const target = e.target as HTMLElement | null
       if (!target) return
       if (panelRef.current?.contains(target)) return
-      if (target.closest('[data-engine-trigger]')) return
+      if (target.closest(triggerSelector)) return
       onClose()
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
-  }, [onClose])
+  }, [onClose, panelRef, triggerSelector])
 
   const failMessage = useCallback((e: unknown): string => {
     return e instanceof ApiRequestError ? e.message : '操作失败'
@@ -331,13 +347,7 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
 
   return (
     <>
-      <div
-        ref={panelRef}
-        className="ep"
-        role="dialog"
-        aria-label="生图引擎控制"
-        tabIndex={-1}
-      >
+      <div className="ep__inner">
         <div className="ep__header">{header}</div>
         {note}
         {actions}
@@ -354,5 +364,29 @@ export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
         onCancel={handleCancelConfirm}
       />
     </>
+  )
+}
+
+/**
+ * 生图引擎控制 Popover（Task4）：仅渲染生图引擎区段的独立浮层面板。
+ * 统一 Runtime 面板见 PowerMenu（复用同一 EngineRuntimeBody）。
+ */
+export function EngineControlPopover({ onClose }: EngineControlPopoverProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <div
+      ref={panelRef}
+      className="ep"
+      role="dialog"
+      aria-label="生图引擎控制"
+      tabIndex={-1}
+    >
+      <EngineRuntimeBody
+        panelRef={panelRef}
+        triggerSelector="[data-engine-trigger]"
+        onClose={onClose}
+      />
+    </div>
   )
 }

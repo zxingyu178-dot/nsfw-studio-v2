@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 
 /**
- * 右栏可折叠分组（Phase 0.12 任务 5.3）：
- * - 折叠态只存浏览器 localStorage（UI 偏好，不入 DB；见规范 §13 小型 UI 偏好持久化）；
- * - 首次访问（无记录）默认展开，保证既有自动化查询与新手可见全部字段；
+ * 右栏 / 左栏可折叠分组（UI 3.0）：
+ * - 折叠态只存浏览器 localStorage（UI 偏好，不入 DB）；
+ * - 首次访问（无记录）默认展开；
  * - id 唯一，避免不同页面共用同一存储 key。
+ *
+ * UI 3.0：头部不再用裸 <button>，改 disclosure（role="button" + 键盘可达），
+ * 与 ui3 设计语言一致，不出现浏览器默认按钮框。
  */
 const STORAGE_PREFIX = 'generate-section:'
 
@@ -36,27 +39,38 @@ export function CollapsibleSection({
   const [open, setOpen] = useState<boolean>(() => readStored(id) ?? defaultOpen)
 
   function toggle(): void {
-    const next = !open
-    setOpen(next)
-    try {
-      window.localStorage.setItem(STORAGE_PREFIX + id, next ? '1' : '0')
-    } catch {
-      // 隐私模式等写入失败不影响功能
+    setOpen((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem(STORAGE_PREFIX + id, next ? '1' : '0')
+      } catch {
+        // 隐私模式等写入失败不影响功能
+      }
+      return next
+    })
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      toggle()
     }
   }
 
   return (
     <section className={`wb-section${open ? '' : ' wb-section--closed'}`}>
-      <button
-        type="button"
+      <div
         className="wb-section__head"
+        role="button"
+        tabIndex={0}
         aria-expanded={open}
         onClick={toggle}
+        onKeyDown={onKeyDown}
       >
         <span className="wb-section__caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
         <span className="wb-section__title">{title}</span>
         {extra && <span className="wb-section__extra">{extra}</span>}
-      </button>
+      </div>
       {open && <div className="wb-section__body">{children}</div>}
     </section>
   )

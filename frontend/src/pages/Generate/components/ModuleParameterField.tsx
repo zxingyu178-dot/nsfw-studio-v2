@@ -1,4 +1,5 @@
-import { Checkbox, Field, Input, Select, Slider } from '../../../components/ui'
+import { Checkbox, Field, Input, Slider } from '../../../components/ui'
+import { PopoverSelect } from '../../../components/ui/ui3'
 import type { ModuleParameterDTO } from '../../../types/workbench'
 
 /**
@@ -35,9 +36,10 @@ export function ModuleParameterField({
   if (param.type === 'enum') {
     return (
       <Field label={label}>
-        <Select
+        <PopoverSelect
           value={String(resolved ?? '')}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(v) => onChange(v)}
+          ariaLabel={label}
           options={(param.enum_values ?? []).map((option) => ({ value: option, label: option }))}
         />
         {param.description && <p className="muted">{param.description}</p>}

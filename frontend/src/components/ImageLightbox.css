@@ -5,11 +5,18 @@
   align-items: stretch;
   justify-content: stretch;
   background: rgba(0, 0, 0, 0.9);
+  /* Task 9：滚动链隔离——到顶/底不继续推底层 Gallery/Generate。 */
+  overscroll-behavior: none;
+  /* Phase 0.14：fixed 视口内裁剪——body/side 高度收敛到视口，避免图片按自然尺寸撑高。 */
+  overflow: hidden;
 }
 
 .lb-body {
   flex: 1;
   min-width: 0;
+  /* Phase 0.14：明确跨轴高度为视口高，cross 轴 stretch 不可靠时仍约束内部。 */
+  height: 100%;
+  min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -18,12 +25,14 @@
 
 .lb-stage {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   cursor: default;
   touch-action: none;
+  overscroll-behavior: none;
 }
 
 .lb-stage--zoomed {
@@ -38,38 +47,21 @@
   -webkit-user-drag: none;
 }
 
-.lb-toolbar {
+/* Task 10：底部浮动 Icon Dock 定位（外观由 UI3 ActionDock/IconButton 提供） */
+.lb-dock {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(20, 20, 20, 0.75);
-  color: #fff;
-}
-
-.lb-toolbar button {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.lb-toolbar button:disabled {
-  opacity: 0.4;
-  cursor: default;
+  z-index: 2;
 }
 
 .lb-count {
   font-size: var(--text-sm, 13px);
-  margin-right: 4px;
+  margin: 0 6px;
   opacity: 0.8;
+  color: var(--fg, #fff);
+  white-space: nowrap;
 }
 
 /* Phase 0.11 右侧信息栏容器（仅 Gallery 传入时出现） */
@@ -77,10 +69,14 @@
   flex: 0 0 340px;
   width: 340px;
   max-width: 40vw;
+  /* Phase 0.14：明确跨轴高度为视口高，信息栏内部独立滚动。 */
+  height: 100%;
   display: flex;
   min-height: 0;
   border-left: 1px solid var(--border);
   background: var(--panel);
+  /* Task 9：信息栏可自己滚，但到顶/底不传导到底层。 */
+  overscroll-behavior: contain;
 }
 
 .lb-side-wrap > .lb-side {

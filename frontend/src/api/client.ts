@@ -458,9 +458,25 @@ export function subscribeJobEvents(
 }
 
 // ===== 系统状态摘要（Phase 0.12 Task7：Settings 系统维护中心只读数据） =====
+/** POST /system/request-shutdown 返回（202 Accepted；loopback only） */
+export interface RequestShutdownResult {
+  accepted: boolean
+  already_pending?: boolean
+  helper?: string
+  helper_launched?: boolean
+  message?: string
+}
+
 export const systemApi = {
   status(): Promise<SystemStatus> {
     return request('/api/v1/system/status')
+  },
+  /** Phase 0.14 Task6：应用内"停止全部后台"自停桥。
+   *  仅回环可用；后端回 202 {accepted:true} 后，由一次性 detached helper 经官方
+   *  lifecycle CLI 停止整套（当前生成 / Mobile Review / Studio Backend / 受管 ComfyUI）。
+   *  前端绝不直接杀进程；这里只发请求并展示"正在停止…"反馈。 */
+  requestShutdown(): Promise<RequestShutdownResult> {
+    return request('/api/v1/system/request-shutdown', jsonInit('POST', {}))
   },
 }
 

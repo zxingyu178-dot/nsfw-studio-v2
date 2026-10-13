@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Button, Checkbox, Field, Input, Select } from '../../../components/ui'
+import { Checkbox, Field } from '../../../components/ui'
+import { IconButton, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import { useJobStore } from '../../../stores/jobStore'
 import {
   hasUpscaleModule,
@@ -18,10 +18,12 @@ import { CollapsibleSection } from './CollapsibleSection'
 import { ModuleParameterField } from './ModuleParameterField'
 
 /**
- * 右栏生成配置（Phase 0.12 任务 5.3）：4 组可折叠中的前三组——
- * 工作流（Engine 只读 / Primary Module / 参数 / 高清放大）、画面（画幅 / 分辨率 / 自定义）、
- * 输出（数量 / Seed）。折叠态由 CollapsibleSection 持久化到 localStorage。
- * 主操作（生成 / 优先生成）固定在 Pane 底部 sticky action footer（见 GenerateFooter）。
+ * 右栏 Parameter Console（UI 3.0）：
+ * - Workflow：PopoverSelect（禁止原生 <select>）；
+ * - 画面：画幅 ChoiceTile / 分辨率 segmented（见 AspectRatioPicker）；
+ * - 数量：NumberStepper + 快捷 chips（保留 1–64 自由输入与钳制）；
+ * - Seed：一行，Random 状态 / Fixed·数值 + 清除。
+ * 不改业务：WorkbenchStore / Job API / Seed 规则全部沿用。
  */
 export function GenerationControls() {
   const state = useWorkbench()
@@ -32,7 +34,6 @@ export function GenerationControls() {
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
   const primaryTitle =
     primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
-  // §21：图片条件 Primary 用能力判断 isImageStartModule（不再用 output_kind==='processed' 猜）
   const primaryCandidates = state.moduleCatalog.filter((module) =>
     state.mode === 'text'
       ? module.available && !module.input_required
@@ -45,18 +46,20 @@ export function GenerationControls() {
 
   return (
     <>
-      {/* ===== 工作流：Engine 只读 / Primary Module / 参数 / 高清放大 ===== */}
+      {/* ===== 工作流 ===== */}
       <CollapsibleSection id="workflow" title="工作流">
-        <Field label="引擎">
+        <div className="wb-param">
+          <span className="wb-param__label">引擎</span>
           <EngineState />
-        </Field>
+        </div>
 
-        <Field label="工作流">
+        <div className="wb-param">
+          <span className="wb-param__label">工作流</span>
           {primaryCandidates.length > 1 ? (
-            <Select
-              id="primary-module"
+            <PopoverSelect
               value={primaryModule}
-              onChange={(event) => setPrimaryModule(event.target.value)}
+              onChange={(v) => setPrimaryModule(v)}
+              ariaLabel="工作流"
               options={primaryCandidates.map((module) => ({
                 value: module.module_id,
                 label: module.title || MODULE_LABEL[module.module_id] || module.module_id,
@@ -65,15 +68,13 @@ export function GenerationControls() {
           ) : (
             <p className="wb-static">① {primaryTitle}</p>
           )}
-          <Checkbox
-            checked={upscaleEnabled}
-            onChange={(event) => setUpscaleEnabled(event.target.checked)}
-            label="② 高清放大"
-          />
-          {upscaleEnabled && (
-            <p className="muted">原图全部完成后，依次生成高清图（原图与高清保持父子关系）。</p>
-          )}
-        </Field>
+        </div>
+
+        <Checkbox
+          checked={upscaleEnabled}
+          onChange={(event) => setUpscaleEnabled(event.target.checked)}
+          label="② 高清放大"
+        />
 
         {configurableParams.map((param) => (
           <ModuleParameterField
@@ -85,7 +86,7 @@ export function GenerationControls() {
         ))}
       </CollapsibleSection>
 
-      {/* ===== 画面：画幅 / 分辨率 / 自定义 ===== */}
+      {/* ===== 画面 ===== */}
       <CollapsibleSection id="canvas" title="画面">
         {followsInputSize ? (
           <Field label="尺寸"><p className="wb-static">跟随输入图（无需设置宽高）</p></Field>
@@ -94,88 +95,50 @@ export function GenerationControls() {
         )}
       </CollapsibleSection>
 
-      {/* ===== 输出：数量 / Seed ===== */}
+      {/* ===== 输出 ===== */}
       <CollapsibleSection id="output" title="输出">
-        <CountField value={state.count} />
+        <div className="wb-param">
+          <span className="wb-param__label">数量</span>
+          <NumberStepper
+            value={state.count}
+            onChange={(v) => setCount(v)}
+            min={1}
+            max={64}
+            chips={[1, 2, 4, 6, 8]}
+            ariaLabel="数量"
+          />
+          <span className="wb-param__label">1–64 张</span>
+        </div>
 
-        <Field label="Seed">
-          {state.seedMode === 'fixed' && state.seed !== null ? (
-            <p className="wb-static">
-              固定 {state.seed}
-              <span className="muted">（单张精确复现；选择数量 &gt; 1 将自动切回随机）</span>
-              <Button size="xs" variant="ghost" onClick={() => setSeed(null)}>恢复随机</Button>
-            </p>
-          ) : (
-            <p className="wb-static">随机（每张独立）</p>
-          )}
-        </Field>
+        <SeedRow />
       </CollapsibleSection>
     </>
   )
 }
 
-/**
- * 输出数量：后端权威口径 WorkbenchSnapshotModel.count ∈ [1,64]（schemas/workbench.py）。
- * 允许任意整数自由输入；常用档 1/2/4/6/8 作为快捷小按钮。
- * 输入非数字 / 越界在 blur（或回车）时钳制到 1–64，并由 Field hint 提示范围。
- * setCount 内既有“固定 Seed + count>1 自动切回随机”逻辑保持不变。
- */
-const COUNT_MIN = 1
-const COUNT_MAX = 64
-const QUICK_COUNTS = [1, 2, 4, 6, 8]
-
-function clampCount(n: number): number {
-  if (!Number.isFinite(n)) return COUNT_MIN
-  return Math.min(COUNT_MAX, Math.max(COUNT_MIN, Math.round(n)))
-}
-
-function CountField({ value }: { value: number }) {
-  const [draft, setDraft] = useState(String(value))
-  // 外部同步（如固定 Seed 自动把 count 收敛为 1）时刷新草稿。
-  useEffect(() => {
-    setDraft(String(value))
-  }, [value])
-
-  const commit = () => {
-    const parsed = Number.parseInt(draft, 10)
-    const clamped = clampCount(Number.isNaN(parsed) ? COUNT_MIN : parsed)
-    if (clamped !== value) setCount(clamped)
-    setDraft(String(clamped))
-  }
+/** Seed 一行：Random 状态 / Fixed·数值 + 清除（不改 Seed 规则）。 */
+function SeedRow() {
+  const state = useWorkbench()
+  const fixed = state.seedMode === 'fixed' && state.seed !== null
 
   return (
-    <Field label="数量" htmlFor="gen-count" hint="1–64 张">
-      <div className="wb-count">
-        <Input
-          id="gen-count"
-          type="number"
-          inputMode="numeric"
-          min={COUNT_MIN}
-          max={COUNT_MAX}
-          value={draft}
-          aria-label="数量"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commit()
-          }}
-        />
-        <div className="wb-count__chips" role="group" aria-label="常用数量">
-          {QUICK_COUNTS.map((n) => (
-            <Button
-              key={n}
-              type="button"
-              size="xs"
-              variant={n === value ? 'secondary' : 'ghost'}
-              aria-pressed={n === value}
-              onClick={() => setCount(n)}
-            >
-              {n}
-            </Button>
-          ))}
-        </div>
+    <div className="wb-param">
+      <span className="wb-param__label">Seed</span>
+      <div className="wb-seed-row">
+        {fixed ? (
+          <>
+            <IconSeed size={16} />
+            <span className="wb-seed-value">Fixed · {state.seed}</span>
+            <IconButton icon={<IconClose size={14} />} label="恢复随机" onClick={() => setSeed(null)} />
+          </>
+        ) : (
+          <>
+            <IconRandom size={16} />
+            <span className="wb-static">随机（每张独立）</span>
+          </>
+        )}
       </div>
-    </Field>
+    </div>
   )
 }
 

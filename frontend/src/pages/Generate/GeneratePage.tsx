@@ -80,18 +80,25 @@ export default function GeneratePage() {
           </span>
         )}
       </div>
-      {/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏 */}
+      {/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏。
+          UI 3.0：用 div[role=tab] 而非裸 <button>，保持 tablist/aria-selected 契约。 */}
       <div className="generate__tabs" role="tablist" aria-label="工作台面板">
         {TAB_LABELS.map((t) => (
-          <button
+          <div
             key={t.key}
-            type="button"
             role="tab"
+            tabIndex={0}
             aria-selected={activeTab === t.key}
             onClick={() => setActiveTab(t.key)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setActiveTab(t.key)
+              }
+            }}
           >
             {t.label}
-          </button>
+          </div>
         ))}
       </div>
       <div className="generate__columns">

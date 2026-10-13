@@ -176,6 +176,56 @@
   --favorite-bg: rgba(196, 122, 10, 0.12);
 }
 
+/* =====================================================================
+   Phase 0.14 UI 3.0 共享设计基础层 Token
+   只追加、不改名。深色 :root 默认，浅色 [data-theme='light'] 覆盖。
+   消费方（Lightbox / Generate / Power UI）一律引用这些变量，禁止散写颜色。
+   ===================================================================== */
+
+:root {
+  /* 控件表面：icon 按钮 / 输入 / 下拉 resting / hover / active */
+  --control-bg: #1a1f2a;
+  --control-hover: #232a38;
+  --control-active: #2c3446;
+  --control-border: #303849;
+
+  /* 中栏画布背景（中性，让图片跳出）；面板内细分隔线 */
+  --canvas-bg: #0b0d11;
+  --panel-divider: rgba(255, 255, 255, 0.07);
+
+  /* 主动作渐变 + 克制冷色状态光效 */
+  --action-gradient-start: #8b6dff;
+  --action-gradient-end: #6f4dff;
+  --glow-accent: rgba(124, 92, 255, 0.35);
+
+  /* icon 状态色统一语义（组件只引用这些，不再各自映射） */
+  --icon-muted: var(--fg-muted);
+  --icon-active: var(--accent-strong);
+  --icon-success: var(--ok);
+  --icon-danger: var(--danger);
+  --icon-favorite: var(--favorite);
+}
+
+[data-theme='light'] {
+  --control-bg: #ffffff;
+  --control-hover: #eef1f7;
+  --control-active: #e3e8f2;
+  --control-border: #cfd6e4;
+
+  --canvas-bg: #e9edf4;
+  --panel-divider: rgba(28, 35, 51, 0.08);
+
+  --action-gradient-start: #6a4df0;
+  --action-gradient-end: #5a3fe0;
+  --glow-accent: rgba(106, 77, 240, 0.22);
+
+  --icon-muted: var(--fg-muted);
+  --icon-active: var(--accent-strong);
+  --icon-success: var(--ok);
+  --icon-danger: var(--danger);
+  --icon-favorite: var(--favorite);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-fast: 0.01ms;

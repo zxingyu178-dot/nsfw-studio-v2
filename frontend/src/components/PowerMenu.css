@@ -1,0 +1,47 @@
+/* ===== 统一 Runtime 面板（PowerMenu / TopNav 电源区） ===== */
+.power-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 复用 .ep 的浮层容器样式，仅放宽一点以容纳两个分区 */
+.ep.pm {
+  width: 300px;
+}
+
+.pm__section + .pm__section {
+  margin-top: var(--space-3);
+}
+
+.pm__section-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-2);
+}
+
+.pm__divider {
+  height: 1px;
+  background: var(--panel-divider, var(--border));
+  margin: var(--space-3) 0;
+}
+
+.pm__studio-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: var(--text-md);
+}
+
+.pm__stopping {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg, var(--surface-2));
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}

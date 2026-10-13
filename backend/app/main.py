@@ -101,10 +101,11 @@ async def lifespan(application: FastAPI):
     application.state.backfill_runner = ThumbnailBackfillRunner(session_factory, storage)
 
     # 受管 ComfyUI 运行时单例（生命周期独立于 Job；应用关闭时不主动停 managed，
-    # 也绝不杀 external）
-    from app.services.engine_runtime_service import EngineRuntimeService
+    # 也绝不杀 external）。生产默认走 ControlHub lifecycle CLI（id=comfyui）；
+    # mode=direct 时才退回 v0.13.2 的直接 Popen 实现（仅 scripts/dev）。
+    from app.services.engine_runtime_service import create_engine_runtime
 
-    application.state.engine_runtime = EngineRuntimeService(settings)
+    application.state.engine_runtime = create_engine_runtime(settings)
 
     # Phase 0.13：Mobile Review Bridge 受管运行时（独立 8767；enabled=false 时只探测不自启）
     from app.services.mobile_review_runtime_service import MobileReviewRuntimeService
