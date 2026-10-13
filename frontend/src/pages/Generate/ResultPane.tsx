@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi } from '../../api/client'
-import { Badge, Button, EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
+import { Badge, EmptyState, ElapsedTimer, Spinner, StatusBadge } from '../../components/ui'
+import { ActionDock, IconButton, IconFavorite, IconKeep, IconReject, IconZoomIn } from '../../components/ui/ui3'
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
@@ -97,7 +98,17 @@ export function ResultPane() {
   }
 
   return (
-    <Pane title="预览" actions={job ? <StatusBadge status={job.status} /> : undefined}>
+    <Pane
+      title="预览"
+      actions={
+        job ? (
+          <>
+            <Link className="wb-gallery-link" to={`/gallery?job=${job.id}`}>去图库</Link>
+            <StatusBadge status={job.status} />
+          </>
+        ) : undefined
+      }
+    >
       {!job && (
         <EmptyState title="暂无生成结果" description="填写 Prompt 并点击“生成”，结果会实时显示在这里。" />
       )}
@@ -133,64 +144,80 @@ export function ResultPane() {
             </ul>
           )}
 
-          <div
-            className="result-stage"
-            onDoubleClick={() => { if (shown) openLightboxFor(shown) }}
-          >
-            {shown ? (
-              <>
-                <img src={imageContentUrl(shown.id)} alt="生成结果" />
-                {(shown.kind === 'upscaled' || shown.kind === 'processed') && (
-                  <Badge tone="info" className="result-stage__hd">
-                    {shown.kind === 'upscaled' ? 'HD' : '处理图'}
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <div className="result-stage__placeholder">
-                {job.status === 'RUNNING' || job.status === 'QUEUED' ? (
-                  <>
-                    <Spinner ariaLabel="正在生成" />
-                    <p className="muted">正在生成，完成后逐张显示…</p>
-                  </>
-                ) : (
-                  <p className="muted">本任务暂无图片</p>
-                )}
+          <div className="wb-canvas">
+            <div
+              className="result-stage"
+              onDoubleClick={() => { if (shown) openLightboxFor(shown) }}
+            >
+              {shown ? (
+                <>
+                  <img src={imageContentUrl(shown.id)} alt="生成结果" />
+                  {(shown.kind === 'upscaled' || shown.kind === 'processed') && (
+                    <Badge tone="info" className="result-stage__hd">
+                      {shown.kind === 'upscaled' ? 'HD' : '处理图'}
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                <div className="result-stage__placeholder">
+                  {job.status === 'RUNNING' || job.status === 'QUEUED' ? (
+                    <>
+                      <Spinner ariaLabel="正在生成" />
+                      <p className="muted">正在生成，完成后逐张显示…</p>
+                    </>
+                  ) : (
+                    <p className="muted">本任务暂无图片</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 悬浮动作坞：图标为主 + Tooltip（收藏 / 保留 / 淘汰 / 放大） */}
+            {shown && (
+              <div className="wb-canvas__dock">
+                <ActionDock label="图片动作">
+                  <IconButton
+                    icon={<IconZoomIn size={16} />}
+                    label="放大"
+                    onClick={() => openLightboxFor(shown)}
+                  />
+                  <IconButton
+                    icon={<IconFavorite size={16} />}
+                    label={shown.favorite ? '已收藏' : '收藏'}
+                    tone={shown.favorite ? 'favorite' : 'muted'}
+                    active={shown.favorite}
+                    onClick={() => void handleToggleFavorite()}
+                  />
+                  <IconButton
+                    icon={<IconKeep size={16} />}
+                    label="保留"
+                    onClick={() => void handleReview('KEEP')}
+                  />
+                  <IconButton
+                    icon={<IconReject size={16} />}
+                    label="淘汰"
+                    onClick={() => void handleReview('REJECT')}
+                  />
+                </ActionDock>
               </div>
             )}
           </div>
 
-          {/* 完成后动作：双击放大 / 收藏 / 保留 / 淘汰 / 去图库 */}
-          {shown && (
-            <div className="wb-result-actions">
-              <Button size="xs" variant="ghost" onClick={() => openLightboxFor(shown)}>放大</Button>
-              <Button
-                size="xs"
-                variant={shown.favorite ? 'secondary' : 'ghost'}
-                onClick={() => void handleToggleFavorite()}
-              >
-                {shown.favorite ? '已收藏 ★' : '收藏'}
-              </Button>
-              <Button size="xs" variant="ghost" onClick={() => void handleReview('KEEP')}>保留</Button>
-              <Button size="xs" variant="ghost" onClick={() => void handleReview('REJECT')}>淘汰</Button>
-              <Link className="ds-btn ds-btn--ghost ds-btn--sm" to={`/gallery?job=${job.id}`}>
-                去图库
-              </Link>
-            </div>
-          )}
-
           {images.length > 0 && (
             <div className="wb-thumbs" role="list" aria-label="本任务已完成图片">
               {images.map((image) => (
-                <button
+                <div
                   key={image.id}
-                  type="button"
                   role="listitem"
+                  tabIndex={0}
                   className={`wb-thumbs__item${
                     shown?.id === image.id ? ' wb-thumbs__item--active' : ''
                   }`}
                   onClick={() => setSelectedId(image.id)}
                   onDoubleClick={() => openLightboxFor(image)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') openLightboxFor(image)
+                  }}
                   title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
                   <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
@@ -199,7 +226,7 @@ export function ResultPane() {
                       {image.kind === 'upscaled' ? 'HD' : '处理'}
                     </Badge>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           )}

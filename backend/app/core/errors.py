@@ -42,6 +42,11 @@ class ConflictError(AppError):
     code = "CONFLICT"
 
 
+class ForbiddenError(AppError):
+    status_code = 403
+    code = "FORBIDDEN"
+
+
 class FileValidationError(AppError):
     status_code = 400
     code = "INVALID_FILE"

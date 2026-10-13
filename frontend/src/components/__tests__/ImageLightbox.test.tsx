@@ -99,6 +99,18 @@ describe('ImageLightbox 共享看图 Lightbox', () => {
     expect(Number(downMatch![1])).toBe(0.25)
   })
 
+  it('双击图片：适应窗口 ↔ 100% 互切', () => {
+    const { container } = renderAt(0)
+    const img = container.querySelector('.lb-img') as HTMLImageElement
+    // 初始适应窗口：无 transform
+    expect(img.style.transform).toBe('')
+    fireEvent.doubleClick(img)
+    expect(img.style.transform).toMatch(/scale\(1\)/)
+    // 再双击回到适应窗口
+    fireEvent.doubleClick(img)
+    expect(img.style.transform).toBe('')
+  })
+
   it('拖动平移改变 offset（缩放后）', () => {
     const { container } = renderAt(0)
     const img = container.querySelector('.lb-img') as HTMLImageElement

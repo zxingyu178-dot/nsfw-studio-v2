@@ -2,6 +2,81 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.14.0] — 2026-10-13
+
+> Runtime 收口 + Lightbox 滚动隔离 + Generate UI 3.0（minor）。
+> 不新增模型 / 节点 / AI 能力；无数据库迁移（沿用 0018）。
+> 生产生命周期统一交由 ControlHub 官方 lifecycle CLI（nsfw-studio-v2=8000、comfyui=8188 均为已批准对象）；8767 为随 Studio 退出的子运行时。
+
+### Added
+
+- **Runtime 收口（ControlHub 单一生命周期 owner）**
+  - 新增 `backend/app/services/controlhub_lifecycle.py`：封装官方 lifecycle CLI
+    （`python -m control_hub.lifecycle_cli <verb> <id> --data-root <root>`，`--data-root`
+    为子解析器参数，置于 verb+id 之后），退出码 / JSON state 映射为引擎状态语义。
+  - `EngineRuntimeService` 新增 `ControlHubEngineRuntime` 适配器与 `create_engine_runtime()`
+    工厂（按 `engine_runtime.mode` 选择 controlhub / direct，默认 controlhub）；**引擎目标恒为
+    `comfyui`(8188)，构造时若误传 `nsfw-studio-v2` 直接 RuntimeError**，绝不去 start Studio 本体。
+    v0.13.2 的直接 Popen 实现整体保留为 direct 适配器。
+  - 新增 `POST /api/v1/system/request-shutdown`：loopback 校验后立即 202，由一次性
+    detached helper（`scripts/runtime/shutdown_helper.ps1`，延迟约 500ms）转调一键停止脚本；
+    幂等（`app.state.shutdown_pending`），后端自身绝不杀自己。
+  - 新增 `scripts/stop_studio.ps1` / `stop_studio.bat`：best-effort 暂停队列 → 停 8767 →
+    经官方 CLI 停 nsfw-studio-v2(8000) → 经官方 CLI 停 owned comfyui(8188) → 核验三端口
+    释放与 owned Python 退出；分步日志，FREE / EXTERNAL_NOT_OWNED / STOP_TIMEOUT 不静默；
+    严禁全局 taskkill / 杀所有 python。
+  - 生产 launcher 收口为 CLI shim（`scripts/launch_studio.ps1`，固定 127.0.0.1:8000，
+    不再自己 Popen uvicorn、不再出现 Vite Preview / 4173 生产链）；旧 `start_studio.bat`
+    改为纯转发 shim；可自定义端口的旧开发启动器迁移到 `scripts/dev/launch_studio_dev.ps1`。
+- **应用内统一 Power Control**：TopNav 电源区新增 `PowerMenu`，分「生图引擎」（复用
+  EngineRuntimeBody，保留 v0.13.2 七态中文文案；RUNNING_EXTERNAL 不提供停止/重启）与
+  「Studio 后台」（停止全部后台带二次确认）两段；队列暂停属调度、留在 Generate，Power/Queue
+  语义分离。
+- **Lightbox 滚动隔离**：`useOverlayScrollLock` 锁 html/body/.app-shell__main，ref-count
+  支持嵌套 overlay，关闭恢复 overflow/scrollTop；`.lb-stage` 改 native non-passive wheel
+  （preventDefault + stopPropagation），滚轮以鼠标位置为锚点缩放、双击 Fit↔100%、ESC 关闭、
+  拖动边界限制；overlay/stage `overscroll-behavior=none`、side-wrap=contain；底部浮动 Icon Dock。
+- **Generate UI 3.0（仅视觉与组件结构，不改业务数据模型与任何 API）**
+  - 三栏重做：Prompt Console（结构化 8 字段 / 完整 Prompt / Negative / 预览折叠）、
+    Canvas Stage（中性画布 + 悬浮 ActionDock + 底部缩略条）、Parameter Console。
+  - 新增专属 `GenerateAction` 主按钮（46px、克制 gradient/glow、细线 loading、disabled 可见
+    Gate 原因；count=1「生成」、count>1「生成 N 张」）。
+  - UI3 共享设计层 `components/ui/ui3/`：IconButton / ToolbarIcon / ActionButton / ActionDock /
+    PopoverSelect（ARIA combobox/listbox、↑↓/Enter/Esc/typeahead）/ ChoiceTile / ChoiceGrid /
+    NumberStepper / PowerButton / StatusPill / Tooltip + 统一 SVG icon（无 emoji/系统字符）。
+  - 画幅形状 Tile、分辨率分段、数量 NumberStepper+快捷 chips、Seed 一行；Queue 紧凑化。
+  - tokens.css 扩展 Light/Dark 双主题 token；Generate 主链静态扫描禁裸 `<button>`/`<select>`
+    （primitive 内部例外）；不引入 Ant / MUI / Element / Bootstrap。
+
+### Fixed
+
+- **Lightbox 视口高度收敛**：`.lb-body/.lb-stage` 被图片自然尺寸撑到超出视口（cross 轴 flex
+  stretch 未约束内部高度），导致 Lightbox 高度溢出；修复 `.lb-overlay{overflow:hidden}`、
+  `.lb-body{height:100%;min-height:0}`、`.lb-stage{min-height:0}`、`.lb-side-wrap{height:100%}`。
+
+### Tests
+
+- 后端：在 v0.13.2（418 passed / 3 skipped）基础上新增 Runtime 收口测试（运行权合同、
+  controlhub 目标恒为 comfyui、停止脚本合同 / 不得杀无关 python、固定生产端口、launcher 为
+  shim、request-shutdown），全量 452 collected（449 passed / 3 skipped）；延续 hermetic 护栏，
+  测试全程禁止连接真实 8188/8000/8767。
+- 前端：UI3 基础层 + Lightbox 隔离（滚动锁 / native wheel / overscroll / 嵌套锁 / 视口高度收敛）
+  + Generate UI 3.0 契约（无裸控件 / GenerateAction / 一屏布局）+ PowerMenu，全量 55 文件 /
+  252 用例；typecheck 0 错误、build 139 modules。
+
+### Notes
+
+- ControlHub 接入：`nsfw-studio-v2`(8000) 已通过官方提交 + 桌面两次人工审批，registry 为
+  approved（capabilities open/start/stop/restart）；`comfyui`(8188) 此前已在册 approved；
+  详见 `controlhub/handoffs/nsfw-studio-v2-2026-10-13.md`。
+- 真机验收：runtime 7 Case 全 PASS（一键启动→引擎 start comfyui 不 start Studio→8767→
+  一键停止三端口 FREE + 内存释放；无关 python / hermes / weixin 进程存活；生成中停止可恢复、
+  已完成图保留、重启不重放陈旧任务）；Gallery / Generate Lightbox 滚动隔离 Chrome / Edge 均 PASS；
+  6 分辨率一屏不滚 + Light/Dark 截图矩阵通过。
+- 不做：Runtime Lease R5、torch cu128→cu130 升级（待用户拍板）、Anime/FaceID/IPAdapter/
+  ControlNet/新模型/新节点、手机生图、AI 自动 Prompt、公网/云。
+- 8767 Mobile Review 为随 Studio 退出的子运行时，非 ControlHub 对象。
+
 ## [0.13.2] — 2026-10-12
 
 > 真机“一键启动生图引擎”闭环补丁，并修复一次线上队列事故暴露的根因（patch）。

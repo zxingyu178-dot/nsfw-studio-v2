@@ -1,9 +1,20 @@
 # 本机私有配置模板（复制为 config.local.yaml 后填写，config.local.yaml 已 gitignore）。
 #
-# engine_runtime：Studio 后端“自己的” ComfyUI 进程管理（固定端口 8188，禁止自动换口）。
+# engine_runtime：Studio 后端 ComfyUI（生图引擎）运行时（固定端口 8188，禁止自动换口）。
 # 所有 <LOCAL_ONLY ...> 占位符必须替换为本机真实值后才生效；本模板不得含真实绝对路径、
 # 盘符或字面回环地址（守卫测试 config.yaml/workflow.yaml 不允许这些，本文件同样遵循）。
+#
+# Phase 0.14 Runtime Closure 适配器选择：
+#   mode: controlhub（默认，生产）—— ComfyUI 生命周期唯一 owner = ControlHub 官方 CLI，
+#         后端绝不自己 Popen；此时下方 working_dir/python_exe 等 direct 字段不再使用。
+#   mode: direct（仅 scripts/dev）—— 保留 v0.13.2 直接 Popen + uv 桩归属实现。
 engine_runtime:
+  # 适配器：controlhub（生产默认） | direct（仅开发）。不写时公共模板已默认 controlhub。
+  # mode: <LOCAL_ONLY controlhub|direct>
+  # 合同冻结：生图引擎 integration_id 恒为 comfyui（127.0.0.1:8188）；
+  # nsfw-studio-v2 是 Studio 后端(8000)，绝不是 engine 目标。一般无需覆盖。
+  # integration_id: comfyui
+  # 以下字段仅 mode=direct 时使用（生产 controlhub 下忽略）：
   # 是否由 Studio 托管启停（false 时 Studio 只做状态探测，不启动/停止）
   managed: <LOCAL_ONLY true|false>
   # 探测/托管目标主机（保持回环；这里不写字面 IP，按本机约定）
@@ -24,6 +35,15 @@ engine_runtime:
   # ComfyUI-Manager prestartup/网络重试）；仅当冷启动更慢导致受管启动误报失败时，
   # 才按本机实际冷启耗时覆盖。未设置时使用后端默认值，此处不写真实数值。
   # health_timeout_seconds: <LOCAL_ONLY seconds>
+
+# ControlHub 官方 lifecycle CLI 连接（生产 controlhub 模式使用；含机器路径，务必本机填写）。
+# 代码已带机器默认值，这里仅在与默认不同时覆盖。占位符，请勿把真机路径提交到公共模板。
+controlhub:
+  # 官方 CLI 解释器（源码 venv 的 python）。默认形如 <LOCAL_ONLY path/to/control-hub/.venv/Scripts/python.exe>
+  python_exe: <LOCAL_ONLY path/to/control-hub/.venv/Scripts/python.exe>
+  # 安装版 registry 目录（必须显式传给 CLI --data-root，否则读到源码 registry 对不上）。
+  # 默认形如 <LOCAL_ONLY %LOCALAPPDATA%/AIHomeControlHub/data>
+  data_root: <LOCAL_ONLY path/to/AIHomeControlHub/data>
 
 # Mobile Review Bridge（局域网手机审核桥，Phase 0.13）——仅本机需要手机审核时放开。
 # 安全红线：8000 始终只听 127.0.0.1；本 Bridge 独立 8767，只暴露审核相关 API。

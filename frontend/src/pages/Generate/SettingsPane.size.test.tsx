@@ -72,10 +72,10 @@ describe('画幅 + 分辨率预设', () => {
     mockUseWorkbench.mockReturnValue(workbenchState())
     render(<SettingsPane imageGenAvailable={true} />)
 
-    fireEvent.change(screen.getByLabelText('画幅'), { target: { value: '9:16' } })
+    fireEvent.click(screen.getByRole('button', { name: '9:16' }))
     expect(mockSetSize).toHaveBeenLastCalledWith(576, 1024)
 
-    fireEvent.change(screen.getByLabelText('分辨率档位'), { target: { value: 'hd' } })
+    fireEvent.click(screen.getByRole('button', { name: '高清' }))
     expect(mockSetSize).toHaveBeenLastCalledWith(1080, 1920)
   })
 
@@ -83,21 +83,21 @@ describe('画幅 + 分辨率预设', () => {
     mockUseWorkbench.mockReturnValue(workbenchState())
     render(<SettingsPane imageGenAvailable={true} />)
 
-    fireEvent.change(screen.getByLabelText('画幅'), { target: { value: '16:9' } })
-    fireEvent.change(screen.getByLabelText('分辨率档位'), { target: { value: 'hd' } })
+    fireEvent.click(screen.getByRole('button', { name: '16:9' }))
+    fireEvent.click(screen.getByRole('button', { name: '高清' }))
     expect(mockSetSize).toHaveBeenLastCalledWith(1920, 1080)
   })
 
-  it('自定义显示宽高输入，提交时 clamp 到 64~4096', () => {
+  it('自定义：宽高 NumberStepper 提交时 clamp 到 64~4096', () => {
     mockUseWorkbench.mockReturnValue(workbenchState())
     render(<SettingsPane imageGenAvailable={true} />)
 
     // 初始为预设，不应出现宽高数字输入
-    expect(screen.queryByLabelText('宽度')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '宽度' })).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('画幅'), { target: { value: 'custom' } })
-    const widthInput = screen.getByLabelText('宽度')
-    const heightInput = screen.getByLabelText('高度')
+    fireEvent.click(screen.getByRole('button', { name: '自定义' }))
+    const widthInput = screen.getByRole('textbox', { name: '宽度' })
+    const heightInput = screen.getByRole('textbox', { name: '高度' })
     expect(widthInput).toBeInTheDocument()
 
     fireEvent.change(widthInput, { target: { value: '5' } })

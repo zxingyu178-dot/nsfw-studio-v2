@@ -22,3 +22,11 @@ mobile_review:
   enabled: false
   host: "0.0.0.0"
   port: 8767
+
+# 受管 ComfyUI 运行时适配器选择（Phase 0.14 Runtime Closure）。
+#   controlhub（默认，生产）：ComfyUI 生命周期唯一 owner 是 ControlHub 官方 lifecycle CLI
+#     （integration_id=comfyui，固定端口 8188）；后端绝不自己拉起/杀进程树。
+#   direct（仅 scripts/dev）：保留 v0.13.2 直接拉起 + uv 桩归属 + 健康探测/自恢复实现。
+# 本机 ControlHub CLI 解释器与 --data-root 写在 config.local.yaml（含机器路径，不提交）。
+engine_runtime:
+  mode: controlhub

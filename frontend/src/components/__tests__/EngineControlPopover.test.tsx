@@ -179,15 +179,16 @@ describe('EngineControlPopover 生图引擎控制', () => {
     expect(stopMock).not.toHaveBeenCalled()
   })
 
-  it('RUNNING_EXTERNAL：不显示停止/重启，显示外部实例说明', async () => {
+  it('RUNNING_EXTERNAL：不显示停止/重启，显示外部实例说明与 tooltip', async () => {
     getMock.mockResolvedValue(rt('RUNNING_EXTERNAL'))
     renderPopover()
     expect(await screen.findByText(/运行中 · 外部实例/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '停止引擎' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '重启' })).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/Studio 不控制其停止\/重启，也不会重复拉起/),
-    ).toBeInTheDocument()
+    const note = screen.getByText(/Studio 不控制其停止\/重启，也不会重复拉起/)
+    expect(note).toBeInTheDocument()
+    // §十一：外部实例带 tooltip 说明 Studio 不控制启停
+    expect(note).toHaveAttribute('title', '外部启动的 ComfyUI，Studio 不控制其启停')
   })
 
   it('PORT_CONFLICT：明确中文提示端口被非 ComfyUI 程序占用，请释放', async () => {

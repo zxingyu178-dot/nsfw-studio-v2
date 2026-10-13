@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { imageContentUrl, imagePreviewUrl, type ImageDTO } from '../types/workbench'
 import { useFocusGuard } from './ui/useOverlay'
+import { useOverlayScrollLock } from '../hooks/useOverlayScrollLock'
+import {
+  ActionDock,
+  IconButton,
+  IconActualSize,
+  IconClose,
+  IconFit,
+  IconInfo,
+  IconNext,
+  IconPrev,
+} from './ui/ui3'
 import './ImageLightbox.css'
 
 /**
@@ -10,6 +21,11 @@ import './ImageLightbox.css'
  * - 渐进加载：初开先载 preview（长边 1536），点「100%」或缩放倍率 ≥1 时才切换 original；
  *   切图后缩放复位 → 回到 preview。快速切图不等待完整原图。
  * - 键盘：ESC 关闭；← / → 上一张 / 下一张；+/- 缩放。
+ * - 滚动隔离（Task 9）：打开期间用 useOverlayScrollLock 锁 html/body/.app-shell__main；
+ *   .lb-stage 的 wheel 以 native non-passive 监听接管（preventDefault+stopPropagation），
+ *   不再用 React onWheel（React 默认 passive，无法拦截触控板滚动）。
+ * - 交互（Task 10）：滚轮以鼠标位置为锚点缩放；双击 Fit↔100%；拖动带边界限制；
+ *   底部用 UI3 ActionDock + IconButton + SVG icon 浮动坞（不再是文字框按钮）。
  * - 可选 hasMore/onLoadMore：到已加载末尾且还有下一页时，触发加载并 append（全历史导航闭环）。
  *   不传这两个 props 的调用方（Generate/ResultPane 有限列表）维持原边界禁用行为。
  */
@@ -51,7 +67,45 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
     }
   })
   const overlayRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  // wheel 监听只在挂载时绑定一次（native non-passive），通过 ref 读取最新 scale/offset。
+  const scaleRef = useRef<number | null>(null)
+  const offsetRef = useRef<{ x: number; y: number }>(ZERO_OFFSET)
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
+
+  /**
+   * 拖动边界限制：已放大时允许把图片拖到边缘与 stage 对齐，但不允许完全甩出屏幕。
+   * 测量不可用（jsdom / 未布局）时原样返回，保证无测量环境下不钳制测试期望的位移。
+   */
+  const clampOffset = useCallback((ox: number, oy: number, s: number): { x: number; y: number } => {
+    const stage = stageRef.current
+    const img = imgRef.current
+    if (!stage || !img) return { x: ox, y: oy }
+    const sw = stage.clientWidth || stage.getBoundingClientRect().width
+    const sh = stage.clientHeight || stage.getBoundingClientRect().height
+    const renderedW = img.getBoundingClientRect().width
+    const renderedH = img.getBoundingClientRect().height
+    if (!sw || !sh || !renderedW || !renderedH) return { x: ox, y: oy }
+    // 布局（未缩放）图片尺寸 = 当前渲染尺寸 / 倍率
+    const iw = renderedW / s
+    const ih = renderedH / s
+    // 图片比 stage 大时，最多拖到「图片边缘刚好碰到 stage 边缘」
+    const maxX = Math.max(0, (sw - iw * s) / 2)
+    const maxY = Math.max(0, (sh - ih * s) / 2)
+    return {
+      x: Math.min(maxX, Math.max(-maxX, ox)),
+      y: Math.min(maxY, Math.max(-maxY, oy)),
+    }
+  }, [])
+
+  const applyScale = useCallback((nextScale: number | null, nextOffset?: { x: number; y: number }) => {
+    scaleRef.current = nextScale
+    const off = nextOffset ?? ZERO_OFFSET
+    offsetRef.current = off
+    setScale(nextScale)
+    setOffset(off)
+  }, [])
 
   const toggleInfo = useCallback(() => {
     setInfoHidden((prev) => {
@@ -66,18 +120,20 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
   }, [])
 
   useFocusGuard(true, overlayRef)
+  // Task 9：锁实际滚动容器（html/body/.app-shell__main），嵌套 overlay 靠 ref-count。
+  useOverlayScrollLock(true)
 
   const clampedIndex = Math.min(Math.max(index, 0), images.length - 1)
 
   // 切换图片后缩放 / 平移复位
   useEffect(() => {
-    setScale(null)
-    setOffset(ZERO_OFFSET)
-  }, [clampedIndex])
+    applyScale(null, ZERO_OFFSET)
+  }, [clampedIndex, applyScale])
 
   const zoomBy = useCallback((factor: number) => {
-    setScale((current) => clampScale((current ?? 1) * factor))
-  }, [])
+    const current = scaleRef.current ?? 1
+    applyScale(clampScale(current * factor), offsetRef.current)
+  }, [applyScale])
 
   // 键盘：ESC 关闭 / ←→ 切换 / + - 缩放
   useEffect(() => {
@@ -110,42 +166,62 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
     return () => document.removeEventListener('keydown', onKey)
   }, [clampedIndex, images.length, onClose, onNavigate, zoomBy, hasMore, onLoadMore])
 
-  // 打开期间锁定 body 滚动
+  // Task 9：.lb-stage wheel 用 native non-passive 监听接管滚动链。
+  // React 的 onWheel 是 passive 委托，无法 preventDefault；这里直接挂 DOM listener。
   useEffect(() => {
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previous
+    const stage = stageRef.current
+    if (!stage) return
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+      const current = scaleRef.current ?? 1
+      const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
+      const next = clampScale(current * factor)
+      // 以鼠标位置为锚点缩放：保持光标下的内容点不动。
+      const rect = stage.getBoundingClientRect()
+      const cx = event.clientX - rect.left
+      const cy = event.clientY - rect.top
+      const ratio = next / current
+      const rawX = offsetRef.current.x + (1 - ratio) * (cx - rect.width / 2)
+      const rawY = offsetRef.current.y + (1 - ratio) * (cy - rect.height / 2)
+      applyScale(next, clampOffset(rawX, rawY, next))
     }
-  }, [])
+    stage.addEventListener('wheel', onWheel, { passive: false })
+    return () => stage.removeEventListener('wheel', onWheel)
+  }, [applyScale, clampOffset])
 
   function resetToFit(): void {
-    setScale(null)
-    setOffset(ZERO_OFFSET)
+    applyScale(null, ZERO_OFFSET)
   }
 
   function zoomTo100(): void {
-    setScale(1)
-    setOffset(ZERO_OFFSET)
+    applyScale(1, ZERO_OFFSET)
   }
 
-  function handleWheel(event: React.WheelEvent): void {
-    event.preventDefault()
-    zoomBy(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)
+  /** 双击图片：适应窗口 ↔ 100% 互切。 */
+  function handleDoubleClick(): void {
+    if (scaleRef.current === null) {
+      zoomTo100()
+    } else {
+      resetToFit()
+    }
   }
 
   function startDrag(event: React.MouseEvent): void {
     // 仅在已放大（非适应窗口）时允许拖动平移
-    if (scale === null) return
+    if (scaleRef.current === null) return
     event.preventDefault()
-    dragRef.current = { startX: event.clientX, startY: event.clientY, ox: offset.x, oy: offset.y }
+    dragRef.current = { startX: event.clientX, startY: event.clientY, ox: offsetRef.current.x, oy: offsetRef.current.y }
     const onMove = (moveEvent: MouseEvent): void => {
       const drag = dragRef.current
       if (!drag) return
-      setOffset({
-        x: drag.ox + moveEvent.clientX - drag.startX,
-        y: drag.oy + moveEvent.clientY - drag.startY,
-      })
+      const s = scaleRef.current ?? 1
+      const next = clampOffset(
+        drag.ox + moveEvent.clientX - drag.startX,
+        drag.oy + moveEvent.clientY - drag.startY,
+        s,
+      )
+      applyScale(s, next)
     }
     const onUp = (): void => {
       dragRef.current = null
@@ -162,6 +238,11 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
   const showOriginal = scale !== null && scale >= 1
   const src = showOriginal ? imageContentUrl(current.id) : imagePreviewUrl(current.id)
   const atEnd = clampedIndex >= images.length - 1
+  const nextLabel = atEnd && hasMore ? (loadingMore ? '加载中…' : '加载更多') : '下一张'
+  const handleNext = (): void => {
+    if (atEnd && hasMore && onLoadMore) onLoadMore()
+    else onNavigate(clampedIndex + 1)
+  }
   const transform = scale === null ? undefined : `translate(${offset.x}px, ${offset.y}px) scale(${scale})`
 
   return (
@@ -175,49 +256,65 @@ export function ImageLightbox({ images, index, onClose, onNavigate, renderSidePa
     >
       <div className="lb-body">
         <div
+          ref={stageRef}
           className={`lb-stage${scale === null ? '' : ' lb-stage--zoomed'}`}
-          onWheel={handleWheel}
           onMouseDown={(event) => {
             // 点击遮罩空白处（点在 stage 本身而非图片）关闭
             if (event.target === event.currentTarget) onClose()
           }}
         >
           <img
+            ref={imgRef}
             className="lb-img"
             src={src}
             alt=""
             draggable={false}
             style={scale === null ? undefined : { transform }}
             onMouseDown={startDrag}
+            onDoubleClick={handleDoubleClick}
           />
         </div>
 
-        <div className="lb-toolbar">
-          <span className="lb-count" aria-live="polite">
-            {clampedIndex + 1} / {images.length}
-          </span>
-          <button
-            type="button"
-            onClick={() => onNavigate(clampedIndex - 1)}
-            disabled={clampedIndex <= 0}
-          >
-            上一张
-          </button>
-          <button type="button" onClick={resetToFit}>适应窗口</button>
-          <button type="button" onClick={zoomTo100}>100%</button>
-          <button
-            type="button"
-            onClick={() => (atEnd && hasMore && onLoadMore ? onLoadMore() : onNavigate(clampedIndex + 1))}
-            disabled={atEnd && !(hasMore && onLoadMore)}
-          >
-            {atEnd && hasMore ? (loadingMore ? '加载中…' : '加载更多') : '下一张'}
-          </button>
-          <button type="button" onClick={onClose}>关闭</button>
-          {renderSidePanel && (
-            <button type="button" onClick={toggleInfo}>
-              {infoHidden ? '显示信息' : '隐藏信息'}
-            </button>
-          )}
+        {/* Task 10：底部浮动 Icon Dock（UI3 ActionDock + IconButton + SVG icon） */}
+        <div className="lb-dock">
+          <ActionDock label="图片操作">
+            <span className="lb-count" aria-live="polite">
+              {clampedIndex + 1} / {images.length}
+            </span>
+            <IconButton
+              icon={<IconPrev size={16} />}
+              label="上一张"
+              disabled={clampedIndex <= 0}
+              onClick={() => onNavigate(clampedIndex - 1)}
+            />
+            <IconButton
+              icon={<IconFit size={16} />}
+              label="适应窗口"
+              active={scale === null}
+              onClick={resetToFit}
+            />
+            <IconButton
+              icon={<IconActualSize size={16} />}
+              label="100%"
+              active={scale !== null && Math.abs(scale - 1) < 1e-6}
+              onClick={zoomTo100}
+            />
+            {renderSidePanel && (
+              <IconButton
+                icon={<IconInfo size={16} />}
+                label={infoHidden ? '显示信息' : '隐藏信息'}
+                active={!infoHidden}
+                onClick={toggleInfo}
+              />
+            )}
+            <IconButton
+              icon={<IconNext size={16} />}
+              label={nextLabel}
+              disabled={atEnd && !(hasMore && onLoadMore)}
+              onClick={handleNext}
+            />
+            <IconButton icon={<IconClose size={16} />} label="关闭" tone="danger" onClick={onClose} />
+          </ActionDock>
         </div>
       </div>
 

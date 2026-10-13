@@ -480,3 +480,154 @@ class EngineRuntimeService:
                 self._clear_record(keep_active=False)
             self._state = STATE_STOPPED
         return self.start()
+
+
+# =====================================================================================
+# Phase 0.14 Runtime Closure：ControlHub 生产适配器（mode=controlhub，默认）
+# =====================================================================================
+#
+# 生产模式下，ComfyUI 生命周期的唯一 owner 是 ControlHub 官方 lifecycle CLI。
+# EngineRuntimeService（上方）保留为 mode=direct 的开发适配器（scripts/dev 使用），
+# 绝不删除；但生产默认不走 Popen / psutil 杀树。
+#
+# 合同冻结（P0）：
+#   - Engine Runtime 的 integration_id 永远是 ``comfyui``（127.0.0.1:8188）；
+#   - 严禁 EngineRuntimeService / 本适配器对 ``nsfw-studio-v2`` 做 start/stop/restart
+#     （nsfw-studio-v2 = Studio 后端 8000，其生命周期归一键停止脚本 / request-shutdown，
+#       与生图引擎按钮无关）。
+
+#: ControlHub CLI 解释器 / data_root 机器默认（任务书冻结；仅代码常量，公共 config.yaml 不含）
+DEFAULT_CONTROLHUB_PYTHON = r"D:\control-hub\.venv\Scripts\python.exe"
+DEFAULT_CONTROLHUB_DATA_ROOT = r"C:\Users\30566\AppData\Local\AIHomeControlHub\data"
+
+
+class ControlHubEngineRuntime:
+    """生产模式适配器：ComfyUI 生命周期一律委托 ControlHub lifecycle CLI（id=comfyui）。
+
+    与 :class:`EngineRuntimeService` 对外同构（``status/start/stop/restart`` → RuntimeSnapshot），
+    但绝不 Popen、绝不 psutil 终止进程树；真实进程托管由 ControlHub carrier / 计划任务负责。
+    所有 CLI 调用经可 monkeypatch 的 ``_invoke`` seam，测试 hermetic。
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        from app.services.controlhub_lifecycle import (
+            ControlHubLifecycleClient,
+            ENGINE_INTEGRATION_ID,
+            STUDIO_INTEGRATION_ID,
+        )
+
+        cfg = settings.engine_runtime or {}
+        self.host = str(cfg.get("host", DEFAULT_HOST))
+        self.port = int(cfg.get("port", FIXED_PORT))
+
+        # 合同：engine integration_id 默认 comfyui，绝不能是 nsfw-studio-v2
+        self.integration_id = str(cfg.get("integration_id", ENGINE_INTEGRATION_ID))
+        if self.integration_id == STUDIO_INTEGRATION_ID:
+            raise RuntimeError(
+                "EngineRuntime 合同错误：engine integration_id 不得为 nsfw-studio-v2（应为 comfyui）"
+            )
+
+        ch_cfg = getattr(settings, "controlhub", {}) or {}
+        python_exe = str(ch_cfg.get("python_exe") or DEFAULT_CONTROLHUB_PYTHON)
+        data_root = str(ch_cfg.get("data_root") or DEFAULT_CONTROLHUB_DATA_ROOT)
+        self._client = ControlHubLifecycleClient(python_exe, data_root)
+
+        logs_dir = settings.storage.data_root / "logs" / "engine"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        self.log_location = str(logs_dir / "comfyui-managed.log")
+
+    # ===== seam（测试 monkeypatch） =====
+
+    def _invoke(self, action: str):
+        """调用 ControlHub CLI（seam）。返回 LifecycleResult。"""
+        return self._client.invoke(action, self.integration_id)
+
+    # ===== 状态映射 =====
+
+    def _snap(self, state: str, owned: bool, detail: str, *, version: str = "") -> RuntimeSnapshot:
+        return RuntimeSnapshot(
+            state=state,
+            host=self.host,
+            port=self.port,
+            owned=owned,
+            pid=None,
+            started_at=None,
+            detail=detail,
+            log_location=self.log_location,
+            health={
+                "online": state == STATE_RUNNING_MANAGED,
+                "engine_name": "comfyui",
+                "engine_version": version,
+            },
+        )
+
+    def _unapproved_detail(self) -> str:
+        return f"ComfyUI integration({self.integration_id}) 未注册/未批准（待第二阶段 ControlHub 接入）"
+
+    def status(self) -> RuntimeSnapshot:
+        res = self._invoke("status")
+        st = res.state
+        if st == "online":
+            return self._snap(STATE_RUNNING_MANAGED, True,
+                              f"ComfyUI 经 ControlHub 运行中 @ {self.host}:{self.port}", version="")
+        if st == "degraded":
+            return self._snap(STATE_RUNNING_MANAGED, True,
+                              f"ComfyUI 运行中（degraded）@ {self.host}:{self.port}")
+        if st == "offline":
+            return self._snap(STATE_STOPPED, False, "ComfyUI 未运行（ControlHub offline）")
+        if res.is_unapproved:
+            return self._snap(STATE_ERROR, False, self._unapproved_detail())
+        return self._snap(STATE_STOPPED, False, f"ComfyUI 状态未知（{res.reason or st or 'unknown'}）")
+
+    def start(self) -> RuntimeSnapshot:
+        res = self._invoke("start")
+        if res.ok:
+            return self.status()
+        if res.is_port_conflict:
+            raise EnginePortConflict()
+        if res.state == "timed_out":
+            return self._snap(STATE_STARTING, True,
+                              "ComfyUI 启动超时，仍在进行（ControlHub 冷启约数分钟）")
+        if res.is_unapproved:
+            return self._snap(STATE_ERROR, False, self._unapproved_detail())
+        return self._snap(STATE_ERROR, False,
+                          f"ComfyUI 启动失败：{res.reason or res.state or 'unknown'}")
+
+    def stop(self) -> RuntimeSnapshot:
+        res = self._invoke("stop")
+        if res.ok:
+            return self._snap(STATE_STOPPED, False, "ComfyUI 已停止（ControlHub）")
+        if res.is_unapproved:
+            # 未注册：本就不存在，视为已停（幂等）
+            return self._snap(STATE_STOPPED, False, "ComfyUI integration 未注册，无需停止")
+        return self._snap(STATE_ERROR, False,
+                         f"ComfyUI 停止失败：{res.reason or res.state or 'unknown'}")
+
+    def restart(self) -> RuntimeSnapshot:
+        res = self._invoke("restart")
+        if res.ok:
+            return self.status()
+        if res.is_port_conflict:
+            raise EnginePortConflict()
+        if res.state == "timed_out":
+            return self._snap(STATE_STARTING, True, "ComfyUI 重启超时，仍在进行（ControlHub）")
+        if res.is_unapproved:
+            return self._snap(STATE_ERROR, False, self._unapproved_detail())
+        return self._snap(STATE_ERROR, False,
+                          f"ComfyUI 重启失败：{res.reason or res.state or 'unknown'}")
+
+
+def create_engine_runtime(settings: Settings):
+    """按 config.engine_runtime.mode 选择适配器（生产默认 controlhub）。
+
+    - ``controlhub``（默认）：ComfyUI 生命周期委托官方 CLI（id=comfyui）；
+    - ``direct``：保留 v0.13.2 直接 Popen + uv 桩归属 + 健康探测/自恢复实现（仅 scripts/dev）。
+    """
+    from app.services.controlhub_lifecycle import MODE_CONTROLHUB, MODE_DIRECT
+
+    cfg = settings.engine_runtime or {}
+    mode = str(cfg.get("mode", MODE_CONTROLHUB)).strip().lower()
+    if mode == MODE_DIRECT:
+        return EngineRuntimeService(settings)
+    # 默认（含未识别值）走生产 controlhub，绝不静默回退到 Popen
+    return ControlHubEngineRuntime(settings)

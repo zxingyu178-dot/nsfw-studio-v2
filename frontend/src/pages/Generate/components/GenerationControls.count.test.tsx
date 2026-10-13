@@ -59,7 +59,7 @@ describe('输出数量自由输入（权威口径 1–64）', () => {
   it('渲染数字输入框与常用档 chips，并显示范围提示', () => {
     mockUseWorkbench.mockReturnValue(state(1))
     render(<GenerationControls />)
-    expect(screen.getByLabelText('数量')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '数量' })).toBeInTheDocument()
     expect(screen.getByText('1–64 张')).toBeInTheDocument()
     for (const n of [1, 2, 4, 6, 8]) {
       expect(screen.getByRole('button', { name: String(n) })).toBeInTheDocument()
@@ -69,7 +69,7 @@ describe('输出数量自由输入（权威口径 1–64）', () => {
   it('可自由输入 3 / 5 / 10，blur 后提交 setCount', () => {
     mockUseWorkbench.mockReturnValue(state(1))
     render(<GenerationControls />)
-    const input = screen.getByLabelText('数量')
+    const input = screen.getByRole('textbox', { name: '数量' })
 
     fireEvent.change(input, { target: { value: '3' } })
     fireEvent.blur(input)
@@ -91,10 +91,10 @@ describe('输出数量自由输入（权威口径 1–64）', () => {
     expect(mockSetCount).toHaveBeenLastCalledWith(4)
   })
 
-  it('越界 / 非法输入在 blur 时钳制到 1–64', () => {
+  it('越界输入在 blur 时钳制到 1–64；非数字输入不触发提交', () => {
     mockUseWorkbench.mockReturnValue(state(5))
     render(<GenerationControls />)
-    const input = screen.getByLabelText('数量')
+    const input = screen.getByRole('textbox', { name: '数量' })
 
     fireEvent.change(input, { target: { value: '0' } })
     fireEvent.blur(input)
@@ -108,8 +108,10 @@ describe('输出数量自由输入（权威口径 1–64）', () => {
     fireEvent.blur(input)
     expect(mockSetCount).toHaveBeenLastCalledWith(64)
 
+    // NumberStepper 契约：非数字输入 blur 后还原为当前值，不触发 setCount（不跳到 1）
+    const callsBefore = mockSetCount.mock.calls.length
     fireEvent.change(input, { target: { value: 'abc' } })
     fireEvent.blur(input)
-    expect(mockSetCount).toHaveBeenLastCalledWith(1)
+    expect(mockSetCount.mock.calls.length).toBe(callsBefore)
   })
 })
