@@ -1,5 +1,6 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import { Button, ConfirmModal, StatusBadge } from '../../../components/ui'
+import { ConfirmModal, StatusBadge } from '../../../components/ui'
+import { ActionButton, IconButton, IconCancel, IconPause, IconPrev, IconResume } from '../../../components/ui/ui3'
 import {
   cancelJob,
   clearStaleJobs,
@@ -59,27 +60,23 @@ export function QueuePanel() {
           </span>
         </div>
         <div className="wb-queue__head-right">
-          <Button
-            size="xs"
-            variant="ghost"
-            title="把上次未正常结束的排队/运行中任务标记为已中断（不会删除已生成图片）"
+          <ActionButton
             onClick={() => setConfirmClear(true)}
           >
             清理陈旧任务
-          </Button>
+          </ActionButton>
           {queueHasActivity && (
             store.queue?.worker.queue_paused ? (
-              <Button size="xs" variant="primary" onClick={() => void resumeQueue()}>
-                继续队列
-              </Button>
+              <ActionButton onClick={() => void resumeQueue()}>继续队列</ActionButton>
             ) : (
-              <Button size="xs" variant="ghost" onClick={() => void pauseQueue()}>
-                暂停队列
-              </Button>
+              <ActionButton onClick={() => void pauseQueue()}>暂停队列</ActionButton>
             )
           )}
         </div>
       </div>
+      {queueHasActivity && (
+        <p className="wb-queue__note">队列只调度后续任务；释放/停止后台引擎请用顶部 Power。</p>
+      )}
       {clearNotice && (
         <p className="muted" role="status" data-testid="clear-stale-notice" onClick={() => setClearNotice(null)}>
           {clearNotice}
@@ -88,7 +85,7 @@ export function QueuePanel() {
       {store.queue?.worker.queue_paused && (
         <div className="ds-notice ds-notice--warning" role="alert">
           <p>队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}</p>
-          <Button size="sm" onClick={() => void resumeQueue()}>恢复队列</Button>
+          <ActionButton onClick={() => void resumeQueue()}>恢复队列</ActionButton>
         </div>
       )}
       {queued.length === 0 && paused.length === 0 && <p className="muted">暂无等待任务</p>}
@@ -113,10 +110,10 @@ export function QueuePanel() {
             actions={
               <>
                 {index > 0 && (
-                  <Button size="xs" variant="ghost" onClick={() => moveToFront(item.id)}>优先</Button>
+                  <IconButton icon={<IconPrev size={14} />} label="优先" tooltip="置顶优先" onClick={() => moveToFront(item.id)} />
                 )}
-                <Button size="xs" variant="ghost" onClick={() => void pauseJob(item.id)}>暂停</Button>
-                <Button size="xs" variant="ghost" onClick={() => void cancelJob(item.id)}>取消</Button>
+                <IconButton icon={<IconPause size={14} />} label="暂停" onClick={() => void pauseJob(item.id)} />
+                <IconButton icon={<IconCancel size={14} />} label="取消" onClick={() => void cancelJob(item.id)} />
               </>
             }
           />
@@ -127,8 +124,8 @@ export function QueuePanel() {
             job={item}
             actions={
               <>
-                <Button size="xs" variant="ghost" onClick={() => void resumeJob(item.id)}>继续</Button>
-                <Button size="xs" variant="ghost" onClick={() => void cancelJob(item.id)}>取消</Button>
+                <IconButton icon={<IconResume size={14} />} label="继续" onClick={() => void resumeJob(item.id)} />
+                <IconButton icon={<IconCancel size={14} />} label="取消" onClick={() => void cancelJob(item.id)} />
               </>
             }
           />

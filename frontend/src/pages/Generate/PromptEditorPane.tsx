@@ -11,6 +11,7 @@ import {
   SegmentedControl,
   Textarea,
 } from '../../components/ui'
+import { ActionButton, IconButton, IconClose, IconPlus } from '../../components/ui/ui3'
 import { STRUCTURED_FIELDS, imageThumbUrl, type AssetType, type StructuredPrompt } from '../../types/workbench'
 import {
   applyAssetToSlot,
@@ -27,6 +28,7 @@ import {
   useWorkbench,
 } from '../../stores/workbenchStore'
 import { AssetPickerDrawer } from './AssetPickerDrawer'
+import { CollapsibleSection } from './components/CollapsibleSection'
 import { Pane } from './Pane'
 
 type SaveTarget = 'prompt' | 'recipe' | null
@@ -189,21 +191,21 @@ export function PromptEditorPane() {
                   {isSlot && (
                     <span className="wb-structured-field__actions">
                       {slotRef && (
-                        <span className="wb-chip" title="已选素材（点击 ✕ 移除，不影响素材本身）">
+                        <span className="wb-chip" title="已选素材（点 × 移除，不影响素材本身）">
                           <span className="wb-chip__name">{slotRef.name}</span>
-                          <button
-                            type="button"
-                            className="wb-chip__remove"
-                            aria-label={`移除已选素材 ${slotRef.name}`}
+                          <IconButton
+                            icon={<IconClose size={14} />}
+                            label={`移除已选素材 ${slotRef.name}`}
+                            size="sm"
                             onClick={() => clearAssetFromSlot(key as 'face')}
-                          >
-                            ✕
-                          </button>
+                          />
                         </span>
                       )}
-                      <Button size="xs" variant="ghost" onClick={() => setPickerSlot(key as AssetType)}>
-                        选择素材
-                      </Button>
+                      <IconButton
+                        icon={<IconPlus size={14} />}
+                        label="选择素材"
+                        onClick={() => setPickerSlot(key as AssetType)}
+                      />
                     </span>
                   )}
                 </div>
@@ -227,20 +229,22 @@ export function PromptEditorPane() {
         </Field>
       )}
 
-      <Field label="Negative Prompt" className="wb-negative">
+      <CollapsibleSection id="negative" title="Negative Prompt" defaultOpen={false}>
         <Textarea
           rows={3}
           value={state.negativePrompt}
           onChange={(event) => setNegativePrompt(event.target.value)}
           placeholder="可选：不希望出现的内容"
         />
-      </Field>
+      </CollapsibleSection>
 
-      <ComposePreview mode={state.promptMode} structured={state.structured} fullPrompt={state.fullPrompt} />
+      <CollapsibleSection id="preview" title="最终 Prompt Preview" defaultOpen={false}>
+        <ComposePreview mode={state.promptMode} structured={state.structured} fullPrompt={state.fullPrompt} />
+      </CollapsibleSection>
 
       <div className="wb-footer">
-        <Button variant="primary" onClick={() => setSaveTarget('prompt')}>保存为 Prompt</Button>
-        <Button variant="secondary" onClick={() => setSaveTarget('recipe')}>保存为配方</Button>
+        <ActionButton onClick={() => setSaveTarget('prompt')}>存为 Prompt</ActionButton>
+        <ActionButton onClick={() => setSaveTarget('recipe')}>存为配方</ActionButton>
       </div>
 
       {message && (
