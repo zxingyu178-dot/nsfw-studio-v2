@@ -7,11 +7,16 @@
   background: rgba(0, 0, 0, 0.9);
   /* Task 9：滚动链隔离——到顶/底不继续推底层 Gallery/Generate。 */
   overscroll-behavior: none;
+  /* Phase 0.14：fixed 视口内裁剪——body/side 高度收敛到视口，避免图片按自然尺寸撑高。 */
+  overflow: hidden;
 }
 
 .lb-body {
   flex: 1;
   min-width: 0;
+  /* Phase 0.14：明确跨轴高度为视口高，cross 轴 stretch 不可靠时仍约束内部。 */
+  height: 100%;
+  min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -20,6 +25,7 @@
 
 .lb-stage {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,6 +69,8 @@
   flex: 0 0 340px;
   width: 340px;
   max-width: 40vw;
+  /* Phase 0.14：明确跨轴高度为视口高，信息栏内部独立滚动。 */
+  height: 100%;
   display: flex;
   min-height: 0;
   border-left: 1px solid var(--border);

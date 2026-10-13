@@ -47,6 +47,14 @@ describe('ImageLightbox overscroll-behavior', () => {
     expect(block('.lb-side-wrap')).toMatch(/overscroll-behavior:\s*contain/)
   })
 
+  it('CSS：高度收敛到视口（真机回归——图片不得按自然尺寸撑高 body/side）', () => {
+    expect(block('.lb-overlay')).toMatch(/overflow:\s*hidden/)
+    expect(block('.lb-body')).toMatch(/height:\s*100%/)
+    expect(block('.lb-body')).toMatch(/min-height:\s*0/)
+    expect(block('.lb-stage')).toMatch(/min-height:\s*0/)
+    expect(block('.lb-side-wrap')).toMatch(/height:\s*100%/)
+  })
+
   it('信息栏渲染为 .lb-side-wrap，且其上 wheel 不传导到底层 scrollTop', () => {
     const { container } = render(
       <ImageLightbox
