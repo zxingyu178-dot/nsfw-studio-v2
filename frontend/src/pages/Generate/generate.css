@@ -523,3 +523,74 @@
   .wb-pane__footer { padding: var(--space-1) 0; }
   .result-stage { min-height: 200px; }
 }
+
+/* ============ GenerateAction（专属主按钮，UI 3.0） ============ */
+.generate-action__wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5, 6px);
+}
+.generate-action__gate {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--danger-bright, #f0908c);
+}
+.generate-action__msg {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+.generate-action__msg--error { color: var(--danger-bright, #f0908c); }
+.generate-action__msg--ok { color: var(--text-tertiary); }
+
+.generate-action {
+  appearance: none;
+  width: 100%;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #0b0f14;
+  background: linear-gradient(180deg,
+    var(--action-gradient-start, #3fd6c2) 0%,
+    var(--action-gradient-end, #2fb6e8) 100%);
+  box-shadow: 0 0 0 1px rgba(63, 214, 194, 0.25),
+    0 0 14px -4px var(--glow-accent, rgba(63, 214, 194, 0.55));
+  cursor: pointer;
+  transition: filter 0.12s ease, box-shadow 0.12s ease, transform 0.05s ease;
+}
+.generate-action:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 0 0 1px rgba(63, 214, 194, 0.4),
+    0 0 20px -2px var(--glow-accent, rgba(63, 214, 194, 0.7));
+}
+.generate-action:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+.generate-action:disabled {
+  cursor: not-allowed;
+  color: var(--text-tertiary);
+  background: var(--control-bg, rgba(255,255,255,0.04));
+  box-shadow: none;
+  border-color: var(--control-border, rgba(255,255,255,0.1));
+}
+.generate-action__icon { display: inline-flex; }
+.generate-action__line {
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.7;
+  animation: generate-action-pulse 0.9s ease-in-out infinite alternate;
+}
+@keyframes generate-action-pulse {
+  from { opacity: 0.25; transform: scaleX(0.5); }
+  to { opacity: 0.8; transform: scaleX(1); }
+}
+.generate-action__secondary { align-self: center; }

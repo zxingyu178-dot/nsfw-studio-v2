@@ -2,7 +2,7 @@ import { activeJob, useJobStore } from '../../stores/jobStore'
 import { Pane } from './Pane'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { CurrentJobCard } from './components/CurrentJobCard'
-import { GenerateFooter } from './components/GenerateFooter'
+import { GenerateAction } from './components/GenerateAction'
 import { GenerationControls } from './components/GenerationControls'
 import { QueuePanel } from './components/QueuePanel'
 
@@ -23,7 +23,7 @@ export function SettingsPane({ imageGenAvailable }: { imageGenAvailable: boolean
   return (
     <Pane
       title="生成配置"
-      footer={<GenerateFooter imageGenAvailable={imageGenAvailable} />}
+      footer={<GenerateAction imageGenAvailable={imageGenAvailable} />}
     >
       <GenerationControls />
 
