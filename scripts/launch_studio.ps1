@@ -1,22 +1,27 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-    NSFW Studio V2 —— 日常启动器（双击桌面快捷方式即调用本脚本）。
+    NSFW Studio V2 —— 生产启动器（双击桌面快捷方式即调用本脚本）。
 
 .DESCRIPTION
-    正常启动【不会】重复 npm install：
-      - 仅在 frontend\dist 缺失，或 dist\.build_commit 与 git HEAD 不一致时才重新构建；
-      - 若工作区有未提交改动，给出中文提示但不阻断启动。
-    先探测 127.0.0.1:8000 是否已在服务：已在服务则直接打开浏览器；
-    否则用项目根 .venv 的 python 后台启动 uvicorn（app.main:app，127.0.0.1:8000）。
-    脚本退出后后端进程继续运行（独立进程，不随脚本退出被杀掉）。
+    Phase 0.14 Runtime Closure：生产启动**不再自己拉起后端服务进程**。
+    ComfyUI / Studio 后端的唯一 lifecycle owner 是 ControlHub 官方 CLI。
+    本脚本只做：
+      1. （可选）前端构建戳检查：dist 缺失或与 git HEAD 不一致时才重新构建；
+      2. 固定端口 127.0.0.1:8000 预检：Free / Ours / Other（Other 打印占用 PID/程序/命令行并
+         退出 3，**绝不静默换口**）；
+      3. 调 ControlHub lifecycle CLI start nsfw-studio-v2（解释器 / --data-root 钉死）；
+      4. 轮询 127.0.0.1:8000/api/v1/health 就绪；
+      5. 打开浏览器。
+
+    红线：固定 8000；禁止 8001/8002/自动换口；禁止 Vite Preview 生产链。
+    需要自定义端口的开发启动器见 scripts/dev/launch_studio_dev.ps1（仅供开发）。
 
 .PARAMETER ProjectRoot
     可选：显式传入项目根。默认按脚本位置（scripts 的上一级）自动定位。
 #>
 param(
-    [string]$ProjectRoot = "",
-    [int]$Port = 8000
+    [string]$ProjectRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,16 +34,19 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
 
 $BackendDir  = Join-Path $ProjectRoot "backend"
 $FrontendDir = Join-Path $ProjectRoot "frontend"
-$VenvPython  = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $DistIndex   = Join-Path $FrontendDir "dist\index.html"
 $StampFile   = Join-Path $FrontendDir "dist\.build_commit"
-$BaseUrl     = "http://127.0.0.1:$Port"
 
-if (-not (Test-Path $VenvPython)) {
-    Write-Host "[NSFW Studio] 未找到虚拟环境：$VenvPython" -ForegroundColor Red
-    Write-Host "[NSFW Studio] 请先运行 scripts\install_desktop_shortcut.ps1 完成一次性安装。" -ForegroundColor Red
-    exit 1
-}
+# ---- 生产固定端口（红线，禁止参数覆盖/自动换口） ----
+$Port      = 8000
+$Host_      = "127.0.0.1"
+$BaseUrl    = "http://${Host_}:$Port"
+
+# ---- ControlHub 官方 lifecycle CLI（钉死，不使用项目 .venv） ----
+$ControlHubPython   = "D:\control-hub\.venv\Scripts\python.exe"
+$ControlHubDataRoot = "C:\Users\30566\AppData\Local\AIHomeControlHub\data"
+$CliModule          = "control_hub.lifecycle_cli"
+$StudioIntegration  = "nsfw-studio-v2"
 
 function Fail-Step([string]$msg) {
     Write-Host "[NSFW Studio][启动失败] $msg" -ForegroundColor Red
@@ -90,38 +98,24 @@ if ($needBuild) {
         & npm run build
         if ($LASTEXITCODE -ne 0) { Fail-Step "前端构建失败（npm run build 退出码 $LASTEXITCODE）。" }
     } finally { Pop-Location }
-    # 构建成功后更新构建戳
     $newCommit = Get-HeadCommit
     Set-Content -Path $StampFile -Value $newCommit -NoNewline -Encoding Ascii
     Write-Host "[NSFW Studio] 前端构建完成：$newCommit" -ForegroundColor Green
 }
 
-# ---- v0.13.2 (d) 端口预检：三分支判定（可 dot-source 复用） ----
+# ---- 端口预检：Free / Ours / Other（Other 打印占用信息并退出 3，不静默换口） ----
 function Get-StudioPortStatus {
-    <#
-    .SYNOPSIS
-        判定 127.0.0.1:<Port> 当前占用情况，返回 'Free' | 'Ours' | 'Other'。
-        可 dot-source 本脚本后单独调用（此时 $Port 由调用方设置）。
-    #>
     param([int]$Port)
-
-    # 1) 无 LISTEN → Free
     $listen = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if (-not $listen) { return "Free" }
-
-    # 2) 有 LISTEN，短超时探本应用健康特征
     $base = "http://127.0.0.1:$Port"
     try {
         $resp = Invoke-WebRequest -Uri "$base/api/v1/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
         $raw = $resp.Content
         if ($raw -is [byte[]]) { $body = [System.Text.Encoding]::UTF8.GetString($raw) }
         else { $body = [string]$raw }
-        if ($body -match '"app_version"' -or $body -match '"product"' -or $body -match '"status"') {
-            return "Ours"
-        }
+        if ($body -match '"status"' -or $body -match '"version"') { return "Ours" }
     } catch { }
-
-    # 3) 有 LISTEN 但非本应用 → Other，取占用进程信息
     return "Other"
 }
 
@@ -132,17 +126,12 @@ function Get-PortOwnerInfo {
     $pid_ = $conn.OwningProcess
     try {
         $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $pid_" -ErrorAction Stop
-        return [PSCustomObject]@{
-            Pid       = $pid_
-            Name      = $proc.Name
-            CommandLine = $proc.CommandLine
-        }
+        return [PSCustomObject]@{ Pid = $pid_; Name = $proc.Name; CommandLine = $proc.CommandLine }
     } catch {
         return [PSCustomObject]@{ Pid = $pid_; Name = "(unknown)"; CommandLine = "" }
     }
 }
 
-# ---- 探测端口状态 ----
 $portStatus = Get-StudioPortStatus -Port $Port
 
 if ($portStatus -eq "Ours") {
@@ -163,24 +152,26 @@ if ($portStatus -eq "Other") {
     exit 3
 }
 
-# Free → 继续启动 uvicorn
+# Free → 经 ControlHub lifecycle CLI 启动 nsfw-studio-v2
+if (-not (Test-Path $ControlHubPython)) {
+    Fail-Step "未找到 ControlHub CLI 解释器：$ControlHubPython"
+}
 
-# ---- 后台启动 uvicorn（独立进程，脚本退出后继续运行）----
-Write-Host "[NSFW Studio] 正在启动后端 uvicorn（127.0.0.1:$Port）……"
-Start-Process -FilePath $VenvPython `
-    -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port") `
-    -WorkingDirectory $BackendDir `
-    -WindowStyle Hidden
+Write-Host "[NSFW Studio] 经 ControlHub lifecycle CLI 启动 $StudioIntegration ……"
+& $ControlHubPython -m $CliModule start $StudioIntegration --data-root $ControlHubDataRoot
+if ($LASTEXITCODE -ne 0) {
+    Fail-Step "ControlHub lifecycle CLI start $StudioIntegration 失败（exit $LASTEXITCODE）。"
+}
 
 # ---- 轮询健康检查直到通过或超时 ----
-$deadline = (Get-Date).AddSeconds(40)
+$deadline = (Get-Date).AddSeconds(60)
 $ok = $false
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 1
     if ((Get-StudioPortStatus -Port $Port) -eq "Ours") { $ok = $true; break }
 }
 if (-not $ok) {
-    Fail-Step "后端启动超时（40 秒内健康检查未通过）。请手动查看 backend 日志排查。"
+    Fail-Step "后端启动超时（60 秒内 /api/v1/health 未就绪）。请查看 ControlHub / carrier 日志排查。"
 }
 
 Write-Host "[NSFW Studio] 后端已就绪：$BaseUrl" -ForegroundColor Green
