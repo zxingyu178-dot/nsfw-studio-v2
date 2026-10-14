@@ -10,6 +10,7 @@ import {
   Drawer,
   Field,
   Input,
+  Modal,
   SegmentedControl,
   Textarea,
 } from '../../components/ui'
@@ -92,7 +93,13 @@ export function PromptTab() {
 
       <div className="pp-grid">
         {items.map((prompt) => (
-          <PromptCard key={prompt.id} prompt={prompt} onOpen={(p) => setDrawer({ open: true, prompt: p })} />
+          <PromptCard
+            key={prompt.id}
+            prompt={prompt}
+            onOpen={(p) => setDrawer({ open: true, prompt: p })}
+            onUse={openInWorkbench}
+            onChanged={reload}
+          />
         ))}
       </div>
 
@@ -153,17 +160,26 @@ export function promptToSnapshot(prompt: PromptDTO): WorkbenchSnapshot {
 
 interface PromptCardProps {
   prompt: PromptDTO
+  /** 打开编辑抽屉。 */
   onOpen: (prompt: PromptDTO) => void
+  /** 一键带入工作台（使用）。 */
+  onUse: (prompt: PromptDTO) => void
+  /** 收藏等元数据变化后刷新外层列表。 */
+  onChanged: () => void
 }
 
-/** Prompt 卡片：封面缩略图 + 一键复制【当前版本完整 positive_prompt】（不打开抽屉）。 */
-function PromptCard({ prompt, onOpen }: PromptCardProps) {
+/**
+ * Prompt 可视化卡片（v0.15 Task 13/14）：
+ * 名称 → 摘要（≤3 行）→ 预览图（在文本下方）→ 更新时间 → 使用 / 复制 / 编辑 / 收藏。
+ * 无图统一低对比“暂未生成”占位（固定 aspect ratio、绝不 broken-image）；点图才打开预览，无图不弹错。
+ * 不自动覆盖封面，封面仍在编辑抽屉里显式“设为 Prompt 封面”。
+ */
+function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [copied, setCopied] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [favBusy, setFavBusy] = useState(false)
 
-  async function handleCopy(event: React.MouseEvent<HTMLButtonElement>): Promise<void> {
-    // 阻止冒泡：点击复制按钮绝不能打开编辑抽屉
-    event.stopPropagation()
-    event.preventDefault()
+  async function handleCopy(): Promise<void> {
     const text = prompt.current_version?.positive_prompt ?? ''
     try {
       await navigator.clipboard.writeText(text)
@@ -174,18 +190,19 @@ function PromptCard({ prompt, onOpen }: PromptCardProps) {
     window.setTimeout(() => setCopied(false), 1500)
   }
 
+  async function handleToggleFavorite(): Promise<void> {
+    if (favBusy) return
+    setFavBusy(true)
+    try {
+      await promptApi.updateMeta(prompt.id, { favorite: !prompt.favorite })
+      onChanged()
+    } finally {
+      setFavBusy(false)
+    }
+  }
+
   return (
-    <article className="pp-card" onClick={() => onOpen(prompt)}>
-      {prompt.preview_image_id ? (
-        <img
-          className="pp-card__cover"
-          src={imageThumbUrl(prompt.preview_image_id)}
-          loading="lazy"
-          alt=""
-        />
-      ) : (
-        <div className="pp-card__cover pp-card__cover--empty">无封面</div>
-      )}
+    <article className="pp-card">
       <header className="pp-card__head">
         <h3 className="pp-card__title">
           {prompt.favorite && <span title="已收藏">★ </span>}
@@ -196,18 +213,67 @@ function PromptCard({ prompt, onOpen }: PromptCardProps) {
           {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
         </Badge>
       </header>
+
       <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
-      <footer className="pp-card__foot">
-        <span className="pp-card__time">{formatDateTime(prompt.updated_at)}</span>
+
+      {/* 预览图：位于文本下方；无图为低对比“暂未生成”占位（固定比例，不裂图）。 */}
+      {prompt.preview_image_id ? (
         <button
           type="button"
-          className="pp-card__copy"
-          title="复制当前版本完整 Prompt"
-          onClick={(event) => void handleCopy(event)}
+          className="pp-card__preview"
+          onClick={() => setPreviewOpen(true)}
+          title="点击预览封面"
+          aria-label={`预览 ${prompt.name} 的封面`}
         >
-          {copied ? '已复制' : '复制'}
+          <img
+            src={imageThumbUrl(prompt.preview_image_id)}
+            loading="lazy"
+            alt=""
+            onError={(event) => {
+              // 后端清了文件但元数据仍在：降级为占位，不显示 broken-image。
+              event.currentTarget.style.display = 'none'
+            }}
+          />
         </button>
+      ) : (
+        <div className="pp-card__preview pp-card__preview--empty" aria-label="暂未生成预览">
+          <span>暂未生成</span>
+        </div>
+      )}
+
+      <footer className="pp-card__foot">
+        <span className="pp-card__time">{formatDateTime(prompt.updated_at)}</span>
+        <span className="pp-card__actions">
+          <button type="button" className="pp-card__action" onClick={() => onUse(prompt)}>
+            使用
+          </button>
+          <button
+            type="button"
+            className="pp-card__action"
+            title="复制当前版本完整 Prompt"
+            onClick={() => void handleCopy()}
+          >
+            {copied ? '已复制' : '复制'}
+          </button>
+          <button type="button" className="pp-card__action" onClick={() => onOpen(prompt)}>
+            编辑
+          </button>
+          <button
+            type="button"
+            className="pp-card__action"
+            disabled={favBusy}
+            onClick={() => void handleToggleFavorite()}
+          >
+            {prompt.favorite ? '★ 已收藏' : '☆ 收藏'}
+          </button>
+        </span>
       </footer>
+
+      {previewOpen && prompt.preview_image_id && (
+        <Modal open title={prompt.name} onClose={() => setPreviewOpen(false)}>
+          <img className="pp-card__preview-modal" src={imageContentUrl(prompt.preview_image_id)} alt={prompt.name} />
+        </Modal>
+      )}
     </article>
   )
 }
