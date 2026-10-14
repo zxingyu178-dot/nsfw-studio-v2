@@ -49,6 +49,41 @@ function Get-StudioStopExitCode {
     return 0
 }
 
+function Resolve-TargetStopState {
+    <#
+        将"某目标的 CLI 停止回报 + 该目标端口核验结果"调和为最终逐目标状态。
+        端口核验是最终事实（ground truth）：ControlHub lifecycle CLI 的 stop 偶发
+        adapter_failed/service_state=online（其内部确认窗口早于进程真正退出），
+        若随后端口已在等待窗口内 FREE，说明目标确已停止，应判定为 STOPPED（仅告警），
+        不能把这种"确认窗口瞬态"误报为停止失败。
+          CliState 取值：STOPPED / FAILED / EXTERNAL / UNKNOWN
+          PortFree     ：停止核验后该目标端口是否已 FREE
+        返回：STOPPED / FAILED / EXTERNAL / UNKNOWN
+        - EXTERNAL 恒为 EXTERNAL（外部实例不强杀，无论端口是否巧合 FREE）。
+        - FAILED + 端口 FREE  -> STOPPED（CLI 确认窗口瞬态，已实际停止）。
+        - FAILED + 端口仍占用 -> FAILED（真未停止，交由退出码 10/11/13）。
+        - STOPPED 恒为 STOPPED。
+        - UNKNOWN（CLI 被跳过等）-> 端口 FREE 则 STOPPED，否则 UNKNOWN。
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$CliState,
+        [Parameter(Mandatory = $true)][bool]$PortFree
+    )
+    switch ($CliState) {
+        "EXTERNAL" { return "EXTERNAL" }
+        "STOPPED"  { return "STOPPED" }
+        "FAILED"   {
+            if ($PortFree) { return "STOPPED" }
+            return "FAILED"
+        }
+        default {
+            if ($PortFree) { return "STOPPED" }
+            return "UNKNOWN"
+        }
+    }
+}
+
 # 退出码常量（供脚本与测试引用，避免魔法数字散落）
 $script:EXIT_OK            = 0
 $script:EXIT_STUDIO_FAIL  = 10

@@ -90,3 +90,52 @@ def test_failure_summary_does_not_say_released():
     assert "后台资源释放未完成" in text, "失败时必须输出明确的失败摘要"
     failure_part = text[text.index("后台资源释放未完成"):]
     assert "已释放" not in failure_part, "失败摘要不得含'已释放'"
+
+
+def test_port_reconciliation_helper_exists():
+    """决策模块必须提供纯函数 Resolve-TargetStopState（CLI 回报 × 端口核验 -> 状态）。"""
+    text = _text(DECISION_PS1)
+    assert "function Resolve-TargetStopState" in text, (
+        "必须提供 Resolve-TargetStopState，以端口核验为最终事实调和 CLI 瞬态 adapter_failed"
+    )
+    # 该函数须同时考虑 CLI 状态与端口是否 FREE（参数在定义中为 $CliState / $PortFree）
+    assert "$CliState" in text and "$PortFree" in text
+    for state in ("STOPPED", "FAILED", "EXTERNAL", "UNKNOWN"):
+        assert f'"{state}"' in text, f"Resolve-TargetStopState 缺少状态 {state}"
+
+
+def test_reconciliation_downgrades_transient_cli_failure_when_port_free():
+    """Resolve-TargetStopState：FAILED + 端口 FREE 必须返回 STOPPED；FAILED + 占用仍 FAILED。"""
+    text = _text(DECISION_PS1)
+    # 切片 FAILED case 到下一个 switch 标签 default 之间（含内层 if 花括号，不能用非贪婪到首个 }）
+    i_failed = text.index('"FAILED"')
+    i_default = text.index("default", i_failed)
+    block = text[i_failed:i_default]
+    port_free_pos = block.index("$PortFree")
+    stop_return_pos = block.index('return "STOPPED"')
+    fail_return_pos = block.index('return "FAILED"')
+    assert port_free_pos < stop_return_pos < fail_return_pos, (
+        "FAILED 分支必须先判 $PortFree：端口 FREE 返回 STOPPED，否则返回 FAILED"
+    )
+    # EXTERNAL 恒为 EXTERNAL（无论端口）
+    m_ext = re.search(r'"EXTERNAL"\s*\{\s*return\s+"EXTERNAL"', text)
+    assert m_ext, "EXTERNAL 必须恒为 EXTERNAL（外部实例不强杀）"
+
+
+def test_stop_script_reconciles_after_port_verification():
+    """stop_studio.ps1 必须在端口核验之后对 Studio/Comfy 调 Resolve-TargetStopState。"""
+    text = _text(STOP_PS1)
+    last_wait = text.rfind("Wait-PortFree")
+    assert last_wait != -1, "必须先做端口核验"
+    assert text.count("Resolve-TargetStopState") >= 2, (
+        "Studio 与 Comfy 都必须经 Resolve-TargetStopState 调和（至少 2 次调用）"
+    )
+    first_reconcile = text.index("Resolve-TargetStopState")
+    assert last_wait < first_reconcile, (
+        "端口核验必须在 Resolve-TargetStopState 调和之前（端口为最终事实）"
+    )
+    # 调和须同时传入端口结果
+    assert "$port8000Free" in text and "$port8188Free" in text
+    # 瞬态降级须有显式告警（不静默吞掉非 0 回报）
+    assert "确认窗口瞬态" in text, "CLI 瞬态失败被降级时必须显式告警"
+

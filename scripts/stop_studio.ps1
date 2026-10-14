@@ -31,7 +31,10 @@
       - 只通过 ControlHub lifecycle CLI + Studio 自身已知 runtime 停止；
       - ComfyUI 若非本 ControlHub owned（外部实例）→ 打印 EXTERNAL_NOT_OWNED，绝不强杀；
       - 任一 HTTP 调用失败都不中断整体停止（best-effort 标注）；
-      - 端口超时未释放 → 打印 STOP_TIMEOUT / OCCUPIED，不静默。
+      - 端口超时未释放 → 打印 STOP_TIMEOUT / OCCUPIED，不静默；
+      - 端口核验是最终事实：CLI stop 偶发 adapter_failed（确认窗口早于进程真正退出），
+        若该目标端口随后已核验 FREE，则判定为已停止（仅告警，不返回 10/11）；
+        只有端口仍占用才算真失败（10/11/13）。
 #>
 param(
     [string]$ProjectRoot = ""
@@ -229,6 +232,21 @@ else {
 
 # Mobile 状态由 8767 端口核验决定（子运行时随 Studio 退出）
 if ($port8767Free) { $MobileState = "STOPPED" } else { $MobileState = "FAILED" }
+
+# Studio / Comfy 状态以"端口核验为最终事实"调和 CLI 回报：
+# CLI stop 偶发 adapter_failed（内部确认窗口早于进程真正退出），若端口已 FREE 则确已停止，
+# 降级为 STOPPED（仅告警），避免误报 10/11；端口仍占用才是真失败（保留 10/11/13）。
+$reconciledStudio = Resolve-TargetStopState -CliState $StudioState -PortFree $port8000Free
+if ($StudioState -eq "FAILED" -and $reconciledStudio -eq "STOPPED") {
+    Write-Warn2 "  nsfw-studio-v2 CLI 曾回报非 0（adapter_failed 确认窗口瞬态），但 8000 已核验 FREE，判定为已停止。"
+}
+$StudioState = $reconciledStudio
+
+$reconciledComfy = Resolve-TargetStopState -CliState $ComfyState -PortFree $port8188Free
+if ($ComfyState -eq "FAILED" -and $reconciledComfy -eq "STOPPED") {
+    Write-Warn2 "  comfyui CLI 曾回报非 0（adapter_failed 确认窗口瞬态），但 8188 已核验 FREE，判定为已停止。"
+}
+$ComfyState = $reconciledComfy
 
 # =====================================================================================
 # 逐目标结果

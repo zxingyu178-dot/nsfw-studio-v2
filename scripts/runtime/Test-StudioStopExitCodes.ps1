@@ -77,6 +77,31 @@ Assert-Code 10 @{ StudioFailed = $true; ComfyFailed = $true } "10 优先于 11"
 # 外部 ComfyUI 时 8188 占用属预期，不计为 13（因 ComfyExternal 先命中返回 15）
 Assert-Code 15 @{ ComfyExternal = $true; Port8188Occupied = $true } "外部 ComfyUI + 8188 占用 -> 15（非 13）"
 
+function Assert-State([string]$expected, [string]$cliState, [bool]$portFree, [string]$label) {
+    $actual = Resolve-TargetStopState -CliState $cliState -PortFree $portFree
+    if ($actual -eq $expected) {
+        Write-Host ("  [PASS] {0} => {1}" -f $label, $actual) -ForegroundColor Green
+        $script:__pass++
+    } else {
+        Write-Host ("  [FAIL] {0} => expected {1}, got {2}" -f $label, $expected, $actual) -ForegroundColor Red
+        $script:__fail++
+    }
+}
+
+Write-Host ""
+Write-Host "== CLI 回报 × 端口核验 -> 逐目标状态 调和 harness ==" -ForegroundColor Cyan
+# CLI 成功 / EXTERNAL 恒成立
+Assert-State "STOPPED"  "STOPPED"  $true  "CLI STOPPED + 端口 FREE"
+Assert-State "STOPPED"  "STOPPED"  $false "CLI STOPPED 即使端口未及 FREE（仍按成功）"
+Assert-State "EXTERNAL" "EXTERNAL" $false "外部 Comfy + 8188 占用"
+Assert-State "EXTERNAL" "EXTERNAL" $true  "外部 Comfy 即使端口巧合 FREE（仍不强杀）"
+# CLI adapter_failed 瞬态：端口 FREE -> 已停止；端口仍占用 -> 真失败
+Assert-State "STOPPED"  "FAILED"   $true  "CLI FAILED + 端口 FREE（确认窗口瞬态）-> STOPPED"
+Assert-State "FAILED"   "FAILED"   $false "CLI FAILED + 端口仍占用 -> FAILED"
+# UNKNOWN 跟随端口
+Assert-State "STOPPED"  "UNKNOWN"  $true  "UNKNOWN + 端口 FREE -> STOPPED"
+Assert-State "UNKNOWN"  "UNKNOWN"  $false "UNKNOWN + 端口仍占用 -> UNKNOWN"
+
 Write-Host ""
 Write-Host "== resolve_aihome.ps1 烟测（不抛异常） ==" -ForegroundColor Cyan
 try {
