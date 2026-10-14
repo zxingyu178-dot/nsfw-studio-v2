@@ -1,4 +1,5 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { DisclosureButton } from '../../../components/ui/ui3'
 
 /**
  * 右栏 / 左栏可折叠分组（UI 3.0）：
@@ -6,8 +7,8 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
  * - 首次访问（无记录）默认展开；
  * - id 唯一，避免不同页面共用同一存储 key。
  *
- * UI 3.0：头部不再用裸 <button>，改 disclosure（role="button" + 键盘可达），
- * 与 ui3 设计语言一致，不出现浏览器默认按钮框。
+ * 语义：头部为 ui3 DisclosureButton（原生 <button aria-expanded aria-controls>），
+ * 不再用自造 div[role="button"][tabindex]。
  */
 const STORAGE_PREFIX = 'generate-section:'
 
@@ -37,6 +38,7 @@ export function CollapsibleSection({
   defaultOpen?: boolean
 }) {
   const [open, setOpen] = useState<boolean>(() => readStored(id) ?? defaultOpen)
+  const bodyId = `wb-section-body-${id}`
 
   function toggle(): void {
     setOpen((prev) => {
@@ -50,28 +52,23 @@ export function CollapsibleSection({
     })
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      toggle()
-    }
-  }
-
   return (
     <section className={`wb-section${open ? '' : ' wb-section--closed'}`}>
-      <div
+      <DisclosureButton
         className="wb-section__head"
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
+        expanded={open}
+        controlsId={bodyId}
         onClick={toggle}
-        onKeyDown={onKeyDown}
       >
         <span className="wb-section__caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
         <span className="wb-section__title">{title}</span>
         {extra && <span className="wb-section__extra">{extra}</span>}
-      </div>
-      {open && <div className="wb-section__body">{children}</div>}
+      </DisclosureButton>
+      {open && (
+        <div id={bodyId} className="wb-section__body">
+          {children}
+        </div>
+      )}
     </section>
   )
 }
