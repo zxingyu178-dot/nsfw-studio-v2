@@ -105,6 +105,20 @@ export function inferAspect(width: number, height: number): AspectKey {
   return best
 }
 
+/**
+ * 从已提交宽高反推分辨率档位（standard 长边 1024 / hd 长边 1920）。
+ * 按“长边”到两档长边的中点（1472）就近归属；不可度量 / 非法尺寸回退 standard。
+ * 用于 Recipe / History / 外部 hydrate 后回选档位，避免 UI 高亮与真实提交宽高不一致。
+ */
+export function deriveTier(width: number, height: number): ResolutionTier {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return 'standard'
+  }
+  const longEdge = Math.max(width, height)
+  const mid = (RESOLUTION_LONG_EDGE.standard + RESOLUTION_LONG_EDGE.hd) / 2
+  return longEdge >= mid ? 'hd' : 'standard'
+}
+
 /** 总像素是否超过“生成较慢”阈值（仅提示用）。 */
 export function isSlowSize(width: number, height: number): boolean {
   return width * height > SLOW_PIXEL_THRESHOLD

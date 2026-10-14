@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { moduleApi } from '../../api/client'
-import { SegmentedControl } from '../../components/ui'
+import { SegmentedControl, Tabs } from '../../components/ui'
 import { PromptEditorPane } from './PromptEditorPane'
 import { ResultPane } from './ResultPane'
 import { SettingsPane } from './SettingsPane'
@@ -81,26 +81,14 @@ export default function GeneratePage() {
         )}
       </div>
       {/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏。
-          UI 3.0：用 div[role=tab] 而非裸 <button>，保持 tablist/aria-selected 契约。 */}
-      <div className="generate__tabs" role="tablist" aria-label="工作台面板">
-        {TAB_LABELS.map((t) => (
-          <div
-            key={t.key}
-            role="tab"
-            tabIndex={0}
-            aria-selected={activeTab === t.key}
-            onClick={() => setActiveTab(t.key)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault()
-                setActiveTab(t.key)
-              }
-            }}
-          >
-            {t.label}
-          </div>
-        ))}
-      </div>
+          收口到 components/ui/Tabs（标准 WAI-ARIA tablist/tab/tabpanel），不再自造 div tab。 */}
+      <Tabs
+        className="generate__tabs"
+        ariaLabel="工作台面板"
+        items={TAB_LABELS.map((t) => ({ key: t.key, label: t.label }))}
+        active={activeTab}
+        onChange={(key) => setActiveTab(key as WorkspaceTab)}
+      />
       <div className="generate__columns">
         <div className="generate__pane generate__pane--prompt">
           <PromptEditorPane />
