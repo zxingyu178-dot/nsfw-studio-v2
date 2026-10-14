@@ -42,16 +42,25 @@ $Port      = 8000
 $Host_      = "127.0.0.1"
 $BaseUrl    = "http://${Host_}:$Port"
 
-# ---- ControlHub 官方 lifecycle CLI（钉死，不使用项目 .venv） ----
-$ControlHubPython   = "D:\control-hub\.venv\Scripts\python.exe"
-$ControlHubDataRoot = "C:\Users\30566\AppData\Local\AIHomeControlHub\data"
-$CliModule          = "control_hub.lifecycle_cli"
-$StudioIntegration  = "nsfw-studio-v2"
+# ---- 解析 ControlHub 环境（去硬编码；dot-source 后读取 $AIHOME_ENV） ----
+$RuntimeDir     = Join-Path $PSScriptRoot "runtime"
+$ResolveScript  = Join-Path $RuntimeDir "resolve_aihome.ps1"
+. $ResolveScript
+
+$CliModule         = "control_hub.lifecycle_cli"
+$StudioIntegration = "nsfw-studio-v2"
 
 function Fail-Step([string]$msg) {
     Write-Host "[NSFW Studio][启动失败] $msg" -ForegroundColor Red
     exit 1
 }
+
+# resolver 失败 -> 非 0 退出并打印明确错误（绝不静默继续）
+if (-not $AIHOME_ENV.Ok) {
+    Fail-Step "无法解析 ControlHub 环境：$($AIHOME_ENV.Error)"
+}
+$ControlHubPython   = $AIHOME_ENV.CONTROLHUB_PYTHON
+$ControlHubDataRoot = $AIHOME_ENV.CONTROLHUB_DATA_ROOT
 
 function Get-HeadCommit {
     if (-not (Get-Command "git" -ErrorAction SilentlyContinue)) { return "unknown" }
