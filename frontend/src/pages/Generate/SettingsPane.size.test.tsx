@@ -137,7 +137,8 @@ describe('画幅 + 分辨率预设', () => {
     render(<SettingsPane imageGenAvailable={true} />)
 
     expect(screen.getByText('该尺寸生成较慢，属正常现象')).toBeInTheDocument()
-    const generate = screen.getByRole('button', { name: '生成' })
+    const generate = document.querySelector('.wb4-generate__main') as HTMLButtonElement
+    expect(generate).toBeTruthy()
     expect(generate).toBeEnabled()
   })
 })

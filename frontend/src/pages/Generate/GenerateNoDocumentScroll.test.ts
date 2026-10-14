@@ -31,16 +31,20 @@ describe('GenerateNoDocumentScroll：根级高度锁，禁止整页撑长', () =
     expect(css).not.toMatch(/\.ds-page--fill\s*\{[^}]*height\s*:\s*auto/)
   })
 
-  it('.generate 根高度锁：height:100% + min-height:0，columns flex:1/min-height:0 内部滚动', () => {
+  it('.generate 根高度锁：height:100% + min-height:0 + overflow:hidden，wb4-columns flex:1/min-height:0 内部滚动', () => {
     const css = readCss('pages/Generate/generate.css')
     const gen = css.match(/\.generate\s*\{([^}]+)\}/)
     expect(gen, '.generate 规则块未找到').toBeTruthy()
     expect(gen![1]).toMatch(/height\s*:\s*100%/)
     expect(gen![1]).toMatch(/min-height\s*:\s*0/)
 
-    const cols = css.match(/\.generate__columns\s*\{([^}]+)\}/)
-    expect(cols, '.generate__columns 规则块未找到').toBeTruthy()
-    expect(cols![1]).toMatch(/flex\s*:\s*1/)
+    const wb4 = css.match(/\.generate\.wb4\s*\{([^}]+)\}/)
+    expect(wb4, '.generate.wb4 规则块未找到').toBeTruthy()
+    expect(wb4![1]).toMatch(/overflow\s*:\s*hidden/)
+
+    const cols = css.match(/\.wb4-columns\s*\{([^}]+)\}/)
+    expect(cols, '.wb4-columns 规则块未找到').toBeTruthy()
+    expect(cols![1]).toMatch(/flex\s*:\s*1 1 auto/)
     expect(cols![1]).toMatch(/min-height\s*:\s*0/)
   })
 

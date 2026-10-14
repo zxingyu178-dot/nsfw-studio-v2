@@ -5,9 +5,9 @@
  * 1. --topnav-height 在 tokens.css 中定义（56px）。
  * 2. z-index 契约：--z-nav > --z-page-sticky（页内浮层永远在一级导航之下）。
  * 3. TopNav 使用 sticky top:0。
- * 4. Generate modebar 不再 sticky——工作台根级禁止整页滚动，modebar 为 static + flex-shrink:0。
- * 5. 响应式断点：≥1320 完整三栏；1024~1319 紧凑三栏；<1024 Workspace Tabs。
- *    任何宽度都不得回退整页文档滚动（不得再出现 1179px 堆叠回退）。
+ * 4. Workbench 4.0 顶栏（.wb4-bar）非 sticky——工作台根级禁止整页滚动，顶栏为 static + flex-shrink:0。
+ * 5. 响应式断点（v0.15）：≥1200 可调三栏；1024~1199 固定紧凑三栏（280/270）；<1024 Workspace Tabs。
+ *    任何宽度都不得回退整页文档滚动（不得再出现 1179px / 1319px 旧堆叠回退）。
  * 6. .app-shell__main--workspace overflow:hidden（Generate 路由根级禁止撑长）。
  * 7. .ds-page--fill 高度锁死 + overflow:hidden。
  */
@@ -57,20 +57,21 @@ describe('App Shell 契约', () => {
     expect(body).toMatch(/z-index\s*:\s*var\(--z-nav\)/)
   })
 
-  it('.generate__modebar 为 position:static + flex-shrink:0（不再 sticky，根级禁滚）', () => {
+  it('.wb4-bar 为非 sticky + flex-shrink:0（Workbench 4.0 顶栏，根级禁滚）', () => {
     const genCss = readCss('pages/Generate/generate.css')
-    const block = genCss.match(/\.generate__modebar\s*\{([^}]+)\}/)
-    expect(block, '.generate__modebar 规则块未找到').toBeTruthy()
+    const block = genCss.match(/\.wb4-bar\s*\{([^}]+)\}/)
+    expect(block, '.wb4-bar 规则块未找到').toBeTruthy()
     const body = block![1]
     expect(body).not.toMatch(/position\s*:\s*sticky/)
     expect(body).toMatch(/flex-shrink\s*:\s*0/)
   })
 
-  it('响应式断点：存在 1319px 紧凑三栏与 1023px Workspace Tabs，且无 1179px 整页堆叠回退', () => {
+  it('响应式断点（v0.15）：存在 1199px 紧凑三栏与 1023px Workspace Tabs，且无 1319/1179 旧回退', () => {
     const genCss = readCss('pages/Generate/generate.css')
-    expect(genCss).toMatch(/max-width\s*:\s*1319\s*px/)
+    expect(genCss).toMatch(/max-width\s*:\s*1199\s*px/)
     expect(genCss).toMatch(/max-width\s*:\s*1023\s*px/)
-    // 历史 bug 回归：1179px 回退（height:auto / columns:1fr / overflow:visible）必须彻底删除。
+    // 历史 bug 回归：旧 1319 / 1179 回退必须彻底删除。
+    expect(genCss).not.toMatch(/max-width\s*:\s*1319\s*px/)
     expect(genCss).not.toMatch(/max-width\s*:\s*1179\s*px/)
     const layoutCss = readCss('components/layout/layout.css')
     expect(layoutCss).not.toMatch(/max-width\s*:\s*1179\s*px/)

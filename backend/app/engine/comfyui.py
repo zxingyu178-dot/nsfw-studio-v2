@@ -299,6 +299,7 @@ class ComfyUIAdapter(EngineAdapter):
         if not prompt_id:
             raise EngineError("UNKNOWN_ENGINE_ERROR", f"/prompt 未返回 prompt_id: {message}")
         self._live[prompt_id] = {"stage": "queued", "progress": 0.0, "state": "queued",
+                                 "step": None, "max_step": None,
                                  "error_type": "", "error_message": "",
                                  "updated": time.monotonic()}
         self._ensure_ws()
@@ -316,9 +317,11 @@ class ComfyUIAdapter(EngineAdapter):
         """
         live = self._live.get(engine_job_id)
         if live and live.get("state") == "failed":
+            # 失败终态：清空 step（不允许停留在 25/25 的采样观感）
             return EngineJobStatus(state="failed", progress=live.get("progress"),
                                    message=live.get("error_message") or "execution error",
-                                   stage=live.get("stage", ""), error_type=live.get("error_type", ""))
+                                   stage=live.get("stage", ""), error_type=live.get("error_type", ""),
+                                   step=None, max_step=None)
         history_state = await self._history_state(engine_job_id)
         if history_state is not None:
             self._missing_polls.pop(engine_job_id, None)
@@ -346,7 +349,8 @@ class ComfyUIAdapter(EngineAdapter):
     def _running_status(live: dict | None) -> EngineJobStatus:
         if live is not None and live.get("state") in ("queued", "running"):
             return EngineJobStatus(state="running", progress=live.get("progress"),
-                                   stage=live.get("stage", ""))
+                                   stage=live.get("stage", ""),
+                                   step=live.get("step"), max_step=live.get("max_step"))
         return EngineJobStatus(state="running", progress=None, stage="unknown")
 
     async def _history_state(self, engine_job_id: str) -> EngineJobStatus | None:
@@ -479,6 +483,7 @@ class ComfyUIAdapter(EngineAdapter):
         live = self._live.get(prompt_id)
         if live is None:
             live = {"stage": "", "progress": None, "state": "running",
+                    "step": None, "max_step": None,
                     "error_type": "", "error_message": ""}
             self._live[prompt_id] = live
         live.update(fields)
@@ -495,18 +500,27 @@ class ComfyUIAdapter(EngineAdapter):
         if prompt_id and prompt_id in self._live:
             live = self._live[prompt_id]
             if kind == "execution_start":
+                # v0.15：进入执行时清空上一阶段可能残留的 Step（如 upscale 引擎任务不报告 step）
                 self._mark_live(prompt_id, state="running", stage="execution",
-                                progress=live.get("progress") or 0.0)
+                                progress=live.get("progress") or 0.0,
+                                step=None, max_step=None)
             elif kind == "progress":
                 value, maximum = data.get("value", 0), data.get("max", 1) or 1
+                # v0.15：ComfyUI progress 事件 value/max 即真实采样步数（保留归一化 progress）
+                step_now = int(value) if isinstance(value, (int, float)) else None
+                max_step_now = int(maximum) if isinstance(maximum, (int, float)) and maximum > 0 else None
                 self._mark_live(prompt_id, state="running", stage="sampling",
-                                progress=round(min(0.99, value / maximum), 3))
+                                progress=round(min(0.99, value / maximum), 3),
+                                step=step_now, max_step=max_step_now)
             elif kind == "execution_success":
-                self._mark_live(prompt_id, state="succeeded", stage="save_image", progress=1.0)
+                # 成功后进入保存图片阶段：清空 Step，UI 不得继续显示 25/25 像在采样
+                self._mark_live(prompt_id, state="succeeded", stage="save_image", progress=1.0,
+                                step=None, max_step=None)
             elif kind == "execution_error":
                 node_type = data.get("node_type") or ""
                 error_message = f"{node_type}: {data.get('exception_message', '')}".strip(": ")
                 self._mark_live(prompt_id, state="failed", stage="error",
+                                step=None, max_step=None,
                                 error_type=classify_engine_message(error_message),
                                 error_message=error_message[:400])
 
