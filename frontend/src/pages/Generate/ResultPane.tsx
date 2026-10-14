@@ -8,6 +8,8 @@ import { activeJob, useJobStore } from '../../stores/jobStore'
 import {
   STAGE_LABEL,
   imageContentUrl,
+  imagePreviewUrl,
+  imageThumbUrl,
   shortJobId,
   type ImageDTO,
 } from '../../types/workbench'
@@ -151,7 +153,7 @@ export function ResultPane() {
             >
               {shown ? (
                 <>
-                  <img src={imageContentUrl(shown.id)} alt="生成结果" />
+                  <ResultImage imageId={shown.id} rendition={imagePreviewUrl} alt="生成结果" />
                   {(shown.kind === 'upscaled' || shown.kind === 'processed') && (
                     <Badge tone="info" className="result-stage__hd">
                       {shown.kind === 'upscaled' ? 'HD' : '处理图'}
@@ -220,7 +222,7 @@ export function ResultPane() {
                   }}
                   title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
                 >
-                  <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
+                  <ResultImage imageId={image.id} rendition={imageThumbUrl} alt="" loading="lazy" />
                   {(image.kind === 'upscaled' || image.kind === 'processed') && (
                     <Badge tone="info" className="wb-thumbs__hd">
                       {image.kind === 'upscaled' ? 'HD' : '处理'}
@@ -255,6 +257,35 @@ export default ResultPane
  * 共享 ListResponse 冻结形状为 { items, total, limit, offset }（无 has_next），
  * 故用“整页未读完或累计 < total”判定是否继续翻页。
  */
+/**
+ * §5：ResultPane 图片渲染——主预览用 1536 preview、缩略条用 512 thumbnail，
+ * 原图（/content）只在 Lightbox / 100% 查看时加载。rendition 加载失败时自动回退原图，避免裂图。
+ */
+function ResultImage({
+  imageId,
+  rendition,
+  alt,
+  loading,
+}: {
+  imageId: string
+  rendition: (imageId: string) => string
+  alt: string
+  loading?: 'lazy' | 'eager'
+}) {
+  const [fallbackToContent, setFallbackToContent] = useState(false)
+  const src = fallbackToContent ? imageContentUrl(imageId) : rendition(imageId)
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading={loading}
+      onError={() => {
+        setFallbackToContent((prev) => (prev ? prev : true))
+      }}
+    />
+  )
+}
+
 async function fetchAllJobImages(jobIds: string[]): Promise<ImageDTO[]> {
   const PAGE_SIZE = 100
   const merged: ImageDTO[] = []

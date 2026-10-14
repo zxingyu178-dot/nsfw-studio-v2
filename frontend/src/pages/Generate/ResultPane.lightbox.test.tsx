@@ -68,7 +68,7 @@ describe('ResultPane 双击主图打开 Lightbox', () => {
       expect(el).toBeTruthy()
       return el as HTMLElement
     })) as HTMLElement
-    expect(stage.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+    expect(stage.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
 
     fireEvent.doubleClick(stage)
 
@@ -83,5 +83,70 @@ describe('ResultPane 双击主图打开 Lightbox', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '图片预览' })).not.toBeInTheDocument()
     })
+  })
+
+  it('主预览用 preview rendition，缩略条用 thumbnail rendition 且 lazy（§5）', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ResultPane />
+      </MemoryRouter>
+    )
+
+    const stage = (await waitFor(() => {
+      const el = container.querySelector('.result-stage')
+      expect(el).toBeTruthy()
+      return el as HTMLElement
+    })) as HTMLElement
+    // 主预览：1536 preview，不载原图
+    expect(stage.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
+
+    const thumbs = await waitFor(() => {
+      const list = container.querySelectorAll('.wb-thumbs img')
+      expect(list.length).toBe(2)
+      return list
+    })
+    // 缩略条：512 thumbnail + loading=lazy
+    const thumbIds = ['img_a', 'img_b']
+    thumbs.forEach((imgEl, idx) => {
+      expect(imgEl.getAttribute('src')).toBe(`/api/v1/images/${thumbIds[idx]}/thumbnail`)
+      expect(imgEl.getAttribute('loading')).toBe('lazy')
+    })
+  })
+
+  it('主预览 preview 加载失败时 onError 回退到原图 /content', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ResultPane />
+      </MemoryRouter>
+    )
+
+    const stage = (await waitFor(() => {
+      const el = container.querySelector('.result-stage')
+      expect(el).toBeTruthy()
+      return el as HTMLElement
+    })) as HTMLElement
+    const mainImg = stage.querySelector('img') as HTMLImageElement
+    expect(mainImg.getAttribute('src')).toBe('/api/v1/images/img_b/preview')
+
+    fireEvent.error(mainImg)
+    expect(mainImg.getAttribute('src')).toBe('/api/v1/images/img_b/content')
+  })
+
+  it('缩略条 thumbnail 加载失败时 onError 回退到原图 /content', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ResultPane />
+      </MemoryRouter>
+    )
+
+    const thumbs = await waitFor(() => {
+      const list = container.querySelectorAll('.wb-thumbs img')
+      expect(list.length).toBe(2)
+      return list
+    })
+    const firstThumb = thumbs[0] as HTMLImageElement
+    expect(firstThumb.getAttribute('src')).toBe('/api/v1/images/img_a/thumbnail')
+    fireEvent.error(firstThumb)
+    expect(firstThumb.getAttribute('src')).toBe('/api/v1/images/img_a/content')
   })
 })

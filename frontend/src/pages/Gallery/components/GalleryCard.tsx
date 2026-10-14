@@ -83,9 +83,13 @@ function GalleryThumb({ image }: { image: ImageDTO }) {
       {!inView ? (
         <div className="gal-card__ph" aria-hidden="true" />
       ) : error ? (
-        <div className="gal-card__err" onClick={() => { setError(false); setRetryKey((k) => k + 1) }} role="button" tabIndex={0}>
+        <button
+          type="button"
+          className="gal-card__err"
+          onClick={() => { setError(false); setRetryKey((k) => k + 1) }}
+        >
           加载失败 · 重试
-        </div>
+        </button>
       ) : (
         <img
           key={retryKey}

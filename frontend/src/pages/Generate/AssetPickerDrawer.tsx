@@ -100,10 +100,9 @@ export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawer
 
       <div className="wb-asset-grid">
         {items.map((asset) => (
-          <div
+          <button
             key={asset.id}
-            role="button"
-            tabIndex={0}
+            type="button"
             className="wb-asset-item"
             title={asset.current_version?.prompt_text || asset.name}
             onClick={() => {
@@ -114,16 +113,6 @@ export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawer
                 name: asset.name,
               })
             }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                const version = asset.current_version
-                onPicked(version?.prompt_text ?? '', {
-                  asset_id: asset.id,
-                  asset_version_id: version?.id ?? '',
-                  name: asset.name,
-                })
-              }
-            }}
           >
             <span className="wb-asset-thumb">
               {asset.current_version?.preview_path ? (
@@ -133,7 +122,7 @@ export function AssetPickerDrawer({ slot, onClose, onPicked }: AssetPickerDrawer
               )}
             </span>
             <span className="wb-asset-name">{asset.name}</span>
-          </div>
+          </button>
         ))}
       </div>
 

@@ -108,6 +108,7 @@
 .gal-card__err {
   position: absolute;
   inset: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,6 +117,9 @@
   cursor: pointer;
   text-align: center;
   padding: var(--space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
 }
 
 /* Badge：左上 HD；右上收藏/checkbox */

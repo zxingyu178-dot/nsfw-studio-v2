@@ -138,6 +138,8 @@
   color: var(--text-primary);
   font-size: var(--text-sm);
   text-align: left;
+  appearance: none;
+  font-family: inherit;
 }
 .wb-section__head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wb-section__caret { color: var(--text-tertiary); width: 1em; }
@@ -336,58 +338,6 @@
 .wb-seed-row { display: flex; align-items: center; gap: var(--space-2); }
 .wb-seed-value { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-primary); }
 
-/* ===== GenerateAction（专属主按钮，不放进 ui3） ===== */
-.generate-action {
-  position: relative;
-  width: 100%;
-  height: 46px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--action-gradient-start), var(--action-gradient-end));
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  box-shadow: 0 0 0 1px var(--glow-accent), 0 4px 16px var(--glow-accent);
-  transition: filter 120ms ease, transform 80ms ease, box-shadow 120ms ease;
-}
-.generate-action:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 0 1px var(--glow-accent), 0 6px 22px var(--glow-accent); }
-.generate-action:active:not(:disabled) { transform: translateY(1px); filter: brightness(0.96); }
-.generate-action:disabled {
-  cursor: not-allowed;
-  background: var(--control-bg);
-  color: var(--text-tertiary);
-  box-shadow: none;
-  border: 1px solid var(--control-border);
-}
-.generate-action__icon { display: inline-flex; }
-/* loading：细线进度，不用浏览器 spinner */
-.generate-action__line {
-  width: 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-  animation: generate-action-pulse 900ms ease-in-out infinite;
-}
-@keyframes generate-action-pulse {
-  0%, 100% { opacity: 0.3; transform: scaleX(0.6); }
-  50% { opacity: 1; transform: scaleX(1); }
-}
-.generate-action__gate {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-.generate-action__secondary {
-  margin-top: var(--space-2);
-  width: 100%;
-}
-
 /* ===== 当前任务卡片 ===== */
 .wb-job {
   border: 1px solid var(--panel-divider);
@@ -448,12 +398,16 @@
 .wb-image-item {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  padding: 0;
   border: 1px solid var(--panel-divider);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--control-bg);
   cursor: pointer;
   text-align: left;
+  appearance: none;
+  font-family: inherit;
 }
 .wb-asset-item:hover,
 .wb-image-item:hover { border-color: var(--accent); }
@@ -593,4 +547,9 @@
   from { opacity: 0.25; transform: scaleX(0.5); }
   to { opacity: 0.8; transform: scaleX(1); }
 }
-.generate-action__secondary { align-self: center; }
+/* （合并自旧重复块：margin-top/width 保持原级联结果，勿拆回两处定义） */
+.generate-action__secondary {
+  margin-top: var(--space-2);
+  width: 100%;
+  align-self: center;
+}
