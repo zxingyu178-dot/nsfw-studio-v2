@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChoiceGrid, ChoiceTile, NumberStepper, type ChoiceShape } from '../../components/ui/ui3'
 import {
   ASPECT_RATIOS,
   computeDimensions,
+  deriveTier,
   inferAspect,
   isSlowSize,
   type AspectKey,
@@ -44,10 +45,43 @@ const CUSTOM_MAX = 4096
 export function AspectRatioPicker({ width, height, onSizeChange }: AspectRatioPickerProps) {
   const initial: AspectKey = inferAspect(width, height)
   const [ratio, setRatio] = useState<PresetAspectKey>(initial === 'custom' ? '1:1' : initial)
-  const [tier, setTier] = useState<Tier>(initial === 'custom' ? 'custom' : 'standard')
+  const [tier, setTier] = useState<Tier>(
+    initial === 'custom' ? 'custom' : deriveTier(width, height),
+  )
   // 自定义宽高用组件内部状态（与旧实现一致：互不依赖 store 回灌）。
   const [customW, setCustomW] = useState(width)
   const [customH, setCustomH] = useState(height)
+  // 用户聚焦在自定义输入期间，外部 hydrate / store 回灌不逐字符打断；失焦后再对齐。
+  const customEditingRef = useRef(false)
+  // 编辑期间被跳过的外部同步标记：失焦时若存在 pending，才用最新外部值对齐。
+  const syncPendingRef = useRef(false)
+
+  // 外部 width/height 变化（Recipe hydrate / History restore / 图片→Workbench）后，
+  // 回选对应画幅与档位。守卫：派生目标与当前状态一致时不 set，从根上避免 effect 循环；
+  // 自定义输入正被聚焦编辑时整体跳过回灌（避免输入中途匹配预设时 tier 被切走、输入框卸载），
+  // 失焦后由 handleCustomBlur 统一对齐。
+  function syncFromExternal(w: number, h: number): void {
+    const derived: AspectKey = inferAspect(w, h)
+    setTier((prev) => {
+      const nextTier: Tier = derived === 'custom' ? 'custom' : deriveTier(w, h)
+      return prev === nextTier ? prev : nextTier
+    })
+    if (derived !== 'custom') {
+      setRatio((prev) => (prev === derived ? prev : derived))
+    }
+    setCustomW((prev) => (prev === w ? prev : w))
+    setCustomH((prev) => (prev === h ? prev : h))
+  }
+
+  useEffect(() => {
+    if (customEditingRef.current) {
+      // 编辑中：整体跳过回灌，并标记失焦后需要对齐（外部 hydrate 可能已改写 store）。
+      syncPendingRef.current = true
+      return
+    }
+    syncFromExternal(width, height)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height])
 
   function handleRatioSelect(key: PresetAspectKey): void {
     setRatio(key)
@@ -73,6 +107,19 @@ export function AspectRatioPicker({ width, height, onSizeChange }: AspectRatioPi
   function handleCustomHeight(h: number): void {
     setCustomH(h)
     onSizeChange(customW, h)
+  }
+
+  function handleCustomFocus(): void {
+    customEditingRef.current = true
+  }
+
+  function handleCustomBlur(): void {
+    customEditingRef.current = false
+    // 仅当编辑期间确有外部 hydrate 被跳过，才在失焦后对齐；普通提交路径 props 未变，不回灌。
+    if (syncPendingRef.current) {
+      syncPendingRef.current = false
+      syncFromExternal(width, height)
+    }
   }
 
   return (
@@ -123,6 +170,8 @@ export function AspectRatioPicker({ width, height, onSizeChange }: AspectRatioPi
             step={8}
             ariaLabel="宽度"
             onChange={handleCustomWidth}
+            onFocus={handleCustomFocus}
+            onBlur={handleCustomBlur}
           />
           <NumberStepper
             value={customH}
@@ -131,6 +180,8 @@ export function AspectRatioPicker({ width, height, onSizeChange }: AspectRatioPi
             step={8}
             ariaLabel="高度"
             onChange={handleCustomHeight}
+            onFocus={handleCustomFocus}
+            onBlur={handleCustomBlur}
           />
         </div>
       )}

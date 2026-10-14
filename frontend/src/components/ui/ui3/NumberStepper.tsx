@@ -19,6 +19,9 @@ export interface NumberStepperProps {
   disabled?: boolean
   ariaLabel?: string
   className?: string
+  /** 输入框聚焦 / 失焦回调（业务层用于“编辑中不被外部回灌打断”的脏标记）。 */
+  onFocus?: () => void
+  onBlur?: () => void
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -35,6 +38,8 @@ export function NumberStepper({
   disabled,
   ariaLabel,
   className = '',
+  onFocus,
+  onBlur,
 }: NumberStepperProps) {
   const [draft, setDraft] = useState(String(value))
 
@@ -86,7 +91,11 @@ export function NumberStepper({
           value={draft}
           disabled={disabled}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => commit(draft)}
+          onFocus={() => onFocus?.()}
+          onBlur={() => {
+            commit(draft)
+            onBlur?.()
+          }}
           onKeyDown={onInputKey}
           onPaste={onPaste}
         />
