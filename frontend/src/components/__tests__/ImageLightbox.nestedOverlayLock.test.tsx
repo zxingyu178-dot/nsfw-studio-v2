@@ -63,4 +63,35 @@ describe('ImageLightbox 嵌套 overlay 滚动锁 ref-count', () => {
     expect(document.documentElement.style.overflow).toBe('')
     expect(getMain().style.overflow).toBe('')
   })
+
+  it('Case A+C：基线 scrollTop 只在首锁快照，内层 Confirm 关闭不提前恢复，外层关闭才归位', () => {
+    // 首锁前用户已滚动到 500px（模拟工作台列表已滚动）
+    getMain().scrollTop = 500
+
+    const outer = render(
+      <ImageLightbox images={images} index={0} onClose={() => {}} onNavigate={() => {}} />,
+    )
+    expect(__overlayLockCount()).toBe(1)
+    // Case A：锁定瞬间不改动 scrollTop
+    expect(getMain().scrollTop).toBe(500)
+
+    // Lightbox 内弹出 Confirm Modal（嵌套锁 +1）
+    const inner = render(<InnerOverlay />)
+    expect(__overlayLockCount()).toBe(2)
+
+    // 嵌套期间即使滚动位置被改动，内层释放也不得恢复基线（ref-count≠0）
+    getMain().scrollTop = 888
+    inner.unmount()
+    expect(__overlayLockCount()).toBe(1)
+    expect(document.documentElement.style.overflow).toBe('hidden')
+    expect(getMain().style.overflow).toBe('hidden')
+    expect(getMain().scrollTop).toBe(888)
+
+    // 外层 Lightbox 关闭：计数归 0，scrollTop 恢复到首锁快照的 500
+    outer.unmount()
+    expect(__overlayLockCount()).toBe(0)
+    expect(document.documentElement.style.overflow).toBe('')
+    expect(getMain().style.overflow).toBe('')
+    expect(getMain().scrollTop).toBe(500)
+  })
 })
