@@ -12,11 +12,20 @@
       CONTROLHUB_DATA_ROOT  ControlHub registry/data 根（作为 CLI --data-root 传入）
 
     解析优先级（高 -> 低，以此为准）：
-      1. 环境变量注入：AIHOME_ROOT / CONTROLHUB_ROOT / CONTROLHUB_PYTHON / CONTROLHUB_DATA_ROOT
-      2. 相对脚本/项目根推导（由本文件位置向上找 AIHome 根与 control-hub 兄弟目录）
-      3. AIHOME.json（AIHome 根）权威登记；以及安装版权威数据目录
-         %LOCALAPPDATA%\AIHomeControlHub\data
-      4. configs/config.local.yaml 的 controlhub 段（仅最后兜底，且忽略 <LOCAL_ONLY> 占位）
+      解释器 CONTROLHUB_PYTHON：
+        1. 环境变量 CONTROLHUB_PYTHON / CONTROLHUB_ROOT
+        2. 相对脚本位置推导的 control-hub 源码根（…\control-hub\.venv）
+        3. AIHOME.json 的 controlhub.python_exe/python/pythonPath
+      数据目录 CONTROLHUB_DATA_ROOT（与源码根解耦）：
+        1. 环境变量 CONTROLHUB_DATA_ROOT / CONTROLHUB_ROOT
+        2. AIHOME.json 的 controlhub.data_root
+        3. 安装版权威数据目录 %LOCALAPPDATA%\AIHomeControlHub\data
+           （已审批运行时对象的权威注册表；真机 nsfw-studio-v2 登记于此）
+        4. 源码根自带 <control-hub>\data（便携/源码态兜底，真机可能仅含旧对象）
+        5. configs/config.local.yaml 的 controlhub 段（仅最后兜底，忽略 <LOCAL_ONLY>）
+
+      解释器随源码根（<源码根>\.venv），数据目录随安装版运行时（per-user
+      LOCALAPPDATA），二者在真机上本就不同位置，不得把 <源码根>\data 当数据目录首选。
 
     使用方式：
         . "$PSScriptRoot\runtime\resolve_aihome.ps1"
@@ -59,6 +68,7 @@ function Get-AIHomeEnv {
     $dataCands  = New-Object System.Collections.Generic.List[string]
     $rootCands  = New-Object System.Collections.Generic.List[string]
     $aihomeRoot = $null
+    $guessChRoot = $null
 
     # ===== 1) 环境变量注入（最高优先级） =====
     if (-not [string]::IsNullOrWhiteSpace($env:CONTROLHUB_PYTHON)) { $pyCands.Add($env:CONTROLHUB_PYTHON) }
@@ -82,10 +92,14 @@ function Get-AIHomeEnv {
     }
     if ($aihomeRoot) {
         $homeParent  = Split-Path -Parent $aihomeRoot
-        $guessChRoot = Join-Path $homeParent "control-hub"   # 与 AIHome 根同级的 control-hub
+        $guessChRoot = Join-Path $homeParent "control-hub"   # 与 AIHome 根同级的 control-hub 源码根
         $rootCands.Add($guessChRoot)
+        # 解释器随源码树：<源码根>\.venv\Scripts\python.exe
         $pyCands.Add((Join-Path $guessChRoot ".venv\Scripts\python.exe"))
-        $dataCands.Add((Join-Path $guessChRoot "data"))
+        # 注意：源码根下的 <chroot>\data 是“源码自带/开发态”数据目录，
+        # 不在这里作为 data-root 首选——它在真机上可能只含旧对象（墓碑），
+        # 而安装版运行时注册表在 %LOCALAPPDATA%\AIHomeControlHub\data（见下方第 3 步）。
+        # 该源码数据目录会在安装版候选之后作为“便携/源码态”兜底加入。
     }
 
     # ===== 3) AIHOME.json 权威登记 + 安装版权威数据目录 =====
@@ -119,9 +133,15 @@ function Get-AIHomeEnv {
             }
         } catch { }
     }
-    # 安装版权威数据目录（不依赖 AIHOME.json 的具体 schema）
+    # 安装版权威运行时数据目录（ControlHub 已安装应用的标准 per-user 位置；
+    # 不依赖 AIHOME.json 的具体 schema）。真机上 nsfw-studio-v2 等已审批对象登记于此，
+    # 因此它必须优先于源码根下的 <chroot>\data（开发态/可能仅含旧对象）。
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
         $dataCands.Add((Join-Path $env:LOCALAPPDATA "AIHomeControlHub\data"))
+    }
+    # 便携/源码态兜底：未安装（无 LOCALAPPDATA 目录）时，才用源码根自带的 data 目录。
+    if ($guessChRoot) {
+        $dataCands.Add((Join-Path $guessChRoot "data"))
     }
 
     # ===== 4) configs/config.local.yaml 兜底（简单行解析，忽略 <LOCAL_ONLY> 占位） =====

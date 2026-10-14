@@ -56,6 +56,26 @@ def test_resolver_exposes_expected_variables():
     assert ("throw" in text.lower()) or ("Error" in text)
 
 
+def test_installed_data_root_precedes_source_tree_data():
+    """data-root 必须与源码根解耦：安装版 %LOCALAPPDATA%\\AIHomeControlHub\\data 是
+    已审批运行时对象（nsfw-studio-v2）的权威注册表，必须优先于源码根自带的
+    <control-hub>\\data（真机上后者仅含旧对象/墓碑，选它会 unknown_integration）。
+
+    锁定：resolver 正文中“安装版数据候选”的 Add 出现在“源码树 data 候选”的 Add 之前。
+    """
+    text = _text(RESOLVER_PS1)
+    installed_marker = 'Join-Path $env:LOCALAPPDATA "AIHomeControlHub\\data"'
+    source_marker = 'Join-Path $guessChRoot "data"'
+    assert installed_marker in text, "resolver 必须包含安装版数据目录候选"
+    assert source_marker in text, "resolver 必须保留源码树 data 作为便携/源码态兜底"
+    i_installed = text.index(installed_marker)
+    i_source = text.index(source_marker)
+    assert i_installed < i_source, (
+        "安装版 LOCALAPPDATA 数据目录候选必须排在源码树 <chroot>\\data 之前，"
+        "否则真机会解析到只含旧对象的源码数据根，导致 nsfw-studio-v2 unknown_integration"
+    )
+
+
 def test_bat_propagates_errorlevel():
     text = _text(STOP_BAT)
     assert re.search(r"exit\s+/b\s+%ERRORLEVEL%", text), (
