@@ -2,6 +2,56 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.15.0] — 2026-10-14
+
+> Minor：Workbench Layout 4.0（Canvas First）、真实进度（Job / Stage / Step）、可视化 Prompt 库、
+> Glass 设计体系与性能守卫。前端重构 Generate 工作台为三栏 + 底部任务坞；后端把进度事件分流为
+> 瞬态 SSE 与持久 job_events，并透传 ComfyUI 真实 step/max_step。
+> 不改业务模型 / 单队列语义，不新增模型 / 节点 / AI 能力；无数据库迁移。
+
+### Added
+
+- **Workbench Layout 4.0（Canvas First）**：Generate 重排为左 Prompt Console、中深色哑光 Canvas、
+  右参数 Inspector 三栏 + 底部 TaskDock。左右栏可拖拽（`ResizablePane`，pointer capture +
+  方向键 8/24px + Home/双击复位），宽度经 `--left-w/--right-w` 持久化；三档断点（≥1200 可调、
+  1024–1199 固定 280/270 隐藏手柄、<1024 Workspace Tabs），整页零纵向滚动。
+- **WorkbenchBar 玻璃顶栏**：模式切换、来源上下文（配方/Prompt/当前工作台）、重置、保存为
+  Prompt/配方（下拉菜单，带名称与收藏）。
+- **Prompt Console 单槽位聚焦**：8 个结构化槽位折叠为 label + chip + 单行摘要，仅激活槽位展开
+  编辑；素材槽位带 chip 与 AssetPicker；active slot 记忆；Negative/Preview 默认收起。
+- **参数 Inspector + 拆分生成**：右栏只负责“怎么生成”（工作流、高清放大 `Switch` 并标注
+  “原图全部完成后处理”、数量、Seed、高级参数）；`SplitGenerateAction` 拆主生成与
+  “优先生成（插入当前任务之后）”，Gate 与旧 GenerateAction 一致。
+- **TaskDock 底部任务坞**：当前 Job / Queue 从右栏迁出；收起态显示状态点、第 N/M、总进度、
+  队列数，展开态两列（CompactCurrentJob + QueuePanel）；tooltip 明确“只暂停任务调度，
+  不停止 Python/ComfyUI 引擎”。
+- **CanvasStage / ProgressHUD 真实进度**：中栏自包含拉取家族图片、filmstrip、ActionDock、Lightbox；
+  顶部 HUD 显示跨 stage 加权总进度、Elapsed、第 N/M 张、阶段 x/y、真实 Step x/y（仅采样型），
+  无 step 的阶段显示“处理中…”，**高清放大不伪造 Step**。
+- **CanvasViewport 产品化**：ResizeObserver fit-to-container、滚轮以光标为锚点缩放、pointer 拖拽、
+  缩放边界钳制、preview/content/thumbnail 三级 rendition、自然尺寸 onLoad 校正。
+- **可视化 Prompt 库卡片**：名称/摘要 → 预览图（文本下方）→ 时间 → 使用/复制/编辑/收藏；
+  预览用 thumbnail（lazy），点击放大；无图为固定 16:9 低对比“暂未生成”占位（不裂图），
+  已归档仍显示；不自动覆盖封面。
+- **Glass 设计体系**：Dark/Light 双主题 glass token（bg/strong/border/highlight/shadow/blur/
+  saturate）+ `.glass/.glass--strong`，`@supports not` 回退较不透明 surface；性能守卫保证玻璃层
+  ≤8、Canvas 绝不 blur、slot/input 不撒 blur。
+- **CI**：PR 闸门加入前端 `test:ci`（Vitest）。
+
+### Changed
+
+- **后端进度事件分流**：`JobService.publish_transient_event` 只发 SSE 不写 `job_events`；
+  queue worker 每轮发瞬态 `ITEM_PROGRESS`，仅签名变化 / 节流 / 切 stage 才落库，进度 tick 不再刷库。
+- **真实 Step 合同**：`EngineJobStatus` 增加 `step/max_step`；ComfyUI 适配器把 progress value 映射为
+  step/max_step，`execution_start/success/error` 清空 step；保留归一化 progress。
+- **前端 liveProgress 瞬态层**：`jobStore.liveProgressByItem` 仅存内存，`handleJobEvent` 消费
+  ITEM_PROGRESS，终态清理，不触发整页每 tick 全量刷新。
+
+### Removed
+
+- 移除旧 `proto/` 原型、已迁移的 SettingsPane 队列/紧凑测试，以及无 DOM 匹配的
+  `.generate__columns` / `.generate__modebar` / 1319px 旧布局死 CSS。
+
 ## [0.14.1] — 2026-10-14
 
 > Fix / Hardening（patch）：一键停止失败状态真实化、运行时路径去硬编码、画幅外部同步、
