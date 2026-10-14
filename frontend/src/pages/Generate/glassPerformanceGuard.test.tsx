@@ -51,13 +51,14 @@ describe('Canvas 绝不 blur（§19.2）', () => {
     const stageBlock = cv.match(/\.canvas-viewport__stage\s*\{([^}]+)\}/)
     expect(stageBlock, '.canvas-viewport__stage 未找到').toBeTruthy()
     expect(stageBlock![1]).not.toMatch(/backdrop-filter/)
-    // 舞台必须是不透明/哑光背景
-    expect(stageBlock![1]).toMatch(/background:\s*var\(--canvas-bg\)/)
+    // 舞台必须是不透明/哑光背景（两主题恒定深色）
+    expect(stageBlock![1]).toMatch(/background:\s*var\(--canvas-stage-bg/)
 
     const gen = stripComments(readCss('pages/Generate/generate.css'))
     const wb4Stage = gen.match(/\.wb4-stage\s*\{([^}]+)\}/)
     expect(wb4Stage, '.wb4-stage 未找到').toBeTruthy()
     expect(wb4Stage![1]).not.toMatch(/backdrop-filter/)
+    expect(wb4Stage![1]).toMatch(/background:\s*var\(--canvas-stage-bg\)/)
   })
 
   it('不在每个 slot / input 上撒 blur', () => {

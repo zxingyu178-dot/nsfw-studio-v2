@@ -48,7 +48,7 @@ describe('Workbench 4.0 三档断点', () => {
 
   it('<1024：Tabs 显示、列纵向堆叠，仅当前 tab 的 pane 可见', () => {
     const block = mediaBlock(readCss('pages/Generate/generate.css'), 1023)
-    expect(block).toMatch(/\.generate__tabs\s*\{\s*display:\s*flex/)
+    expect(block).toMatch(/\.generate\s+\.generate__tabs\s*\{\s*display:\s*flex/)
     expect(block).toMatch(/flex-direction:\s*column/)
     expect(block).toMatch(/\.generate--tab-prompt\s+\.wb4-pane--left/)
     expect(block).toMatch(/\.generate--tab-preview\s+\.wb4-center/)

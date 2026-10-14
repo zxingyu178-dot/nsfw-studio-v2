@@ -44,9 +44,9 @@
   min-height: 0;
   overflow: hidden;
   touch-action: none; /* 触屏 drag 不被浏览器接管滚动 */
-  background: var(--canvas-bg);
+  background: var(--canvas-stage-bg, var(--canvas-bg));
   border-radius: var(--radius-md);
-  border: 1px solid var(--panel-divider);
+  border: 1px solid var(--canvas-stage-border, var(--panel-divider));
 }
 .canvas-viewport__stage img {
   display: block;

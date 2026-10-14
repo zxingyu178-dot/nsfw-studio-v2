@@ -9,12 +9,14 @@
   min-height: 0;
 }
 
-/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏 */
-.generate__tabs {
+/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏。
+   提高特异性以覆盖 Tabs 基类 .ds-tabs 的 display:flex（两者同为单类，取决于打包顺序）。 */
+.generate .generate__tabs {
   display: none;
   flex-shrink: 0;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3) 0;
+  margin-bottom: 0;
   border-bottom: 1px solid var(--panel-divider);
 }
 .generate__tabs [role='tab'] {
@@ -694,25 +696,38 @@
 .wb4-generate__next:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------- 中栏 Canvas Stage（深色哑光，不使用 backdrop-filter） ---------- */
+/* Canvas 舞台：两主题恒定深色哑光，opaque，绝不 backdrop-filter。 */
 .wb4-stage {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--panel-divider);
+  border: 1px solid var(--canvas-stage-border);
   border-radius: var(--radius-md);
-  background: var(--canvas-bg);
+  background: var(--canvas-stage-bg);
+  color: var(--canvas-stage-fg);
   overflow: hidden;
 }
+.wb4-stage .muted,
+.wb4-stage .ds-empty__desc { color: var(--canvas-stage-fg-muted); }
+.wb4-stage .ds-empty__title { color: var(--canvas-stage-fg); }
+/* 深色舞台上的空态：透明底、无白卡，浅字 */
+.wb4-stage .ds-empty {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  color: var(--canvas-stage-fg);
+}
+.wb4-stage .ds-empty__icon { color: var(--canvas-stage-fg-muted); }
 .wb4-stage__topbar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--panel-divider);
+  border-bottom: 1px solid var(--canvas-stage-border);
   min-height: 34px;
+  color: var(--canvas-stage-fg-muted);
 }
 .wb4-stage__canvas {
   position: relative;
@@ -763,7 +778,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--panel-divider);
+  border-top: 1px solid var(--canvas-stage-border);
 }
 .wb4-filmstrip {
   flex: 1 1 auto;
@@ -862,7 +877,7 @@
 
 /* <1024：Workspace Tabs，一次一个 pane；TaskDock 常驻展开 */
 @media (max-width: 1023px) {
-  .generate__tabs { display: flex; }
+  .generate .generate__tabs { display: flex; }
   .wb4-columns {
     flex-direction: column;
     --left-w: auto;

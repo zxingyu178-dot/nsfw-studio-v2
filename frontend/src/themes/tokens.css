@@ -206,6 +206,18 @@
   --icon-favorite: var(--favorite);
 }
 
+/*
+ * Canvas 舞台恒定深色哑光（不随浅色主题变亮）：
+ * 图片编辑/生成工具的视觉中心永远是图，参考 Lightroom 暗色舞台。
+ * 仅作用于 .wb4-stage / .canvas-viewport__stage，缩略图等仍用主题相关 --canvas-bg。
+ */
+:root {
+  --canvas-stage-bg: #0b0d11;
+  --canvas-stage-fg: #e6e8ee;
+  --canvas-stage-fg-muted: rgba(230, 232, 238, 0.62);
+  --canvas-stage-border: rgba(255, 255, 255, 0.08);
+}
+
 [data-theme='light'] {
   --control-bg: #ffffff;
   --control-hover: #eef1f7;
