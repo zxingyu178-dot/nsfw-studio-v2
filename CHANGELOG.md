@@ -2,6 +2,80 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.14.1] — 2026-10-14
+
+> Fix / Hardening（patch）：一键停止失败状态真实化、运行时路径去硬编码、画幅外部同步、
+> 结果图 rendition 分层、GenerateAction CSS 去重、控件语义化，并补齐 3 份能力审计 +
+> Canvas 拖拽/缩放原型。
+> 不改业务模型 / Job / Queue / Image，不新增模型 / 节点 / AI 能力；无数据库迁移（沿用 0018）。
+
+### Fixed
+
+- **一键停止退出码真实化**（`scripts/stop_studio.ps1`）：修复"失败也可能 exit 0"。
+  最终退出码 0=全部成功停止；10=Studio Backend 失败；11=ComfyUI 失败；12=Mobile Review(8767) 失败；
+  13=停止后端口仍占用；14=ControlHub 调用失败（resolver 解析失败同归此类）；
+  15=外部非 owned ComfyUI 未停（EXTERNAL_NOT_OWNED，partial success，非 0、绝不强杀）。
+  决策优先级 14>15>13>12>10>11>0；逐目标打印 STOPPED/EXTERNAL/FAILED 与端口 FREE/OCCUPIED；
+  仅全部符合预期才输出"后台资源已释放"，失败绝不返回 0；`.bat` 透传退出码。
+  决策逻辑抽到 `scripts/runtime/stop_decision.ps1` 的纯函数 `Get-StudioStopExitCode`（可 dot-source 单测）。
+- **运行时路径去硬编码**：新增 `scripts/runtime/resolve_aihome.ps1`，统一解析
+  AIHOME_ROOT / CONTROLHUB_ROOT / CONTROLHUB_PYTHON / CONTROLHUB_DATA_ROOT；优先级
+  环境变量注入 > 相对脚本/项目根推导 > AIHOME.json/Registry 权威路径 > local config 兜底；
+  解析失败显式报错、绝不静默用空路径（stop 归 14、launch 非 0）。`launch_studio.ps1`/
+  `stop_studio.ps1` 统一 dot-source，正文不再写死任何机器完整路径。
+- **AspectRatioPicker 外部状态同步**：新增纯函数 `deriveTier(width,height)`；以 `useEffect`
+  跟随外部 width/height，仅在派生值与当前 state 不一致时才 set（杜绝循环 set）；custom 输入
+  聚焦/本地编辑期间加焦点脏标记保护、失焦后再对齐。修复 Recipe / History / Image→Workbench /
+  hydrate 后画幅与分辨率 UI 高亮和真实提交宽高不一致。
+- **ResultPane 结果图分层**：Canvas 主预览改用 preview rendition（1536）、filmstrip 改用
+  thumbnail（512，`loading="lazy"`），原图仅用于 Lightbox / 查看 100%；preview/thumb 加载失败
+  时 onError 清晰回退原图，避免无谓加载整张大图。
+- **GenerateAction CSS 去重**：合并 `generate.css` 中重复的 `.generate-action` 主声明与
+  :hover/:active/:disabled 等规则为唯一权威样式，responsive override 只保留在 `@media` 内；
+  新增静态 guard（核心 selector 主声明出现 ≥2 次即测试失败）。
+- **控件语义化（修正错误静态规则）**：静态规则改为"业务页禁止无 DS wrapper 的裸 `<button>`/
+  `<select>`、要求 DS 大写组件，`components/ui`、`components/ui/ui3` 等 primitive 目录内部允许
+  原生控件"；新增 ui3 `DisclosureButton`（原生 `<button aria-expanded aria-controls>`）；
+  `CollapsibleSection` 改为语义 disclosure、`GalleryCard` 错误重试块与 `AssetPickerDrawer`
+  素材项由 `div role=button` 改回 `<button>`、`GeneratePage` 自造 tab 收口到现有
+  `components/ui/Tabs`（标准 WAI-ARIA tablist/tab/tabpanel，primitive 本身未改动）。
+
+### Added
+
+- **Lightbox 嵌套滚动锁自动化测试**：覆盖 Case C——Lightbox 内再开 Confirm Modal，关闭内层
+  后外层锁仍在（ref-count 不提前释放），关闭外层才恢复底层 scrollTop。
+- **审计与原型（不落地为正式 UI）**：
+  - `docs/GENERATE_INFORMATION_DUPLICATION_AUDIT.md`（§9 信息重复 inventory）；
+  - `docs/PROMPT_PREVIEW_CONTRACT_AUDIT.md`（§10 Prompt 预览图合同核实）；
+  - `docs/GENERATION_PROGRESS_CAPABILITY_AUDIT.md`（§11 真实生成进度能力盘点）；
+  - `frontend/src/pages/Generate/proto/CanvasViewport.tsx`（§12 独立 pan/zoom 技术原型，
+    未接入任何生产页面）。
+
+### Tests
+
+- 后端：在 v0.14.0（452 collected = 449 passed / 3 skipped）基础上新增 runtime 停止退出码 /
+  resolver 路径合同测试 14 个，全量 **466 collected = 463 passed / 3 skipped / 0 失败**；
+  PowerShell 退出码 harness（`scripts/runtime/Test-StudioStopExitCodes.ps1`，mock CLI/端口）
+  在 Windows 门禁执行；延续 hermetic 护栏，测试禁连真实 8188 / 8000 / 8767。
+- 前端：新增画幅外部同步、ResultPane rendition 分层与回退、CSS 重复 selector guard、
+  语义控件 / 嵌套 overlay 锁、CanvasViewport 原型等测试，全量串行 **58 文件 / 284 用例全绿**；
+  test:store 11 passed；typecheck 0 错误；build 140 modules。
+
+### Notes
+
+- 审计结论（基于真实代码，逐行可追溯）：
+  - **Prompt 预览图合同已满足**：API 稳定返回 `preview_image_id`；`image_reference_service`
+    已统计 `prompt_preview_ids` 引用，物理删除在存在引用时跳过（封面图不会被误删）；归档可读、
+    复用 rendition；当前仓库无 duplicate/copy Prompt 功能。**本轮未改后端、未加 migration。**
+  - **生成进度当前只有 0~1 比例**：ComfyUI `progress` 事件的 `value/max` 在引擎适配器即被
+    折算为 0~0.99，整数 step 未保留；可绑定 engine_job_id(prompt_id)；SSE 传输层可携带 step
+    但当前未填；upscale 绑定无 KSampler、不发 progress 事件。**无真实 step 不做 UI 假造**，
+    StageProgress 正式契约留待下一阶段。
+  - Generate 业务页无原生 `<select>`（唯一实现位于 primitive 层 `components/ui/Select.tsx`），
+    本轮不做全站迁移。
+- 不做：Workbench Layout 4.0、Prompt 最终 UI、Canvas 最终交互、完整 StepProgress、MediaReview、
+  新模型 / Anime / FaceID / IPAdapter / ControlNet；不升级 torch。
+
 ## [0.14.0] — 2026-10-13
 
 > Runtime 收口 + Lightbox 滚动隔离 + Generate UI 3.0（minor）。
