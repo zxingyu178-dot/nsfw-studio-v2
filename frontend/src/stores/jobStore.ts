@@ -3,7 +3,27 @@
 // 任何事件（含 SSE 重连）都回源 GET /jobs、/queue、/engine/status。
 import { useSyncExternalStore } from 'react'
 import { ApiRequestError, jobApi, subscribeJobEvents } from '../api/client'
-import type { EngineStatusDTO, JobDTO, QueueDTO, WorkbenchSnapshot } from '../types/workbench'
+import type { EngineStatusDTO, JobDTO, JobEventDTO, QueueDTO, WorkbenchSnapshot } from '../types/workbench'
+
+/**
+ * v0.15 Task 8：实时采样进度（瞬态，不入持久 JobDTO）。
+ * 由 ITEM_PROGRESS SSE 直接驱动，页面刷新/重连后随下一次回源重建。
+ */
+export interface LiveProgress {
+  /** 归一化进度 0~1（引擎不支持时为 null） */
+  progress?: number | null
+  /** 引擎阶段标识（sampling / save_image / upscale …） */
+  engineStage?: string | null
+  /** 当前 Stage 序号（从 0 开始） */
+  stageIndex?: number | null
+  /** 采样当前步数（仅采样型工作流有值） */
+  step?: number | null
+  /** 采样总步数（仅采样型工作流有值） */
+  maxStep?: number | null
+  updatedAt: number
+  /** 内部：所属 Job id，用于 Job 终态/切换时清理 */
+  jobId?: string
+}
 
 export interface JobStoreState {
   engine: EngineStatusDTO | null
@@ -11,6 +31,8 @@ export interface JobStoreState {
   queue: QueueDTO | null
   /** 本页提交/关注的 Job（含 items，用于中栏进度与缩略图） */
   trackedJob: JobDTO | null
+  /** v0.15：按 job_item_id 索引的实时进度（瞬态，不随持久快照刷新） */
+  liveProgressByItem: Record<string, LiveProgress>
   submitting: boolean
   /** 正在执行队列操作的 Job id */
   busyJobId: string | null
@@ -23,6 +45,7 @@ let state: JobStoreState = {
   engineLoaded: false,
   queue: null,
   trackedJob: null,
+  liveProgressByItem: {},
   submitting: false,
   busyJobId: null,
   sseConnected: false,
@@ -56,6 +79,92 @@ export function activeJob(store: JobStoreState): JobDTO | null {
   return store.trackedJob ?? store.queue?.running ?? null
 }
 
+// ===== 实时进度（v0.15 Task 8：瞬态层，不塞进持久 JobDTO） =====
+
+const ITEM_TERMINAL_EVENTS = new Set(['ITEM_COMPLETED', 'ITEM_FAILED', 'ITEM_CANCELLED'])
+const JOB_TERMINAL_EVENTS = new Set(['JOB_COMPLETED', 'JOB_FAILED', 'JOB_CANCELLED'])
+
+function num(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function setLiveProgress(itemId: string, jobId: string, payload: Record<string, unknown>): void {
+  const next = { ...state.liveProgressByItem }
+  next[itemId] = {
+    progress: num(payload.progress),
+    engineStage: typeof payload.stage === 'string' ? payload.stage : null,
+    stageIndex: num(payload.stage_index),
+    step: num(payload.step),
+    maxStep: num(payload.max_step),
+    updatedAt: Date.now(),
+    jobId,
+  }
+  setState({ liveProgressByItem: next })
+}
+
+function clearLiveProgressItem(itemId: string): void {
+  if (!state.liveProgressByItem[itemId]) return
+  const next = { ...state.liveProgressByItem }
+  delete next[itemId]
+  setState({ liveProgressByItem: next })
+}
+
+function clearLiveProgressForJob(jobId: string): void {
+  const current = state.liveProgressByItem
+  const kept = Object.fromEntries(
+    Object.entries(current).filter(([, v]) => v.jobId !== jobId),
+  )
+  if (Object.keys(kept).length !== Object.keys(current).length) {
+    setState({ liveProgressByItem: kept })
+  }
+}
+
+function clearAllLiveProgress(): void {
+  if (Object.keys(state.liveProgressByItem).length === 0) return
+  setState({ liveProgressByItem: {} })
+}
+
+/**
+ * SSE 事件分流（v0.15 Task 8）：
+ * - ITEM_PROGRESS 只更新瞬态 liveProgress，**不触发** GET /queue、/engine/status、/job；
+ * - 关键 lifecycle 事件（创建/开始/完成/失败/暂停/取消/阶段切换…）才回源刷新；
+ * - 终态事件清理对应瞬态进度。
+ */
+export function handleJobEvent(event: JobEventDTO): void {
+  if (event.type === 'ITEM_PROGRESS') {
+    if (event.item_id) setLiveProgress(event.item_id, event.job_id, event.payload ?? {})
+    return
+  }
+  if (ITEM_TERMINAL_EVENTS.has(event.type) && event.item_id) {
+    clearLiveProgressItem(event.item_id)
+  }
+  if (JOB_TERMINAL_EVENTS.has(event.type)) {
+    clearLiveProgressForJob(event.job_id)
+  }
+  // 关键 lifecycle 事件才回源（progress 事件已在上面直接 return）
+  scheduleJobRefresh()
+}
+
+/** 回源后根据持久 DTO 收敛瞬态进度：已终态的 item 不再保留 live 进度。 */
+function pruneLiveProgress(jobs: JobDTO[]): void {
+  const terminalItemIds = new Set<string>()
+  for (const job of jobs) {
+    for (const stage of job.stages ?? []) {
+      for (const item of stage.items ?? []) {
+        if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(item.status)) {
+          terminalItemIds.add(item.job_item_id)
+        }
+      }
+    }
+  }
+  const before = Object.keys(state.liveProgressByItem).length
+  if (!before) return
+  const kept = Object.fromEntries(
+    Object.entries(state.liveProgressByItem).filter(([id]) => !terminalItemIds.has(id)),
+  )
+  if (Object.keys(kept).length !== before) setState({ liveProgressByItem: kept })
+}
+
 // ===== 数据刷新（唯一事实源 = 数据库） =====
 
 let refreshTimer: number | null = null
@@ -85,6 +194,10 @@ export async function refreshJobs(): Promise<void> {
       tracked = inQueue ?? (await jobApi.get(trackedId))
     }
     setState({ queue, engine, engineLoaded: true, trackedJob: tracked })
+    // 瞬态进度收敛：持久 DTO 已终态的 item 不再保留 live
+    pruneLiveProgress([queue.running, ...queue.queued, ...queue.paused, tracked].filter(
+      (j): j is JobDTO => j !== null && j !== undefined,
+    ))
   } catch (error) {
     setState({
       lastError: error instanceof ApiRequestError ? error.message : '无法获取任务状态',
@@ -95,8 +208,9 @@ export async function refreshJobs(): Promise<void> {
   }
 }
 
-/** 打开本页时关注某个 Job（如刷新后从"当前任务"点选） */
+/** 打开本页时关注某个 Job（如刷新后从"当前任务"点选）；切换关注时清理瞬态进度。 */
 export function trackJob(jobId: string): void {
+  clearAllLiveProgress()
   void jobApi
     .get(jobId)
     .then((job) => setState({ trackedJob: job }))
@@ -133,6 +247,7 @@ export async function submitGeneration(
       source: 'web',
     })
     pendingRequest = null
+    clearAllLiveProgress()
     setState({ trackedJob: job, submitting: false })
     void refreshJobs()
     return job
@@ -236,7 +351,7 @@ export function startJobStore(): void {
   started = true
   void refreshJobs()
   unsubscribeSse = subscribeJobEvents(
-    () => scheduleJobRefresh(),
+    (event) => handleJobEvent(event),
     (connection) => setState({ sseConnected: connection === 'open' }),
   )
   pollTimer = window.setInterval(() => {
@@ -250,4 +365,36 @@ export function stopJobStore(): void {
   unsubscribeSse?.()
   unsubscribeSse = null
   started = false
+}
+
+/** 读取某逻辑槽位（job_item_id）的实时进度；无则 undefined。 */
+export function liveProgressForItem(
+  store: JobStoreState,
+  itemId: string | null | undefined,
+): LiveProgress | undefined {
+  return itemId ? store.liveProgressByItem[itemId] : undefined
+}
+
+/** 测试隔离：重置仓库内存态与定时器（仅测试使用）。 */
+export function __resetJobStoreForTest(): void {
+  if (refreshTimer !== null) window.clearTimeout(refreshTimer)
+  refreshTimer = null
+  if (pollTimer !== null) window.clearInterval(pollTimer)
+  pollTimer = null
+  unsubscribeSse?.()
+  unsubscribeSse = null
+  started = false
+  refreshing = false
+  state = {
+    engine: null,
+    engineLoaded: false,
+    queue: null,
+    trackedJob: null,
+    liveProgressByItem: {},
+    submitting: false,
+    busyJobId: null,
+    sseConnected: false,
+    lastError: null,
+  }
+  listeners.clear()
 }

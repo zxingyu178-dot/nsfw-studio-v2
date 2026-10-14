@@ -67,6 +67,7 @@ class SingleQueueWorker:
         seed_upper: int = 2**31 - 1,
         stage_timeout_seconds: float = DEFAULT_STAGE_TIMEOUT_SECONDS,
         stall_timeout_seconds: float = 600.0,
+        progress_persist_interval_ms: int = 330,
     ) -> None:
         self._session_factory = session_factory
         self._adapter = adapter
@@ -82,6 +83,10 @@ class SingleQueueWorker:
         self._stage_timeout = float(stage_timeout_seconds)
         # v0.13.2 (b) stall 收敛：引擎在线但 progress 持续 0 超过此时长 → 判 stall（RTX3060 eager 冷加载留足余量）
         self._stall_timeout = float(stall_timeout_seconds)
+        # v0.15 Task 7：进度列节流持久化上限（默认 330ms ≈ 3 次/秒）；ITEM_PROGRESS 不再入库
+        self._progress_persist_interval = progress_persist_interval_ms / 1000
+        # stage_item_id → {"signature": (progress, step, stage), "last_write": monotonic}
+        self._progress_state: dict[str, dict] = {}
         self._task: asyncio.Task | None = None
         self._running = False
         self._queue_paused = False
@@ -450,7 +455,10 @@ class SingleQueueWorker:
                     continue
                 return self._stage_item_failed(job_id, stage_item_id, "ENGINE_NETWORK", error.message)
 
-            self._update_stage_item_progress(job_id, stage_item_id, status)
+            self._update_stage_item_progress(
+                job_id, stage_item_id, status,
+                stage_index=stage.stage_index, job_item_id=stage_item.job_item_id,
+            )
 
             # v0.13.2 (b) stall 收敛：引擎在线、任务 running、progress/stage 长时间不动 → 判卡死
             progress_now = getattr(status, "progress", None)
@@ -600,26 +608,70 @@ class SingleQueueWorker:
                     job_item.engine_job_id = engine_job_id
             session.commit()
 
-    def _update_stage_item_progress(self, job_id: str, stage_item_id: str, status) -> None:
+    def _update_stage_item_progress(
+        self,
+        job_id: str,
+        stage_item_id: str,
+        status,
+        *,
+        stage_index: int | None,
+        job_item_id: str | None,
+    ) -> None:
+        """v0.15 Task 6/7：真实 Step 透传 + 进度事件分流。
+
+        - 每次轮询都发布**临时** ITEM_PROGRESS（只广播 SSE，不写 job_events），
+          前端 liveProgress 即时刷新；
+        - JobStageItem.progress 列仍持久化（供刷新/崩溃恢复），但节流写入：
+          仅当签名 (progress, step, stage) 变化且距上次写入超过
+          ``progress_persist_interval``（约 3 次/秒，stage 切换立即写）；
+          相同签名绝不重复 commit，杜绝 200ms 无差别落库。
+        """
+        progress = float(status.progress) if status.progress is not None else None
+        step = getattr(status, "step", None)
+        max_step = getattr(status, "max_step", None)
+        stage = status.stage or ""
+
+        # 1) 实时层：只广播 SSE，不插入 job_events
+        job_service.publish_transient_event(
+            "ITEM_PROGRESS", job_id, item_id=job_item_id,
+            payload={"progress": progress, "stage": stage, "stage_index": stage_index,
+                     "step": step, "max_step": max_step},
+        )
+
+        # 2) 持久化层：节流 + 签名去重
+        state = self._progress_state.get(stage_item_id)
+        if state is None:
+            state = {"signature": None, "last_write": 0.0}
+            self._progress_state[stage_item_id] = state
+        signature = (
+            round(progress, 3) if progress is not None else None,
+            int(step) if step is not None else None,
+            stage,
+        )
+        if state["signature"] == signature:
+            return  # 相同签名不写
+        now = time.monotonic()
+        stage_changed = state["signature"] is not None and state["signature"][2] != stage
+        if state["last_write"] > 0 and not stage_changed \
+                and (now - state["last_write"]) < self._progress_persist_interval:
+            return  # 节流：暂不落库（实时层已广播，下次轮询再补；stage 切换立即写）
+
         with self._session_factory() as session:
             stage_item = session.get(JobStageItem, stage_item_id)
             if stage_item is None:
                 return
-            if status.progress is not None:
-                stage_item.progress = float(status.progress)
-            stage_index = None
-            stage = session.get(JobStage, stage_item.job_stage_id)
-            if stage is not None:
-                stage_index = stage.stage_index
+            if progress is not None:
+                stage_item.progress = progress
             job_item = session.get(JobItem, stage_item.job_item_id)
-            if job_item is not None:
-                job_item.progress = stage_item.progress
-            job_service.record_event(
-                session, job_id, "ITEM_PROGRESS", item_id=stage_item.job_item_id,
-                payload={"progress": stage_item.progress, "stage": status.stage,
-                         "stage_index": stage_index},
-            )
+            if job_item is not None and progress is not None:
+                job_item.progress = progress
             session.commit()
+        state["signature"] = signature
+        state["last_write"] = now
+
+    def _clear_progress_state(self, stage_item_id: str) -> None:
+        """StageItem 终态后清理节流状态。"""
+        self._progress_state.pop(stage_item_id, None)
 
     def _stage_item_completed(self, job_id: str, stage_item_id: str, image_ids: list[str]) -> None:
         """StageItem 完成：output_image_id 落库；槽位处于最后一个 Stage 时 JobItem 才 COMPLETED。"""
@@ -631,6 +683,7 @@ class SingleQueueWorker:
             stage_item.status = "COMPLETED"
             stage_item.output_image_id = image_ids[0]
             stage_item.progress = 1.0
+            self._clear_progress_state(stage_item_id)
             stage_item.finished_at = utc_now_iso()
             if stage is not None:
                 stage.completed_count = sum(1 for it in stage.stage_items if it.status == "COMPLETED")
@@ -669,6 +722,7 @@ class SingleQueueWorker:
                 return
             stage_item.status = "CANCELLED"
             stage_item.finished_at = utc_now_iso()
+            self._clear_progress_state(stage_item_id)
             job_service.record_event(session, job_id, "ITEM_CANCELLED", item_id=stage_item.job_item_id)
             session.commit()
 
@@ -681,6 +735,7 @@ class SingleQueueWorker:
             stage_item.error_type = error_type
             stage_item.error_message = message
             stage_item.finished_at = utc_now_iso()
+            self._clear_progress_state(stage_item_id)
             stage = session.get(JobStage, stage_item.job_stage_id)
             job_item = session.get(JobItem, stage_item.job_item_id)
             if job_item is not None:

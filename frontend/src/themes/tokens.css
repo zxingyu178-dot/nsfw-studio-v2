@@ -206,6 +206,18 @@
   --icon-favorite: var(--favorite);
 }
 
+/*
+ * Canvas 舞台恒定深色哑光（不随浅色主题变亮）：
+ * 图片编辑/生成工具的视觉中心永远是图，参考 Lightroom 暗色舞台。
+ * 仅作用于 .wb4-stage / .canvas-viewport__stage，缩略图等仍用主题相关 --canvas-bg。
+ */
+:root {
+  --canvas-stage-bg: #0b0d11;
+  --canvas-stage-fg: #e6e8ee;
+  --canvas-stage-fg-muted: rgba(230, 232, 238, 0.62);
+  --canvas-stage-border: rgba(255, 255, 255, 0.08);
+}
+
 [data-theme='light'] {
   --control-bg: #ffffff;
   --control-hover: #eef1f7;
@@ -224,6 +236,70 @@
   --icon-success: var(--ok);
   --icon-danger: var(--danger);
   --icon-favorite: var(--favorite);
+}
+
+/* =====================================================================
+   v0.15 Workbench 4.0 — Glass Surface System（Task 2 / Task 15）
+   只在 8 类容器使用（TopNav / WorkbenchBar / Prompt Console / Inspector /
+   TaskDock / Progress HUD / Canvas ActionDock / Popover）。
+   禁止：每个 slot/input 都 blur、Canvas 图片背景 blur；嵌套 backdrop-filter ≤ 8。
+   深色 :root 默认，浅色 [data-theme='light'] 覆盖。
+   ===================================================================== */
+:root {
+  --glass-bg: rgba(24, 28, 38, 0.62);
+  --glass-bg-strong: rgba(20, 24, 33, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-highlight: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+  --glass-blur: 16px;
+  --glass-saturate: 1.35;
+  /* 无 backdrop-filter 时的回退表面（较不透明 surface-2） */
+  --glass-fallback: var(--panel);
+}
+
+[data-theme='light'] {
+  --glass-bg: rgba(255, 255, 255, 0.66);
+  --glass-bg-strong: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(28, 35, 51, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 10px 30px rgba(28, 35, 51, 0.16);
+  --glass-blur: 16px;
+  --glass-saturate: 1.25;
+  --glass-fallback: var(--panel);
+}
+
+/* 玻璃原语：仅容器级使用，组件统一 class，避免散落 blur。 */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+.glass--strong {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+/* 无 backdrop-filter 支持 → 回退较不透明 surface，保证可读。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass,
+  .glass--strong {
+    background: var(--glass-fallback);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* 用户明确要求减少动效/透明时也回退不透明，避免玻璃带来的性能与可读性问题。 */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass--strong {
+    background: var(--glass-fallback);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

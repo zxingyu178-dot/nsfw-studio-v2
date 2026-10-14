@@ -20,20 +20,21 @@ function renderPage() {
 }
 
 describe('GeneratePage 工作台骨架', () => {
-  it('挂载模式栏与三栏（编辑 / 结果 / 参数）', async () => {
+  it('挂载 WorkbenchBar 与三栏（Prompt Console / Canvas / 参数）', async () => {
     renderPage()
-    // 模式栏（UI-1 前为 tablist 结构）
+    // WorkbenchBar 模式切换
     expect(screen.getByText('文生图')).toBeInTheDocument()
     expect(screen.getByText('图片生成')).toBeInTheDocument()
-    // 三栏标题（h2.wb-pane__title；窄屏 tab 也有“预览”，故按 heading 精确取 pane 标题）
+    // 左栏 Prompt Console、右栏 Inspector 标题；中栏 Canvas 无标题（Canvas First）
     expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '预览' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '生成配置' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
+    // 底部任务坞存在
+    expect(document.querySelector('[data-testid="task-dock"]')).not.toBeNull()
   })
 
-  it('提交按钮存在（主操作）', () => {
+  it('提交按钮存在（拆分生成主操作）', () => {
     renderPage()
-    const buttons = screen.getAllByRole('button', { name: '生成' })
+    const buttons = screen.getAllByRole('button', { name: /生成/ })
     expect(buttons.length).toBeGreaterThan(0)
   })
 })

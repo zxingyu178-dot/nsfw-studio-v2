@@ -65,67 +65,84 @@ function renderTab() {
   )
 }
 
-describe('Prompt 卡片封面与一键复制', () => {
-  it('有 preview_image_id 时渲染 lazy 封面 img，src 为缩略图 URL', async () => {
+describe('Prompt 可视化卡片（v0.15：预览在文本下方）', () => {
+  it('有 preview_image_id：预览图用 thumbnail，且位于名称/摘要之后（文本下方）', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
     const { container } = renderTab()
     await screen.findByText('测试 Prompt')
 
-    const cover = container.querySelector('img.pp-card__cover') as HTMLImageElement
-    expect(cover).toBeTruthy()
-    expect(cover.getAttribute('loading')).toBe('lazy')
-    expect(cover.getAttribute('src')).toBe(imageThumbUrl('img_cover'))
-    expect(screen.queryByText('无封面')).toBeNull()
+    const card = container.querySelector('.pp-card') as HTMLElement
+    const head = card.querySelector('.pp-card__head') as HTMLElement
+    const excerpt = card.querySelector('.pp-card__excerpt') as HTMLElement
+    const preview = card.querySelector('.pp-card__preview') as HTMLElement
+    const img = preview.querySelector('img') as HTMLImageElement
+    expect(img).toBeTruthy()
+    expect(img.getAttribute('loading')).toBe('lazy')
+    expect(img.getAttribute('src')).toBe(imageThumbUrl('img_cover'))
+    // DOM 顺序：head → excerpt → preview（预览在文本下方）
+    expect(head.compareDocumentPosition(excerpt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(excerpt.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // 不再使用旧的顶部封面
+    expect(card.querySelector('.pp-card__cover')).toBeNull()
   })
 
-  it('无 preview_image_id 时渲染占位块', async () => {
+  it('无 preview_image_id：显示固定比例低对比“暂未生成”占位，不出现 broken-image/无封面', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt({ preview_image_id: null })] } as never)
     const { container } = renderTab()
     await screen.findByText('测试 Prompt')
 
-    expect(container.querySelector('img.pp-card__cover')).toBeNull()
-    expect(screen.getByText('无封面')).toBeInTheDocument()
+    expect(screen.getByText('暂未生成')).toBeInTheDocument()
+    expect(screen.queryByText('无封面')).toBeNull()
+    const placeholder = container.querySelector('.pp-card__preview--empty') as HTMLElement
+    expect(placeholder).toBeTruthy()
+    // 固定 aspect ratio（CSS 层断言在 generateCssDedupe/样式测试，这里保证无 img）
+    expect(placeholder.querySelector('img')).toBeNull()
   })
 
-  it('点复制按钮写入完整 positive_prompt 且不打开编辑抽屉（stopPropagation）', async () => {
+  it('已归档 Prompt 仍显示在卡片网格中（含已归档徽标）', async () => {
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt({ archived: true })] } as never)
+    renderTab()
+    await screen.findByText('测试 Prompt')
+    expect(screen.getByText('已归档')).toBeInTheDocument()
+  })
+
+  it('点预览图打开大图预览；无图不提供可点击预览', async () => {
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
+    renderTab()
+    await screen.findByText('测试 Prompt')
+    fireEvent.click(screen.getByRole('button', { name: /预览 .* 的封面/ }))
+    expect((await screen.findByRole('dialog')).querySelector('img')).toBeTruthy()
+  })
+
+  it('复制按钮写入完整 positive_prompt 且不打开编辑抽屉', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
     renderTab()
     await screen.findByText('测试 Prompt')
 
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith('masterpiece, best quality, 1girl, long hair'),
-    )
-    // 抽屉未打开：编辑抽屉的版本历史标题不存在
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('masterpiece, best quality, 1girl, long hair'))
     expect(screen.queryByText('版本历史（不可变；恢复 = 复制为新最新版）')).toBeNull()
-    expect(screen.queryByRole('button', { name: '保存为新版本' })).toBeNull()
   })
 
-  it('设置封面打开图片选择器并触发 setPreviewImage；移除封面触发 clearPreviewImage', async () => {
+  it('“编辑”打开抽屉，封面仍显式“设为 Prompt 封面”（不自动覆盖）', async () => {
     const { promptApi } = await import('../../api/client')
-    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt({ preview_image_id: null })] } as never)
     const { container } = renderTab()
     await screen.findByText('测试 Prompt')
 
-    // 打开编辑抽屉（点击卡片），封面区块出现
-    fireEvent.click(container.querySelector('.pp-card') as HTMLElement)
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
     expect(await screen.findByText('封面')).toBeInTheDocument()
-
-    // 已有封面 → 移除封面
-    fireEvent.click(screen.getByRole('button', { name: '移除封面' }))
-    await waitFor(() => expect(promptApi.clearPreviewImage).toHaveBeenCalledWith('prm_1'))
-
-    // 打开图片选择器（复用 ImagePickerDrawer）
-    fireEvent.click(screen.getByRole('button', { name: '更换封面' }))
+    expect(screen.getByRole('button', { name: '设置封面' })).toBeInTheDocument()
+    // 选图 → setPreviewImage
+    fireEvent.click(screen.getByRole('button', { name: '设置封面' }))
     expect(await screen.findByText('选择封面图片')).toBeInTheDocument()
-
-    // 选中图片 → setPreviewImage（图片列表有 200ms 防抖，先等待渲染）
     await waitFor(() => expect(container.querySelector('.wb-image-item')).not.toBeNull())
     fireEvent.click(container.querySelector('.wb-image-item') as HTMLElement)
     await waitFor(() => expect(promptApi.setPreviewImage).toHaveBeenCalledWith('prm_1', 'img_picked'))
@@ -158,4 +175,3 @@ describe('新建 Prompt 后立即刷新列表', () => {
     expect(promptApi.create).toHaveBeenCalledTimes(1)
   })
 })
-
