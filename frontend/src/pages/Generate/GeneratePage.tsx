@@ -1,16 +1,36 @@
+/**
+ * GeneratePage v0.15 —— Workbench Layout 4.0（Canvas First）。
+ *
+ * 三栏：左 Prompt Console（生成什么）｜中 Canvas（结果，深色哑光、绝不 blur）｜右 Inspector（怎么生成）；
+ * 顶 WorkbenchBar（模式/来源/重置/保存）；底 TaskDock（收起态常驻，展开态含当前任务 + 队列全能力）。
+ * 数据与业务逻辑（module catalog、location.state 带入配方、job 跟踪、结果动作）与 0.14 一致，仅重构布局。
+ */
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { moduleApi } from '../../api/client'
-import { SegmentedControl, Tabs } from '../../components/ui'
-import { PromptEditorPane } from './PromptEditorPane'
-import { ResultPane } from './ResultPane'
-import { SettingsPane } from './SettingsPane'
+import { Tabs } from '../../components/ui'
+import { CanvasStage } from './workbench/CanvasStage'
+import { InspectorPanel } from './workbench/InspectorPanel'
+import { PromptConsole } from './workbench/PromptConsole'
+import { ResizablePane } from './workbench/ResizablePane'
+import { TaskDock } from './workbench/TaskDock'
+import { WorkbenchBar } from './workbench/WorkbenchBar'
+import {
+  LEFT_MAX,
+  LEFT_MIN,
+  RIGHT_MAX,
+  RIGHT_MIN,
+  resetLeftWidth,
+  resetRightWidth,
+  setLeftWidth,
+  setRightWidth,
+  useWorkbenchLayout,
+} from './workbench/workbenchLayout'
 import {
   availableImageModuleIds,
   hydrateWorkbench,
   resetWorkbench,
   setModuleCatalog,
-  setWorkbenchMode,
   useWorkbench,
 } from '../../stores/workbenchStore'
 import type { WorkbenchNavigationState } from './workbenchNavigation'
@@ -26,14 +46,8 @@ const TAB_LABELS: Array<{ key: WorkspaceTab; label: string }> = [
 
 export default function GeneratePage() {
   const location = useLocation()
-  const state = useWorkbench()
-  // 窄屏（<1024）Workspace Tabs：一次只显示一个 pane；宽屏三栏时该状态不影响布局。
+  useWorkbench()
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('prompt')
-  /**
-   * 图片生成 Gate（Phase 5 §二十；Phase 5.1 Task7）：
-   * 目录中存在 **available=true** 且 input_required=true / output_kind=processed 的模块才算可用。
-   * 只注册、未配置 provider binding 的模块 → registered=true / available=false → Gate 关闭。
-   */
   const [imageGenAvailable, setImageGenAvailable] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -48,7 +62,6 @@ export default function GeneratePage() {
     moduleApi
       .list()
       .then((modules) => {
-        // Task6/Task7：目录进 store（校正 Primary Module + 作为 Gate 唯一依据）
         setModuleCatalog(modules)
         setImageGenAvailable(availableImageModuleIds(modules).length > 0)
       })
@@ -58,30 +71,12 @@ export default function GeneratePage() {
       })
   }, [])
 
+  const layout = useWorkbenchLayout()
+
   return (
-    <div className={`generate generate--tab-${activeTab}`} aria-label="生成工作台">
-      <div className="generate__modebar">
-        <SegmentedControl
-          value={state.mode}
-          onChange={(v) => setWorkbenchMode(v as typeof state.mode)}
-          options={[
-            { value: 'text', label: '文生图' },
-            { value: 'image', label: '图片生成' },
-          ]}
-          ariaLabel="生成模式"
-        />
-        {state.mode === 'image' && (
-          <span className="muted generate__modebar-hint">
-            {imageGenAvailable === null
-              ? '正在检查图片生成工作流…'
-              : imageGenAvailable
-                ? '输入图片 + Prompt → 处理型工作流'
-                : '图片生成：尚未配置可用工作流'}
-          </span>
-        )}
-      </div>
-      {/* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏。
-          收口到 components/ui/Tabs（标准 WAI-ARIA tablist/tab/tabpanel），不再自造 div tab。 */}
+    <div className={`generate wb4 generate--tab-${activeTab}`} aria-label="生成工作台">
+      <WorkbenchBar />
+
       <Tabs
         className="generate__tabs"
         ariaLabel="工作台面板"
@@ -89,17 +84,43 @@ export default function GeneratePage() {
         active={activeTab}
         onChange={(key) => setActiveTab(key as WorkspaceTab)}
       />
-      <div className="generate__columns">
-        <div className="generate__pane generate__pane--prompt">
-          <PromptEditorPane />
+
+      <div
+        className="wb4-columns"
+        style={{ '--left-w': `${layout.leftWidth}px`, '--right-w': `${layout.rightWidth}px` } as React.CSSProperties}
+      >
+        <ResizablePane
+          side="left"
+          width={layout.leftWidth}
+          min={LEFT_MIN}
+          max={LEFT_MAX}
+          label="Prompt 栏宽度"
+          onChange={setLeftWidth}
+          onReset={resetLeftWidth}
+          className="generate__pane generate__pane--prompt"
+        >
+          <PromptConsole />
+        </ResizablePane>
+
+        <div className="wb4-pane wb4-center generate__pane generate__pane--preview">
+          <CanvasStage />
         </div>
-        <div className="generate__pane generate__pane--preview">
-          <ResultPane />
-        </div>
-        <div className="generate__pane generate__pane--settings">
-          <SettingsPane imageGenAvailable={imageGenAvailable} />
-        </div>
+
+        <ResizablePane
+          side="right"
+          width={layout.rightWidth}
+          min={RIGHT_MIN}
+          max={RIGHT_MAX}
+          label="参数栏宽度"
+          onChange={setRightWidth}
+          onReset={resetRightWidth}
+          className="generate__pane generate__pane--settings"
+        >
+          <InspectorPanel imageGenAvailable={imageGenAvailable} />
+        </ResizablePane>
       </div>
+
+      <TaskDock />
     </div>
   )
 }

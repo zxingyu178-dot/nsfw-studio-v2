@@ -1,32 +1,12 @@
 /* ===== Generate 工作台（UI 3.0：专业桌面工具 / 克制赛博 / 冷色高亮） =====
    类名 wb- 前缀；颜色一律引用 token，不散写色值。
-   保留既有布局契约：.generate 高度锁、columns flex:1、pane 内滚、1319px 紧凑三栏。 */
+   v0.15 Workbench 4.0：三栏由 .wb4-columns 控制，断点 1200/1024（见文件末尾），整页零纵向滚动。 */
 
 .generate {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-
-/* 顶部模式栏：薄、克制，不抢主视觉 */
-.generate__modebar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-  padding: var(--space-1) var(--space-4);
-  min-height: 38px;
-  border-bottom: 1px solid var(--panel-divider);
-  background: transparent;
-}
-
-.generate__modebar-hint {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
 }
 
 /* 窄屏（<1024）Workspace Tabs：宽屏由 CSS 隐藏 */
@@ -55,16 +35,7 @@
   border-bottom-color: var(--accent);
 }
 
-.generate__columns {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 5fr 4fr 3fr;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-}
-
-/* 每个 pane 外层包裹：宽屏为 grid 项，窄屏为 tab 切换项 */
+/* 每个 pane 外层包裹（窄屏 tab 切换时用作显示/隐藏标记；v0.15 三栏由 .wb4-columns 负责） */
 .generate__pane {
   min-height: 0;
   display: flex;
@@ -434,44 +405,9 @@
 }
 .wb-asset-more { display: flex; justify-content: center; margin-top: var(--space-3); }
 
-/* ===== 响应式：三档断点（任何宽度都不回退整页文档滚动） =====
-   ≥1320        完整三栏（5fr 4fr 3fr）
-   1024~1319    紧凑三栏（中间预览优先保宽，gap/padding 紧凑）
-   <1024        Workspace Tabs（一次一个 pane）
-*/
-@media (max-width: 1319px) {
-  .generate__columns {
-    grid-template-columns: minmax(270px, 0.9fr) minmax(320px, 1.2fr) minmax(250px, 0.85fr);
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-  }
-  .wb-pane__header { padding: var(--space-1) 0; }
-  .wb-pane__body { padding: var(--space-2) 0; gap: var(--space-2); }
-  .wb-pane__footer { padding: var(--space-2) 0; }
-  .generate__modebar-hint { display: none; }
-}
-
-@media (max-width: 1023px) {
-  .generate__tabs { display: flex; }
-  .generate__columns {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding: var(--space-2);
-  }
-  .generate__pane { display: none; flex: 1 1 0; min-height: 0; }
-  .generate--tab-prompt .generate__pane--prompt,
-  .generate--tab-preview .generate__pane--preview,
-  .generate--tab-settings .generate__pane--settings {
-    display: flex;
-  }
-}
-
-/* 低高度窗口压缩，禁止靠整页滚动腾空间 */
+/* ===== 响应式：三档断点见文件末尾 Workbench 4.0 段（1200 / 1024），任何宽度都不回退整页文档滚动 =====
+   低高度窗口压缩（保留 pane 内边距与结果区最小高度），禁止靠整页滚动腾空间。 */
 @media (max-height: 700px) {
-  .generate__modebar { min-height: 34px; padding: 2px var(--space-3); }
-  .generate__modebar-hint { display: none; }
-  .generate__columns { padding: var(--space-1) var(--space-2); gap: var(--space-2); }
   .wb-pane__header { padding: var(--space-1) 0; }
   .wb-pane__body { padding: var(--space-2) 0; gap: var(--space-2); }
   .wb-pane__footer { padding: var(--space-1) 0; }
@@ -552,4 +488,411 @@
   margin-top: var(--space-2);
   width: 100%;
   align-self: center;
+}
+
+/* ============================================================
+   Workbench 4.0（v0.15，Canvas First）
+   左 Prompt Console · 中 Canvas（深色哑光、绝不 blur）· 右 Inspector · 底 TaskDock · 顶 WorkbenchBar
+   整页零纵向滚动：宽度变化只在 1200/1024 两档重排；高度锁在 .generate，内部 pane 各自滚动。
+   ============================================================ */
+
+.generate.wb4 {
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+
+/* ---------- 顶部 WorkbenchBar（glass 容器 #1） ---------- */
+.wb4-bar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+.wb4-bar__left { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2); }
+.wb4-bar__context {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.wb4-bar__right { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2); }
+.wb4-bar__notice { position: absolute; left: 50%; bottom: -28px; transform: translateX(-50%); z-index: 20; margin: 0; }
+.wb4-save__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wb4-save__trigger:hover { border-color: var(--accent); }
+.wb4-bar__save { position: relative; }
+.wb4-save__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.wb4-save__menu [role='menuitem'] {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wb4-save__menu [role='menuitem']:hover { background: var(--control-bg); }
+
+/* ---------- 三栏列容器 ---------- */
+.wb4-columns {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
+}
+.wb4-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.wb4-pane__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb4-pane__content > .wb-pane { flex: 1 1 auto; min-height: 0; }
+.wb4-pane--left { width: var(--left-w, 320px); flex: 0 0 var(--left-w, 320px); }
+.wb4-pane--right { width: var(--right-w, 300px); flex: 0 0 var(--right-w, 300px); }
+.wb4-center { flex: 1 1 auto; min-width: 0; }
+
+/* 拖拽手柄 */
+.wb4-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.wb4-resize-handle--left { right: -5px; }
+.wb4-resize-handle--right { left: -5px; }
+.wb4-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 40px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.wb4-resize-handle:hover::after,
+.wb4-resize-handle:focus-visible::after { background: var(--accent); }
+.wb4-resize-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------- 左栏 Prompt Console：单槽位聚焦 ---------- */
+.wb4-slots { display: flex; flex-direction: column; gap: 2px; }
+.wb4-slot {
+  border-bottom: 1px solid var(--panel-divider);
+  padding: var(--space-1) 0;
+}
+.wb4-slot:last-child { border-bottom: none; }
+.wb4-slot__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wb4-slot__label {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+.wb4-slot--filled .wb4-slot__label,
+.wb4-slot--active .wb4-slot__label { color: var(--text-primary); font-weight: var(--weight-semibold); }
+.wb4-slot__actions { display: flex; align-items: center; gap: 2px; }
+.wb4-slot__asset { display: inline-flex; align-items: center; gap: 2px; }
+.wb4-slot__summary {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.wb4-slot__placeholder { color: var(--text-tertiary); }
+.wb4-slot__textarea { width: 100%; margin-top: var(--space-1); }
+
+/* ---------- 右栏 Inspector ---------- */
+.wb4-inspector__group { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb4-workflow-title { margin: 0; }
+.wb4-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--panel-divider);
+}
+.wb4-switch-row__text { display: flex; flex-direction: column; gap: 2px; }
+.wb4-switch-row__label { font-size: var(--text-sm); color: var(--text-primary); }
+.wb4-switch-row__sub { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+/* ---------- 拆分生成按钮（Task 11） ---------- */
+.wb4-generate { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; }
+.wb4-generate__split { display: flex; align-items: stretch; gap: 6px; }
+.wb4-generate__main { flex: 1 1 auto; height: 44px; }
+.wb4-generate__next {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+}
+.wb4-generate__next:hover:not(:disabled) { border-color: var(--accent); }
+.wb4-generate__next:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* ---------- 中栏 Canvas Stage（深色哑光，不使用 backdrop-filter） ---------- */
+.wb4-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-divider);
+  border-radius: var(--radius-md);
+  background: var(--canvas-bg);
+  overflow: hidden;
+}
+.wb4-stage__topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--panel-divider);
+  min-height: 34px;
+}
+.wb4-stage__canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wb4-stage__canvas .canvas-viewport {
+  position: absolute;
+  inset: 0;
+}
+.wb4-stage__hud {
+  position: absolute;
+  top: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: min(520px, 86%);
+  pointer-events: none;
+}
+
+/* Progress HUD（glass 容器 #2） */
+.wb4-hud {
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wb4-hud__row { display: flex; align-items: center; gap: var(--space-2); }
+.wb4-hud__progress { flex: 1 1 auto; display: flex; align-items: center; gap: var(--space-2); }
+.wb4-hud__bar { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--control-bg); overflow: hidden; }
+.wb4-hud__bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent, #3fd6c2), #2fb6e8); transition: width 0.2s ease; }
+.wb4-hud__overall { font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-primary); }
+.wb4-hud__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-secondary); }
+.wb4-hud__item,
+.wb4-hud__stage,
+.wb4-hud__step { color: var(--text-secondary); }
+.wb4-hud__step { font-family: var(--font-mono); }
+.wb4-hud__step--indeterminate { color: var(--text-tertiary); }
+
+/* 底部 filmstrip + 动作 */
+.wb4-stage__dock {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--panel-divider);
+}
+.wb4-filmstrip {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding: 0;
+}
+.wb4-filmstrip__item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: var(--control-bg);
+  cursor: pointer;
+  padding: 0;
+}
+.wb4-filmstrip__item img { width: 100%; height: 100%; object-fit: cover; }
+.wb4-filmstrip__item--active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.wb4-filmstrip__badge {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+/* ---------- 底部 TaskDock（glass 容器 #3） ---------- */
+.wb4-dock {
+  flex-shrink: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+.wb4-dock__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 38px;
+  padding: 0 var(--space-3);
+}
+.wb4-dock__expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wb4-dock__chevron { transition: transform 0.15s ease; }
+.wb4-dock__chevron--up { transform: rotate(180deg); }
+.wb4-dock__status { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-secondary); }
+.wb4-dock__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); }
+.wb4-dock__dot--run { background: var(--success); box-shadow: 0 0 6px var(--glow-accent); }
+.wb4-dock__label { font-family: var(--font-mono); }
+.wb4-dock__item,
+.wb4-dock__overall { color: var(--text-secondary); }
+.wb4-dock__queue-count { font-size: var(--text-xs); color: var(--text-tertiary); }
+.wb4-dock__bar-actions { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2); }
+.wb4-dock__body {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.4fr);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--panel-divider);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.wb4-dock__current { min-width: 0; }
+.wb4-dock__queue { min-width: 0; }
+.wb4-dock__queue .wb-queue-list--scroll { max-height: 220px; }
+
+/* ---------- 响应式三档断点（重排只在 1200 / 1024；整页零纵向滚动） ---------- */
+
+/* 1024–1199：固定紧凑三栏（280 / 270），隐藏拖拽手柄 */
+@media (max-width: 1199px) {
+  .wb4-columns {
+    --left-w: 280px;
+    --right-w: 270px;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2) 0;
+  }
+  .wb4-resize-handle { display: none; }
+  .wb4-bar__context { display: none; }
+}
+
+/* <1024：Workspace Tabs，一次一个 pane；TaskDock 常驻展开 */
+@media (max-width: 1023px) {
+  .generate__tabs { display: flex; }
+  .wb4-columns {
+    flex-direction: column;
+    --left-w: auto;
+    --right-w: auto;
+    gap: 0;
+    padding: var(--space-2);
+  }
+  .wb4-pane,
+  .wb4-pane--left,
+  .wb4-pane--right {
+    width: 100%;
+    flex: 1 1 0;
+    display: none;
+  }
+  .wb4-center { display: none; }
+  .generate--tab-prompt .wb4-pane--left,
+  .generate--tab-preview .wb4-center,
+  .generate--tab-settings .wb4-pane--right {
+    display: flex;
+  }
+  .wb4-resize-handle { display: none; }
+  .wb4-dock__body {
+    grid-template-columns: 1fr;
+    max-height: 40vh;
+  }
+}
+
+/* 低高度窗口压缩，仍禁止整页滚动 */
+@media (max-height: 700px) {
+  .wb4-bar { min-height: 38px; }
+  .wb4-dock__bar { min-height: 34px; }
+  .wb4-dock__body { max-height: 200px; }
 }

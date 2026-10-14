@@ -19,7 +19,7 @@ describe('GenerateLayoutVisualContract（≥1024 三栏 + 一屏 + 主按钮首�
   it('三栏根与三列面板同时存在（编辑 / 预览 / 配置）', () => {
     const { container } = renderPage()
     expect(container.querySelector('.generate')).not.toBeNull()
-    expect(container.querySelector('.generate__columns')).not.toBeNull()
+    expect(container.querySelector('.wb4-columns')).not.toBeNull()
     expect(container.querySelector('.generate__pane--prompt')).not.toBeNull()
     expect(container.querySelector('.generate__pane--preview')).not.toBeNull()
     expect(container.querySelector('.generate__pane--settings')).not.toBeNull()
