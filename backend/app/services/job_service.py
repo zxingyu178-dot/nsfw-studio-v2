@@ -310,6 +310,18 @@ def record_event(session: Session, job_id: str, event_type: str, *, item_id: str
     _publish(event_type, job_id, item_id=item_id, payload=payload)
 
 
+def publish_transient_event(
+    event_type: str, job_id: str, *, item_id: str | None = None, payload: dict | None = None
+) -> None:
+    """v0.15 Task 7：临时实时进度事件——**只广播 SSE，不写 job_events**。
+
+    采样阶段引擎每 200ms 轮询一次，若每次都 INSERT ITEM_PROGRESS + COMMIT，
+    会放大 SQLite 写入并永久膨胀 job_events。ITEM_PROGRESS 属于纯实时信号，
+    页面刷新/崩溃恢复所需的最后进度由 JobStageItem.progress 列（节流持久化）承担。
+    """
+    _publish(event_type, job_id, item_id=item_id, payload=payload)
+
+
 # ===== 查询 =====
 
 def get_job(session: Session, job_id: str) -> Job:

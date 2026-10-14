@@ -56,13 +56,23 @@ class EngineJobRequest:
 
 @dataclass(frozen=True)
 class EngineJobStatus:
-    """引擎侧任务状态（含进度能力：引擎不支持时 progress 为 None）。"""
+    """引擎侧任务状态（含进度能力：引擎不支持时 progress 为 None）。
+
+    v0.15 真实采样 Step：
+    - ``step`` / ``max_step`` 表示采样型工作流当前/总步数（如 ComfyUI KSampler 17/30）；
+    - 仅在引擎明确报告时有值；非采样阶段（如高清放大、保存图片）必须为 None，
+      上层据此显示"处理中…"，**绝不允许伪造 Step**；
+    - 任务成功/失败进入终态时 step/max_step 必须清空，避免 UI 停在 25/25。
+    - ``progress`` 仍为 0.0~1.0 归一化进度（step 存在时 = step/max_step）。
+    """
 
     state: str  # queued | running | succeeded | failed | canceled | unknown
     progress: float | None = None  # 0.0 ~ 1.0
     message: str = ""
     stage: str = ""
     error_type: str = ""  # 失败时的分类（规范 §三十五）；空则由 Worker 按消息归类
+    step: int | None = None  # v0.15：采样当前步数（仅采样阶段有值）
+    max_step: int | None = None  # v0.15：采样总步数（仅采样阶段有值）
 
 
 @dataclass(frozen=True)
