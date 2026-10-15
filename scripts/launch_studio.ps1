@@ -91,25 +91,40 @@ if ($porcelain.Count -gt 0) {
     Write-Host "[NSFW Studio] 检测到未提交改动，dist 可能不是最新（不阻断启动）。" -ForegroundColor Yellow
 }
 
+# 生产机（双击桌面快捷方式）通常没有 Node.js 工具链：node 仅存在于开发 / Agent
+# 环境时，重新构建才可行。无工具链时绝不能因此阻断生产启动——只要已有可服务的
+# dist，就降级使用现有构建并提示；只有 dist 真的缺失且无工具链时才致命退出。
+$nodeAvailable = ($null -ne (Get-Command "node" -ErrorAction SilentlyContinue)) -and
+                 ($null -ne (Get-Command "npm" -ErrorAction SilentlyContinue))
+
 if ($needBuild) {
-    Write-Host "[NSFW Studio] 前端构建已过期，正在重新构建……" -ForegroundColor Cyan
-    if (-not (Test-Path (Join-Path $FrontendDir "node_modules"))) {
-        Write-Host "[NSFW Studio] 未发现 node_modules，正在安装前端依赖……"
+    if (-not $nodeAvailable) {
+        if (-not (Test-Path $DistIndex)) {
+            Fail-Step "前端 dist 缺失，且本机未找到 Node.js/npm，无法启动。请在开发环境执行 npm run build 后再运行本启动器。"
+        }
+        Write-Host "[NSFW Studio] 检测到前端可能需要重建，但本机未发现 Node.js/npm（生产环境无前端工具链）。" -ForegroundColor Yellow
+        Write-Host "[NSFW Studio] 将使用已构建的 dist 继续启动；如需更新前端，请在开发环境执行 npm run build。" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "[NSFW Studio] 前端构建已过期，正在重新构建……" -ForegroundColor Cyan
+        if (-not (Test-Path (Join-Path $FrontendDir "node_modules"))) {
+            Write-Host "[NSFW Studio] 未发现 node_modules，正在安装前端依赖……"
+            Push-Location $FrontendDir
+            try {
+                if (Test-Path (Join-Path $FrontendDir "package-lock.json")) { & npm ci }
+                else { & npm install --no-audit --no-fund }
+                if ($LASTEXITCODE -ne 0) { Fail-Step "前端依赖安装失败（npm 退出码 $LASTEXITCODE）。" }
+            } finally { Pop-Location }
+        }
         Push-Location $FrontendDir
         try {
-            if (Test-Path (Join-Path $FrontendDir "package-lock.json")) { & npm ci }
-            else { & npm install --no-audit --no-fund }
-            if ($LASTEXITCODE -ne 0) { Fail-Step "前端依赖安装失败（npm 退出码 $LASTEXITCODE）。" }
+            & npm run build
+            if ($LASTEXITCODE -ne 0) { Fail-Step "前端构建失败（npm run build 退出码 $LASTEXITCODE）。" }
         } finally { Pop-Location }
+        $newCommit = Get-HeadCommit
+        Set-Content -Path $StampFile -Value $newCommit -NoNewline -Encoding Ascii
+        Write-Host "[NSFW Studio] 前端构建完成：$newCommit" -ForegroundColor Green
     }
-    Push-Location $FrontendDir
-    try {
-        & npm run build
-        if ($LASTEXITCODE -ne 0) { Fail-Step "前端构建失败（npm run build 退出码 $LASTEXITCODE）。" }
-    } finally { Pop-Location }
-    $newCommit = Get-HeadCommit
-    Set-Content -Path $StampFile -Value $newCommit -NoNewline -Encoding Ascii
-    Write-Host "[NSFW Studio] 前端构建完成：$newCommit" -ForegroundColor Green
 }
 
 # ---- 端口预检：Free / Ours / Other（Other 打印占用信息并退出 3，不静默换口） ----
