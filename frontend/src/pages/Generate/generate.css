@@ -771,6 +771,33 @@
 .wb4-hud__step { font-family: var(--font-mono); }
 .wb4-hud__step--indeterminate { color: var(--text-tertiary); }
 
+/* v0.15.1：QUEUED 排队横幅（区别于 RUNNING HUD，不显示采样 Step/Stage/Elapsed） */
+.wb4-stage__queued-banner {
+  position: absolute;
+  top: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.wb4-stage__queued-banner .ds-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent, #3fd6c2);
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 /* 底部 filmstrip + 动作 */
 .wb4-stage__dock {
   flex-shrink: 0;

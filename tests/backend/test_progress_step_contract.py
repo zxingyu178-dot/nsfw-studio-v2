@@ -59,24 +59,36 @@ def _make_adapter_with_live_prompt():
         options={"websocket_progress": True},
         comfyui_config={"url": "http://127.0.0.1:8188"},
     )
-    # 与 submit_job 成功后写入的 live 结构保持一致
+    # 与 submit_job 成功后写入的 live 结构保持一致（含 v0.15.1 节点身份字段）
     adapter._live["pid"] = {
         "stage": "queued", "progress": 0.0, "state": "queued",
         "step": None, "max_step": None,
+        "current_node": None, "node_classes": {"3": "KSampler", "7": "ImageUpscaleWithModel"},
         "error_type": "", "error_message": "", "updated": time.monotonic(),
     }
     return adapter
 
 
+def _executing(node):
+    import json
+    return json.dumps({"type": "executing", "data": {"prompt_id": "pid", "node": node}})
+
+
 def test_comfy_progress_preserves_step():
-    """ComfyUI progress 事件 value/max 必须映射为 step/max_step，且保留归一化 progress。"""
+    """当前节点是采样器（KSampler）时，progress value/max 映射为 step/max_step，保留归一化 progress。"""
     adapter = _make_adapter_with_live_prompt()
 
+    # 先进入执行、再报告当前节点为 KSampler（真实 ComfyUI 事件顺序：executing → progress）
+    adapter._handle_ws_message(
+        '{"type": "execution_start", "data": {"prompt_id": "pid"}}'
+    )
+    adapter._handle_ws_message(_executing("3"))
     adapter._handle_ws_message(
         '{"type": "progress", "data": {"prompt_id": "pid", "value": 17, "max": 30}}'
     )
     live = adapter._live["pid"]
     assert live["step"] == 17 and live["max_step"] == 30
+    assert live["stage"] == "sampling"
     assert live["progress"] == pytest.approx(17 / 30, abs=0.01)
 
     status = adapter._running_status(live)
@@ -100,11 +112,47 @@ def test_comfy_progress_preserves_step():
     assert public.step == 17 and public.max_step == 30
 
 
+def test_comfy_generic_progress_from_non_sampler_has_no_step():
+    """当前节点不是采样器（如放大器/自定义节点）时，progress 保留但 step/max_step 必须为 None。"""
+    adapter = _make_adapter_with_live_prompt()
+    adapter._handle_ws_message(
+        '{"type": "execution_start", "data": {"prompt_id": "pid"}}'
+    )
+    # 当前节点是放大模型节点（非采样器）
+    adapter._handle_ws_message(_executing("7"))
+    adapter._handle_ws_message(
+        '{"type": "progress", "data": {"prompt_id": "pid", "value": 3, "max": 8}}'
+    )
+    live = adapter._live["pid"]
+    assert live["step"] is None and live["max_step"] is None
+    assert live["stage"] == "execution"
+    assert live["progress"] == pytest.approx(3 / 8, abs=0.01)
+
+    # 尚未收到 executing（无法确认节点身份）也必须保守地不显示 Step
+    adapter2 = _make_adapter_with_live_prompt()
+    adapter2._handle_ws_message(
+        '{"type": "progress", "data": {"prompt_id": "pid", "value": 1, "max": 10}}'
+    )
+    assert adapter2._live["pid"]["step"] is None
+
+
+def test_comfy_executing_tracks_current_node():
+    """executing 事件必须记录当前节点 id；progress 据此定位 class_type。"""
+    adapter = _make_adapter_with_live_prompt()
+    adapter._handle_ws_message(_executing("3"))
+    assert adapter._live["pid"]["current_node"] == "3"
+    # node=None 表示所有节点执行完，不覆盖当前节点（随后 execution_success 会清 step）
+    import json
+    adapter._handle_ws_message(json.dumps({"type": "executing", "data": {"prompt_id": "pid", "node": None}}))
+    assert adapter._live["pid"]["current_node"] == "3"
+
+
 def test_progress_success_clears_step():
     """execution_success / execution_error 必须清空 step/max_step。"""
     adapter = _make_adapter_with_live_prompt()
 
-    # 先采样到 17/30
+    # 先采样到 17/30（先 executing 到 KSampler 节点）
+    adapter._handle_ws_message(_executing("3"))
     adapter._handle_ws_message(
         '{"type": "progress", "data": {"prompt_id": "pid", "value": 17, "max": 30}}'
     )
@@ -120,6 +168,7 @@ def test_progress_success_clears_step():
 
     # 失败路径同样清空
     adapter2 = _make_adapter_with_live_prompt()
+    adapter2._handle_ws_message(_executing("3"))
     adapter2._handle_ws_message(
         '{"type": "progress", "data": {"prompt_id": "pid", "value": 5, "max": 30}}'
     )
@@ -181,18 +230,21 @@ def test_progress_unchanged_does_not_write_event(session_factory):
     try:
         worker = SingleQueueWorker(
             session_factory, MockEngineAdapter(),
-            progress_persist_interval_ms=10_000,  # 测试中故意放大节流窗口
+            progress_persist_interval_ms=10_000,  # 测试中故意放大持久化节流窗口
+            progress_broadcast_heartbeat_ms=10_000,  # 同时放大广播 heartbeat，只验证“签名变化即发”
         )
         status = EngineJobStatus(state="running", progress=0.1, stage="sampling",
                                  step=1, max_step=10)
-        # 同一签名连续 3 次：每次都广播 SSE，但只允许落库一次
+        # 同一签名连续 3 次：SSE 去重后只广播 1 次（DB 也只允许落库一次）
         for _ in range(3):
             worker._update_stage_item_progress(
                 job_id, stage_item_id, status,
                 stage_index=0, job_item_id=job_item_id,
             )
         progress_events = [e for e in broker.events if e["type"] == "ITEM_PROGRESS"]
-        assert len(progress_events) == 3, "每次轮询都应广播临时 SSE"
+        assert len(progress_events) == 1, "相同签名必须去重，只广播一次 SSE"
+        # v0.15.1：payload 必须携带 stage_item_id（多阶段身份）
+        assert progress_events[0]["payload"]["stage_item_id"] == stage_item_id
 
         with session_factory() as session:
             assert session.query(JobEvent).filter_by(event_type="ITEM_PROGRESS").count() == 0
@@ -222,6 +274,72 @@ def test_progress_unchanged_does_not_write_event(session_factory):
         # 临时 SSE 必须携带真实 step
         stepped = [e for e in progress_events if e["payload"].get("step") == 1]
         assert stepped and stepped[0]["payload"]["max_step"] == 10
+    finally:
+        job_service.set_event_broker(original_broker)
+
+
+def test_progress_broadcast_heartbeat(session_factory):
+    """签名不变时，超过 heartbeat 仍应补发一次心跳；heartbeat 内去重。"""
+    from app.engine.base import EngineJobStatus
+    from app.engine.mock import MockEngineAdapter
+    from app.services import job_service
+    from app.workers.queue_worker import SingleQueueWorker
+
+    job_id, stage_item_id, job_item_id = _make_job(session_factory)
+    broker = _CaptureBroker()
+    original_broker = job_service._EVENT_BROKER
+    job_service.set_event_broker(broker)
+    try:
+        # heartbeat=0：每次轮询都到点，允许每次广播
+        worker = SingleQueueWorker(
+            session_factory, MockEngineAdapter(),
+            progress_broadcast_heartbeat_ms=0,
+        )
+        status = EngineJobStatus(state="running", progress=0.1, stage="sampling",
+                                 step=1, max_step=10)
+        for _ in range(3):
+            worker._update_stage_item_progress(
+                job_id, stage_item_id, status,
+                stage_index=0, job_item_id=job_item_id,
+            )
+        progress_events = [e for e in broker.events if e["type"] == "ITEM_PROGRESS"]
+        assert len(progress_events) == 3, "heartbeat=0 时每次轮询都应补发心跳"
+    finally:
+        job_service.set_event_broker(original_broker)
+
+
+def test_progress_broadcast_coalesces_then_emits_on_change(session_factory):
+    """相同签名只广播一次，签名变化后立即再广播（验证 SSE 去重与实时性并存）。"""
+    from app.engine.base import EngineJobStatus
+    from app.engine.mock import MockEngineAdapter
+    from app.services import job_service
+    from app.workers.queue_worker import SingleQueueWorker
+
+    job_id, stage_item_id, job_item_id = _make_job(session_factory)
+    broker = _CaptureBroker()
+    original_broker = job_service._EVENT_BROKER
+    job_service.set_event_broker(broker)
+    try:
+        worker = SingleQueueWorker(
+            session_factory, MockEngineAdapter(),
+            progress_persist_interval_ms=10_000,
+            progress_broadcast_heartbeat_ms=10_000,
+        )
+
+        def push(progress, step, stage):
+            worker._update_stage_item_progress(
+                job_id, stage_item_id,
+                EngineJobStatus(state="running", progress=progress, stage=stage,
+                                step=step, max_step=10),
+                stage_index=0, job_item_id=job_item_id,
+            )
+
+        push(0.1, 1, "sampling")
+        push(0.1, 1, "sampling")  # 去重
+        push(0.2, 2, "sampling")  # 签名变化 → 立即广播
+        progress_events = [e for e in broker.events if e["type"] == "ITEM_PROGRESS"]
+        assert len(progress_events) == 2
+        assert progress_events[-1]["payload"]["progress"] == pytest.approx(0.2)
     finally:
         job_service.set_event_broker(original_broker)
 

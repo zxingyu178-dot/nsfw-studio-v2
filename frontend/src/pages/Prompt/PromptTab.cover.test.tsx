@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { PromptTab } from './PromptTab'
-import { imageThumbUrl } from '../../types/workbench'
+import { imagePreviewUrl, imageThumbUrl } from '../../types/workbench'
 import type { PromptDTO } from '../../types/workbench'
 
 vi.mock('../../api/client', () => ({
@@ -99,6 +99,34 @@ describe('Prompt 可视化卡片（v0.15：预览在文本下方）', () => {
     expect(placeholder).toBeTruthy()
     // 固定 aspect ratio（CSS 层断言在 generateCssDedupe/样式测试，这里保证无 img）
     expect(placeholder.querySelector('img')).toBeNull()
+  })
+
+  it('v0.15.1：有 preview_image_id 但缩略图加载失败（onError）→ 统一“暂未生成”占位，不残留 img/空白', async () => {
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
+    const { container } = renderTab()
+    await screen.findByText('测试 Prompt')
+
+    const img = container.querySelector('.pp-card__preview img') as HTMLImageElement
+    expect(img).toBeTruthy()
+    fireEvent.error(img) // 模拟 rendition 缺失/损坏
+
+    expect(await screen.findByText('暂未生成')).toBeInTheDocument()
+    expect(container.querySelector('.pp-card__preview img')).toBeNull()
+    expect(container.querySelector('.pp-card__preview--empty')).toBeTruthy()
+  })
+
+  it('v0.15.1：编辑抽屉小封面使用 preview（1536 渐进图）而非 original content，降低 IO', async () => {
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
+    const { container } = renderTab()
+    await screen.findByText('测试 Prompt')
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    const coverImg = await waitFor(() => container.querySelector('.pp-cover__img') as HTMLImageElement)
+    expect(coverImg).toBeTruthy()
+    expect(coverImg.getAttribute('src')).toBe(imagePreviewUrl('img_cover'))
+    expect(coverImg.getAttribute('src')).not.toContain('/content')
   })
 
   it('已归档 Prompt 仍显示在卡片网格中（含已归档徽标）', async () => {

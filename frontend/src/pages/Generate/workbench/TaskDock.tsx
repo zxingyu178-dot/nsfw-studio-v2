@@ -14,13 +14,16 @@ import { toggleDock, useWorkbenchLayout } from './workbenchLayout'
 export function TaskDock() {
   const store = useJobStore()
   const open = useWorkbenchLayout().dockOpen
-  const live = store.liveProgressByItem
+  const live = store.liveProgressByStageItem
   const running = store.queue?.running ?? null
   const queuedCount = (store.queue?.queued ?? []).length + (store.queue?.paused ?? []).length
   const paused = store.queue?.worker.queue_paused ?? false
 
   const hud = running ? hudSnapshot(running, live) : null
-  const busy = store.submitting
+  // v0.15.1：动作忙态必须绑定到具体 job（busyJobId），而非全局 submitting；
+  // 只对当前 dock 展示的那个 running job 置忙，避免别的任务操作时误禁用。
+  const busy = store.submitting || (running !== null && store.busyJobId === running.id)
+  const busyAction = store.busyJobId === running?.id ? store.busyJobAction : null
 
   return (
     <div className={`wb4-dock glass${open ? ' wb4-dock--open' : ''}`} data-testid="task-dock">
@@ -67,7 +70,7 @@ export function TaskDock() {
         <div className="wb4-dock__body">
           <div className="wb4-dock__current">
             {running ? (
-              <CompactCurrentJob job={running} busy={busy} />
+              <CompactCurrentJob job={running} busy={busy} busyAction={busyAction} />
             ) : (
               <p className="muted">当前没有运行中的任务。</p>
             )}
@@ -82,7 +85,15 @@ export function TaskDock() {
 }
 
 /** 展开态当前任务：保留状态/摘要/模块/操作，去掉进度条/Stage/elapsed/第N张（已在 Canvas HUD）。 */
-function CompactCurrentJob({ job, busy }: { job: JobDTO; busy: boolean }) {
+function CompactCurrentJob({
+  job,
+  busy,
+  busyAction,
+}: {
+  job: JobDTO
+  busy: boolean
+  busyAction: 'pause' | 'resume' | 'cancel' | null
+}) {
   const excerpt = (job.positive_prompt_snapshot ?? '').trim() || '（无 Prompt）'
   const moduleLabel =
     job.stages && job.stages.length > 1
@@ -100,13 +111,22 @@ function CompactCurrentJob({ job, busy }: { job: JobDTO; busy: boolean }) {
       </p>
       <div className="wb-job__actions">
         {job.status === 'RUNNING' && !job.pause_requested && (
-          <Button size="sm" disabled={busy} onClick={() => void pauseJob(job.id)}>暂停</Button>
+          <Button size="sm" disabled={busy} aria-busy={busyAction === 'pause'}
+                  onClick={() => void pauseJob(job.id)}>
+            {busyAction === 'pause' ? '正在暂停…' : '暂停'}
+          </Button>
         )}
         {job.status === 'PAUSED' && (
-          <Button size="sm" disabled={busy} onClick={() => void resumeJob(job.id)}>继续</Button>
+          <Button size="sm" disabled={busy} aria-busy={busyAction === 'resume'}
+                  onClick={() => void resumeJob(job.id)}>
+            {busyAction === 'resume' ? '正在继续…' : '继续'}
+          </Button>
         )}
         {['QUEUED', 'RUNNING', 'PAUSED'].includes(job.status) && !job.cancel_requested && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void cancelJob(job.id)}>取消</Button>
+          <Button size="sm" variant="ghost" disabled={busy} aria-busy={busyAction === 'cancel'}
+                  onClick={() => void cancelJob(job.id)}>
+            {busyAction === 'cancel' ? '正在取消…' : '取消'}
+          </Button>
         )}
         {job.status === 'RUNNING' && job.cancel_requested && <span className="muted">正在取消…</span>}
       </div>

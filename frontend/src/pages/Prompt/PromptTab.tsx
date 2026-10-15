@@ -20,6 +20,7 @@ import {
   STRUCTURED_FIELDS,
   emptyStructured,
   imageContentUrl,
+  imagePreviewUrl,
   imageThumbUrl,
   type PromptDTO,
   type PromptMode,
@@ -178,6 +179,16 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [favBusy, setFavBusy] = useState(false)
+  // v0.15.1：DB 有 preview_image_id 但 rendition 缺失/损坏时，统一回退“暂未生成”占位，
+  // 而不是把 img 隐藏后留下一个空白 preview 区。
+  const [previewFailed, setPreviewFailed] = useState(false)
+
+  // 封面 id 变化（重新设置封面）时重置失败态，允许重试新加载。
+  useEffect(() => {
+    setPreviewFailed(false)
+  }, [prompt.preview_image_id])
+
+  const hasPreview = Boolean(prompt.preview_image_id) && !previewFailed
 
   async function handleCopy(): Promise<void> {
     const text = prompt.current_version?.positive_prompt ?? ''
@@ -216,8 +227,8 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
 
       <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
 
-      {/* 预览图：位于文本下方；无图为低对比“暂未生成”占位（固定比例，不裂图）。 */}
-      {prompt.preview_image_id ? (
+      {/* 预览图：位于文本下方；无图或加载失败统一为低对比“暂未生成”占位（固定比例，不裂图、不留空白）。 */}
+      {hasPreview && prompt.preview_image_id ? (
         <button
           type="button"
           className="pp-card__preview"
@@ -229,9 +240,9 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
             src={imageThumbUrl(prompt.preview_image_id)}
             loading="lazy"
             alt=""
-            onError={(event) => {
-              // 后端清了文件但元数据仍在：降级为占位，不显示 broken-image。
-              event.currentTarget.style.display = 'none'
+            onError={() => {
+              // 后端清了文件但元数据仍在 / rendition 损坏：进入统一占位，不显示 broken-image、不留空白。
+              setPreviewFailed(true)
             }}
           />
         </button>
@@ -301,6 +312,8 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [coverImageId, setCoverImageId] = useState<string | null>(prompt?.preview_image_id ?? null)
+  // v0.15.1：小封面 rendition 加载失败时回退“无封面”，不显示 broken-image。
+  const [coverFailed, setCoverFailed] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
@@ -312,6 +325,7 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
     setViewingVersionId(null)
     setMessage(null)
     setCoverImageId(prompt?.preview_image_id ?? null)
+    setCoverFailed(false)
     setPickerOpen(false)
     if (prompt) {
       promptApi
@@ -342,6 +356,7 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
         const updated = await refreshDetail(prompt.id)
         setName(updated.name)
         setCoverImageId(updated.preview_image_id)
+        setCoverFailed(false)
       } else {
         // 新建 Prompt：刷新外层列表，使新卡片立即出现（否则需手动刷新页面）
         onChanged()
@@ -462,8 +477,14 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
         <section className="pp-cover">
           <h4 className="pp-cover__title">封面</h4>
           <div className="pp-cover__body">
-            {coverImageId ? (
-              <img className="pp-cover__img" src={imageContentUrl(coverImageId)} loading="lazy" alt="" />
+            {coverImageId && !coverFailed ? (
+              <img
+                className="pp-cover__img"
+                src={imagePreviewUrl(coverImageId)}
+                loading="lazy"
+                alt=""
+                onError={() => setCoverFailed(true)}
+              />
             ) : (
               <div className="pp-cover__empty">无封面</div>
             )}

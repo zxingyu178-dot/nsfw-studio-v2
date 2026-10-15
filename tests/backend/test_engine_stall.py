@@ -1,4 +1,10 @@
-"""v0.13.2 (b) stall 卡死收敛测试（hermetic，假 adapter，不碰真引擎）。"""
+"""v0.15.1 sampling stall 卡死收敛测试（hermetic，假 adapter，不碰真引擎）。
+
+sampling stall 与 general execution timeout 分离：
+- 仅采样阶段（step/max_step 有值）且 step 长时间冻结 → ENGINE_STALLED；
+- 模型加载 / VAE / 高清放大 / 保存等无 step 阶段不套短 stall（即使超过 stall_timeout），
+  由执行总超时兜底，最终能正常完成。
+"""
 from __future__ import annotations
 
 import dataclasses
@@ -45,8 +51,8 @@ def _wait(client, job_id, predicate, timeout=20.0):
     raise AssertionError(f"wait timeout: {last}")
 
 
-def test_stall_zero_progress_times_out_and_fails_item(settings, monkeypatch):
-    """引擎在线但 progress 持续 0 超过 stall_timeout → item FAILED(ENGINE_STALLED) + 调 interrupt/cancel。"""
+def test_sampling_step_frozen_stalls_and_fails_item(settings, monkeypatch):
+    """采样 Step 停在 12/30（progress 0.4 不动）超过 stall_timeout → ENGINE_STALLED + cancel。"""
     from fastapi.testclient import TestClient
     from app.main import create_app
     from app.engine.base import EngineJobStatus
@@ -55,7 +61,7 @@ def test_stall_zero_progress_times_out_and_fails_item(settings, monkeypatch):
     cancelled: list[str] = []
 
     async def fake_status(self, engine_job_id):
-        return EngineJobStatus(state="running", progress=0.0, stage="")
+        return EngineJobStatus(state="running", progress=0.4, stage="sampling", step=12, max_step=30)
 
     async def fake_cancel(self, engine_job_id):
         cancelled.append(engine_job_id)
@@ -65,23 +71,20 @@ def test_stall_zero_progress_times_out_and_fails_item(settings, monkeypatch):
 
     app = create_app(mock_settings(settings))
     with TestClient(app) as client:
-        # 缩短 stall 超时，便于测试
         client.app.state.worker._stall_timeout = 0.3
         job = client.post("/api/v1/jobs", json={"snapshot": make_snapshot(1)}).json()
         final = _wait(client, job["id"],
                       lambda j: j["status"] in ("FAILED", "COMPLETED", "CANCELLED"),
                       timeout=20.0)
-        # 必须判 FAILED 且 error_type=ENGINE_STALLED
         assert final["status"] == "FAILED", final
         items = [it for st in final["stages"] for it in st["items"]]
-        assert any((it.get("error_type") == "ENGINE_STALLED"
-                    or "STALLED" in str(it.get("error_message", ""))) for it in items), items
-        # 必须调过一次 cancel/interrupt
+        assert any(it.get("error_type") == "ENGINE_STALLED" for it in items), items
+        assert any("12/30" in str(it.get("error_message", "")) for it in items), items
         assert len(cancelled) >= 1
 
 
-def test_slow_progress_no_stall(settings, monkeypatch):
-    """progress 缓慢增长（虽慢但在动）→ 不判 stall，最终能完成。"""
+def test_non_sampling_phase_not_short_stalled(settings, monkeypatch):
+    """模型加载（无 step、progress 0）即使超过 stall_timeout 也不判短 stall，随后成功 → COMPLETED。"""
     from fastapi.testclient import TestClient
     from app.main import create_app
     from app.engine.base import EngineJobStatus, EngineOutputFile
@@ -91,8 +94,43 @@ def test_slow_progress_no_stall(settings, monkeypatch):
 
     async def fake_status(self, engine_job_id):
         calls["n"] += 1
-        if calls["n"] < 5:
-            return EngineJobStatus(state="running", progress=0.1 * calls["n"], stage="model_loading")
+        # 约 25 个 poll（每个 20ms ≈ 0.5s）停在无 step 的模型加载阶段，超过 stall_timeout=0.3
+        if calls["n"] < 25:
+            return EngineJobStatus(state="running", progress=0.0, stage="model_loading")
+        return EngineJobStatus(state="succeeded", progress=1.0, stage="save_image")
+
+    async def fake_outputs(self, engine_job_id):
+        return [EngineOutputFile(filename=f"{engine_job_id}.png", data=PNG_FIXTURE)]
+
+    monkeypatch.setattr(MockEngineAdapter, "get_job_status", fake_status)
+    monkeypatch.setattr(MockEngineAdapter, "get_job_outputs", fake_outputs)
+
+    app = create_app(mock_settings(settings))
+    with TestClient(app) as client:
+        client.app.state.worker._stall_timeout = 0.3
+        job = client.post("/api/v1/jobs", json={"snapshot": make_snapshot(1)}).json()
+        final = _wait(client, job["id"],
+                      lambda j: j["status"] in ("FAILED", "COMPLETED", "CANCELLED"),
+                      timeout=20.0)
+        assert final["status"] == "COMPLETED", final
+
+
+def test_sampling_step_advances_no_stall(settings, monkeypatch):
+    """采样 step 持续推进（即使很慢）→ 不判 stall，最终完成。"""
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.engine.base import EngineJobStatus, EngineOutputFile
+    from app.engine.mock import PNG_FIXTURE, MockEngineAdapter
+
+    calls = {"n": 0}
+
+    async def fake_status(self, engine_job_id):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            return EngineJobStatus(
+                state="running", progress=calls["n"] / 4, stage="sampling",
+                step=calls["n"], max_step=4,
+            )
         return EngineJobStatus(state="succeeded", progress=1.0, stage="save_image")
 
     async def fake_outputs(self, engine_job_id):
