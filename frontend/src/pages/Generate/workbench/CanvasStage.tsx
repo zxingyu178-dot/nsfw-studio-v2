@@ -4,14 +4,14 @@
  * 顶部浮 ProgressHUD（总进度/第N张/阶段/Step/Elapsed），底部 filmstrip（thumbnail）+ ActionDock。
  * 数据逻辑沿用：activeJob + 分页拉全 Job family 图片，favorite/keep/reject 乐观更新；Lightbox 退为全屏查看。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiRequestError, imageApi } from '../../../api/client'
+import { ApiRequestError, imageApi, jobApi } from '../../../api/client'
 import { CanvasViewport } from '../../../components/CanvasViewport/CanvasViewport'
 import { EmptyState, Spinner, StatusBadge } from '../../../components/ui'
 import { ActionDock, IconButton, IconFavorite, IconKeep, IconReject } from '../../../components/ui/ui3'
 import { ImageLightbox } from '../../../components/ImageLightbox'
-import { activeJob, useJobStore } from '../../../stores/jobStore'
+import { activeJob, trackJob, useJobStore } from '../../../stores/jobStore'
 import {
   imageContentUrl,
   imagePreviewUrl,
@@ -19,7 +19,9 @@ import {
   shortJobId,
   type ImageDTO,
 } from '../../../types/workbench'
+import { ImageMutationQueue, type ImageMutation } from './imageMutationQueue'
 import { ProgressHUD } from './ProgressHUD'
+import { fetchResumeFamilyJobIds } from './resumeFamily'
 
 async function fetchAllJobImages(jobIds: string[]): Promise<ImageDTO[]> {
   const PAGE_SIZE = 100
@@ -42,25 +44,88 @@ export function CanvasStage() {
   const [images, setImages] = useState<ImageDTO[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [actionPendingId, setActionPendingId] = useState<string | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
+  // 以服务器返回为准更新单张图片（收藏/审核成功后用响应 DTO 校正本地态）。
+  const patchImageFromDto = useCallback((dto: ImageDTO) => {
+    setImages((prev) => prev.map((img) =>
+      img.id === dto.id ? { ...img, favorite: dto.favorite, status: dto.status } : img,
+    ))
+  }, [])
+
+  // 真正落地一次变更：调 API；失败时重新 GET 权威状态校正并给出可见提示（绝不静默吞错）。
+  const applyMutation = useCallback(async (imageId: string, mutation: ImageMutation): Promise<void> => {
+    try {
+      let dto: ImageDTO | null = null
+      if (mutation.favorite !== undefined) {
+        dto = await imageApi.favorite(imageId, mutation.favorite)
+      }
+      if (mutation.status !== undefined) {
+        dto = await imageApi.setStatus(imageId, { status: mutation.status })
+      }
+      if (dto) patchImageFromDto(dto)
+    } catch {
+      try {
+        const authoritative = await imageApi.get(imageId)
+        patchImageFromDto(authoritative)
+      } catch {
+        // 重新获取也失败：保留提示，由用户在下次刷新时回源收敛
+      }
+      setNotice('图片状态更新失败，已恢复为服务器当前状态，请重试。')
+    }
+  }, [patchImageFromDto])
+
+  // v0.15.1：每张图串行 + 最后意图合并（连点 KEEP→REJECT、反复收藏，最终恒等于最后一次点击）。
+  const mutationQueueRef = useRef<ImageMutationQueue | null>(null)
+  if (mutationQueueRef.current === null) {
+    mutationQueueRef.current = new ImageMutationQueue(applyMutation)
+  }
+
+  const enqueueMutation = useCallback((imageId: string, mutation: ImageMutation) => {
+    setActionPendingId(imageId)
+    void mutationQueueRef.current!.enqueue(imageId, mutation).finally(() => {
+      setActionPendingId((current) => (current === imageId ? null : current))
+    })
+  }, [])
+
   const jobId = job?.id ?? null
-  const parentId = job?.resume_of_job_id ?? null
   const completedCount = job?.completed_count ?? 0
   const completedStageItems = job?.stages?.reduce((total, stage) => total + stage.completed_count, 0) ?? 0
+
+  // v0.15.1：增量刷新去重——记录已加载图片的 id 集合签名（仅 id，不含 favorite/status 本地态），
+  // 家族重拉后 id 集合未变（无新图）就跳过 setImages，避免每完成一张全量回源造成的重复渲染/抖动。
+  const imagesKeyRef = useRef<{ jobId: string | null; key: string }>({ jobId: null, key: '' })
 
   useEffect(() => {
     if (!jobId) {
       setImages([])
+      imagesKeyRef.current = { jobId: null, key: '' }
       return
     }
+    if (imagesKeyRef.current.jobId !== jobId) {
+      imagesKeyRef.current = { jobId, key: '' }
+    }
     let cancelled = false
-    const ids = parentId ? [jobId, parentId] : [jobId]
-    void fetchAllJobImages(ids)
+    void (async () => {
+      // v0.15.1：沿 resume_of_job_id 取完整 root→current 链（A→B→C），合并全部家族图片；
+      // 不再只取一层 parent，避免漏掉 root 的图片。
+      const ids = await fetchResumeFamilyJobIds((id) => jobApi.get(id), jobId)
+      return fetchAllJobImages(ids)
+    })()
       .then((merged) => {
-        if (cancelled) return
-        merged.sort((a, b) => a.created_at.localeCompare(b.created_at))
-        setImages(merged)
+        if (cancelled || !merged) return
+        // 按 image id 去重（resume family 各 job 理论不重叠，防御性去重）。
+        const byId = new Map<string, ImageDTO>()
+        for (const img of merged) byId.set(img.id, img)
+        const deduped = Array.from(byId.values())
+        // 仅在 id 集合真变化（新图完成/数量变化）时才重排并刷新。
+        const nextKey = Array.from(byId.keys()).sort().join('|')
+        if (imagesKeyRef.current.jobId === jobId && imagesKeyRef.current.key === nextKey) return
+        imagesKeyRef.current = { jobId, key: nextKey }
+        deduped.sort((a, b) => a.created_at.localeCompare(b.created_at))
+        setImages(deduped)
         setError(null)
       })
       .catch((err: unknown) => {
@@ -69,14 +134,25 @@ export function CanvasStage() {
     return () => {
       cancelled = true
     }
-  }, [jobId, parentId, completedCount, completedStageItems])
+  }, [jobId, completedCount, completedStageItems])
 
   useEffect(() => {
     setSelectedId(null)
   }, [jobId])
 
   const shown = images.find((image) => image.id === selectedId) ?? images[images.length - 1] ?? null
-  const isRunning = Boolean(job && (job.status === 'RUNNING' || job.status === 'QUEUED'))
+  // v0.15.1：QUEUED 与 RUNNING 显式分离。只有 RUNNING 才显示采样 Step/Stage/Elapsed HUD；
+  // QUEUED 仅表示“已排队、等待调度”，不能再误报“正在生成”。
+  const isRunning = Boolean(job && job.status === 'RUNNING')
+  const isQueued = Boolean(job && job.status === 'QUEUED')
+  // 前方排队任务数（在 queue.queued 中的位置）；找不到时按队列长度兜底。
+  const queueAhead = (() => {
+    if (!isQueued || !job) return 0
+    const queued = store.queue?.queued ?? []
+    const idx = queued.findIndex((q) => q.id === job.id)
+    return idx >= 0 ? idx : queued.length
+  })()
+  const currentRunningId = store.queue?.running?.id ?? null
 
   const patchShown = useCallback(
     (patch: Partial<ImageDTO>) => {
@@ -85,25 +161,17 @@ export function CanvasStage() {
     [shown?.id],
   )
 
-  async function handleToggleFavorite(): Promise<void> {
+  function handleToggleFavorite(): void {
     if (!shown) return
     const next = !shown.favorite
-    patchShown({ favorite: next })
-    try {
-      await imageApi.favorite(shown.id, next)
-    } catch {
-      patchShown({ favorite: !next })
-    }
+    patchShown({ favorite: next }) // 乐观即时反馈
+    enqueueMutation(shown.id, { favorite: next }) // 串行落地 + 最后意图合并
   }
 
-  async function handleReview(status: 'KEEP' | 'REJECT'): Promise<void> {
+  function handleReview(status: 'KEEP' | 'REJECT'): void {
     if (!shown) return
-    patchShown({ status })
-    try {
-      await imageApi.setStatus(shown.id, { status })
-    } catch {
-      patchShown({ status: shown.status })
-    }
+    patchShown({ status }) // 乐观即时反馈
+    enqueueMutation(shown.id, { status }) // 串行落地，连点最终=最后意图
   }
 
   const lightboxIndex = shown ? Math.max(0, images.findIndex((i) => i.id === shown.id)) : 0
@@ -129,6 +197,17 @@ export function CanvasStage() {
           </div>
         )}
 
+        {isQueued && job && (
+          <div className="wb4-stage__queued-banner" role="status">
+            <span className="muted">已加入队列 · 前方 {queueAhead} 个任务 · 等待开始</span>
+            {currentRunningId && currentRunningId !== job.id && (
+              <button type="button" className="ds-link" onClick={() => trackJob(currentRunningId)}>
+                查看当前运行任务
+              </button>
+            )}
+          </div>
+        )}
+
         {!job && (
           <EmptyState title="暂无生成结果" description="填写 Prompt 并点击“生成”，结果会实时显示在这里。" />
         )}
@@ -137,6 +216,8 @@ export function CanvasStage() {
           <CanvasViewport
             imageUrl={imagePreviewUrl(shown.id)}
             contentUrl={imageContentUrl(shown.id)}
+            imageWidth={shown.width}
+            imageHeight={shown.height}
             alt="生成结果"
             badge={shown.kind === 'upscaled' ? 'HD' : shown.kind === 'processed' ? '处理图' : undefined}
             onFullscreen={() => setLightboxOpen(true)}
@@ -150,6 +231,11 @@ export function CanvasStage() {
                 <Spinner ariaLabel="正在生成" />
                 <p className="muted">正在生成，完成后逐张显示…</p>
               </>
+            ) : isQueued ? (
+              <>
+                <p className="muted">已加入队列，前方 {queueAhead} 个任务，等待开始…</p>
+                <p className="muted">排队期间不显示采样进度，任务开始后这里会实时显示 Step / Stage。</p>
+              </>
             ) : (
               <p className="muted">本任务暂无图片</p>
             )}
@@ -158,6 +244,12 @@ export function CanvasStage() {
       </div>
 
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
+      {notice && (
+        <p className="ds-notice ds-notice--error" role="alert">
+          {notice}
+          <button type="button" className="ds-notice__close" onClick={() => setNotice(null)}>知道了</button>
+        </p>
+      )}
 
       {/* 底部：filmstrip + 当前图动作（Canvas 主查看，filmstrip 用 thumbnail）。 */}
       {images.length > 0 && (
@@ -187,10 +279,21 @@ export function CanvasStage() {
                 label={shown.favorite ? '已收藏' : '收藏'}
                 tone={shown.favorite ? 'favorite' : 'muted'}
                 active={shown.favorite}
-                onClick={() => void handleToggleFavorite()}
+                disabled={actionPendingId === shown.id}
+                onClick={handleToggleFavorite}
               />
-              <IconButton icon={<IconKeep size={16} />} label="保留" onClick={() => void handleReview('KEEP')} />
-              <IconButton icon={<IconReject size={16} />} label="淘汰" onClick={() => void handleReview('REJECT')} />
+              <IconButton
+                icon={<IconKeep size={16} />}
+                label="保留"
+                disabled={actionPendingId === shown.id}
+                onClick={() => handleReview('KEEP')}
+              />
+              <IconButton
+                icon={<IconReject size={16} />}
+                label="淘汰"
+                disabled={actionPendingId === shown.id}
+                onClick={() => handleReview('REJECT')}
+              />
             </ActionDock>
           )}
         </div>

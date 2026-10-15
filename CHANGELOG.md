@@ -2,6 +2,55 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.15.1] — 2026-10-15
+
+> Patch / Workbench Live Hardening：修复 v0.15 代码审计发现的 1 个 P0（CI 工具链）、
+> 8 个 P1（Canvas 几何、多阶段进度、采样 Step 语义、SSE 去重、resume 链、review 串行、
+> 任务坞忙碌态、预览失败占位、队列语义）与 4 个 P2（采样 stall、增量刷新、legacy 清理、
+> active slot 守卫）。
+> 不改业务模型 / 单队列语义，不新增模型 / 节点 / AI 能力；无数据库迁移。
+
+### Fixed
+
+- **P0 CI 工具链**：CI 固定 Node 22.22.2（`.nvmrc` / `.node-version` / `engines.node`），
+  修复 main 前端 CI 因 Node 版本漂移导致的失败。
+- **Canvas 逻辑尺寸（#17）**：CanvasViewport 不再用 preview naturalWidth 覆盖几何，
+  改用逻辑尺寸 `FALLBACK_IMAGE{1024,1024}`，Fit/100% 不再随 rendition 错误伸缩，100% 反映真实像素。
+- **多阶段 liveProgress（#18）**：进度按 `stage_item_id` 分键存储与清理，终态只清自己的
+  StageItem，不再误伤相邻阶段；LiveProgress 携带 `stageItemId`。
+- **sampler-only Step（#19）**：后端仅在当前节点命中采样器白名单
+  （KSampler/KSamplerAdvanced/SamplerCustom/SamplerCustomAdvanced）时输出 step/max_step，
+  model load / VAE / upscale / save 阶段不再伪造 Step。
+- **SSE 去重（#20）**：广播签名变化才发、否则 2s heartbeat；DB 持久化签名 330ms 节流、
+  stage 切换立即写；生命周期事件 payload 补 `stage_item_id`。
+- **完整 resume family（#21）**：Canvas 用 jobApi 沿 `resume_of_job_id` 取 root→current
+  完整链（visited set + max-depth 16），合并整条链图片，A→B→C 多层 resume 图片全可见。
+- **review mutation 串行化（#22）**：图片收藏/保留/弃用 per-image 串行队列，成功用响应 DTO
+  校正、失败重取权威并显式报错（不静默），动作进行中禁用按钮。
+- **TaskDock busyJobId（#23）**：暂停/继续/取消只在忙碌任务上禁用并显示“正在…”与 aria-busy，
+  忙碌别的任务不误伤当前任务按钮。
+- **Prompt 预览失败占位（#24）**：PromptCard 预览失败统一“暂未生成”占位（不裂图），
+  Editor 小封面改用 1536 preview 并在失败时回退“无封面”。
+- **QUEUED/RUNNING 分离（#25）**：进度 HUD 仅 RUNNING 渲染；QUEUED 显示排队横幅
+  （前方 N 个任务 + 查看当前运行任务），空结果占位区分运行/排队/完成三态。
+- **采样 stall 看门狗（#26）**：仅采样阶段 step 冻结超过阈值才判 ENGINE_STALLED；
+  非采样阶段不套短 stall，交执行总超时 ENGINE_TIMEOUT，避免模型加载/VAE 被误判卡死。
+- **Canvas 增量刷新（#26）**：按图片 id 去重，图片集合不变则跳过 setImages，
+  避免每完成一张全量重排抖动。
+- **active slot 守卫（#26）**：localStorage 记忆值必须命中合法 slot，非法值回退第一个
+  有内容 slot，再否则 style，杜绝 8 个槽位全不 active。
+
+### Changed
+
+- **SSE 心跳节流**：`QueueWorker` 新增 `progress_broadcast_heartbeat_ms=2000`，
+  瞬态广播与持久化写库分别签名节流，降低空转期 SSE 与数据库压力。
+
+### Removed
+
+- 删除 0.14 的 `ResultPane`（含 lightbox 测试）与 `components/GenerationControls`
+  （含 count 测试），二者已被 Workbench 4.0 的 CanvasStage / InspectorPanel 取代；
+  旧测试迁移到生产路径，并新增 `legacy.guard` 防止生产代码再次引用旧模块。
+
 ## [0.15.0] — 2026-10-14
 
 > Minor：Workbench Layout 4.0（Canvas First）、真实进度（Job / Stage / Step）、可视化 Prompt 库、

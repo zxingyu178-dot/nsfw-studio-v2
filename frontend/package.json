@@ -1,8 +1,11 @@
 {
   "name": "nsfw-studio-frontend",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.15.1",
   "type": "module",
+  "engines": {
+    "node": ">=22.22.2 <23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",

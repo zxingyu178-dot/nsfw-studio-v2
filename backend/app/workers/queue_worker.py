@@ -68,6 +68,7 @@ class SingleQueueWorker:
         stage_timeout_seconds: float = DEFAULT_STAGE_TIMEOUT_SECONDS,
         stall_timeout_seconds: float = 600.0,
         progress_persist_interval_ms: int = 330,
+        progress_broadcast_heartbeat_ms: int = 2000,
     ) -> None:
         self._session_factory = session_factory
         self._adapter = adapter
@@ -85,7 +86,12 @@ class SingleQueueWorker:
         self._stall_timeout = float(stall_timeout_seconds)
         # v0.15 Task 7：进度列节流持久化上限（默认 330ms ≈ 3 次/秒）；ITEM_PROGRESS 不再入库
         self._progress_persist_interval = progress_persist_interval_ms / 1000
-        # stage_item_id → {"signature": (progress, step, stage), "last_write": monotonic}
+        # v0.15.1：SSE 广播去重——签名变化即发；签名不变则最多按 heartbeat（默认 2s）补一次心跳。
+        self._progress_broadcast_heartbeat = progress_broadcast_heartbeat_ms / 1000
+        # stage_item_id → {
+        #   "db_signature":(progress,step,stage), "last_write":monotonic,
+        #   "sse_signature":(progress,step,max_step,stage,stage_index), "last_broadcast":monotonic
+        # }
         self._progress_state: dict[str, dict] = {}
         self._task: asyncio.Task | None = None
         self._running = False
@@ -375,6 +381,7 @@ class SingleQueueWorker:
                     job_item.seed = seed
             job_service.record_event(session, job_id, "STAGE_ITEM_STARTED", item_id=stage_item.job_item_id, payload={
                 "stage_index": stage.stage_index, "module_id": stage.module_id, "seed": seed,
+                "stage_item_id": stage_item.id,
             })
             session.commit()
             # 会话关闭后仅使用已加载的标量字段（expire_on_commit=False）
@@ -414,10 +421,11 @@ class SingleQueueWorker:
 
         # 轮询进度（§十：执行总超时，绝不无限 RUNNING）
         cancel_sent = False
-        # v0.13.2 (b) stall 收敛：记录"最后进度/最后 stage 变化时间"，progress/stage 不动超 stall_timeout → 判卡死
-        last_progress_time = time.monotonic()
-        last_progress_value: float = -1.0
-        last_stage: str | None = None
+        # v0.15.1：sampling stall 与 general execution timeout 分离。
+        # 仅在采样阶段（step/max_step 有值）用“step 长时间不变化”判采样卡死；
+        # 模型加载 / VAE / 高清放大 / 保存等无 step 阶段不套短 stall，统一交给执行总超时。
+        last_step: int | None = None
+        last_step_time = time.monotonic()
         while True:
             await asyncio.sleep(self._engine_poll)
             if timeout_seconds and (time.monotonic() - started) > timeout_seconds:
@@ -460,32 +468,38 @@ class SingleQueueWorker:
                 stage_index=stage.stage_index, job_item_id=stage_item.job_item_id,
             )
 
-            # v0.13.2 (b) stall 收敛：引擎在线、任务 running、progress/stage 长时间不动 → 判卡死
-            progress_now = getattr(status, "progress", None)
-            stage_now = getattr(status, "stage", None)
-            moving = False
-            if progress_now is not None and progress_now != last_progress_value:
-                moving = True
-            if stage_now is not None and stage_now != last_stage:
-                moving = True
-            if moving:
-                last_progress_value = progress_now if progress_now is not None else last_progress_value
-                if stage_now is not None:
-                    last_stage = stage_now
-                last_progress_time = time.monotonic()
-            elif status.state == "running" and progress_now == 0.0 and self._stall_timeout > 0:
-                stalled_for = time.monotonic() - last_progress_time
-                if stalled_for >= self._stall_timeout:
-                    # 向引擎 interrupt（best-effort，只这一个 prompt）
-                    try:
-                        await self._adapter.cancel_job(engine_job_id)
-                    except Exception:
-                        logger.warning("stall 清理时 cancel_job 失败（忽略）", exc_info=True)
-                    return self._stage_item_failed(
-                        job_id, stage_item_id, "ENGINE_STALLED",
-                        f"引擎在线但 progress 持续为 0 超过 {int(self._stall_timeout)} 秒"
-                        f"（已 {int(stalled_for)} 秒无进展），判为卡死并释放队列头",
-                    )
+            # v0.15.1：采样卡死（step 冻结）看门狗。
+            # 只在采样阶段（step/max_step 有值）启用短 stall；step 推进即续命，
+            # step 长时间不变 → ENGINE_STALLED。无 step 阶段（model load/VAE/upscale/save）
+            # 不在此判定，由上面的执行总超时（ENGINE_TIMEOUT）兜底。
+            step_now = getattr(status, "step", None)
+            max_step_now = getattr(status, "max_step", None)
+            sampling = (
+                status.state == "running"
+                and isinstance(step_now, int)
+                and isinstance(max_step_now, int)
+                and max_step_now > 0
+            )
+            if sampling:
+                if last_step is None or step_now != last_step:
+                    last_step = step_now
+                    last_step_time = time.monotonic()
+                elif self._stall_timeout > 0:
+                    stalled_for = time.monotonic() - last_step_time
+                    if stalled_for >= self._stall_timeout:
+                        # 向引擎 interrupt（best-effort，只这一个 prompt）
+                        try:
+                            await self._adapter.cancel_job(engine_job_id)
+                        except Exception:
+                            logger.warning("sampling stall 清理时 cancel_job 失败（忽略）", exc_info=True)
+                        return self._stage_item_failed(
+                            job_id, stage_item_id, "ENGINE_STALLED",
+                            f"采样 Step 停在 {step_now}/{max_step_now} 超过 {int(self._stall_timeout)} 秒"
+                            f"（已 {int(stalled_for)} 秒无推进），判为采样卡死并释放队列头",
+                        )
+            else:
+                # 进入采样前 / 离开采样后（非采样阶段）：重置 step 看门狗，避免误判。
+                last_step = None
 
             if status.state == "succeeded":
                 # §一（P0）：Engine succeeded 只是必要条件——必须成功取回输出并导入 Studio Image
@@ -617,41 +631,60 @@ class SingleQueueWorker:
         stage_index: int | None,
         job_item_id: str | None,
     ) -> None:
-        """v0.15 Task 6/7：真实 Step 透传 + 进度事件分流。
+        """v0.15 Task 6/7 + v0.15.1：真实 Step 透传 + 进度事件分流 + SSE 去重。
 
-        - 每次轮询都发布**临时** ITEM_PROGRESS（只广播 SSE，不写 job_events），
-          前端 liveProgress 即时刷新；
+        - 实时层（SSE，不写 job_events）：payload 带 stage_item_id（多阶段身份）；
+          仅当广播签名 (progress, step, max_step, stage, stage_index) 变化时立即广播，
+          签名不变则只在超过 heartbeat（默认 2s）时补发一次心跳，杜绝 200ms 无差别重复广播；
         - JobStageItem.progress 列仍持久化（供刷新/崩溃恢复），但节流写入：
           仅当签名 (progress, step, stage) 变化且距上次写入超过
           ``progress_persist_interval``（约 3 次/秒，stage 切换立即写）；
-          相同签名绝不重复 commit，杜绝 200ms 无差别落库。
+          相同签名绝不重复 commit。
+        SSE 广播节流与 DB 持久化节流彼此独立。
         """
         progress = float(status.progress) if status.progress is not None else None
         step = getattr(status, "step", None)
         max_step = getattr(status, "max_step", None)
         stage = status.stage or ""
 
-        # 1) 实时层：只广播 SSE，不插入 job_events
-        job_service.publish_transient_event(
-            "ITEM_PROGRESS", job_id, item_id=job_item_id,
-            payload={"progress": progress, "stage": stage, "stage_index": stage_index,
-                     "step": step, "max_step": max_step},
-        )
-
-        # 2) 持久化层：节流 + 签名去重
         state = self._progress_state.get(stage_item_id)
         if state is None:
-            state = {"signature": None, "last_write": 0.0}
+            state = {"db_signature": None, "last_write": 0.0,
+                     "sse_signature": None, "last_broadcast": 0.0}
             self._progress_state[stage_item_id] = state
-        signature = (
+        now = time.monotonic()
+
+        # 1) 实时层：只广播 SSE，不插入 job_events；签名变化即发 + 2s heartbeat。
+        sse_signature = (
+            round(progress, 3) if progress is not None else None,
+            int(step) if step is not None else None,
+            int(max_step) if max_step is not None else None,
+            stage,
+            stage_index,
+        )
+        should_broadcast = (
+            state["sse_signature"] != sse_signature
+            or (now - state["last_broadcast"]) >= self._progress_broadcast_heartbeat
+        )
+        if should_broadcast:
+            job_service.publish_transient_event(
+                "ITEM_PROGRESS", job_id, item_id=job_item_id,
+                payload={"progress": progress, "stage": stage, "stage_index": stage_index,
+                         "step": step, "max_step": max_step,
+                         "stage_item_id": stage_item_id},
+            )
+            state["sse_signature"] = sse_signature
+            state["last_broadcast"] = now
+
+        # 2) 持久化层：节流 + 签名去重（与 SSE 广播独立）
+        db_signature = (
             round(progress, 3) if progress is not None else None,
             int(step) if step is not None else None,
             stage,
         )
-        if state["signature"] == signature:
+        if state["db_signature"] == db_signature:
             return  # 相同签名不写
-        now = time.monotonic()
-        stage_changed = state["signature"] is not None and state["signature"][2] != stage
+        stage_changed = state["db_signature"] is not None and state["db_signature"][2] != stage
         if state["last_write"] > 0 and not stage_changed \
                 and (now - state["last_write"]) < self._progress_persist_interval:
             return  # 节流：暂不落库（实时层已广播，下次轮询再补；stage 切换立即写）
@@ -666,7 +699,7 @@ class SingleQueueWorker:
             if job_item is not None and progress is not None:
                 job_item.progress = progress
             session.commit()
-        state["signature"] = signature
+        state["db_signature"] = db_signature
         state["last_write"] = now
 
     def _clear_progress_state(self, stage_item_id: str) -> None:
@@ -696,10 +729,13 @@ class SingleQueueWorker:
                     job_item.status = "COMPLETED"
                     job_item.finished_at = utc_now_iso()
                     job_service.record_event(session, job_id, "ITEM_COMPLETED",
-                                             item_id=job_item.id, payload={"image_ids": image_ids})
+                                             item_id=job_item.id,
+                                             payload={"image_ids": image_ids,
+                                                      "stage_item_id": stage_item_id})
             job_service.record_event(session, job_id, "STAGE_ITEM_COMPLETED", item_id=stage_item.job_item_id,
                                      payload={"image_ids": image_ids,
-                                              "stage_index": stage.stage_index if stage else None})
+                                              "stage_index": stage.stage_index if stage else None,
+                                              "stage_item_id": stage_item_id})
             job = session.get(Job, job_id)
             if job is not None:
                 job.completed_count = sum(1 for it in job.items if it.status == "COMPLETED")
@@ -723,7 +759,8 @@ class SingleQueueWorker:
             stage_item.status = "CANCELLED"
             stage_item.finished_at = utc_now_iso()
             self._clear_progress_state(stage_item_id)
-            job_service.record_event(session, job_id, "ITEM_CANCELLED", item_id=stage_item.job_item_id)
+            job_service.record_event(session, job_id, "ITEM_CANCELLED", item_id=stage_item.job_item_id,
+                                     payload={"stage_item_id": stage_item_id})
             session.commit()
 
     def _stage_item_failed(self, job_id: str, stage_item_id: str, error_type: str, message: str) -> str:
@@ -746,6 +783,7 @@ class SingleQueueWorker:
             job_service.record_event(session, job_id, "ITEM_FAILED", item_id=stage_item.job_item_id, payload={
                 "error_type": error_type, "message": message,
                 "stage_index": stage.stage_index if stage else None,
+                "stage_item_id": stage_item_id,
             })
             session.commit()
         return "FAILED"

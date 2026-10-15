@@ -48,6 +48,18 @@ LIVE_STALE_SECONDS = 30.0
 # 既不在 /queue 也不在 /history 的连续轮询次数容忍（避免提交竞态误判）
 MISSING_TOLERANCE = 10
 
+# v0.15.1：ComfyUI `progress` 是通用进度事件，不等价于“它一定来自采样器”。
+# 只有当前执行节点（executing 事件给出的 node id）的 class_type 命中本保守白名单时，
+# 才把 progress 的 value/max 当作采样 Step；其它节点（自定义/放大/预处理/加载/保存）
+# 即使上报 progress，也只保留归一化 progress，step/max_step 置 None——错误的 Step 比没有更糟。
+# 注意：不在 Adapter 内修改 provider binding.yaml（会改变 binding hash、破坏历史精确复现）。
+SAMPLER_CLASS_TYPES = frozenset({
+    "KSampler",
+    "KSamplerAdvanced",
+    "SamplerCustom",
+    "SamplerCustomAdvanced",
+})
+
 
 def _format_prefix(template: str, values: dict[str, str]) -> str:
     """渲染 save_image_prefix 模板；未知占位符原样保留（不抛异常）。"""
@@ -298,8 +310,15 @@ class ComfyUIAdapter(EngineAdapter):
         prompt_id = data.get("prompt_id")
         if not prompt_id:
             raise EngineError("UNKNOWN_ENGINE_ERROR", f"/prompt 未返回 prompt_id: {message}")
+        # v0.15.1：记录本次提交的 node id → class_type，供 progress 事件判定当前节点是否为采样器。
+        node_classes = {
+            str(node_id): str(node.get("class_type") or "")
+            for node_id, node in prompt.items()
+            if isinstance(node, dict)
+        }
         self._live[prompt_id] = {"stage": "queued", "progress": 0.0, "state": "queued",
                                  "step": None, "max_step": None,
+                                 "current_node": None, "node_classes": node_classes,
                                  "error_type": "", "error_message": "",
                                  "updated": time.monotonic()}
         self._ensure_ws()
@@ -503,15 +522,29 @@ class ComfyUIAdapter(EngineAdapter):
                 # v0.15：进入执行时清空上一阶段可能残留的 Step（如 upscale 引擎任务不报告 step）
                 self._mark_live(prompt_id, state="running", stage="execution",
                                 progress=live.get("progress") or 0.0,
-                                step=None, max_step=None)
+                                step=None, max_step=None, current_node=None)
+            elif kind == "executing":
+                # v0.15.1：记录当前执行节点 id（progress 事件本身不带节点，需用它定位 class_type）。
+                # node=None 表示该 prompt 的所有节点已执行完（随后是 execution_success）。
+                node = data.get("node")
+                if node is not None:
+                    live["current_node"] = str(node)
+                    live["updated"] = time.monotonic()
             elif kind == "progress":
                 value, maximum = data.get("value", 0), data.get("max", 1) or 1
-                # v0.15：ComfyUI progress 事件 value/max 即真实采样步数（保留归一化 progress）
-                step_now = int(value) if isinstance(value, (int, float)) else None
-                max_step_now = int(maximum) if isinstance(maximum, (int, float)) and maximum > 0 else None
-                self._mark_live(prompt_id, state="running", stage="sampling",
-                                progress=round(min(0.99, value / maximum), 3),
-                                step=step_now, max_step=max_step_now)
+                norm = round(min(0.99, value / maximum), 3) if maximum else live.get("progress")
+                # v0.15.1：仅当当前节点 class_type 命中采样器白名单，progress 才是采样 Step。
+                current_class = live.get("node_classes", {}).get(live.get("current_node"))
+                if current_class in SAMPLER_CLASS_TYPES:
+                    step_now = int(value) if isinstance(value, (int, float)) else None
+                    max_step_now = int(maximum) if isinstance(maximum, (int, float)) and maximum > 0 else None
+                    self._mark_live(prompt_id, state="running", stage="sampling",
+                                    progress=norm, step=step_now, max_step=max_step_now)
+                else:
+                    # 未知/通用节点（自定义/放大/加载/预处理）：保留归一化 progress，
+                    # 但绝不伪造采样 Step；stage 不标 sampling。
+                    self._mark_live(prompt_id, state="running", stage="execution",
+                                    progress=norm, step=None, max_step=None)
             elif kind == "execution_success":
                 # 成功后进入保存图片阶段：清空 Step，UI 不得继续显示 25/25 像在采样
                 self._mark_live(prompt_id, state="succeeded", stage="save_image", progress=1.0,

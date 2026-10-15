@@ -8,6 +8,12 @@
  * - rendition 分层：Canvas 默认 /preview；scale≥1（或 100%）后再异步加载 /content，
  *   原图加载完成前保持 preview，不闪白；Filmstrip 用 /thumbnail 由调用方负责。
  * - 滚轮以鼠标为中心缩放、拖拽平移、双击 Fit/100%；wheel non-passive + preventDefault，不触发页面滚动。
+ *
+ * v0.15.1：逻辑尺寸 / rendition 尺寸分离。几何坐标的唯一事实源是调用方传入的
+ * ImageDTO.width/height（原图逻辑尺寸）。preview 的 naturalWidth/Height 只是 rendition
+ * 自身信息（长边约 1536 的下采样），**绝不覆盖**逻辑尺寸；preview 与 original 两层都渲染到
+ * 同一逻辑坐标系（CSS 宽高恒为逻辑尺寸），因此 100% 是原图真实 1:1 像素，且 preview→content
+ * 切换时 transform 不跳。仅当调用方未给有效尺寸时，才退回 preview natural 尺寸。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -27,7 +33,11 @@ export interface CanvasViewportProps {
   imageUrl: string
   /** 原图（/content）地址：仅 scale≥1 或 100% 后异步加载；不传则始终用 imageUrl。 */
   contentUrl?: string
-  /** 图片原始像素尺寸（由调用方/onLoad 提供）；未知时给占位，onLoad 后以 natural 尺寸重算。 */
+  /**
+   * 原图逻辑像素尺寸（ImageDTO.width/height）——几何坐标的唯一事实源。
+   * 传入有效正值时，preview 的 natural 尺寸绝不覆盖它；未知（undefined/非正数）时
+   * 才退回 preview natural 尺寸，再退回占位 1024。
+   */
   imageWidth?: number
   imageHeight?: number
   /** 初始容器尺寸占位；真实挂载后以 ref 的 getBoundingClientRect 为准。 */
@@ -40,11 +50,17 @@ export interface CanvasViewportProps {
   onFullscreen?: () => void
 }
 
+const FALLBACK_IMAGE: Size = { width: 1024, height: 1024 }
+
+function validPositive(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0
+}
+
 export function CanvasViewport({
   imageUrl,
   contentUrl,
-  imageWidth = 1024,
-  imageHeight = 1024,
+  imageWidth,
+  imageHeight,
   containerWidth = 800,
   containerHeight = 600,
   alt = '',
@@ -54,11 +70,14 @@ export function CanvasViewport({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
 
+  /** 调用方是否提供了有效逻辑尺寸（原图尺寸）。 */
+  const hasLogicalSize = validPositive(imageWidth) && validPositive(imageHeight)
+  const logicalSize: Size = hasLogicalSize
+    ? { width: imageWidth as number, height: imageHeight as number }
+    : FALLBACK_IMAGE
+
   const [transform, setTransform] = useState<ViewTransform>(() =>
-    fitTransform(
-      { width: containerWidth, height: containerHeight },
-      { width: imageWidth, height: imageHeight },
-    ),
+    fitTransform({ width: containerWidth, height: containerHeight }, logicalSize),
   )
   const [mode, setMode] = useState<'fit' | 'full'>('fit')
   /** 用户是否已手动缩放/平移（决定容器 resize 时 refit 还是保持中心）。 */
@@ -76,13 +95,19 @@ export function CanvasViewport({
     return { width: containerWidth, height: containerHeight }
   }, [containerWidth, containerHeight])
 
+  /**
+   * 几何尺寸。
+   * - 有逻辑尺寸：永远返回逻辑尺寸（原图坐标），preview natural 只是 rendition 信息。
+   * - 无逻辑尺寸：退回 preview 的 naturalWidth/Height，再退回占位。
+   */
   const imageSize = useCallback((): Size => {
+    if (hasLogicalSize) return logicalSize
     const img = imgRef.current
     if (img && img.naturalWidth > 0) {
       return { width: img.naturalWidth, height: img.naturalHeight }
     }
-    return { width: imageWidth, height: imageHeight }
-  }, [imageWidth, imageHeight])
+    return FALLBACK_IMAGE
+  }, [hasLogicalSize, logicalSize.width, logicalSize.height])
 
   const fitToContainer = useCallback(() => {
     manualRef.current = false
@@ -245,7 +270,8 @@ export function CanvasViewport({
           className="canvas-viewport__preview"
           style={imgStyle()}
           onLoad={() => {
-            // 调用方未给精确尺寸时，以真实 naturalWidth/Height 重新 fit；手动视图不打断。
+            // 有逻辑尺寸时 imageSize() 恒为逻辑尺寸（preview natural 不参与）；
+            // 仅当调用方未给尺寸时，才借此次 onLoad 用真实 natural 尺寸 fit；手动视图不打断。
             if (!manualRef.current) {
               setTransform(fitTransform(containerSize(), imageSize()))
             }

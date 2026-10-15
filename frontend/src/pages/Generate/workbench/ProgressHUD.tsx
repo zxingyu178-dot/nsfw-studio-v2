@@ -11,7 +11,7 @@ import type { JobDTO } from '../../../types/workbench'
 import { hudSnapshot } from './workbenchProgress'
 
 export function ProgressHUD({ job }: { job: JobDTO }) {
-  const live = useJobStore().liveProgressByItem
+  const live = useJobStore().liveProgressByStageItem
   const hud = hudSnapshot(job, live)
 
   const showStep = hud.step !== null && hud.maxStep !== null && hud.maxStep > 0
