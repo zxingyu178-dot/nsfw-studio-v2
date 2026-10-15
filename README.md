@@ -86,7 +86,7 @@ scripts\dev_backend.bat
 #   .venv\Scripts\python -m pip install -r backend\requirements.txt
 #   .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000 --app-dir backend
 
-# 前端（使用 AIHome 统一 Node 环境）
+# 前端（使用 AIHome 统一 Node 环境，要求 Node >=22.22.2 <23；见 .nvmrc / .node-version）
 scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
