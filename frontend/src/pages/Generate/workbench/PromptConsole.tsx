@@ -12,6 +12,7 @@ import { ImagePickerDrawer } from '../../../components/ImagePickerDrawer'
 import { Button, Field, SegmentedControl, Textarea } from '../../../components/ui'
 import { IconButton, IconClose, IconPlus } from '../../../components/ui/ui3'
 import { STRUCTURED_FIELDS, imageThumbUrl, type AssetType } from '../../../types/workbench'
+import { resolveActiveSlot } from './resolveActiveSlot'
 import {
   applyAssetToSlot,
   clearAssetFromSlot,
@@ -48,12 +49,16 @@ export function PromptConsole() {
   const structuredEditable = state.promptMode === 'structured'
   const inputImage = state.inputImages[0] ?? null
 
-  // 默认 active slot：记忆 → 第一个有内容 → 风格。
-  const firstFilled = STRUCTURED_FIELDS.find((f) => state.structured[f.key].trim().length > 0)
-  const initialActive =
-    (typeof localStorage !== 'undefined' && localStorage.getItem(ACTIVE_SLOT_KEY)) ||
-    firstFilled?.key ||
-    'style'
+  // 默认 active slot：记忆（须为合法 slot key）→ 第一个有内容 → 风格。
+  // v0.15.1：localStorage 非法值（旧值/手工值如 "foo"）不对应任何 slot，会导致 8 个 slot 全不 active，
+  // 因此读取后交给 resolveActiveSlot 校验，非法值一律回退。
+  let storedSlot: string | null = null
+  try {
+    storedSlot = typeof localStorage !== 'undefined' ? localStorage.getItem(ACTIVE_SLOT_KEY) : null
+  } catch {
+    storedSlot = null
+  }
+  const initialActive = resolveActiveSlot(state.structured, storedSlot)
   const [activeSlot, setActiveSlot] = useState<string>(initialActive)
 
   function activateSlot(key: string): void {
