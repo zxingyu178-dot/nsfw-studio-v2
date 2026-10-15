@@ -1,6 +1,6 @@
 /**
  * Canvas 进度 HUD 计算（v0.15 Task 9/13）：
- * 持久 JobDTO 为事实源，实时 step/progress 来自 jobStore 的 liveProgressByItem 瞬态层。
+ * 持久 JobDTO 为事实源，实时 step/progress 来自 jobStore 的 liveProgressByStageItem（按 stage_item_id）瞬态层。
  * 关键：总进度按全部 Stage 的工作单元加权，不能用“当前 running stage progress”冒充整个 Job。
  */
 import { MODULE_LABEL, type JobDTO, type JobStageItemDTO } from '../../../types/workbench'
@@ -26,8 +26,11 @@ export interface HudSnapshot {
 
 const UPSCALE_MODULES = new Set(['upscale'])
 
-/** 跨 Stage 工作单元总进度：total=Σ stage.total_count，done=Σ(completed + 当前 running item 进度)。 */
-export function workOverall(job: JobDTO, liveByItem: Record<string, LiveProgress>): number {
+/**
+ * 跨 Stage 工作单元总进度：total=Σ stage.total_count，done=Σ(completed + 当前 running item 进度)。
+ * v0.15.1：实时进度按 **stage_item_id**（StageItem.id）索引，多阶段同一 job_item_id 不再串进度。
+ */
+export function workOverall(job: JobDTO, liveByStageItem: Record<string, LiveProgress>): number {
   const stages = job.stages ?? []
   if (stages.length === 0) {
     return job.requested_count > 0 ? Math.round((job.completed_count / job.requested_count) * 100) : 0
@@ -39,7 +42,7 @@ export function workOverall(job: JobDTO, liveByItem: Record<string, LiveProgress
     done += stage.completed_count
     const running = stage.items.find((item) => item.status === 'RUNNING')
     if (running) {
-      const live = liveByItem[running.job_item_id]
+      const live = liveByStageItem[running.id]
       const progress = live?.progress ?? running.progress ?? 0
       done += Math.max(0, Math.min(1, progress))
     }
@@ -48,20 +51,20 @@ export function workOverall(job: JobDTO, liveByItem: Record<string, LiveProgress
   return Math.max(0, Math.min(100, Math.round((done / total) * 100)))
 }
 
-function liveForItem(
+function liveForStageItem(
   item: JobStageItemDTO | undefined,
-  liveByItem: Record<string, LiveProgress>,
+  liveByStageItem: Record<string, LiveProgress>,
 ): LiveProgress | null {
   if (!item) return null
-  return liveByItem[item.job_item_id] ?? null
+  return liveByStageItem[item.id] ?? null
 }
 
-export function hudSnapshot(job: JobDTO, liveByItem: Record<string, LiveProgress> = {}): HudSnapshot {
+export function hudSnapshot(job: JobDTO, liveByStageItem: Record<string, LiveProgress> = {}): HudSnapshot {
   const stages = job.stages ?? []
   const stageCount = stages.length
   const runningStage = stages.find((s) => s.status === 'RUNNING') ?? null
   const runningItem = runningStage?.items.find((i) => i.status === 'RUNNING') ?? null
-  const live = liveForItem(runningItem ?? undefined, liveByItem)
+  const live = liveForStageItem(runningItem ?? undefined, liveByStageItem)
 
   let stageIndex: number | null = null
   let stageLabel: string | null = null
@@ -78,7 +81,7 @@ export function hudSnapshot(job: JobDTO, liveByItem: Record<string, LiveProgress
   const indeterminate = Boolean(runningStage) && (step === null || maxStep === null || maxStep <= 0)
 
   return {
-    overall: workOverall(job, liveByItem),
+    overall: workOverall(job, liveByStageItem),
     currentItem: runningItem ? runningItem.item_index + 1 : runningStage?.current_item != null ? runningStage.current_item + 1 : null,
     itemTotal: runningStage?.total_count ?? job.requested_count ?? null,
     stageIndex,

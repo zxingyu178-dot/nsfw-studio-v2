@@ -27,7 +27,7 @@ function basicStage(over: Record<string, unknown> = {}) {
     total_count: 8,
     completed_count: 2,
     items: [
-      { job_item_id: 'it_run', status: 'RUNNING', item_index: 2, progress: 0.5 },
+      { id: 'si_run', job_item_id: 'it_run', status: 'RUNNING', item_index: 2, progress: 0.5 },
     ],
     ...over,
   }
@@ -57,7 +57,7 @@ describe('workOverall：跨 Stage 工作单元加权', () => {
 
   it('实时瞬态 progress 覆盖持久 item.progress', () => {
     const job = makeJob({ stages: [basicStage()] })
-    const live: Record<string, LiveProgress> = { it_run: { progress: 1, step: 10, maxStep: 20, updatedAt: 1 } }
+    const live: Record<string, LiveProgress> = { si_run: { progress: 1, step: 10, maxStep: 20, updatedAt: 1 } }
     // (2 + 1) / 8 = 37.5% → 38%
     expect(workOverall(job, live)).toBe(38)
   })
@@ -66,7 +66,7 @@ describe('workOverall：跨 Stage 工作单元加权', () => {
 describe('hudSnapshot：Step 仅采样型，upscale 处理中', () => {
   it('basic 采样：有 step/maxStep 时返回真实 Step，不 indeterminate', () => {
     const job = makeJob({ stages: [basicStage()] })
-    const live: Record<string, LiveProgress> = { it_run: { progress: 0.5, step: 10, maxStep: 20, updatedAt: 1 } }
+    const live: Record<string, LiveProgress> = { si_run: { progress: 0.5, step: 10, maxStep: 20, updatedAt: 1 } }
     const hud = hudSnapshot(job, live)
     expect(hud.step).toBe(10)
     expect(hud.maxStep).toBe(20)
@@ -95,11 +95,11 @@ describe('hudSnapshot：Step 仅采样型，upscale 处理中', () => {
       status: 'RUNNING',
       total_count: 8,
       completed_count: 1,
-      items: [{ job_item_id: 'it_up', status: 'RUNNING', item_index: 1, progress: 0.25 }],
+      items: [{ id: 'si_up', job_item_id: 'it_up', status: 'RUNNING', item_index: 1, progress: 0.25 }],
     }
     const job = makeJob({ stages: [basicDone, upRunning] })
     // upscale 引擎不给 step（save_image 类）
-    const live: Record<string, LiveProgress> = { it_up: { progress: 0.25, step: null, maxStep: null, updatedAt: 1 } }
+    const live: Record<string, LiveProgress> = { si_up: { progress: 0.25, step: null, maxStep: null, updatedAt: 1 } }
     const hud = hudSnapshot(job, live)
     expect(hud.stageLabel).toBe('高清放大')
     expect(hud.step).toBeNull()

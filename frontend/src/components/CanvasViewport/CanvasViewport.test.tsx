@@ -212,3 +212,102 @@ describe('CanvasViewport 组件状态机（Task 5）', () => {
     expect(transformOf().scale).toBeCloseTo(before, 5)
   })
 })
+
+describe('CanvasViewport 逻辑尺寸 / rendition 尺寸分离（v0.15.1）', () => {
+  // 原图（逻辑）1088×1920；preview rendition 长边约 1536 → 870×1536。
+  const ORIGINAL = { width: 1088, height: 1920 }
+  const PREVIEW_NATURAL = { width: 870, height: 1536 }
+
+  function setNatural(el: HTMLImageElement, size: { width: number; height: number }): void {
+    Object.defineProperty(el, 'naturalWidth', { configurable: true, value: size.width })
+    Object.defineProperty(el, 'naturalHeight', { configurable: true, value: size.height })
+  }
+
+  it('preview natural 是下采样尺寸（870×1536），几何仍按原图逻辑 1088×1920 fit', () => {
+    render(
+      <CanvasViewport
+        imageUrl="a-preview.png"
+        contentUrl="a-content.png"
+        imageWidth={ORIGINAL.width}
+        imageHeight={ORIGINAL.height}
+      />,
+    )
+    const preview = previewImg()
+    setNatural(preview, PREVIEW_NATURAL)
+    fireEvent.load(preview)
+
+    // CSS 宽高恒为逻辑尺寸：preview 被等比拉伸到原图坐标系
+    expect(preview.style.width).toBe('1088px')
+    expect(preview.style.height).toBe('1920px')
+
+    // fit 按逻辑尺寸而非 preview natural
+    const t = transformOf()
+    const logicalFit = fitTransform(CONTAINER, ORIGINAL)
+    const previewFit = fitTransform(CONTAINER, PREVIEW_NATURAL)
+    expect(t.scale).toBeCloseTo(logicalFit.scale, 5)
+    expect(t.scale).not.toBeCloseTo(previewFit.scale, 5)
+  })
+
+  it('100% = 原图 1:1 像素（scale=1），不是 preview 的 100%', () => {
+    render(
+      <CanvasViewport
+        imageUrl="a-preview.png"
+        contentUrl="a-content.png"
+        imageWidth={ORIGINAL.width}
+        imageHeight={ORIGINAL.height}
+      />,
+    )
+    setNatural(previewImg(), PREVIEW_NATURAL)
+    fireEvent.load(previewImg())
+    fireEvent.click(screen.getByRole('button', { name: '100%' }))
+
+    const t = transformOf()
+    expect(t.scale).toBeCloseTo(1, 6)
+    expect(t.tx).toBeCloseTo((800 - 1088) / 2, 4)
+    expect(t.ty).toBeCloseTo((600 - 1920) / 2, 4)
+    // 平移钳制按原图逻辑尺寸：放大到 scale=1 向右拖到底，左边界钳到 edgeGrab
+    fireEvent.pointerDown(stage(), { clientX: 100, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(stage(), { clientX: 9999, clientY: 9999, pointerId: 1 })
+    fireEvent.pointerUp(stage(), { clientX: 9999, clientY: 9999, pointerId: 1 })
+    const after = transformOf()
+    expect(after.tx).toBe(40)
+    expect(after.ty).toBe(40)
+  })
+
+  it('preview→original 加载前后 transform 不跳（两层同一逻辑坐标系）', () => {
+    render(
+      <CanvasViewport
+        imageUrl="a-preview.png"
+        contentUrl="a-content.png"
+        imageWidth={ORIGINAL.width}
+        imageHeight={ORIGINAL.height}
+      />,
+    )
+    setNatural(previewImg(), PREVIEW_NATURAL)
+    fireEvent.load(previewImg())
+    fireEvent.click(screen.getByRole('button', { name: '100%' }))
+    const before = transformOf()
+
+    const content = stage().querySelector('.canvas-viewport__content') as HTMLImageElement
+    expect(content).not.toBeNull()
+    // 原图 natural 即逻辑尺寸；CSS 宽高同样是逻辑尺寸
+    setNatural(content, ORIGINAL)
+    expect(content.style.width).toBe('1088px')
+    expect(content.style.height).toBe('1920px')
+    fireEvent.load(content)
+    expect(content.style.opacity).toBe('1')
+
+    const after = transformOf()
+    expect(after.scale).toBeCloseTo(before.scale, 6)
+    expect(after.tx).toBeCloseTo(before.tx, 6)
+    expect(after.ty).toBeCloseTo(before.ty, 6)
+  })
+
+  it('未提供逻辑尺寸时回退：preview natural 决定几何（向后兼容）', () => {
+    render(<CanvasViewport imageUrl="a-preview.png" />)
+    setNatural(previewImg(), { width: 800, height: 400 })
+    fireEvent.load(previewImg())
+    const t = transformOf()
+    expect(t.scale).toBeCloseTo(fitTransform(CONTAINER, { width: 800, height: 400 }).scale, 5)
+  })
+})

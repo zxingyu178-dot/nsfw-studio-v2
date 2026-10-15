@@ -47,10 +47,26 @@ function storeWithQueue(overrides: Record<string, unknown> = {}) {
       paused: [],
     },
     jobs: [],
-    liveProgressByItem: {},
+    liveProgressByStageItem: {},
     submitting: false,
+    busyJobId: null,
+    busyJobAction: null,
     lastError: null,
     ...overrides,
+  }
+}
+
+function runningJob(over: Record<string, unknown> = {}) {
+  return {
+    id: 'job_running_1',
+    status: 'RUNNING',
+    positive_prompt_snapshot: 'running prompt',
+    requested_count: 1,
+    module_id: 'basic_generate',
+    pause_requested: false,
+    cancel_requested: false,
+    stages: [],
+    ...over,
   }
 }
 
@@ -114,5 +130,46 @@ describe('TaskDock 展开态队列（迁移自 SettingsPane）', () => {
     expect(screen.getAllByRole('button', { name: '优先' }).length).toBe(21)
     expect(screen.getAllByRole('button', { name: '暂停' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: '取消' }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('TaskDock 当前任务动作忙态（v0.15.1 busyJobId 绑定）', () => {
+  it('busyJobId 命中当前 running job 且动作为 cancel：取消按钮显示“正在取消…”且动作按钮禁用', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: runningJob(),
+          queued: [],
+          paused: [],
+        },
+        busyJobId: 'job_running_1',
+        busyJobAction: 'cancel',
+      }),
+    )
+    render(<TaskDock />)
+    const cancelBtn = screen.getByRole('button', { name: '正在取消…' })
+    expect(cancelBtn).toBeDisabled()
+    expect(cancelBtn.getAttribute('aria-busy')).toBe('true')
+    // 同一任务的其它动作按钮也禁用（避免并发操作）
+    expect(screen.getByRole('button', { name: '暂停' })).toBeDisabled()
+  })
+
+  it('busyJobId 指向别的任务时，不误禁用当前 running job 的按钮', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: runningJob(),
+          queued: [],
+          paused: [],
+        },
+        busyJobId: 'job_other',
+        busyJobAction: 'pause',
+      }),
+    )
+    render(<TaskDock />)
+    expect(screen.getByRole('button', { name: '暂停' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '取消' })).not.toBeDisabled()
   })
 })
