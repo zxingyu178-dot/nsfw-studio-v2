@@ -1,6 +1,22 @@
 # TASKS — NSFW Studio V2
 
-## 版本时间线（v0.10–v0.15.1）
+## Phase 0.16：Anima 动漫生图上线 ✅（2026-10-20，v0.16.0）
+
+- [x] 归档分支盘点：`archive/anime-module-v0.9.1`（基于 v0.9.0，5 模块契约/测试/文档齐全）
+- [x] 移植到 v0.15.1 基线：`backend/app/workflows/anime_generate.py`（复用 BasicGenerate 契约）
+- [x] 注册表：`default_registry()` 按展示顺序加入 `AnimeGenerateModule`（5 个正式模块）
+- [x] provider binding `workflows/providers/comfyui/anime_generate/v1/`（双指纹不变，immutable）
+- [x] 回归测试 `tests/backend/test_anime_generate_module.py`（5 用例，离线 Mock）
+- [x] 文档：`docs/AI_IMAGE_GENERATION_GUIDE.md`、`scripts/agent_generate.py`、CHANGELOG 0.16.0
+- [ ] 真机 Gate：ComfyUI 8188 恢复后补跑动漫链真实出图（Basic/Upscale 真机 Gate 同样待补）
+
+## Phase 0.17：整体 UI 重构（用户对当前 UI 不满意）
+
+- [ ] UI 现状审计：信息架构 / 三栏工作台 / Canvas / 图库 / 审图 / 提示词库的实际使用路径
+- [ ] 与用户确认"符合使用逻辑"的具体目标（高频路径、要减的步骤、要突出的信息）
+- [ ] 出重构方案（页面结构 + 交互流 + 设计语言）→ 评审 → 分阶段实现
+
+## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。
 
@@ -10,6 +26,7 @@
 - **v0.14.0–0.14.1**（2026-10-13/14）— Runtime 收口 + Lightbox 隔离 + Generate UI 3.0；生产生命周期接入 ControlHub（`nsfw-studio-v2`=8000、`comfyui`=8188）
 - **v0.15.0**（2026-10-14）— Workbench Layout 4.0（Canvas First + TaskDock）+ 真实 Job/Stage/Step 进度 + 可视化 Prompt 库 + Glass 设计体系
 - **v0.15.1**（2026-10-15）— Workbench live hardening：1 P0 + 8 P1 + 4 P2；CI 固定 Node 22.22.2
+- **v0.16.0**（2026-10-20）— Anima 动漫生图模块上线（从 v0.9.0 归档分支移植）；5 个正式 WorkflowModule；真机 Gate 待补
 
 ## 接手整理（2026-10-20，v0.15.1 基线）
 

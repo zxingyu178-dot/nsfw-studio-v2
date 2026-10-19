@@ -10,6 +10,7 @@ from collections.abc import Iterable
 
 from app.engine.base import EngineError
 from app.workflows.base import WorkflowModule
+from app.workflows.anime_generate import AnimeGenerateModule
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
 from app.workflows.reference_generate import ReferenceGenerateModule
@@ -52,7 +53,11 @@ class ModuleRegistry:
 
 
 def default_registry() -> ModuleRegistry:
-    """产品默认注册表：基础生图 + 图生图 + 参考图生成 + 高清放大（Phase 3 / 5.1 / 7）。"""
+    """产品默认注册表：基础生图 + 动漫生图 + 图生图 + 参考图生成 + 高清放大。
+
+    顺序 = 产品展示顺序（Phase 3 / 5.1 / 7 / Phase 0.16 Anima 上线）。
+    """
     return ModuleRegistry([
-        BasicGenerateModule(), Img2ImgModule(), ReferenceGenerateModule(), UpscaleModule(),
+        BasicGenerateModule(), AnimeGenerateModule(), Img2ImgModule(),
+        ReferenceGenerateModule(), UpscaleModule(),
     ])
