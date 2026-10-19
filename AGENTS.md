@@ -14,19 +14,21 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 v0.15.1，2026-10-15）
+## 3. 阶段纪律（当前 v0.16.0，2026-10-20）
 
-**当前状态**：v0.15.1 = Workbench Layout 4.0（Canvas First 三栏 + TaskDock）、真实进度
+**当前状态**：v0.16.0 = Anima 动漫生图模块上线（从 v0.9.0 归档分支移植到 v0.15.1 基线，
+`anime_generate` + `comfyui/anime_generate/v1` binding，核心执行逻辑零改动）。
+基线 v0.15.1 = Workbench Layout 4.0（Canvas First 三栏 + TaskDock）、真实进度
 （Job / Stage / Step）、可视化 Prompt 库、Glass 设计体系；后端进度事件分流为瞬态 SSE 与
 持久 `job_events`，`EngineJobStatus` 透传 `step/max_step`，采样 stall 与执行总超时分离；
 Canvas 逻辑尺寸 / Fit / 100%、多阶段 progress 按 `stage_item_id` 分键、完整 resume family、
-SSE 签名去重 + 心跳节流、review 动作 per-image 串行化。4 个正式 WorkflowModule：
-`basic_generate` / `img2img` / `reference_generate` / `upscale`。生产生命周期交 ControlHub
-official lifecycle CLI（`nsfw-studio-v2`=8000、`comfyui`=8188），部署/日用实例为
-`projects/nsfw-studio-v2-app`（分支 `deploy/app-instance`，跟踪 `origin/main`）。
+SSE 签名去重 + 心跳节流、review 动作 per-image 串行化。5 个正式 WorkflowModule：
+`basic_generate` / `anime_generate` / `img2img` / `reference_generate` / `upscale`。
+生产生命周期交 ControlHub official lifecycle CLI（`nsfw-studio-v2`=8000、`comfyui`=8188），
+部署/日用实例为 `projects/nsfw-studio-v2-app`（分支 `deploy/app-instance`，跟踪 `origin/main`）。
 逐版真相 = `CHANGELOG.md`；发布报告 = `docs/release/`、`docs/phase011/`。
-Anima 动漫生图模块未合入 main，归档分支 `archive/anime-module-v0.9.1`（基于 v0.9.0），
-如需上线必须先移植到当前基线并重新验收。
+Anima 已上线：动漫/插画请用 `anime_generate`（官方说明写实主体表现差），写实继续用
+`basic_generate`；归档分支 `archive/anime-module-v0.9.1` 仅作历史证据保留。
 
 以下为历史阶段（Phase 0 → 7，v0.1.0–v0.9.0）记录：
 
@@ -53,10 +55,10 @@ Recipe 固定 Seed 归一化、移除执行重排 + PIPELINE_DUPLICATE_MODULE、
 创建期拒绝、availability 版本域修正、Img2Img execute Prompt 契约、generation_mode 显式化、
 ParameterSpec 元数据驱动 + size_mode、真实照片验收（默认 denoise 0.55→0.8）与浏览器全链路，v0.8.0）。
 
-**v0.15.1 当前能力**：4 个 WorkflowModule（`basic_generate` 文生图 / `img2img` 图生图 /
-`reference_generate` 参考图 / `upscale` 高清），`GET /api/v1/modules` 返回能力与
+**v0.16.0 当前能力**：5 个 WorkflowModule（`basic_generate` 文生图 / `anime_generate` 动漫生图 /
+`img2img` 图生图 / `reference_generate` 参考图 / `upscale` 高清），`GET /api/v1/modules` 返回能力与
 ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
-`WorkbenchSnapshot.generation_mode`（text|image）显式保存与恢复；文生图 / 图片生成 / 高清 /
+`WorkbenchSnapshot.generation_mode`（text|image）显式保存与恢复；文生图 / 动漫 / 图片生成 / 高清 /
 参考图可组合为合法链；Job/Stage/Step 真实进度经 SSE + `job_events` 双通道对外。
 
 仍禁止扩大范围实现：

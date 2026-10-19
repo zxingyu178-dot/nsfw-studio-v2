@@ -2,6 +2,34 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.16.0] — 2026-10-20
+
+> Minor：Anima 动漫生图模块上线。把 2026-10-10 完成并离线验收（Mock 5 例 + 真实探针出图）的
+> `anime_generate` 从 v0.9.0 归档分支 `archive/anime-module-v0.9.1` 移植到 v0.15.1 基线。
+> 不新增模型 / 节点 / AI 能力（模型为本机已就位的 Anima-2.9B）；无数据库迁移；
+> 核心执行链（QueueWorker / PipelineExecutor / 单队列）零改动。
+
+### Added
+
+- **`anime_generate` 模块（第五个正式 WorkflowModule）**：动漫 / 插画文生图，模型为
+  **Anima-2.9B（preview-v1 int8）** + Qwen3-0.6B 文本编码器 + Qwen Image VAE
+  （本机已就位，零下载接入；合计 4.22 GB，加载与显存压力低于 Qwen-Image 2.1 写实链）；
+- provider binding `workflows/providers/comfyui/anime_generate/v1/`
+  （按 ComfyUI 官方蓝图 `Text to Image (Anima)`：UNETLoader + CLIPTextEncode×2 +
+  KSampler 30 步 / cfg 4 / er_sde / simple + VAEDecode；workflow_hash / binding_hash 双指纹固化）；
+- 与 `basic_generate` 标准契约完全一致（复用同一实现，仅覆写能力身份）——
+  前端模块选择器（/modules 驱动）自动出现"动漫生图（Anima）"选项；
+- 离线 Mock 回归 5 例（`tests/backend/test_anime_generate_module.py`）；
+- 《AI 生图指南》（`docs/AI_IMAGE_GENERATION_GUIDE.md`）与 Agent 调用示例
+  （`scripts/agent_generate.py`）随模块一并纳入版本库。
+
+### Notes
+
+- 官方说明：Anima 擅长动漫 / 艺术风格，**写实主体表现差**（写实请继续用 `basic_generate`）；
+- `models/diffusion_models/anima-turbo-v1.0.safetensors`（15 字节）是失败下载占位
+  （内容 "Entry not found"），不可用；如需要 turbo 变体请重新下载后新建 v2 binding；
+- 真机 Gate（ComfyUI 8188）本轮未执行：引擎当前离线，需恢复后补跑动漫链真实出图并归档证据。
+
 ## [0.15.1] — 2026-10-15
 
 > Patch / Workbench Live Hardening：修复 v0.15 代码审计发现的 1 个 P0（CI 工具链）、

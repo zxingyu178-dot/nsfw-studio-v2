@@ -1,0 +1,41 @@
+# anime_generate v1 — ComfyUI Provider Binding（Anima 2.9B 动漫链）
+#
+# 来源：本机 ComfyUI 0.37.0 官方蓝图 `blueprints/Text to Image (Anima).json`
+#       （模型：circlestone-labs/Anima，动漫/插画向，官方说明 "performs poorly on realistic subjects"）。
+# 本机模型（C:\ComfyUI_models，均已就位、零下载接入）：
+#   diffusion_models/Anima-2.9B-preview-v1_int8_convrot.safetensors
+#   text_encoders/qwen_3_06b_base.safetensors（CLIPLoader type=stable_diffusion，按官方蓝图）
+#   vae/qwen_image_vae.safetensors
+#
+# 图结构：UNETLoader → CLIPTextEncode(正/负) → KSampler(空 latent, denoise=1.0) → VAEDecode → SaveImage
+# 与 basic_generate/v1（Qwen-Image 2.1）的差异：不同模型/编码器/VAE、标准 CLIPTextEncode、
+#   采样参数 30 步 / cfg 4 / er_sde / simple（官方蓝图原值），非 Qwen 系节点组合。
+
+binding_version: v1
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+# §九：输出命名包含 Studio 身份（job/stage/item），支持崩溃恢复的文件级核对
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+# 固定默认（官方蓝图实测值；Module 标准输入不暴露）
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # CLIPTextEncode 标准负向提示词
+  output_size: explicit            # 尺寸由工作台显式宽高决定（EmptyLatentImage 注入）
