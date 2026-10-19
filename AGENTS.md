@@ -14,7 +14,21 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 Phase 6 完成，v0.8.0）
+## 3. 阶段纪律（当前 v0.15.1，2026-10-15）
+
+**当前状态**：v0.15.1 = Workbench Layout 4.0（Canvas First 三栏 + TaskDock）、真实进度
+（Job / Stage / Step）、可视化 Prompt 库、Glass 设计体系；后端进度事件分流为瞬态 SSE 与
+持久 `job_events`，`EngineJobStatus` 透传 `step/max_step`，采样 stall 与执行总超时分离；
+Canvas 逻辑尺寸 / Fit / 100%、多阶段 progress 按 `stage_item_id` 分键、完整 resume family、
+SSE 签名去重 + 心跳节流、review 动作 per-image 串行化。4 个正式 WorkflowModule：
+`basic_generate` / `img2img` / `reference_generate` / `upscale`。生产生命周期交 ControlHub
+official lifecycle CLI（`nsfw-studio-v2`=8000、`comfyui`=8188），部署/日用实例为
+`projects/nsfw-studio-v2-app`（分支 `deploy/app-instance`，跟踪 `origin/main`）。
+逐版真相 = `CHANGELOG.md`；发布报告 = `docs/release/`、`docs/phase011/`。
+Anima 动漫生图模块未合入 main，归档分支 `archive/anime-module-v0.9.1`（基于 v0.9.0），
+如需上线必须先移植到当前基线并重新验收。
+
+以下为历史阶段（Phase 0 → 7，v0.1.0–v0.9.0）记录：
 
 已完成 Phase 0 / 0.1 / 0.1.1 / 1（Prompt-Asset-Recipe Core）/
 2（Job Execution Core + ComfyUIAdapter + Gallery）/
@@ -39,17 +53,17 @@ Recipe 固定 Seed 归一化、移除执行重排 + PIPELINE_DUPLICATE_MODULE、
 创建期拒绝、availability 版本域修正、Img2Img execute Prompt 契约、generation_mode 显式化、
 ParameterSpec 元数据驱动 + size_mode、真实照片验收（默认 denoise 0.55→0.8）与浏览器全链路，v0.8.0）。
 
-**Phase 6 后当前能力**：图片生成模式 Primary Module = `img2img`（denoise 0.05–1.0，
-**默认 0.8**；输出 kind=processed + parent=输入图 + size_mode=input）；`GET /api/v1/modules`
-返回能力/参数 Schema（ParameterSpec）与 `size_mode`，`available=true` 是前端 Gate 唯一依据；
-`WorkbenchSnapshot.generation_mode`（text|image）显式保存与恢复；Image→工作台恢复"最近的
-生成上下文"（import→img2img→upscale 仍恢复 Img2Img）；文生图 / 图片生成 / 高清可任意组合
-为合法链（basic_generate→upscale、img2img→upscale）。
+**v0.15.1 当前能力**：4 个 WorkflowModule（`basic_generate` 文生图 / `img2img` 图生图 /
+`reference_generate` 参考图 / `upscale` 高清），`GET /api/v1/modules` 返回能力与
+ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
+`WorkbenchSnapshot.generation_mode`（text|image）显式保存与恢复；文生图 / 图片生成 / 高清 /
+参考图可组合为合法链；Job/Stage/Step 真实进度经 SSE + `job_events` 双通道对外。
 
-本阶段仍禁止扩大范围实现：
+仍禁止扩大范围实现：
 
-- Reference（IPAdapter 类）/ ControlNet / FaceID / InstantID / 局部重绘 / 蒙版编辑器 / 视频；
-- 手机端 / 豆包正式接入 / Agent 正式接入 / 全局搜索；
+- 扩展参考能力：IPAdapter 类、ControlNet、FaceID、InstantID、局部重绘、蒙版编辑器、视频；
+- 豆包正式接入 / Agent 正式接入 / 全局搜索；
+- 手机端 App（局域网 Mobile Review Bridge 8767 是既有子运行时，不扩展为新端）；
 - 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 
 生成链路约束：
@@ -105,9 +119,16 @@ ParameterSpec 元数据驱动 + size_mode、真实照片验收（默认 denoise 
 
 ## 5. 脚本与登记
 
-- `scripts/` 下的长期脚本（dev_backend / dev_frontend / init_dataroot / backup_db / build_handoff）
-  已登记至 AIHome Registry；修改前先确认调用方。
-- 本项目不新增任何长期运行服务；dev server 均为手动临时启动，不接入 ControlHub。
+- `scripts/` 下的长期脚本（dev_backend / dev_frontend / init_dataroot / backup_db / build_handoff /
+  launch / stop 等）已登记至 AIHome Registry；修改前先确认调用方。
+- **生产运行时接入 ControlHub**（v0.14 起）：`nsfw-studio-v2`(8000) 与 `comfyui`(8188) 是
+  独立已批准对象，生命周期只走官方 lifecycle CLI（`python -m control_hub.lifecycle_cli start|stop <id>
+  --data-root <controlhub-data>`）；应用内「启动/停止生图引擎」只作用于 `comfyui`，
+  **绝不**对 `nsfw-studio-v2` 执行 start/stop。8767 Mobile Review Bridge 是随 Studio 退出的
+  子运行时，不是独立 ControlHub 对象。
+- 部署/日用实例 = `projects/nsfw-studio-v2-app`（worktree，分支 `deploy/app-instance`
+  跟踪 `origin/main`）；开发主工作树 = `projects/nsfw-studio-v2`（main/develop）。
+  两者都不得提交 DataRoot、`.venv`、`frontend/dist`、`configs/config.local.yaml`。
 
 ## 6. 验证要求
 

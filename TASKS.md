@@ -1,5 +1,25 @@
 # TASKS — NSFW Studio V2
 
+## 版本时间线（v0.10–v0.15.1）
+
+> 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。
+
+- **v0.11.0**（2026-10-12）— Phase 0.11 图片资产管理基线（`docs/phase011/PHASE_REPORT.md`）
+- **v0.12.0**（2026-10-12）— Phase 0.12 产品体验收口（不新增模型 / 节点 / AI 能力）
+- **v0.13.0–0.13.2**（2026-10-12）— Phase 0.13 Generate 一屏工作台 + 局域网 Mobile Review Bridge（8767）；真机闭环与队列事故补丁
+- **v0.14.0–0.14.1**（2026-10-13/14）— Runtime 收口 + Lightbox 隔离 + Generate UI 3.0；生产生命周期接入 ControlHub（`nsfw-studio-v2`=8000、`comfyui`=8188）
+- **v0.15.0**（2026-10-14）— Workbench Layout 4.0（Canvas First + TaskDock）+ 真实 Job/Stage/Step 进度 + 可视化 Prompt 库 + Glass 设计体系
+- **v0.15.1**（2026-10-15）— Workbench live hardening：1 P0 + 8 P1 + 4 P2；CI 固定 Node 22.22.2
+
+## 接手整理（2026-10-20，v0.15.1 基线）
+
+- [x] Anima 动漫生图模块（原未提交在制）归档到分支 `archive/anime-module-v0.9.1`（基于 v0.9.0，**未合并 main**）
+- [x] 清理 10 个已合并 worktree，仅保留开发主工作树 + 部署实例
+- [x] 合并 `feature/daily-use-ux-runtime`（仅 `DAILY_USE_REPORT.md`）→ develop → main，CI 全绿
+- [x] 部署实例 `projects/nsfw-studio-v2-app` 恢复为 worktree（分支 `deploy/app-instance`，跟踪 `origin/main`），健康检查 `version=0.15.1` 通过
+- [x] README / AGENTS / TASKS 对齐 v0.15.1 实际状态
+- [ ] 下一阶段（Phase 0.16）范围待定
+
 ## Phase 7：可靠性收口 + Reference 能力 Gate ✅（2026-10-09，v0.9.0）
 
 - [x] Task 0：真正 Stage-aware Resume（复用已完成上游 Stage + `reused_from_stage_item_id` 溯源；
