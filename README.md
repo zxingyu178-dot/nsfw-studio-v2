@@ -4,7 +4,22 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前阶段：Phase 6 — Pipeline 可靠性收口（已完成，v0.8.0）。**
+**当前版本：v0.15.1（2026-10-15）— Workbench 4.0 + 真实进度 + 日用运行时收口。**
+
+v0.10–v0.15 把「能生成」推进到「日用」：Generate 工作台重构为 Canvas First 三栏 + 底部
+TaskDock（Layout 4.0），Glass 设计体系与可视化 Prompt 库；后端把进度事件分流为瞬态 SSE 与
+持久 `job_events`，并透传 ComfyUI 真实 Step（`EngineJobStatus.step/max_step`），采样 stall
+与执行总超时分离；Canvas 逻辑尺寸 / Fit / 100%、多阶段进度按 `stage_item_id` 分键、
+完整 resume family（`resume_of_job_id` 链）、SSE 签名去重 + 心跳节流、review 动作
+per-image 串行化。运行时侧生产生命周期统一交 ControlHub 官方 lifecycle CLI
+（`nsfw-studio-v2`=8000、`comfyui`=8188 为独立已批准对象；8767 Mobile Review Bridge 为
+随 Studio 退出的子运行时），日用/部署实例为 `projects/nsfw-studio-v2-app`。
+当前 4 个正式 WorkflowModule：`basic_generate` / `img2img` / `reference_generate` / `upscale`；
+Anima 动漫生图模块已完成并离线验收，但**未合入 main**，归档在分支
+`archive/anime-module-v0.9.1`（基于 v0.9.0）。逐版说明见 `CHANGELOG.md`，
+发布报告见 `docs/release/v0.15.0`、`docs/release/v0.15.1`、`docs/phase011`。
+
+**历史阶段：Phase 6 — Pipeline 可靠性收口（v0.8.0）。**
 不扩模型，解决"能生成之后如何可靠继续编辑、可靠复现、可靠扩第四个 Module"：
 Image → Workbench 生成上下文改为"距离最近的 generate 上下文"（import→img2img→upscale 恢复
 Img2Img，Seed 用该图真实 Seed）；前端工作流身份完整保留（规范模块顺序，不再重建裸 upscale）；
@@ -91,7 +106,7 @@ scripts\dev_frontend.bat
 # 打开 http://localhost:5173
 ```
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.8.0"}`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health` → `{"status":"ok","version":"0.15.1"}`
 - 测试：`.venv\Scripts\python -m pytest`（在项目根目录执行；GitHub CI 在 push/PR 时自动运行同样检查）
 - 仅初始化数据目录（不启动服务）：`python scripts\init_dataroot.py`
 - 数据库安全备份：`.venv\Scripts\python scripts\backup_db.py`（SQLite backup API，输出到 `DataRoot/backups/`）
