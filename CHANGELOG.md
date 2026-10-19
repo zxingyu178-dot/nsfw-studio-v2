@@ -2,6 +2,28 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [Unreleased] — Anima 动漫生图接入（2026-10-10）
+
+### Added
+
+- **`anime_generate` 模块（第五个正式 WorkflowModule）**：动漫 / 插画文生图，模型为
+  **Anima-2.9B（preview-v1 int8）** + Qwen3-0.6B 文本编码器 + Qwen Image VAE
+  （本机已就位，零下载接入；合计 4.22 GB，加载与显存压力显著低于 Qwen-Image 2.1 写实链）；
+- provider binding `workflows/providers/comfyui/anime_generate/v1/`
+  （按 ComfyUI 官方蓝图 `Text to Image (Anima)`：UNETLoader + CLIPTextEncode×2 +
+  KSampler 30 步 / cfg 4 / er_sde / simple + VAEDecode；双指纹固化）；
+- 与 `basic_generate` 标准契约完全一致（复用同一实现，仅覆写能力身份）——
+  前端模块选择器（/modules 驱动）自动出现"动漫生图（Anima）"选项；
+- 离线 Mock 回归 5 例（tests/backend/test_anime_generate_module.py）；
+- 《AI 生图指南》新增"动漫文生图"模式与选择建议：
+  `workflow_modules: [{"module_id": "anime_generate"}]`。
+
+### Notes
+
+- 官方说明：Anima 擅长动漫 / 艺术风格，**写实主体表现差**（写实请继续用 `basic_generate`）；
+- ComfyUI `models/diffusion_models/anima-turbo-v1.0.safetensors`（15 字节）是失败下载占位
+  （内容 "Entry not found"），不可用；如需要 turbo 变体请重新下载后新建 v2 binding。
+
 ## [0.9.0] — 2026-10-09
 
 ### Added（Phase 7：可靠性收口 + Reference 能力 Gate）

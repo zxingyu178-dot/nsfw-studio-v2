@@ -1,4 +1,15 @@
-# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1 / 6 / 7（2026-10-09）
+# TEST_REPORT — Phase 0 / 0.1 / 1 / 2 / 2.1 / 2.2 / 3 / 4 / 5 / 5.1 / 6 / 7 / Anima 接入（2026-10-10）
+
+## Anima 动漫生图接入（2026-10-10）
+
+- 快速套件：**259 passed**（v0.9.0 的 254 例 + 新增 5 例 `test_anime_generate_module.py`）；
+- 真实 ComfyUI 探针（直接 API，官方蓝图层）：`Anima-2.9B-preview-v1_int8_convrot` +
+  `qwen_3_06b_base` + `qwen_image_vae`，768×768 / 30 步 / cfg 4 / er_sde → COMPLETED，
+  输出为高质量动漫插画（红裙少女夜景，完全匹配提示词）；
+- 产品路径 E2E（source=doubao + queue_mode=next，`/api/v1/jobs` → Worker → 真实 ComfyUI →
+  DataRoot 入库 → `/images/{id}/content` 取图）：见下方"结果"。
+
+**E2E 结果**：（完成后回填）
 
 ## Phase 7 测试（v0.9.0，可靠性收口 + Reference Gate）
 

@@ -41,13 +41,16 @@ module_id / module_version / title / description / parameters
 | 模块 | uses_seed | input_kind | input_required | output_kind | parent_policy | cardinality | size_mode | job kinds | slots |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `basic_generate` | true | none | false | original | none | 1 | explicit | generate | — |
+| `anime_generate`（Anima 2.9B） | true | none | false | original | none | 1 | explicit | generate | — |
 | `img2img`（Phase 5.1） | true | image | true | processed | input_image | 1 | input | generate | source(必填×1) |
 | `reference_generate`（Phase 7） | true | image | true | original | input_image | 1 | input | generate | reference(必填×1) |
 | `upscale` | false | image | true | upscaled | input_image | 1 | input | generate + process | source(必填×1) |
 
-`is_generative`：`basic_generate / img2img / reference_generate = true`；`upscale = false`
+`is_generative`：`basic_generate / anime_generate / img2img / reference_generate = true`；`upscale = false`
 （后处理产出不构成生成上下文，Workbench 恢复继续向上追溯）。
-`can_start_from_image`：`img2img / reference_generate / upscale = true`；`basic_generate = false`。
+`can_start_from_image`：`img2img / reference_generate / upscale = true`；`basic_generate / anime_generate = false`。
+`anime_generate` 与 `basic_generate` 标准契约完全一致（同一实现复用），差异只在执行身份与 provider
+binding（Anima-2.9B 动漫链 vs Qwen-Image 2.1 写实链）。
 
 Phase 6 `size_mode`：`basic_generate=explicit`；`img2img=input`（输出=输入尺寸）；`upscale=input`
 （×N 由 provider binding 决定）；`reference_generate=input`（输出跟随重采样后的参考图）。

@@ -1,5 +1,45 @@
 # DEV_LOG — NSFW Studio V2
 
+## 2026-10-10 — Anima 动漫生图接入（`anime_generate`，Unreleased）
+
+**背景**：用户凌晨安装 Anima-2.9B（preview-v1 int8）+ qwen_3_06b_base + qwen_image_vae
+（C:\ComfyUI_models，合计 4.22 GB），要求接入 Studio 并让豆包可直接调用。
+
+**执行**：
+
+- 只读重盘 ComfyUI：0.37.0 原生支持 Anima（`supported_models.Anima` / `AnimaTokenizer`），
+  本机存在官方蓝图 `blueprints/Text to Image (Anima).json`（UNETLoader + CLIPLoader(type=stable_diffusion)
+  + VAELoader + CLIPTextEncode×2 + KSampler 30 步 / cfg 4 / er_sde / simple + EmptyLatent）；
+- 真实探针（直接 API，768×768/30 步）：COMPLETED，输出为高质量动漫插画（红裙少女夜景）；
+- 新模块 `anime_generate`（与 basic_generate 同契约，仅覆写能力身份）+ binding
+  `comfyui/anime_generate/v1`（双指纹）；QueueWorker / 核心零修改；
+- 离线 Mock 回归 5 例；全量快速套件 **259 passed**；
+- 后端重启（venv python）加载新模块：`/modules` 显示 `anime_generate available=true`；
+  前端模块选择器（/modules 驱动）自动出现"动漫生图（Anima）"；
+- 产品路径 E2E：source=doubao + queue_mode=next → 真实 ComfyUI → DataRoot 入库（见 TEST_REPORT）；
+- 文档：《AI 生图指南》新增动漫模式（含"怎么选"与豆包系统提示词第 7 条）、MODULE_IO_CONTRACT、
+  CHANGELOG、TEST_REPORT。
+
+**发现（如实记录）**：
+
+- `anima-turbo-v1.0.safetensors`（15 字节）是失败下载占位（"Entry not found"），未接入；
+- Anima 主模型在 `C:\ComfyUI_models` 与 ComfyUI 自身目录各有一份（3 GB×2），建议确认后删一份；
+- 重启后端时用户队列中 1 个 RUNNING 任务（`batch_v2_*`，06:50 创建）被安全标记为恢复路径，
+  队列其余 58 个任务在重启后继续处理（`queue_mode=next` 的批量任务按后进先出执行）。
+
+**运维根治（当日 20:35，服务反复掉线问题）**：
+
+- 症状：手动/会话附属方式启动的后端与前端被静默回收（无崩溃日志、同时消失），而
+  计划任务托管的 ComfyUI 从未掉线 → 根因 = 进程随宿主会话作业组回收；
+- 修复：新增 `scripts/runtime/{run_backend.ps1, run_frontend.ps1, register-tasks.ps1}`，
+  注册 `\AIHome\NSFWStudioV2`（后端）与 `\AIHome\NSFWStudioV2Frontend`（前端）两个计划任务
+  （与 ComfyUI 同模式：手动生命周期、无触发器、当前用户非提权、`-WindowStyle Hidden` 无窗口）；
+- 崩溃恢复实测：后端掉线期间 ComfyUI 仍完成 `batch_v2_qinghai_bikini` 全部 10 张，
+  重启后启动恢复机制全部入库（0 损失）；`batch_v2_couple_maple_dresspull` 中断（1/10），
+  待 resume-remaining。
+
+**Git 状态**：本项为 v0.9.0 发布后的新工作，尚未提交（等用户确认提交/版本策略）。
+
 ## 2026-10-09 — Phase 7：可靠性收口 + Reference 能力 Gate（v0.9.0）
 
 **执行**：TRAE Code Agent（feature/phase7-reference-slots → develop → CI → main → CI → tag v0.9.0）。

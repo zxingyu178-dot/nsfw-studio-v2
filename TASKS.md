@@ -1,5 +1,15 @@
 # TASKS — NSFW Studio V2
 
+## Anima 动漫生图接入（2026-10-10，Unreleased）
+
+- [x] 只读重盘：Anima 原生支持（0.37.0）+ 官方蓝图管线与采样参数确认
+- [x] 真实探针：本机三件套（Anima-2.9B int8 / qwen_3_06b_base / qwen_image_vae）直接跑通
+- [x] `anime_generate` 模块 + `comfyui/anime_generate/v1` binding（双指纹；核心零修改）
+- [x] Mock 回归 5 例 + 全量 259 passed；后端重启后 `/modules available=true`（前端自动出现选项）
+- [x] 产品路径 E2E（source=doubao；真实出图 → DataRoot → 取图接口）
+- [x] 文档：AI 生图指南 / MODULE_IO_CONTRACT / CHANGELOG / TEST_REPORT / DEV_LOG
+- [ ] Git 提交与版本策略（待用户确认：v0.9.1 补丁发布 or 随下阶段）
+
 ## Phase 7：可靠性收口 + Reference 能力 Gate ✅（2026-10-09，v0.9.0）
 
 - [x] Task 0：真正 Stage-aware Resume（复用已完成上游 Stage + `reused_from_stage_item_id` 溯源；
