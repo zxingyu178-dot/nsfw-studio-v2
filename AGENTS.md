@@ -146,3 +146,18 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 - 每个阶段在 `develop` 完成、测试通过后合并回 `main` 并保持两分支一致。
 - Commit 用 conventional 前缀（feat / fix / docs / chore / test）。
 - 禁止把 DataRoot 数据、`node_modules`、`.venv`、交接包提交进仓库。
+
+## 8. Codex 子智能体分工（用户指令 2026-10-20）
+
+> 用户明确要求：「多调用 codex 干活」。默认把可独立完成的工作交给 Codex 子智能体，
+> Lead（主智能体）负责拆分任务、审查 diff、跑验证、提交与发布。
+
+- **常规任务** → `subagent_codex_lite`（`gpt-5.6-sol`，medium 思考）。适用于：后端服务/测试、
+  前端组件与样式、文档整理、refactor、CI 修复等边界清楚的任务。
+- **复杂任务** → `subagent_codex`（`gpt-6-astra`）。仅用于跨模块设计、难 bug、性能/并发等
+  需要强推理的工作。Plus 会员有 5 小时额度，注意节省。
+- Codex 只改代码、不提交：禁止 `git commit / push / tag`，交付后由 Lead 审查并提交。
+- 派单必须写清：工作目录、允许改动的范围、验收标准（`pytest` / `vitest` / `tsc -b` / `npm run build`）、
+  禁止事项（新增依赖、改技术栈、动 DataRoot、写 BOM、修改 `docs/DESIGN.md` 之外的设计约定）。
+- 视觉任务必须遵守 `docs/DESIGN.md`；业务任务必须遵守本文件第 3/4 节架构红线。
+- Lead 合入前必须：跑对应测试与构建、检查 diff 无越界、检查无 BOM、必要时截图验证 UI。
