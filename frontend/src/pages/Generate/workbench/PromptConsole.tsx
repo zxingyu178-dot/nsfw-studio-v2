@@ -10,7 +10,7 @@ import { ApiRequestError, imageApi } from '../../../api/client'
 import { ComposePreview } from '../../../components/ComposePreview'
 import { ImagePickerDrawer } from '../../../components/ImagePickerDrawer'
 import { Button, Field, SegmentedControl, Textarea } from '../../../components/ui'
-import { IconButton, IconClose, IconPlus } from '../../../components/ui/ui3'
+import { IconButton, IconChevronDown, IconClose, IconPlus } from '../../../components/ui/ui3'
 import { STRUCTURED_FIELDS, imageThumbUrl, type AssetType } from '../../../types/workbench'
 import { resolveActiveSlot } from './resolveActiveSlot'
 import {
@@ -38,7 +38,7 @@ function isSlotKey(key: string): key is AssetType {
   return (SLOT_KEYS as string[]).includes(key)
 }
 
-export function PromptConsole() {
+export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) {
   const state = useWorkbench()
   const [pickerSlot, setPickerSlot] = useState<AssetType | null>(null)
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
@@ -104,16 +104,25 @@ export function PromptConsole() {
     <Pane
       title="Prompt 编辑"
       actions={
-        <SegmentedControl
-          size="sm"
-          value={state.promptMode}
-          onChange={(m) => setPromptMode(m as typeof state.promptMode)}
-          options={[
-            { value: 'structured', label: '结构化' },
-            { value: 'full', label: '完整 Prompt' },
-          ]}
-          ariaLabel="Prompt 编辑模式"
-        />
+        <div className="wb-pane__actions-row">
+          <SegmentedControl
+            size="sm"
+            value={state.promptMode}
+            onChange={(m) => setPromptMode(m as typeof state.promptMode)}
+            options={[
+              { value: 'structured', label: '结构化' },
+              { value: 'full', label: '完整 Prompt' },
+            ]}
+            ariaLabel="Prompt 编辑模式"
+          />
+          {onCollapse && (
+            <IconButton
+              icon={<IconChevronDown size={14} className="wb-pane__collapse-icon wb-pane__collapse-icon--left" />}
+              label="收起 Prompt 栏"
+              onClick={onCollapse}
+            />
+          )}
+        </div>
       }
     >
       {/* 输入图片（仅图片生成模式），逻辑沿用原 PromptEditorPane。 */}

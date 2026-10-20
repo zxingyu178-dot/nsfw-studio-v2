@@ -10,6 +10,7 @@ from app.schemas.prompt import (
     ComposeResponse,
     PromptCreateRequest,
     PromptListResponse,
+    PromptImagesResponse,
     PromptMetaUpdateRequest,
     PromptResponse,
     PromptVersionCreateRequest,
@@ -18,7 +19,7 @@ from app.schemas.prompt import (
     prompt_response,
     prompt_version_response,
 )
-from app.services import prompt_service
+from app.services import prompt_image_service, prompt_service
 from app.services.prompt_composer import compose_structured
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
@@ -33,26 +34,33 @@ def compose_prompt(request: ComposeRequest) -> ComposeResponse:
     return ComposeResponse(composed_prompt=composed)
 
 
-@router.get("", response_model=PromptListResponse, summary="Prompt 列表")
+@router.get("", response_model=PromptListResponse, response_model_exclude_unset=True, summary="Prompt 列表")
 def list_prompts(
     search: str | None = Query(default=None),
     favorite: bool | None = Query(default=None),
     archived: bool | None = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    include_images: bool = Query(default=False),
+    images_limit: int = Query(default=3, ge=1, le=10),
     session: Session = Depends(get_session),
 ) -> PromptListResponse:
-    items, total = prompt_service.list_prompts(
-        session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset
+    return prompt_image_service.list_prompts(
+        session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
+        include_images=include_images, images_limit=images_limit,
     )
-    return PromptListResponse(
-        items=[
-            prompt_response(prompt, prompt_service.get_current_version(session, prompt))
-            for prompt in items
-        ],
-        total=total,
-        limit=limit,
-        offset=offset,
+
+
+@router.get("/{prompt_id}/images", response_model=PromptImagesResponse, summary="Prompt 生成图片")
+def list_prompt_images(
+    prompt_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    version_id: str | None = Query(default=None),
+    session: Session = Depends(get_session),
+) -> PromptImagesResponse:
+    return prompt_image_service.list_prompt_images(
+        session, prompt_id, limit=limit, offset=offset, version_id=version_id,
     )
 
 

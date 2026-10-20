@@ -1,11 +1,13 @@
 /**
- * ResizablePane（v0.15 Task 1 §5.2）：三栏可拖拽侧栏。
+ * ResizablePane（v0.15 Task 1 §5.2 / Phase 0.17.1）：三栏可拖拽侧栏 + 可收起。
  * - pointer capture 拖拽，不选中文本；clamp min/max；
  * - double click 恢复默认；
  * - 无障碍：role=separator / aria-orientation=vertical / aria-valuenow，
- *   方向键微调（ArrowLeft/Right，Shift 加速），Home 复位。
+ *   方向键微调（ArrowLeft/Right，Shift 加速），Home 复位；
+ * - Phase 0.17.1：collapsed=true 时只渲染 44px 竖栏按钮（点击展开），把宽度让给 Canvas。
  */
 import { useRef, type ReactNode } from 'react'
+import { IconChevronDown } from '../../../components/ui/ui3'
 import { clampWidth } from './workbenchLayout'
 
 export interface ResizablePaneProps {
@@ -18,6 +20,11 @@ export interface ResizablePaneProps {
   onReset: () => void
   children: ReactNode
   className?: string
+  /** Phase 0.17.1：收起态（只留竖栏）。 */
+  collapsed?: boolean
+  /** 收起/展开按钮的无障碍文案（如「Prompt 栏」「参数栏」）。 */
+  collapseLabel?: string
+  onToggleCollapse?: () => void
 }
 
 const KEY_STEP = 8
@@ -33,8 +40,35 @@ export function ResizablePane({
   onReset,
   children,
   className = '',
+  collapsed = false,
+  collapseLabel = '侧栏',
+  onToggleCollapse,
 }: ResizablePaneProps) {
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  if (collapsed) {
+    return (
+      <div
+        className={`wb4-pane wb4-pane--${side} wb4-pane--collapsed ${className}`.trim()}
+        data-width={width}
+        data-collapsed="true"
+      >
+        <button
+          type="button"
+          className="wb4-pane__rail"
+          onClick={onToggleCollapse}
+          aria-label={`展开${collapseLabel}`}
+          title={`展开${collapseLabel}`}
+        >
+          <IconChevronDown
+            size={14}
+            className={`wb4-pane__rail-icon wb4-pane__rail-icon--${side}`}
+          />
+          <span className="wb4-pane__rail-text">{collapseLabel}</span>
+        </button>
+      </div>
+    )
+  }
 
   function applyDelta(deltaClientX: number): void {
     // 左栏：handle 在右缘，向右拖(deltaX>0)变宽；右栏：handle 在左缘，向左拖(deltaX<0)变宽。
