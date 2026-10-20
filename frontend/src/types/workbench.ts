@@ -70,6 +70,51 @@ export interface PromptDTO {
   images?: PromptImageDTO[]
   /** 该提示词生成过的图片总数（不受 images_limit 限制）。 */
   images_total?: number
+  /** Phase 0.17.3：人工评分与手动淘汰状态。 */
+  status?: PromptStatus
+  status_reason?: string
+  /** include_evaluation=true 时的最近一次评分。 */
+  latest_evaluation?: PromptEvaluationDTO | null
+}
+
+/** Phase 0.17.3：提示词状态（手动设置，低分不自动淘汰）。 */
+export type PromptStatus = 'keep' | 'candidate' | 'eliminated'
+
+/** Phase 0.17.3：7 个评分维度（与后端白名单一致）。 */
+export type PromptEvaluationDimension =
+  | 'subject'
+  | 'clothing'
+  | 'scene'
+  | 'composition'
+  | 'lighting'
+  | 'style'
+  | 'quality'
+
+export const PROMPT_EVALUATION_DIMENSIONS: Array<{ key: PromptEvaluationDimension; label: string }> = [
+  { key: 'subject', label: '人物' },
+  { key: 'clothing', label: '服饰' },
+  { key: 'scene', label: '场景' },
+  { key: 'composition', label: '构图' },
+  { key: 'lighting', label: '光影' },
+  { key: 'style', label: '风格' },
+  { key: 'quality', label: '画质' },
+]
+
+export const PROMPT_STATUS_LABEL: Record<PromptStatus, string> = {
+  keep: '保留',
+  candidate: '候选',
+  eliminated: '已淘汰',
+}
+
+export interface PromptEvaluationDTO {
+  id: string
+  prompt_id: string
+  prompt_version_id: string | null
+  overall_score: number
+  dimension_scores: Partial<Record<PromptEvaluationDimension, number>>
+  source: string
+  notes: string
+  created_at: string
 }
 
 /** Phase 0.17.2：提示词 → 生成图聚合项的图片摘要（后端 PromptImageResponse）。 */

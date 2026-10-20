@@ -75,7 +75,9 @@ import type {
   ListResponse,
   ModuleCapabilitiesDTO,
   PromptDTO,
+  PromptEvaluationDTO,
   PromptMode,
+  PromptStatus,
   PromptVersionDTO,
   QueueDTO,
   RecipeDTO,
@@ -96,6 +98,8 @@ export interface PromptListParams {
   include_images?: boolean
   /** 每条提示词最多返回几张图（1–10，默认 3）。 */
   images_limit?: number
+  /** Phase 0.17.3：附带每条提示词最近一次评分。 */
+  include_evaluation?: boolean
 }
 
 function buildQuery(params: object): string {
@@ -155,6 +159,25 @@ export const promptApi = {
   },
   compose(body: { mode: PromptMode; positive_prompt?: string; structured?: unknown }): Promise<ComposeResult> {
     return request('/api/v1/prompts/compose', jsonInit('POST', body))
+  },
+  /** Phase 0.17.3：人工评分（7 维 + 总分），返回最新评估记录。 */
+  createEvaluation(
+    id: string,
+    body: {
+      overall_score: number
+      dimension_scores?: Record<string, number>
+      notes?: string
+      prompt_version_id?: string | null
+    },
+  ): Promise<PromptEvaluationDTO> {
+    return request(`/api/v1/prompts/${id}/evaluations`, jsonInit('POST', body))
+  },
+  listEvaluations(id: string): Promise<PromptEvaluationDTO[]> {
+    return request(`/api/v1/prompts/${id}/evaluations`)
+  },
+  /** Phase 0.17.3：手动设置状态（保留/候选/淘汰）。 */
+  setStatus(id: string, body: { status: PromptStatus; reason?: string }): Promise<PromptDTO> {
+    return request(`/api/v1/prompts/${id}/status`, jsonInit('POST', body))
   },
 }
 
