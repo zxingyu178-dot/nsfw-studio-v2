@@ -42,7 +42,7 @@
 
 - [x] 评分排序（score_desc / score_asc）+ 状态筛选（keep / candidate / eliminated），前后端 + 测试（v0.21.0）
 - [x] 组合筛选：状态多值（后端）+ 已评分/未评分筛选 + 筛选条件写入 URL（v0.23.0）
-- [ ] 保存筛选偏好到本地（localStorage，跨会话记住上次筛选）
+- [x] 保存筛选偏好到本地（localStorage，URL > 偏好 > 默认 + 重置筛选，v0.25.0）
 
 ## Phase 0.20：图库按任务查看（Codex 实现）
 

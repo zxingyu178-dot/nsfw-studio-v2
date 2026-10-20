@@ -34,6 +34,39 @@ import {
   type WorkbenchSnapshot,
 } from '../../types/workbench'
 import { PromptScoringDialog } from './PromptScoringDialog'
+import {
+  clearPromptFilterPrefs,
+  readPromptFilterPrefs,
+  writePromptFilterPrefs,
+  type PromptFilterPrefs,
+} from './promptFilterPrefs'
+
+const PROMPT_FILTER_PARAM_NAMES = ['q', 'sort', 'status', 'scored'] as const
+
+function prefsToSearchParams(prefs: PromptFilterPrefs, current: URLSearchParams): URLSearchParams {
+  const next = new URLSearchParams(current)
+  PROMPT_FILTER_PARAM_NAMES.forEach((name) => next.delete(name))
+  if (prefs.q !== '') next.set('q', prefs.q)
+  if (prefs.sort !== 'updated_desc') next.set('sort', prefs.sort)
+  if (prefs.status !== '') next.set('status', prefs.status)
+  if (prefs.scored !== '') next.set('scored', prefs.scored)
+  return next
+}
+
+function searchParamsToPrefs(params: URLSearchParams): PromptFilterPrefs {
+  const sortParam = params.get('sort')
+  const statusParam = params.get('status')
+  const scoredParam = params.get('scored')
+  return {
+    q: params.get('q') ?? '',
+    sort: sortParam === 'score_desc' || sortParam === 'score_asc' ? sortParam : 'updated_desc',
+    status:
+      statusParam === 'keep' || statusParam === 'candidate' || statusParam === 'eliminated'
+        ? statusParam
+        : '',
+    scored: scoredParam === 'true' || scoredParam === 'false' ? scoredParam : '',
+  }
+}
 
 /** 我的 Prompt（§三十八-§四十、§四十九、§五十四、§五十五）。 */
 export function PromptTab() {
@@ -42,17 +75,30 @@ export function PromptTab() {
   const [showArchived, setShowArchived] = useState(false)
   const [drawer, setDrawer] = useState<{ open: boolean; prompt: PromptDTO | null }>({ open: false, prompt: null })
 
-  const search = searchParams.get('q') ?? ''
-  const sortParam = searchParams.get('sort')
+  const hasExplicitFilterParams = PROMPT_FILTER_PARAM_NAMES.some((name) => searchParams.has(name))
+  const [initialFilterPrefs] = useState<PromptFilterPrefs | null>(() =>
+    hasExplicitFilterParams ? null : readPromptFilterPrefs(),
+  )
+  const [initialPrefsApplied, setInitialPrefsApplied] = useState(false)
+  const useInitialPrefs = !hasExplicitFilterParams && !initialPrefsApplied && initialFilterPrefs !== null
+
+  const search = useInitialPrefs ? initialFilterPrefs.q : (searchParams.get('q') ?? '')
+  const sortParam = useInitialPrefs ? initialFilterPrefs.sort : searchParams.get('sort')
   const sort: PromptSort =
     sortParam === 'score_desc' || sortParam === 'score_asc' ? sortParam : 'updated_desc'
-  const statusParam = searchParams.get('status')
+  const statusParam = useInitialPrefs ? initialFilterPrefs.status : searchParams.get('status')
   const status: PromptStatus | '' =
     statusParam === 'keep' || statusParam === 'candidate' || statusParam === 'eliminated'
       ? statusParam
       : ''
-  const scoredParam = searchParams.get('scored')
+  const scoredParam = useInitialPrefs ? initialFilterPrefs.scored : searchParams.get('scored')
   const scored = scoredParam === 'true' ? true : scoredParam === 'false' ? false : undefined
+
+  useEffect(() => {
+    if (!useInitialPrefs) return
+    setInitialPrefsApplied(true)
+    setSearchParams(prefsToSearchParams(initialFilterPrefs, searchParams), { replace: true })
+  }, [initialFilterPrefs, searchParams, setSearchParams, useInitialPrefs])
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -73,19 +119,24 @@ export function PromptTab() {
   }, [scored, scoredParam, search, searchParams, setSearchParams, sortParam, status, statusParam])
 
   function updateFilter(name: 'q' | 'sort' | 'status' | 'scored', value: string): void {
-    setSearchParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        const isDefault =
-          value === '' ||
-          (name === 'sort' && value === 'updated_desc')
-        if (isDefault) next.delete(name)
-        else next.set(name, value)
-        return next
-      },
-      { replace: true },
-    )
+    const next = new URLSearchParams(searchParams)
+    const normalizedValue = name === 'q' && value.trim() === '' ? '' : value
+    const isDefault = normalizedValue === '' || (name === 'sort' && normalizedValue === 'updated_desc')
+    if (isDefault) next.delete(name)
+    else next.set(name, normalizedValue)
+    setSearchParams(next, { replace: true })
+    writePromptFilterPrefs(searchParamsToPrefs(next))
   }
+
+  function resetFilters(): void {
+    const next = new URLSearchParams(searchParams)
+    PROMPT_FILTER_PARAM_NAMES.forEach((name) => next.delete(name))
+    setInitialPrefsApplied(true)
+    clearPromptFilterPrefs()
+    setSearchParams(next, { replace: true })
+  }
+
+  const hasNonDefaultFilters = search.trim() !== '' || sort !== 'updated_desc' || status !== '' || scored !== undefined
 
   // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多（数据全可达）。
   const fetcher = useCallback(
@@ -168,6 +219,11 @@ export function PromptTab() {
             ]}
             onChange={(event) => updateFilter('scored', event.target.value)}
           />
+          {hasNonDefaultFilters && (
+            <Button size="xs" variant="ghost" onClick={resetFilters}>
+              重置筛选
+            </Button>
+          )}
         </div>
         <span className="pp-toolbar__spacer" />
         <Button variant="primary" onClick={() => setDrawer({ open: true, prompt: null })}>
