@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, promptApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
 import { ImagePickerDrawer } from '../../components/ImagePickerDrawer'
@@ -38,11 +38,54 @@ import { PromptScoringDialog } from './PromptScoringDialog'
 /** 我的 Prompt（§三十八-§四十、§四十九、§五十四、§五十五）。 */
 export function PromptTab() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showArchived, setShowArchived] = useState(false)
-  const [sort, setSort] = useState<PromptSort>('updated_desc')
-  const [status, setStatus] = useState<PromptStatus | ''>('')
   const [drawer, setDrawer] = useState<{ open: boolean; prompt: PromptDTO | null }>({ open: false, prompt: null })
+
+  const search = searchParams.get('q') ?? ''
+  const sortParam = searchParams.get('sort')
+  const sort: PromptSort =
+    sortParam === 'score_desc' || sortParam === 'score_asc' ? sortParam : 'updated_desc'
+  const statusParam = searchParams.get('status')
+  const status: PromptStatus | '' =
+    statusParam === 'keep' || statusParam === 'candidate' || statusParam === 'eliminated'
+      ? statusParam
+      : ''
+  const scoredParam = searchParams.get('scored')
+  const scored = scoredParam === 'true' ? true : scoredParam === 'false' ? false : undefined
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    let changed = false
+
+    function remove(name: 'q' | 'sort' | 'status' | 'scored'): void {
+      if (!next.has(name)) return
+      next.delete(name)
+      changed = true
+    }
+
+    if (search.trim() === '') remove('q')
+    if (sortParam !== null && sortParam !== 'score_desc' && sortParam !== 'score_asc') remove('sort')
+    if (statusParam !== null && status === '') remove('status')
+    if (scoredParam !== null && scored === undefined) remove('scored')
+
+    if (changed) setSearchParams(next, { replace: true })
+  }, [scored, scoredParam, search, searchParams, setSearchParams, sortParam, status, statusParam])
+
+  function updateFilter(name: 'q' | 'sort' | 'status' | 'scored', value: string): void {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        const isDefault =
+          value === '' ||
+          (name === 'sort' && value === 'updated_desc')
+        if (isDefault) next.delete(name)
+        else next.set(name, value)
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多（数据全可达）。
   const fetcher = useCallback(
@@ -59,8 +102,9 @@ export function PromptTab() {
         include_evaluation: true,
         ...(sort === 'updated_desc' ? {} : { sort }),
         ...(status ? { status } : {}),
+        ...(scored === undefined ? {} : { scored }),
       }),
-    [search, showArchived, sort, status],
+    [search, showArchived, sort, status, scored],
   )
 
   const {
@@ -85,7 +129,7 @@ export function PromptTab() {
         <Input
           placeholder="搜索名称 / Prompt 内容"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => updateFilter('q', event.target.value)}
         />
         <Checkbox
           label="显示已归档"
@@ -101,7 +145,7 @@ export function PromptTab() {
               { value: 'score_desc', label: '排序：评分高→低' },
               { value: 'score_asc', label: '排序：评分低→高' },
             ]}
-            onChange={(event) => setSort(event.target.value as PromptSort)}
+            onChange={(event) => updateFilter('sort', event.target.value)}
           />
           <Select
             aria-label="Prompt 状态"
@@ -112,7 +156,17 @@ export function PromptTab() {
               { value: 'candidate', label: '状态：候选' },
               { value: 'eliminated', label: '状态：已淘汰' },
             ]}
-            onChange={(event) => setStatus(event.target.value as PromptStatus | '')}
+            onChange={(event) => updateFilter('status', event.target.value)}
+          />
+          <Select
+            aria-label="已评分"
+            value={scoredParam === 'true' || scoredParam === 'false' ? scoredParam : ''}
+            options={[
+              { value: '', label: '评分：全部' },
+              { value: 'true', label: '仅已评分' },
+              { value: 'false', label: '仅未评分' },
+            ]}
+            onChange={(event) => updateFilter('scored', event.target.value)}
           />
         </div>
         <span className="pp-toolbar__spacer" />

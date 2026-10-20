@@ -1,4 +1,6 @@
 """提示词图片只读查询：按生成 Job 的来源快照归属，不遍历任务项。"""
+from collections.abc import Sequence
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -77,11 +79,12 @@ def list_prompts(
     archived: bool | None = False, limit: int = 50, offset: int = 0,
     include_images: bool = False, images_limit: int = 3,
     include_evaluation: bool = False,
-    sort: str = "updated_desc", status: str | None = None,
+    sort: str = "updated_desc", status: Sequence[str] | None = None,
+    scored: bool | None = None,
 ) -> PromptListResponse:
     prompts, total = prompt_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
-        sort=sort, status=status,
+        sort=sort, status=status, scored=scored,
     )
     # 当前版本也批量读取，避免列表已有的逐提示词查询随数量增长。
     version_ids = [prompt.current_version_id for prompt in prompts if prompt.current_version_id]

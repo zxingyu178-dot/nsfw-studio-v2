@@ -2,6 +2,27 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.23.0] — 2026-10-20
+
+> Minor：提示词筛选升级——「已评分 / 未评分」筛选、状态多选（后端），筛选条件写入 URL
+> （可分享、刷新/前进后退保留）。
+
+### Added
+
+- 后端 `GET /api/v1/prompts`：
+  - `status` 改为可重复参数（`?status=keep&status=candidate` → `IN` 并集，单值保持兼容，非法值 422）；
+  - 新增 `scored=true|false`（是否存在 evaluation，SQL `EXISTS` / `NOT EXISTS`，无 Python 过滤 / 无 N+1）。
+- 前端「我的 Prompt」新增「已评分」筛选（全部 / 仅已评分 / 仅未评分）。
+- 筛选状态写入 URL：`?q=&sort=&status=&scored=`；默认值不写 URL、不发送冗余参数；
+  浏览器前进/后退与外部改 URL 会同步控件。
+- 测试：`tests/backend/test_prompt_list_filters.py`（7 例）、`PromptTab.urlfilters.test.tsx`（5 例）。
+
+### Notes
+
+- 后端 / 前端分别由 Codex lite 两个任务实现；Lead 审查后跑全量前端测试（75 文件 369 用例）、
+  `tsc -b`、`vite build`、后端目标测试与截图验收。
+- 本地全量前端测试已按 CI 方式（singleFork）跑通，避免再次出现"只跑子集漏守卫"。
+
 ## [0.22.0] — 2026-10-20
 
 > Minor：图库「按任务查看」升级为缩略图卡片；后端 job-groups 补每任务最新 4 张预览图。
