@@ -13,7 +13,7 @@
 | C | 图生图 img2img（输入 A，denoise 0.8） | **PASS** | `job_37b4723e…` → `img_856164d3…`（processed 1024×1024，parent=A）；`Prompt executed in 377.88s` |
 | D | 高清放大 upscale（输入 A） | **PASS** | `job_ec73730c…` → `img_22c30fe8…`（upscaled 4096×4096，parent=A）；约 40s |
 | E | 参考图生成 reference_generate | **PASS** | `job_d2888de2…` → `img_869f4f36…`（1024×1024，parent=A、角色一致）；首次模型加载约 9–10 分钟 |
-| F | 中断恢复 + >1536 大图显示 | 未执行 | 需停止/重启 Studio 并做 Canvas 显示检查，本轮未跑 |
+| F | 中断恢复 + >1536 大图 | **PASS（F1）/ 部分（F2）** | F1：`job_8d0cf418…` 中断 → resume `job_2778084e…`，stage0 保留、stage1 续跑完成；F2：1920×1088 生成成功（Canvas Fit/100% 视觉检查未完成） |
 
 ## 详细记录
 
@@ -69,4 +69,5 @@
   图片入库、父子关系、缩略图、下载均正常。
 - **E（参考图）也已 PASS**；仅剩 **F（中断恢复 + >1536 大图显示）未执行**，
   在 F 完成前，不建议宣称"全链路真机验收完成"。
-- 本轮 ComfyUI 由 ControlHub 启动，验收结束后已按流程 stop；Studio 保持原有运行状态。
+- 本轮 ComfyUI 由 ControlHub 启动；验收结束后按流程 stop。Studio 在 F1 中按计划 stop/start 两次，
+  最终启动并升级了前端构建（修复部署实例旧 UI 问题）。
