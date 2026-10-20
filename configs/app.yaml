@@ -1,4 +1,4 @@
-﻿# 应用基础配置
+# 应用基础配置
 app:
   name: "NSFW Studio"
   version: "0.20.0"
