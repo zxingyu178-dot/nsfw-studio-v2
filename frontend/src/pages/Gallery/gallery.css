@@ -600,7 +600,7 @@ button.gal-group__main {
 
 .gal-group__time {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -615,7 +615,7 @@ button.gal-group__main {
 
 .gal-group__count { color: var(--text-secondary); }
 .gal-group__count--success { color: var(--success); }
-.gal-group__count--warning { color: var(--warning); }
+.gal-group__count--warning { color: var(--warn); }
 .gal-group__count--danger { color: var(--danger); }
 
 .gal-group__previews {
@@ -643,7 +643,7 @@ button.gal-group__main {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   background: var(--surface-2);
   border: 1px solid var(--border);
   font-size: 11px;
