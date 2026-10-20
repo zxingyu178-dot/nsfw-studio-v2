@@ -80,6 +80,24 @@ export interface PromptDTO {
 /** Phase 0.17.3：提示词状态（手动设置，低分不自动淘汰）。 */
 export type PromptStatus = 'keep' | 'candidate' | 'eliminated'
 
+export type PromptSort = 'updated_desc' | 'score_desc' | 'score_asc'
+
+export interface PromptListParams {
+  search?: string
+  favorite?: boolean | null
+  archived?: boolean | null
+  limit?: number
+  offset?: number
+  /** Phase 0.17.2：附带每条提示词最近生成的图（默认 false，保持旧响应体积不变）。 */
+  include_images?: boolean
+  /** 每条提示词最多返回几张图（1–10，默认 3）。 */
+  images_limit?: number
+  /** Phase 0.17.3：附带每条提示词最近一次评分。 */
+  include_evaluation?: boolean
+  sort?: PromptSort
+  status?: PromptStatus
+}
+
 /** Phase 0.17.3：7 个评分维度（与后端白名单一致）。 */
 export type PromptEvaluationDimension =
   | 'subject'

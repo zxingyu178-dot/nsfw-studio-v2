@@ -1,6 +1,8 @@
 """Prompt API：只做请求解析 → 调用 Service → 返回 Response（规范 §三十三）。"""
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -48,12 +50,15 @@ def list_prompts(
     include_images: bool = Query(default=False),
     images_limit: int = Query(default=3, ge=1, le=10),
     include_evaluation: bool = Query(default=False),
+    sort: Literal["updated_desc", "score_desc", "score_asc"] = Query(default="updated_desc"),
+    status: Literal["keep", "candidate", "eliminated"] | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> PromptListResponse:
+    # 列表选项显式透传到 service（禁止用 Session.info 之类隐式状态桥）。
     return prompt_image_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
         include_images=include_images, images_limit=images_limit,
-        include_evaluation=include_evaluation,
+        include_evaluation=include_evaluation, sort=sort, status=status,
     )
 
 

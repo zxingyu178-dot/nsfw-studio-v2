@@ -12,6 +12,7 @@ import {
   Input,
   Modal,
   SegmentedControl,
+  Select,
   Textarea,
 } from '../../components/ui'
 import { formatDateTime } from '../../utils/format'
@@ -25,6 +26,8 @@ import {
   imageThumbUrl,
   type PromptDTO,
   type PromptImageDTO,
+  type PromptSort,
+  type PromptStatus,
   type PromptMode,
   type PromptVersionDTO,
   type StructuredPrompt,
@@ -37,6 +40,8 @@ export function PromptTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [sort, setSort] = useState<PromptSort>('updated_desc')
+  const [status, setStatus] = useState<PromptStatus | ''>('')
   const [drawer, setDrawer] = useState<{ open: boolean; prompt: PromptDTO | null }>({ open: false, prompt: null })
 
   // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多（数据全可达）。
@@ -52,8 +57,10 @@ export function PromptTab() {
         images_limit: 3,
         // Phase 0.17.3：附带最近一次评分，卡片上展示评分与状态。
         include_evaluation: true,
+        ...(sort === 'updated_desc' ? {} : { sort }),
+        ...(status ? { status } : {}),
       }),
-    [search, showArchived],
+    [search, showArchived, sort, status],
   )
 
   const {
@@ -85,6 +92,29 @@ export function PromptTab() {
           checked={showArchived}
           onChange={(event) => setShowArchived(event.target.checked)}
         />
+        <div className="pp-toolbar__filters">
+          <Select
+            aria-label="Prompt 排序"
+            value={sort}
+            options={[
+              { value: 'updated_desc', label: '排序：最近更新' },
+              { value: 'score_desc', label: '排序：评分高→低' },
+              { value: 'score_asc', label: '排序：评分低→高' },
+            ]}
+            onChange={(event) => setSort(event.target.value as PromptSort)}
+          />
+          <Select
+            aria-label="Prompt 状态"
+            value={status}
+            options={[
+              { value: '', label: '状态：全部' },
+              { value: 'keep', label: '状态：保留' },
+              { value: 'candidate', label: '状态：候选' },
+              { value: 'eliminated', label: '状态：已淘汰' },
+            ]}
+            onChange={(event) => setStatus(event.target.value as PromptStatus | '')}
+          />
+        </div>
         <span className="pp-toolbar__spacer" />
         <Button variant="primary" onClick={() => setDrawer({ open: true, prompt: null })}>
           新建 Prompt
