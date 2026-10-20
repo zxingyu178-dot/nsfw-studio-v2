@@ -938,3 +938,61 @@
   .wb4-dock__bar { min-height: 34px; }
   .wb4-dock__body { max-height: 200px; }
 }
+
+/* ===== Phase 0.17.1：三栏可收起 + 参数栏收起按钮 + 队列条阶段/Step ===== */
+.wb4-pane--collapsed {
+  width: 44px;
+  flex: 0 0 44px;
+  overflow: hidden;
+}
+
+.wb4-pane__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.wb4-pane__rail:hover {
+  color: var(--text-base);
+  background: var(--control-bg);
+}
+
+.wb4-pane__rail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.wb4-pane__rail-icon--left { transform: rotate(90deg); }
+.wb4-pane__rail-icon--right { transform: rotate(-90deg); }
+
+.wb4-pane__rail-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  user-select: none;
+}
+
+.wb-pane__actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-pane__collapse-icon--left { transform: rotate(90deg); }
+.wb-pane__collapse-icon--right { transform: rotate(-90deg); }
+
+.wb4-dock__stage,
+.wb4-dock__step {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

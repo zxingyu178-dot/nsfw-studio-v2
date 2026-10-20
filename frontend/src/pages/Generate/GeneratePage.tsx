@@ -16,6 +16,7 @@ import { ResizablePane } from './workbench/ResizablePane'
 import { TaskDock } from './workbench/TaskDock'
 import { WorkbenchBar } from './workbench/WorkbenchBar'
 import {
+  COLLAPSED_WIDTH,
   LEFT_MAX,
   LEFT_MIN,
   RIGHT_MAX,
@@ -24,6 +25,8 @@ import {
   resetRightWidth,
   setLeftWidth,
   setRightWidth,
+  toggleLeftCollapsed,
+  toggleRightCollapsed,
   useWorkbenchLayout,
 } from './workbench/workbenchLayout'
 import {
@@ -87,7 +90,10 @@ export default function GeneratePage() {
 
       <div
         className="wb4-columns"
-        style={{ '--left-w': `${layout.leftWidth}px`, '--right-w': `${layout.rightWidth}px` } as React.CSSProperties}
+        style={{
+          '--left-w': layout.leftCollapsed ? `${COLLAPSED_WIDTH}px` : `${layout.leftWidth}px`,
+          '--right-w': layout.rightCollapsed ? `${COLLAPSED_WIDTH}px` : `${layout.rightWidth}px`,
+        } as React.CSSProperties}
       >
         <ResizablePane
           side="left"
@@ -98,8 +104,11 @@ export default function GeneratePage() {
           onChange={setLeftWidth}
           onReset={resetLeftWidth}
           className="generate__pane generate__pane--prompt"
+          collapsed={layout.leftCollapsed}
+          collapseLabel="Prompt 栏"
+          onToggleCollapse={toggleLeftCollapsed}
         >
-          <PromptConsole />
+          <PromptConsole onCollapse={toggleLeftCollapsed} />
         </ResizablePane>
 
         <div className="wb4-pane wb4-center generate__pane generate__pane--preview">
@@ -115,8 +124,11 @@ export default function GeneratePage() {
           onChange={setRightWidth}
           onReset={resetRightWidth}
           className="generate__pane generate__pane--settings"
+          collapsed={layout.rightCollapsed}
+          collapseLabel="参数栏"
+          onToggleCollapse={toggleRightCollapsed}
         >
-          <InspectorPanel imageGenAvailable={imageGenAvailable} />
+          <InspectorPanel imageGenAvailable={imageGenAvailable} onCollapse={toggleRightCollapsed} />
         </ResizablePane>
       </div>
 

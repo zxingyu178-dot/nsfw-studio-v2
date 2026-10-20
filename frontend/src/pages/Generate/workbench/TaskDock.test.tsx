@@ -173,3 +173,73 @@ describe('TaskDock 当前任务动作忙态（v0.15.1 busyJobId 绑定）', () =
     expect(screen.getByRole('button', { name: '取消' })).not.toBeDisabled()
   })
 })
+
+describe('TaskDock Phase 0.17.1：收起态常驻阶段与真实 Step', () => {
+  function multiStageRunningJob() {
+    return runningJob({
+      requested_count: 2,
+      stages: [
+        {
+          id: 'stg_1',
+          job_id: 'job_running_1',
+          stage_index: 0,
+          module_id: 'basic_generate',
+          status: 'RUNNING',
+          total_count: 2,
+          completed_count: 0,
+          current_item: 0,
+          items: [
+            { id: 'itm_1', stage_id: 'stg_1', item_index: 0, status: 'RUNNING', progress: 0.5 },
+          ],
+        },
+        {
+          id: 'stg_2',
+          job_id: 'job_running_1',
+          stage_index: 1,
+          module_id: 'upscale',
+          status: 'QUEUED',
+          total_count: 2,
+          completed_count: 0,
+          items: [],
+        },
+      ],
+    })
+  }
+
+  it('收起态显示“阶段 x/y”与“Step x/y”', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: multiStageRunningJob(),
+          queued: [],
+          paused: [],
+        },
+        liveProgressByStageItem: { itm_1: { progress: 0.5, step: 12, maxStep: 25 } },
+      }),
+    )
+    setDockOpen(false)
+    render(<TaskDock />)
+    const dock = screen.getByTestId('task-dock')
+    expect(dock.textContent).toContain('阶段 1/2')
+    expect(dock.textContent).toContain('Step 12/25')
+  })
+
+  it('非采样阶段（如 upscale）不伪造 Step', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: multiStageRunningJob(),
+          queued: [],
+          paused: [],
+        },
+        liveProgressByStageItem: { itm_1: { progress: 0.3 } },
+      }),
+    )
+    setDockOpen(false)
+    render(<TaskDock />)
+    const dock = screen.getByTestId('task-dock')
+    expect(dock.textContent).not.toContain('Step')
+  })
+})
