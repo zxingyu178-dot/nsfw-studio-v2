@@ -54,6 +54,17 @@
 - [x] 详情抽屉分区重做（概览/操作/版本/高级/素材/封面/危险区）+ 等宽参数（v0.24.0）
 - [x] 修复单 fork 全量测试竞态（findBy / fake timers flush / 超时配置），连续 3 次全绿
 
+## Phase 0.23：真实机器验收（P0，待用户授权启动服务）
+
+- [x] 环境只读审计（ComfyUI 目录/模型、DataRoot、磁盘、ControlHub、端口）并落盘计划：
+      `docs/REAL_MACHINE_GATE_PLAN.md`
+- [ ] Gate A 文生图基础链路
+- [ ] Gate B 动漫生图
+- [ ] Gate C 图生图
+- [ ] Gate D 高清放大
+- [ ] Gate E 参考图生成
+- [ ] Gate F 恢复（A→B→C 中断续跑）+ >1536 大图 Fit/100% 显示
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。
