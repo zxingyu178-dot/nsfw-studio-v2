@@ -292,3 +292,39 @@
   margin-top: var(--space-4);
 }
 .pp-loadmore .muted { font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* ===== Phase 0.17.2：提示词卡片下的「生成图」缩略行 ===== */
+.pp-card__gallery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 2px;
+}
+
+.pp-card__gallery-thumb {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--control-bg, var(--surface, transparent));
+  cursor: pointer;
+}
+
+.pp-card__gallery-thumb:hover {
+  border-color: var(--accent, currentColor);
+}
+
+.pp-card__gallery-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pp-card__gallery-more {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}

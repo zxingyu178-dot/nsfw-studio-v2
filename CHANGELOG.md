@@ -2,6 +2,24 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.18.0] — 2026-10-20
+
+> Minor：提示词库卡片 —— 每条提示词下面直接看到它生成过的图（Phase 0.17.2 前后端打通）。
+> 只改前端展示与请求参数；后端聚合 API 在 v0.17.0 已上线；无数据库迁移。
+
+### Added
+
+- **Prompt 卡片生成图缩略行**：卡片内新增最多 3 张缩略图（默认 `images_limit=3`），
+  超出部分显示 `+N`（总数来自 `images_total`）；点击缩略图打开该图 preview 大图。
+- 列表请求自动携带 `include_images=true&images_limit=3`；DTO 增加 `PromptImageDTO`、
+  `PromptDTO.images/images_total`；`PromptListParams` 增加两个可选参数。
+- 回归测试：`PromptTab.gallery.test.tsx` 4 例（请求参数、缩略行与 +N、无图不渲染、点击看大图）。
+
+### Notes
+
+- 提示词评分系统（0.17.3）下一步；AI 优化（0.17.4）按用户决定后置（先手动评分）。
+- 完整设计见 `docs/PHASE017_UI_REDESIGN_PLAN.md`。
+
 ## [0.17.0] — 2026-10-20
 
 > Minor：Phase 0.17 第一批 —— 一屏工作台骨架 + 提示词→生成图聚合只读 API。

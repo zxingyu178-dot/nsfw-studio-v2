@@ -66,6 +66,23 @@ export interface PromptDTO {
   created_at: string
   updated_at: string
   current_version: PromptVersionDTO | null
+  /** Phase 0.17.2：include_images=true 时返回的「该提示词生成过的图」最近 N 张。 */
+  images?: PromptImageDTO[]
+  /** 该提示词生成过的图片总数（不受 images_limit 限制）。 */
+  images_total?: number
+}
+
+/** Phase 0.17.2：提示词 → 生成图聚合项的图片摘要（后端 PromptImageResponse）。 */
+export interface PromptImageDTO {
+  id: string
+  job_id: string | null
+  job_status: string
+  module_id: string | null
+  width: number
+  height: number
+  created_at: string
+  thumbnail_url: string
+  preview_url: string
 }
 
 export interface AssetVersionDTO {
