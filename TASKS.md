@@ -38,6 +38,11 @@
 - [x] C 图库：瀑布流（CSS columns，220px 列宽，12px 间距，8px 圆角）+ hover 底部操作层（收藏/下载）+ 比例标签（v0.20.2）
 - [x] D 提示词 / 素材 / 设置：提示词卡片图片优先 + 设置等宽数值 + 素材 hover（v0.20.3，DESIGN.md A–D 全部落地）
 
+## Phase 0.19：提示词库检索能力（Codex 实现）
+
+- [x] 评分排序（score_desc / score_asc）+ 状态筛选（keep / candidate / eliminated），前后端 + 测试（v0.21.0）
+- [ ] 组合筛选（多状态、仅未评分）与保存筛选偏好（待评估）
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。
