@@ -1214,3 +1214,67 @@
   flex: 0 1 auto;
   min-width: 0;
 }
+
+/* ===== Phase 0.18 B：工作台扁平三栏（对齐 DESIGN.md）=====
+   左 280 生成控制台 / 中纯黑画布 / 右 320 详情参数；
+   扁平分区：用 1px 分隔线而不是卡片套卡片、没有外边距与圆角。 */
+.wb4-columns {
+  gap: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+.wb4-pane--left > .wb-pane {
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface-2);
+  height: 100%;
+}
+
+.wb4-pane--right > .wb-pane {
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface-2);
+  height: 100%;
+}
+
+.wb4-center {
+  background: #000;
+}
+
+.wb4-stage {
+  padding: 12px 16px 10px;
+}
+
+.wb4-stage__canvas {
+  border: none;
+  border-radius: 0;
+  background: #000;
+}
+
+.wb4-pane--collapsed {
+  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.wb4-dock {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface-2);
+}
+
+/* Phase 0.18 B：窄栏头部控件紧凑化（280px 左栏内标题不被截断） */
+.wb-pane__actions-row {
+  gap: 4px;
+}
+
+.wb-pane__actions-row .ds-segmented .ds-btn,
+.wb-pane__actions-row [role='group'] .ds-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+}
