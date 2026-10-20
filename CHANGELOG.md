@@ -2,6 +2,28 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.19.0] — 2026-10-20
+
+> Minor：提示词评分系统（手动）—— 7 维评分 + 保留/候选/淘汰，卡片直接展示状态与分数。
+> 后端 API 在 PR #20 已合入 develop；本版补前端 UI；低分不自动淘汰（用户决定手动淘汰）。
+
+### Added
+
+- **Prompt 卡片状态与评分**：头部显示状态徽章（保留 / 候选 / 已淘汰）、摘要下方显示最近评分
+  `x / 5` 与状态说明（status_reason）。
+- **评分弹窗**（`PromptScoringDialog`）：总分 1–5 + 人物/服饰/场景/构图/光影/风格/画质
+  7 维各 1–5 分（默认取最近一次评分，否则 3 分）+ 备注；状态按钮（保留/候选/已淘汰）与状态说明；
+  保存时创建评估记录（`POST /prompts/{id}/evaluations`），状态变化再调
+  `POST /prompts/{id}/status`。
+- 列表请求自动携带 `include_evaluation=true`；前端 API 增加 `createEvaluation` /
+  `listEvaluations` / `setStatus`；DTO 增加 `PromptStatus`、`PromptEvaluationDTO` 与 7 维常量。
+- 回归测试：`PromptTab.scoring.test.tsx` 4 例（请求参数、徽章与评分、无评分入口、弹窗保存）。
+
+### Notes
+
+- AI 优化迭代（0.17.4）仍后置，等手动评分用一段时间后再决定模型通道。
+- 视觉风格迭代（0.17.5）待用户给方向。
+
 ## [0.18.0] — 2026-10-20
 
 > Minor：提示词库卡片 —— 每条提示词下面直接看到它生成过的图（Phase 0.17.2 前后端打通）。

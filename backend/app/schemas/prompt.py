@@ -1,7 +1,10 @@
 """Prompt 相关出入参。"""
+import json
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
 
-from app.models import Prompt, PromptVersion
+from app.models import Prompt, PromptEvaluation, PromptVersion
 from app.schemas.image import ImageResponse
 from app.schemas.workbench import PromptMode, StructuredPromptModel, structured_model_from_json
 
@@ -52,6 +55,34 @@ class PromptVersionResponse(BaseModel):
     created_at: str
 
 
+PromptStatus = Literal["keep", "candidate", "eliminated"]
+EvaluationDimension = Literal["subject", "clothing", "scene", "composition", "lighting", "style", "quality"]
+EvaluationScore = Annotated[int, Field(strict=True, ge=1, le=5)]
+
+
+class PromptEvaluationCreateRequest(BaseModel):
+    overall_score: EvaluationScore
+    dimension_scores: dict[EvaluationDimension, EvaluationScore] = Field(default_factory=dict)
+    notes: str = ""
+    prompt_version_id: str | None = None
+
+
+class PromptEvaluationResponse(BaseModel):
+    id: str
+    prompt_id: str
+    prompt_version_id: str | None
+    overall_score: EvaluationScore
+    dimension_scores: dict[EvaluationDimension, EvaluationScore]
+    source: str
+    notes: str
+    created_at: str
+
+
+class PromptStatusRequest(BaseModel):
+    status: PromptStatus
+    reason: str = ""
+
+
 class PromptResponse(BaseModel):
     id: str
     name: str
@@ -61,6 +92,8 @@ class PromptResponse(BaseModel):
     created_at: str
     updated_at: str
     current_version: PromptVersionResponse | None
+    status: PromptStatus = "candidate"
+    status_reason: str = ""
 
 
 class PromptImageResponse(ImageResponse):
@@ -78,6 +111,7 @@ class PromptImagesResponse(BaseModel):
 
 
 class PromptListItemResponse(PromptResponse):
+    latest_evaluation: PromptEvaluationResponse | None = None
     images: list[PromptImageResponse] | None = None
     images_total: int | None = None
 
@@ -108,8 +142,20 @@ def prompt_response(prompt: Prompt, current_version: PromptVersion | None) -> Pr
         name=prompt.name,
         favorite=prompt.favorite,
         archived=prompt.archived,
+        status=prompt.status,
+        status_reason=prompt.status_reason,
         preview_image_id=prompt.preview_image_id,
         created_at=prompt.created_at,
         updated_at=prompt.updated_at,
         current_version=prompt_version_response(current_version) if current_version else None,
+    )
+
+
+def prompt_evaluation_response(evaluation: PromptEvaluation) -> PromptEvaluationResponse:
+    return PromptEvaluationResponse(
+        id=evaluation.id, prompt_id=evaluation.prompt_id,
+        prompt_version_id=evaluation.prompt_version_id,
+        overall_score=evaluation.overall_score,
+        dimension_scores=json.loads(evaluation.dimension_scores_json),
+        source=evaluation.source, notes=evaluation.notes, created_at=evaluation.created_at,
     )

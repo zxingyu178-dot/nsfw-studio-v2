@@ -328,3 +328,141 @@
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
+
+/* ===== Phase 0.17.3：提示词状态徽章 / 评分 / 评分弹窗 ===== */
+.pp-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pp-card__status {
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pp-card__status--keep {
+  color: var(--success, #3fbf7f);
+  border-color: var(--success, #3fbf7f);
+}
+
+.pp-card__status--eliminated {
+  color: var(--danger, #e46a6a);
+  border-color: var(--danger, #e46a6a);
+  opacity: 0.85;
+}
+
+.pp-card__status--candidate {
+  opacity: 0.7;
+}
+
+.pp-card__score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.pp-card__score-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.pp-card__score-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.pp-card__score-note {
+  margin-left: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.pp-score {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 420px;
+  max-width: 560px;
+}
+
+.pp-score__hint {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.pp-score__status {
+  display: flex;
+  gap: 8px;
+}
+
+.pp-score__status-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pp-score__status-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.pp-score__dims {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.pp-score__dim {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pp-score__dim-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.pp-score__picker {
+  display: flex;
+  gap: 4px;
+}
+
+.pp-score__score {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pp-score__score--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.pp-score__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

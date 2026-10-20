@@ -20,7 +20,7 @@ from app.models.job import (
     JobStage,
     JobStageItem,
 )
-from app.models.prompt import Prompt, PromptVersion
+from app.models.prompt import Prompt, PromptEvaluation, PromptVersion
 from app.models.mobile_review import (
     ImageReviewSession,
     ImageReviewSessionItem,
@@ -57,6 +57,7 @@ __all__ = [
     "JobStage",
     "JobStageItem",
     "Prompt",
+    "PromptEvaluation",
     "PromptVersion",
     "Recipe",
     "RecipeAssetSnapshot",
