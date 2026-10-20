@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 
 from app.models import Prompt, PromptVersion
+from app.schemas.image import ImageResponse
 from app.schemas.workbench import PromptMode, StructuredPromptModel, structured_model_from_json
 
 
@@ -62,8 +63,27 @@ class PromptResponse(BaseModel):
     current_version: PromptVersionResponse | None
 
 
+class PromptImageResponse(ImageResponse):
+    job_status: str
+    module_id: str | None
+    thumbnail_url: str
+    preview_url: str
+
+
+class PromptImagesResponse(BaseModel):
+    items: list[PromptImageResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class PromptListItemResponse(PromptResponse):
+    images: list[PromptImageResponse] | None = None
+    images_total: int | None = None
+
+
 class PromptListResponse(BaseModel):
-    items: list[PromptResponse]
+    items: list[PromptListItemResponse]
     total: int
     limit: int
     offset: int
