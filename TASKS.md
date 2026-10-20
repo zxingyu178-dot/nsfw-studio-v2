@@ -49,6 +49,11 @@
 - [x] job-groups 返回每任务最新 4 张 preview_image_ids（窗口函数 + 单次 IN 查询）
 - [x] 分组视图重做：两列卡片 + 缩略图带 + 语义色计数 + 等宽 job id（v0.22.0）
 
+## Phase 0.22：图库详情抽屉 + 前端测试稳定性（Codex 实现）
+
+- [x] 详情抽屉分区重做（概览/操作/版本/高级/素材/封面/危险区）+ 等宽参数（v0.24.0）
+- [x] 修复单 fork 全量测试竞态（findBy / fake timers flush / 超时配置），连续 3 次全绿
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。

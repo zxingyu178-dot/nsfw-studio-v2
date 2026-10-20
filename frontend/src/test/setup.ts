@@ -1,6 +1,11 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { configure } from '@testing-library/dom'
+
+// 单 fork 跑全量时（CI `test:ci`）JSDOM 负载较高，默认 1s 的异步查找超时容易假失败；
+// 放宽到 3s，仅影响等待上限，不会让真实失败变成通过。
+configure({ asyncUtilTimeout: 3000 })
 
 // 每个用例后自动卸载组件，避免状态泄漏。
 afterEach(() => {
