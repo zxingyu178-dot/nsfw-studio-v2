@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   IMAGE_KIND_LABEL,
   IMAGE_STATUS_LABEL,
+  imageContentUrl,
   imageThumbUrl,
   normalizeImageStatus,
   shortJobId,
@@ -9,10 +10,10 @@ import {
 } from '../../../types/workbench'
 
 /**
- * Phase 0.12 Task6：单张图库卡片。
- * - 左上：HD/processed 徽标；右上：收藏 ★（多选模式改为 checkbox/选中态）；
- * - 底部 hover overlay：尺寸 + 审核状态。
- * 进入选择模式后才显示 checkbox，平时不打扰浏览。
+ * 图库卡片（Phase 0.18 C：对齐 docs/DESIGN.md）。
+ * - 瀑布流自然比例：媒体不固定高度，图片按原始宽高比排列；
+ * - 左上比例标签；右上收藏 ★（多选模式改 checkbox）；
+ * - hover 底部升起黑色渐变操作层：尺寸/状态 + 收藏 + 下载。
  */
 
 interface GalleryCardProps {
@@ -21,20 +22,36 @@ interface GalleryCardProps {
   selectMode: boolean
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
+  onToggleFavorite: (image: ImageDTO) => void
 }
 
-export function GalleryCard({ image, selected, selectMode, onCardClick, onCardDoubleClick }: GalleryCardProps) {
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b)
+}
+
+/** 简化宽高比为「3:4」这类比例标签；过大的非标准比例回退到「W×H」。 */
+export function ratioLabel(width: number, height: number): string {
+  if (!width || !height) return ''
+  const divisor = gcd(width, height)
+  const rw = width / divisor
+  const rh = height / divisor
+  if (rw <= 16 && rh <= 16) return `${rw}:${rh}`
+  return `${width}×${height}`
+}
+
+export function GalleryCard({
+  image, selected, selectMode, onCardClick, onCardDoubleClick, onToggleFavorite,
+}: GalleryCardProps) {
   const status = normalizeImageStatus(image)
   return (
-    <button
-      type="button"
+    <div
       className={`gal-card${selected ? ' gal-card--selected' : ''}`}
       onClick={() => onCardClick(image)}
       onDoubleClick={() => onCardDoubleClick(image)}
       title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${IMAGE_STATUS_LABEL[status]}`}
     >
       <GalleryThumb image={image} />
-      {image.kind === 'upscaled' && <span className="gal-card__hd">HD</span>}
+      <span className="gal-card__ratio">{ratioLabel(image.width, image.height)}</span>
       <span className="gal-card__corner">
         {selectMode && (
           <span className={`gal-card__check${selected ? ' gal-card__check--on' : ''}`} aria-hidden="true">
@@ -44,10 +61,36 @@ export function GalleryCard({ image, selected, selectMode, onCardClick, onCardDo
         {!selectMode && image.favorite && <span className="gal-card__fav" title="收藏">★</span>}
       </span>
       <span className="gal-card__overlay">
-        <span className="gal-card__overlay-size">{image.width}×{image.height}</span>
-        <span className="gal-card__overlay-status">{IMAGE_STATUS_LABEL[status]}</span>
+        <span className="gal-card__overlay-meta">
+          {image.kind === 'upscaled' && <span className="gal-card__overlay-hd">HD</span>}
+          {image.width}×{image.height} · {IMAGE_STATUS_LABEL[status]}
+        </span>
+        <span className="gal-card__overlay-actions">
+          <button
+            type="button"
+            className={`gal-card__action${image.favorite ? ' gal-card__action--on' : ''}`}
+            title={image.favorite ? '取消收藏' : '收藏'}
+            aria-label={image.favorite ? '取消收藏' : '收藏'}
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleFavorite(image)
+            }}
+          >
+            ★
+          </button>
+          <a
+            className="gal-card__action"
+            href={imageContentUrl(image.id)}
+            download
+            title="下载原图"
+            aria-label="下载原图"
+            onClick={(event) => event.stopPropagation()}
+          >
+            ↓
+          </a>
+        </span>
       </span>
-    </button>
+    </div>
   )
 }
 

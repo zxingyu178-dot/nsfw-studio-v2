@@ -20,12 +20,13 @@ interface GalleryGridProps {
   fit: GalleryFit
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
+  onToggleFavorite: (image: ImageDTO) => void
   sentinelRef: MutableRefObject<HTMLDivElement | null>
 }
 
 export function GalleryGrid({
   items, total, hasNext, loading, loadingMore, selectedIds, selectMode,
-  density, fit, onCardClick, onCardDoubleClick, sentinelRef,
+  density, fit, onCardClick, onCardDoubleClick, onToggleFavorite, sentinelRef,
 }: GalleryGridProps) {
   return (
     <>
@@ -46,6 +47,7 @@ export function GalleryGrid({
             selectMode={selectMode}
             onCardClick={onCardClick}
             onCardDoubleClick={onCardDoubleClick}
+            onToggleFavorite={onToggleFavorite}
           />
         ))}
       </div>
