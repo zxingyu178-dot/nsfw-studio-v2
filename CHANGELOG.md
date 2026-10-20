@@ -4,9 +4,9 @@
 
 ## [0.17.0] — 2026-10-20
 
-> Minor：Phase 0.17.1 一屏工作台骨架（第一批）。给「注意力被三栏切碎」「队列进度不直观」两个
-> 用户反馈痛点提供直接解法：左右栏可收起把空间让给 Canvas，队列条收起态常驻阶段与真实 Step。
-> 不改业务模型 / API / 队列语义；无数据库迁移。
+> Minor：Phase 0.17 第一批 —— 一屏工作台骨架 + 提示词→生成图聚合只读 API。
+> 给「注意力被三栏切碎」「队列进度不直观」「提示词与产出图分离」三个用户反馈痛点提供直接解法。
+> 不改 Job / 队列 / 图片业务语义；无数据库迁移。
 
 ### Added
 
@@ -16,9 +16,17 @@
 - **队列条常驻阶段与 Step**：TaskDock 收起态新增「阶段 x/y · 阶段名」与真实采样
   「Step x/y」；非采样阶段（如高清放大）不伪造 Step（沿用 v0.15.1 语义）。
 - 回归测试：GeneratePage 收起/展开 3 例、TaskDock 阶段与 Step 2 例。
+- **提示词 → 生成图聚合 API（只读，Phase 0.17.2 后端）**：
+  - `GET /api/v1/prompts/{id}/images?limit&offset&version_id` → `items/total`，图片摘要复用
+    `ImageResponse` 并补 `job_status/module_id/thumbnail_url/preview_url`；
+  - `GET /api/v1/prompts` 新增 `include_images`（默认 false）与 `images_limit`（默认 3，1–10）：
+    窗口函数一次聚合每个提示词的最近 N 张图 + 总数，提示词列表固定 4 次查询（无 N+1）；
+    默认响应字段保持不变；
+  - 新增 `tests/backend/test_prompt_images.py` 11 例（空/排序分页/版本过滤/批量聚合/无 N+1/404/422）。
 
 ### Notes
 
+- 提示词聚合 API 由 Codex 子智能体（gpt-6-astra）实现，人工审查后合入；CI pytest 全绿。
 - 参数分层沿用 v0.15 的「常用项常驻 + 高级参数折叠」；提示词库与评分系统分别在 0.17.2 / 0.17.3。
 - 本版本是 Phase 0.17 的第一批；完整设计见 `docs/PHASE017_UI_REDESIGN_PLAN.md`。
 
