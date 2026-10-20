@@ -579,3 +579,40 @@
   max-width: 560px;
   min-width: 240px;
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：提示词页（8px 圆角、无边框阴影、数字等宽）===== */
+.pp-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.pp-card:hover {
+  border-color: var(--control-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.pp-card__preview {
+  border-radius: var(--radius-sm);
+  border: none;
+}
+
+.pp-card__gallery-thumb {
+  border-radius: var(--radius-sm);
+}
+
+.pp-card__score-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.pp-card__status {
+  border-radius: var(--radius-pill);
+}
+
+.pp-card__action {
+  border-radius: var(--radius-sm);
+}

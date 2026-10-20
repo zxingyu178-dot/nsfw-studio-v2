@@ -222,3 +222,77 @@ body {
   align-items: center;
   gap: 10px;
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：全局排版 / 顶栏（52px，零阴影）===== */
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-family-base);
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: -0.15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.topnav {
+  height: var(--topnav-height);
+  padding: 0 20px;
+  gap: 24px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.topnav__brand {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+}
+
+.topnav__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.topnav__link {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.topnav__link:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+.topnav__link--active {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+.topnav__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 数字 / 参数 / seed / 尺寸 / 耗时 一律等宽字体（DESIGN.md §3） */
+.wb-seed-value,
+.ui3-stepper__value,
+.wb4-dock__overall,
+.wb4-dock__step,
+.wb4-stage__hud,
+.pp-card__score-value,
+.st-dl dd,
+.wb4-dock__item {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

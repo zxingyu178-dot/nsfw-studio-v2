@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+﻿import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import GeneratePage from './GeneratePage'
@@ -28,7 +28,7 @@ describe('GeneratePage 工作台骨架', () => {
     expect(screen.getByText('文生图')).toBeInTheDocument()
     expect(screen.getByText('图片生成')).toBeInTheDocument()
     // 左栏 Prompt Console、右栏 Inspector 标题；中栏 Canvas 无标题（Canvas First）
-    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
     // 底部任务坞存在
     expect(document.querySelector('[data-testid="task-dock"]')).not.toBeNull()
@@ -44,16 +44,16 @@ describe('GeneratePage 工作台骨架', () => {
 describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
   it('左栏可收起为竖栏并可再展开', () => {
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '收起 Prompt 栏' }))
     // 收起后内容不再挂载，只保留展开竖栏
-    expect(screen.queryByRole('heading', { name: 'Prompt 编辑' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'PROMPT' })).toBeNull()
     const expand = screen.getByRole('button', { name: '展开Prompt 栏' })
     expect(expand).toBeInTheDocument()
 
     fireEvent.click(expand)
-    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
   })
 
   it('右栏可收起为竖栏并可再展开', () => {
@@ -77,4 +77,5 @@ describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
     expect(columns.style.getPropertyValue('--left-w')).toBe('44px')
   })
 })
+
 
