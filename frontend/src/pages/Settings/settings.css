@@ -51,3 +51,57 @@
   background: var(--warn-bg);
   color: var(--warn);
 }
+
+/* ===== Phase 0.17.5 视觉升级第三批：设置 =====
+   设置页是「系统与维护中心」：宽屏两列卡片，卡片内是 label/value 行。 */
+.ds-page:has(> .st-panel) {
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.ds-page:has(> .st-panel) > .st-panel {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .ds-page:has(> .st-panel) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.st-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+}
+
+.st-panel__title {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.st-dl {
+  gap: 10px;
+}
+
+.st-dl dt {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.st-dl dd {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.st-actions {
+  margin-top: 14px;
+  gap: 8px;
+}
