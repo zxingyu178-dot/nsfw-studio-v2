@@ -19,7 +19,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/generate" replace />} />
         <Route path="/generate" element={<RoutedPage width="wide" fill><GeneratePage /></RoutedPage>} />
         <Route path="/gallery" element={<RoutedPage width="wide"><GalleryPage /></RoutedPage>} />
-        <Route path="/prompts" element={<RoutedPage width="normal"><PromptPage /></RoutedPage>} />
+        <Route path="/prompts" element={<RoutedPage width="wide"><PromptPage /></RoutedPage>} />
         <Route path="/assets" element={<RoutedPage width="wide"><AssetsPage /></RoutedPage>} />
         <Route path="/settings" element={<RoutedPage width="normal"><SettingsPage /></RoutedPage>} />
         <Route path="*" element={<Navigate to="/generate" replace />} />
