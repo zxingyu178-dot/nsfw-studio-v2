@@ -309,3 +309,43 @@
     --dur-slow: 0.01ms;
   }
 }
+
+/* ===== Phase 0.17.5 视觉升级：全局 Token 校准（第二批）=====
+   目标：更深的底、更克制的边框、更高级的圆角/阴影/品牌色，让整体接近成熟产品观感。
+   只覆盖值，不改 token 名（design_tokens 守卫要求引用都能解析）。 */
+:root {
+  --bg: #090b10;
+  --bg-soft: #0e1117;
+  --panel: #12161f;
+  --border: #212836;
+  --fg: #e9edf5;
+  --fg-muted: #96a0b3;
+  --accent: #6f5bf6;
+  --accent-strong: #9382ff;
+  --surface-1: var(--bg);
+  --surface-2: var(--panel);
+  --surface-3: var(--bg-soft);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.5);
+  --shadow: var(--shadow-md);
+}
+
+[data-theme='light'] {
+  --bg: #f5f7fb;
+  --bg-soft: #ffffff;
+  --panel: #ffffff;
+  --border: #e2e7f0;
+  --fg: #161c28;
+  --fg-muted: #5d6a80;
+  --accent: #5c48e8;
+  --accent-strong: #4a36d6;
+  --shadow-sm: 0 1px 2px rgba(22, 28, 40, 0.06);
+  --shadow-md: 0 10px 28px rgba(22, 28, 40, 0.1);
+  --shadow-lg: 0 24px 56px rgba(22, 28, 40, 0.14);
+  --shadow: var(--shadow-md);
+}
