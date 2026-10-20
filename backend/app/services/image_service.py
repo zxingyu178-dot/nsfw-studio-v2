@@ -836,13 +836,14 @@ def job_gallery_summary(session: Session, job_id: str) -> dict:
 def list_job_groups(
     session: Session, *, page: int = 1, page_size: int = 20,
 ) -> tuple[list[dict], int]:
-    """Phase 0.11.1 P1-2：按 Job 聚合图库统计（单次 GROUP BY，避免 N+1）。
+    """Phase 0.11.1 P1-2：按 Job 聚合图库统计并批量加载预览图。
 
     口径与 ``job_gallery_summary`` 完全一致：
     - unreviewed = count(status='NEW')；rejected = count(status='REJECT')；
     - kept = count(status IN ('KEEP','ARCHIVED'))；favorites = count(favorite=true)。
     只含 status='COMPLETED' 且有产出图的 Job；按 Job created_at 倒序（id 兜底）。
-    返回 (groups, total_groups)。
+    当前页各 Job 的最新四张图按 created_at/id 倒序返回；预览只用一次 IN 查询，
+    避免按 Job 逐条查询。返回 (groups, total_groups)。
     """
     agg = (
         select(
@@ -876,6 +877,28 @@ def list_job_groups(
         query.order_by(Job.created_at.desc(), Job.id.desc())
         .limit(page_size).offset((page - 1) * page_size)
     ).all()
+    preview_image_ids: dict[str, list[str]] = {row.job_id: [] for row in rows}
+    if preview_image_ids:
+        ranked_previews = (
+            select(
+                Image.job_id.label("job_id"),
+                Image.id.label("image_id"),
+                func.row_number().over(
+                    partition_by=Image.job_id,
+                    order_by=(Image.created_at.desc(), Image.id.desc()),
+                ).label("preview_rank"),
+            )
+            .where(Image.job_id.in_(preview_image_ids))
+            .subquery()
+        )
+        preview_rows = session.execute(
+            select(ranked_previews.c.job_id, ranked_previews.c.image_id)
+            .where(ranked_previews.c.preview_rank <= 4)
+            .order_by(ranked_previews.c.job_id, ranked_previews.c.preview_rank)
+        ).all()
+        for preview in preview_rows:
+            preview_image_ids[preview.job_id].append(preview.image_id)
+
     groups = [
         {
             "job_id": row.job_id,
@@ -886,6 +909,7 @@ def list_job_groups(
             "kept": int(row.kept),
             "rejected": int(row.rejected),
             "favorites": int(row.favorites),
+            "preview_image_ids": preview_image_ids[row.job_id],
         }
         for row in rows
     ]

@@ -2,6 +2,31 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.22.0] — 2026-10-20
+
+> Minor：图库「按任务查看」升级为缩略图卡片；后端 job-groups 补每任务最新 4 张预览图。
+
+### Added
+
+- `GET /api/v1/images/job-groups` 每组新增 `preview_image_ids`（最新 4 张，按 created_at/id 倒序）；
+  实现用窗口函数 + 单次 `IN (...)` 查询，保持既有「单次 GROUP BY，无 N+1」约束。
+- 前端 `ImageJobGroupDTO` 增加 `preview_image_ids?: string[]`。
+- 新增测试：`tests/backend/test_image_job_groups_preview.py`、`GalleryGroupView.test.tsx`。
+
+### Changed
+
+- **「按任务查看」重做**：两列自适应卡片（520px 起，<1180px 单列）；job 短 id 用等宽字体、
+  模块名小徽章、时间右对齐；未审核/保留/收藏/淘汰四类计数按语义色区分；
+  最多 4 张 72px 缩略图 + `+N`；卡片整体可点（应用任务筛选），「开始审核」主按钮不触发冒泡。
+- 视觉遵守 DESIGN.md：`surface-3` 卡片 + 1px 边框 + 8px 圆角、零页面阴影、等宽数字。
+- `.gitignore` 增加 `pytest-of-*/` 与根级 `/tmp*`（Windows 沙盒下 pytest 临时文件会落在仓库根）。
+
+### Notes
+
+- 实现来自 Codex 子智能体（lite）；Lead 审查后修正：移除 `div[role="button"]`（违反裸控件守卫）
+  改为 `article`、分组改两列网格、缩略图 64→72px，并截图验收。
+- 本地验证：后端目标测试通过；前端 Gallery 12 文件 46 用例全过；`tsc -b` / `vite build` 通过。
+
 ## [0.21.0] — 2026-10-20
 
 > Minor：提示词库支持「按评分排序 + 按状态筛选」，是人工评分系统的配套检索能力。
