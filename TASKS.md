@@ -58,12 +58,13 @@
 
 - [x] 环境只读审计（ComfyUI 目录/模型、DataRoot、磁盘、ControlHub、端口）并落盘计划：
       `docs/REAL_MACHINE_GATE_PLAN.md`
-- [ ] Gate A 文生图基础链路
-- [ ] Gate B 动漫生图
-- [ ] Gate C 图生图
-- [ ] Gate D 高清放大
-- [ ] Gate E 参考图生成
-- [ ] Gate F 恢复（A→B→C 中断续跑）+ >1536 大图 Fit/100% 显示
+- [x] Gate A 文生图基础链路（PASS）
+- [x] Gate B 动漫生图（PASS）
+- [x] Gate C 图生图（PASS）
+- [x] Gate D 高清放大（PASS）
+- [x] Gate E 参考图生成（PASS）
+- [x] Gate F1 中断恢复（PASS：stage0 保留 COMPLETED，resume 仅续跑 stage1）
+- [ ] Gate F2 Canvas Fit/100% 视觉检查（1920×1088 已生成；待人工确认显示层）
 
 ## 版本时间线（v0.10–v0.16.0）
 
