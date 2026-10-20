@@ -1151,3 +1151,66 @@
 .wb4-stage__canvas {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：生成工作台（去渐变/去阴影/小圆角）===== */
+.generate {
+  background: var(--bg);
+}
+
+.wb4-pane > .wb-pane {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.wb4-bar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.wb4-dock {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+.wb4-stage__canvas {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.wb4-stage__hud {
+  background: rgba(20, 20, 22, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.wb-pane__footer {
+  background: var(--surface-2);
+}
+
+.wb4-dock__overall,
+.wb4-dock__step,
+.wb4-dock__item {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phase 0.18：面板标题不换行（左栏变窄时 PROMPT 编辑 不再竖排折行） */
+.wb-pane__header {
+  gap: 8px;
+}
+
+.wb-pane__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.wb-pane__actions {
+  flex: 0 1 auto;
+  min-width: 0;
+}
