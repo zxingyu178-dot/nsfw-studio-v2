@@ -376,3 +376,21 @@ button.gal-group__main {
 .gal-card__media {
   background: var(--bg-soft);
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：图库（8px 圆角、无阴影、无边框或 1px）===== */
+.gal-card {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.gal-card:hover {
+  border-color: var(--control-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.gal-card__media {
+  border-radius: 0;
+}

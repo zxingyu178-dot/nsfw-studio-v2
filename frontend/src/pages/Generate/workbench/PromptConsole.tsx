@@ -102,7 +102,7 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
 
   return (
     <Pane
-      title="Prompt 编辑"
+      title="PROMPT"
       actions={
         <div className="wb-pane__actions-row">
           <SegmentedControl

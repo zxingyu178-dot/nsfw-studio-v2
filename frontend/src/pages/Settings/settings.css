@@ -105,3 +105,11 @@
   margin-top: 14px;
   gap: 8px;
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：设置（扁平分区、零阴影、8px 圆角）===== */
+.st-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}

@@ -985,3 +985,79 @@
   background: var(--surface-3);
   color: var(--fg);
 }
+
+/* ===== Phase 0.18 对齐 DESIGN.md：控件（6–8px 圆角、实心 accent、零重阴影）===== */
+.ds-btn {
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ds-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: none;
+}
+
+.ds-btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.ds-btn--primary:active:not(:disabled) {
+  background: #4656e8;
+}
+
+.ds-btn--secondary {
+  background: transparent;
+  border-color: var(--control-border);
+  color: var(--text-secondary);
+}
+
+.ds-btn--secondary:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--control-border);
+  color: var(--text-primary);
+}
+
+.ds-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.ds-input,
+.ds-select__native {
+  background: var(--surface-3);
+  border-color: var(--border);
+  border-radius: var(--radius-md);
+}
+
+.ds-input:focus,
+.ds-input:focus-visible,
+.ds-select__native:focus,
+.ds-select__native:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.ui3-tile {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.ui3-tile--selected {
+  box-shadow: none;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.ds-field__label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.35px;
+  color: var(--text-secondary);
+}
