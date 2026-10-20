@@ -466,3 +466,104 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ===== Phase 0.17.5 视觉升级：提示词页 =====
+   目标（用户要求「更美观、有设计、像大厂手笔」）：
+   - 更宽的内容容器（/prompts 由 normal 960 -> wide），卡片自适应 300px 起；
+   - 卡片建立清晰层级：表面色 + 细边框 + hover 轻抬升，而不是平铺在背景上；
+   - 底部操作区改为「时间一行 + 操作一行」，修掉时间被挤成竖排的缺陷；
+   - 类型层级：标题 14/600，摘要 12/1.65，辅助信息 11。 */
+.pp-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+}
+
+.pp-toolbar {
+  margin-bottom: var(--space-5);
+}
+
+.pp-card {
+  background: var(--surface-2);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px 14px;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.pp-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.pp-card__title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.pp-card__excerpt {
+  margin: 10px 0 12px;
+  font-size: var(--text-sm);
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.pp-card__preview {
+  border-radius: var(--radius-md);
+}
+
+.pp-card__foot {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pp-card__time {
+  width: 100%;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.pp-card__actions {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.pp-card__action {
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.pp-card__action:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.pp-card__status {
+  padding: 1px 8px;
+  letter-spacing: 0.02em;
+}
+
+.pp-card__score {
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pp-card__score-value {
+  font-size: 18px;
+}
+
+.pp-card__score-note {
+  margin-left: auto;
+  max-width: 58%;
+}
