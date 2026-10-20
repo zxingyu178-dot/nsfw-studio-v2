@@ -531,3 +531,166 @@ button.gal-group__main {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+/* ===== Phase 0.18：任务分组卡片 ===== */
+.gal-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gal-group:hover {
+  border-color: var(--control-border);
+}
+
+.gal-group:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.gal-group__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.gal-group__head,
+.gal-group__identity,
+.gal-group__counts,
+.gal-group__previews {
+  display: flex;
+  align-items: center;
+}
+
+.gal-group__head {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gal-group__identity {
+  gap: 8px;
+  min-width: 0;
+}
+
+.gal-group__id {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: var(--weight-semibold);
+}
+
+.gal-group__module {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.gal-group__time {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.gal-group__counts {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.gal-group__count { color: var(--text-secondary); }
+.gal-group__count--success { color: var(--success); }
+.gal-group__count--warning { color: var(--warning); }
+.gal-group__count--danger { color: var(--danger); }
+
+.gal-group__previews {
+  gap: 6px;
+  min-height: 64px;
+  margin-top: 10px;
+}
+
+.gal-group__thumb,
+.gal-group__preview-empty,
+.gal-group__more {
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+}
+
+.gal-group__thumb {
+  display: block;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.gal-group__preview-empty,
+.gal-group__more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.gal-group__more {
+  font-family: var(--font-mono);
+}
+
+.gal-group-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+/* ===== Phase 0.18 D+：任务分组两列网格（避免整行拉伸，图片更突出）===== */
+.gal-group-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  gap: 12px;
+}
+
+.gal-group {
+  align-items: flex-start;
+  padding: 14px 16px;
+}
+
+.gal-group__thumb,
+.gal-group__preview-empty,
+.gal-group__more {
+  width: 72px;
+  height: 72px;
+}
+
+.gal-group__previews {
+  min-height: 72px;
+}
+
+.gal-group-load-more {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
+
+@media (max-width: 1180px) {
+  .gal-group-list {
+    grid-template-columns: 1fr;
+  }
+}

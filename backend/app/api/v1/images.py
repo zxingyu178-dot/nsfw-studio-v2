@@ -153,7 +153,7 @@ def backfill_thumbnails_stop(request: Request) -> ImageBackfillStatus:
     return ImageBackfillStatus(**request.app.state.backfill_runner.stop())
 
 
-@router.get("/job-groups", summary="按 Job 聚合图库统计（单次 GROUP BY，避免 N+1；可分页到早期 Job）")
+@router.get("/job-groups", summary="按 Job 聚合图库统计与最新四张预览（批量查询，避免 N+1）")
 def list_job_groups(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -162,7 +162,8 @@ def list_job_groups(
     """只含 completed/有产出图的 Job；按 Job created_at 倒序。
 
     每个 Job 返回 {job_id, module_id, created_at, total, unreviewed, kept, rejected,
-    favorites}；计数口径与 by-job/{job_id}/summary 完全一致。
+    favorites, preview_image_ids}；预览图按 created_at/id 倒序，计数口径与
+    by-job/{job_id}/summary 完全一致。
     """
     groups, total = image_service.list_job_groups(session, page=page, page_size=page_size)
     return {

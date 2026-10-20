@@ -43,6 +43,11 @@
 - [x] 评分排序（score_desc / score_asc）+ 状态筛选（keep / candidate / eliminated），前后端 + 测试（v0.21.0）
 - [ ] 组合筛选（多状态、仅未评分）与保存筛选偏好（待评估）
 
+## Phase 0.20：图库按任务查看（Codex 实现）
+
+- [x] job-groups 返回每任务最新 4 张 preview_image_ids（窗口函数 + 单次 IN 查询）
+- [x] 分组视图重做：两列卡片 + 缩略图带 + 语义色计数 + 等宽 job id（v0.22.0）
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。

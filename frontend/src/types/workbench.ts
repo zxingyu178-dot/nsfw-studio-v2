@@ -462,6 +462,7 @@ export interface ImageJobGroupDTO {
   kept: number
   rejected: number
   favorites: number
+  preview_image_ids?: string[]
 }
 
 /** Phase 0.11.1 缩略图后台回填进度 */
