@@ -1,18 +1,19 @@
 /**
- * Workbench 4.0 布局（v0.15 Task 1）：三栏宽度 + TaskDock 展开态 + Phase 0.17.1 左右栏收起。
+ * Workbench 布局（v0.15 Task 1 → Phase 0.18 对齐 docs/DESIGN.md）：
+ * 左生成控制台 280px / 中画布 / 右详情参数 320px，均可拖拽与收起。
  * 宽度/收起状态持久化到 localStorage；拖拽 ResizeHandle 时 clamp 到 min/max。
  * 断点（≥1200 可调 / 1024–1199 固定紧凑 / <1024 Workspace Tabs）主要由 CSS 决定。
  */
 import { useSyncExternalStore } from 'react'
 
-export const LEFT_DEFAULT = 320
-export const RIGHT_DEFAULT = 300
-export const LEFT_MIN = 280
-export const LEFT_MAX = 420
-export const RIGHT_MIN = 270
-export const RIGHT_MAX = 380
+export const LEFT_DEFAULT = 280
+export const RIGHT_DEFAULT = 320
+export const LEFT_MIN = 240
+export const LEFT_MAX = 360
+export const RIGHT_MIN = 280
+export const RIGHT_MAX = 420
 export const LEFT_COMPACT = 280
-export const RIGHT_COMPACT = 270
+export const RIGHT_COMPACT = 320
 /** 收起态宽度（仅保留一条可点击展开的竖栏）。 */
 export const COLLAPSED_WIDTH = 44
 

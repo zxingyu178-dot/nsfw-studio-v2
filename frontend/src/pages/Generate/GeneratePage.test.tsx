@@ -71,7 +71,8 @@ describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
   it('收起状态写入 CSS 变量，宽度让给 Canvas（collapse 后 --left-w 为 44px）', () => {
     const { container } = renderPage()
     const columns = container.querySelector('.wb4-columns') as HTMLElement
-    expect(columns.style.getPropertyValue('--left-w')).toBe('320px')
+    // Phase 0.18 对齐 DESIGN.md：左生成控制台默认 280px。
+    expect(columns.style.getPropertyValue('--left-w')).toBe('280px')
 
     fireEvent.click(screen.getByRole('button', { name: '收起 Prompt 栏' }))
     expect(columns.style.getPropertyValue('--left-w')).toBe('44px')

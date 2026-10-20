@@ -111,7 +111,7 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
             onChange={(m) => setPromptMode(m as typeof state.promptMode)}
             options={[
               { value: 'structured', label: '结构化' },
-              { value: 'full', label: '完整 Prompt' },
+              { value: 'full', label: '完整' },
             ]}
             ariaLabel="Prompt 编辑模式"
           />
