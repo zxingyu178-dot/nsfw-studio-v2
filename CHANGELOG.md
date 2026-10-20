@@ -23,7 +23,10 @@
 ### Notes
 
 - 真实机器验收 A–E、F1 已 PASS；F2 大图已生成，Canvas Fit/100% 视觉确认待人工。
-- 本机沙箱限制 CLI Python 写 DataRoot，真实 `--apply` 需在用户终端或经授权的一次性任务执行。
+- **迁移已实际执行（2026-10-20 21:54）**：`created=101`（98 prompts + 3 faces），执行前已备份
+  `studio-20261020-215411.db`，映射文件 `v1-migration-map-20261020T135425300651Z.json`；
+  执行后核查：prompts 99（1 现有 + 98 迁移）、assets 4（1 现有 + 3 人脸）、images 1094。
+- 本机沙箱限制 dev venv Python 写 DataRoot，实际迁移改用部署实例 venv Python 执行（同一解释器版本）。
 
 ## [0.25.1] — 2026-10-20
 
