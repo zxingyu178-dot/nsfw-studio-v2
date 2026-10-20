@@ -131,6 +131,8 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 - 部署/日用实例 = `projects/nsfw-studio-v2-app`（worktree，分支 `deploy/app-instance`
   跟踪 `origin/main`）；开发主工作树 = `projects/nsfw-studio-v2`（main/develop）。
   两者都不得提交 DataRoot、`.venv`、`frontend/dist`、`configs/config.local.yaml`。
+- 部署实例发布 = `git pull` + `scripts/deploy_app_dist.ps1`；禁止只 pull 不构建、不同步
+  gitignored 的 `frontend/dist`。发布后运行 `scripts/check_app_dist.ps1` 做只读一致性检查。
 
 ## 6. 验证要求
 

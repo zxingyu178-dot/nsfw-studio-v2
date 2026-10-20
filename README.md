@@ -19,6 +19,10 @@ TaskDock（Layout 4.0），Glass 设计体系与可视化 Prompt 库；后端把
 per-image 串行化。运行时侧生产生命周期统一交 ControlHub 官方 lifecycle CLI
 （`nsfw-studio-v2`=8000、`comfyui`=8188 为独立已批准对象；8767 Mobile Review Bridge 为
 随 Studio 退出的子运行时），日用/部署实例为 `projects/nsfw-studio-v2-app`。
+发布到部署实例不能只执行 `git pull`：合入发布提交后，必须在开发工作树运行
+`powershell -NoProfile -File scripts/deploy_app_dist.ps1`，构建并同步 gitignored 的 `frontend/dist`。
+发布后用 `powershell -NoProfile -File scripts/check_app_dist.ps1` 做只读一致性自检；全部 `PASS`
+且退出码为 0，才表示部署工作树 HEAD、构建戳和静态资源一致。
 当前 5 个正式 WorkflowModule：`basic_generate`（文生图）/ `anime_generate`（动漫生图）/
 `img2img`（图生图）/ `reference_generate`（参考图）/ `upscale`（高清）。
 逐版说明见 `CHANGELOG.md`，发布报告见 `docs/release/v0.15.0`、`docs/release/v0.15.1`、
