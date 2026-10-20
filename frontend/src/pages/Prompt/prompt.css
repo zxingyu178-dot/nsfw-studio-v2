@@ -567,3 +567,15 @@
   margin-left: auto;
   max-width: 58%;
 }
+
+/* ===== Phase 0.17.5：工具栏单行化（搜索框不再独占整行） ===== */
+.pp-toolbar {
+  flex-wrap: wrap;
+}
+
+.pp-toolbar .ds-input {
+  width: auto;
+  flex: 1 1 360px;
+  max-width: 560px;
+  min-width: 240px;
+}
