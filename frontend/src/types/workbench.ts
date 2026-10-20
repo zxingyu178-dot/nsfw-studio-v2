@@ -96,6 +96,7 @@ export interface PromptListParams {
   include_evaluation?: boolean
   sort?: PromptSort
   status?: PromptStatus
+  scored?: boolean
 }
 
 /** Phase 0.17.3：7 个评分维度（与后端白名单一致）。 */

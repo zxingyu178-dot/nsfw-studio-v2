@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -237,7 +239,8 @@ def list_prompts(
     limit: int = 50,
     offset: int = 0,
     sort: str = "updated_desc",
-    status: str | None = None,
+    status: Sequence[str] | None = None,
+    scored: bool | None = None,
 ) -> tuple[list[Prompt], int]:
     """列表统一筛选、排序与分页（规范 §三十五）。"""
     if limit < 1 or limit > 200:
@@ -252,8 +255,13 @@ def list_prompts(
         filters.append(Prompt.archived == archived)
     if favorite is not None:
         filters.append(Prompt.favorite == favorite)
-    if status is not None:
-        filters.append(Prompt.status == status)
+    if status:
+        filters.append(Prompt.status.in_(status))
+    if scored is not None:
+        evaluation_exists = select(1).where(
+            PromptEvaluation.prompt_id == Prompt.id,
+        ).exists()
+        filters.append(evaluation_exists if scored else ~evaluation_exists)
     if search:
         like = f"%{search.strip()}%"
         current_version = select(PromptVersion.id).where(

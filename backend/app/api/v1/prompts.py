@@ -51,14 +51,15 @@ def list_prompts(
     images_limit: int = Query(default=3, ge=1, le=10),
     include_evaluation: bool = Query(default=False),
     sort: Literal["updated_desc", "score_desc", "score_asc"] = Query(default="updated_desc"),
-    status: Literal["keep", "candidate", "eliminated"] | None = Query(default=None),
+    status: list[Literal["keep", "candidate", "eliminated"]] | None = Query(default=None),
+    scored: bool | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> PromptListResponse:
     # 列表选项显式透传到 service（禁止用 Session.info 之类隐式状态桥）。
     return prompt_image_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
         include_images=include_images, images_limit=images_limit,
-        include_evaluation=include_evaluation, sort=sort, status=status,
+        include_evaluation=include_evaluation, sort=sort, status=status, scored=scored,
     )
 
 
