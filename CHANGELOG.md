@@ -2,6 +2,35 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.24.0] — 2026-10-20
+
+> Minor：图库详情抽屉按 DESIGN.md 重做（分区 + 等宽参数 + 危险区），并加固前端测试竞态。
+
+### Changed
+
+- **图片详情抽屉重做**：分区为「概览 / 操作 / 版本 / 高级信息 / 创建素材 / 设为 Prompt 封面 / 危险区」。
+  - 概览：状态与收藏 chip、尺寸 / Seed / 生成时间 / 来源（模块 + Job）/ 类型 / Prompt / Negative
+    两列栅格展示，数字与时间统一等宽字体；
+  - 操作：设为工作台起点（可选固定 Seed）、使用输入图、以此图生成、下载原图、复制 Prompt、
+    保留 / 取消审核 / 收藏；主次按钮分组；
+  - 高级信息折叠保留来源 / Stage / Workflow 版本；危险区（淘汰 / 永久删除）放最后，danger 语义克制。
+- 分区样式：`surface-2` 卡片 + 1px 边框 + 8px 圆角、零页面阴影；分区标题 12px 大写 + 字距；
+  字段 label 12px muted / value 13px，数字等宽。
+- 新增「下载原图」入口。
+
+### Fixed
+
+- **前端单 fork 全量测试的偶发失败**（本地连续出现，随机落在 2–3 个用例）：
+  - `Gallery.detail`：Job 详情是异步拉取的，Prompt 断言由 `getByText` 改为 `findByText`，消除竞态；
+  - `MobileReviewPairing`：fake timers 场景改为多轮 flush（`flushAsync`），避免 effect 链未跑完；
+  - `vitest.config.ts`：`testTimeout` / `hookTimeout` 提到 15s；测试 setup 把 RTL
+    `asyncUtilTimeout` 提到 3s（只放宽等待上限，不改变断言）。
+  - 修完后连续 3 次全量 `--singleFork` 运行 370 用例全绿。
+
+### Notes
+
+- 抽屉实现来自 Codex 子智能体（lite）；Lead 负责测试竞态加固、全量回归与截图验收。
+
 ## [0.23.0] — 2026-10-20
 
 > Minor：提示词筛选升级——「已评分 / 未评分」筛选、状态多选（后端），筛选条件写入 URL

@@ -16,6 +16,11 @@ vi.mock('../../api/client', () => ({
   },
 }))
 
+/** fake timers 下多 flush 几轮微任务，避免单 fork 全量时 effect 链未跑完导致假失败。 */
+async function flushAsync(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await vi.advanceTimersByTimeAsync(0)
+}
+
 function runtimeState(state: string) {
   return {
     state,
@@ -65,9 +70,9 @@ describe('MobileReviewPairing：配对码 + 倒计时', () => {
       expires_in_seconds: 600,
     } as never)
     render(<MobileReviewSection />)
-    await vi.advanceTimersByTimeAsync(0) // flush mount（runtime/devices）promises
+    await flushAsync() // flush mount（runtime/devices）promises
     fireEvent.click(screen.getByRole('button', { name: /生成配对码/ }))
-    await vi.advanceTimersByTimeAsync(0) // flush createPairingCode promise
+    await flushAsync() // flush createPairingCode promise
     expect(screen.getByTestId('pairing-code')).toHaveTextContent('111222')
     expect(screen.getByTestId('pairing-countdown').textContent).toBe('10:00')
 
@@ -83,9 +88,9 @@ describe('MobileReviewPairing：配对码 + 倒计时', () => {
       expires_in_seconds: 600,
     } as never)
     render(<MobileReviewSection />)
-    await vi.advanceTimersByTimeAsync(0)
+    await flushAsync()
     fireEvent.click(screen.getByRole('button', { name: /生成配对码/ }))
-    await vi.advanceTimersByTimeAsync(0)
+    await flushAsync()
     expect(screen.getByTestId('pairing-code')).toHaveTextContent('654321')
 
     // 过 10 分钟 + 1 秒 → 码自动消失
