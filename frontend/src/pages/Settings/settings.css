@@ -113,3 +113,27 @@
   border-radius: var(--radius-md);
   box-shadow: none;
 }
+
+/* ===== Phase 0.18 D：设置页数值等宽 / 分区收敛 ===== */
+.st-dl dd,
+.st-panel__text strong,
+.st-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.st-panel {
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.st-panel__title {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.st-dot--ok {
+  color: var(--ok);
+}
