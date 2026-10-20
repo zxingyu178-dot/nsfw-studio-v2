@@ -72,7 +72,8 @@ describe('ImageDetail 详情信息栏与操作', () => {
     // 信息栏字段
     expect(screen.getByText('1024 × 768')).toBeInTheDocument()
     expect(screen.getByText('777')).toBeInTheDocument()
-    expect(screen.getByText('a beautiful cat, masterpiece')).toBeInTheDocument()
+    // Job 详情异步拉取：用 findBy 避免抽屉标题先渲染、Prompt 尚未出现的竞态（单 fork 全量时偶发）。
+    expect(await screen.findByText('a beautiful cat, masterpiece')).toBeInTheDocument()
     // 操作入口
     expect(screen.getByRole('button', { name: '复制 Prompt' })).toBeInTheDocument()
     // 普通图（非 REJECT）显示「淘汰此图」，而非物理删除

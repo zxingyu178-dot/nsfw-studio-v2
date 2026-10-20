@@ -265,6 +265,7 @@ export function GalleryDetailDrawer({
   }
 
   const displayStatus = normalizeImageStatus(image)
+  const sourceModule = provenance?.module_id ?? job?.module_id ?? null
 
   return (
     <Drawer
@@ -278,226 +279,251 @@ export function GalleryDetailDrawer({
         </>
       }
     >
-      <div className="gal-detail__preview" onDoubleClick={onPreviewLightbox} title="双击放大查看">
-        <img src={imageContentUrl(image.id)} alt="" />
-        {image.kind === 'upscaled' && <span className="gal-detail__hd">HD</span>}
-      </div>
-
-      {(versions?.parent || (versions?.children.length ?? 0) > 0) && (
-        <div className="gal-version-links">
-          {versions?.parent && (
-            <Button size="sm" variant="ghost" onClick={() => onSelectImage(versions.parent as ImageDTO)}>
-              来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看
-            </Button>
-          )}
-          {(versions?.children.length ?? 0) > 0 && (
-            <div className="gal-version-children">
-              <span className="muted">派生版本：</span>
-              {versions!.children.map((child) => {
-                const scale = image.width > 0 ? Math.round(child.width / image.width) : 0
-                return (
-                  <Button
-                    key={child.id}
-                    size="sm" variant="ghost"
-                    onClick={() => onSelectImage(child)}
-                  >
-                    {IMAGE_KIND_LABEL[child.kind] ?? child.kind}
-                    {scale > 1 ? ` ×${scale}` : ''} · {child.width}×{child.height}
-                  </Button>
-                )
-              })}
-            </div>
-          )}
+      <div className="gal-detail">
+        <div className="gal-detail__preview" onDoubleClick={onPreviewLightbox} title="双击放大查看">
+          <img src={imageContentUrl(image.id)} alt="" />
+          {image.kind === 'upscaled' && <span className="gal-detail__hd">HD</span>}
         </div>
-      )}
 
-      <div className="gal-actions">
-        <Button
-          size="sm" variant={displayStatus === 'KEEP' || displayStatus === 'ARCHIVED' ? 'primary' : 'secondary'}
-          disabled={busy}
-          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'KEEP' }), '已保留') }}
-        >
-          保留 (K)
-        </Button>
-        <Button
-          size="sm" variant={displayStatus === 'REJECT' ? 'primary' : 'secondary'}
-          disabled={busy}
-          onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'REJECT' }), '已淘汰') }}
-        >
-          淘汰 (R)
-        </Button>
-        {displayStatus !== 'NEW' && (
-          <Button
-            size="sm" variant="ghost" disabled={busy}
-            onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'NEW' }), '已恢复为待审核') }}
-          >
-            取消审核
-          </Button>
-        )}
-        <Button
-          size="sm" variant="ghost" disabled={busy}
-          onClick={() => { onFavoriteStart(image.favorite); void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏') }}
-        >
-          {image.favorite ? '★ 已收藏' : '☆ 收藏 (F)'}
-        </Button>
-      </div>
-
-      {provenance && (
-        <div>
+        <section className="gal-detail-section" aria-labelledby="gal-overview-title">
+          <h3 id="gal-overview-title" className="gal-section-title">概览</h3>
+          <div className="gal-detail-chips" aria-label="图片状态">
+            <span className="gal-detail-chip">{IMAGE_STATUS_LABEL[displayStatus]}</span>
+            {image.favorite && <span className="gal-detail-chip gal-detail-chip--accent">★ 收藏</span>}
+          </div>
           <dl className="gal-fields">
-            <dt>来源任务</dt>
-            <dd>{provenance.job_id ? shortJobId(provenance.job_id) : '外部导入'}</dd>
+            <dt>尺寸</dt>
+            <dd className="gal-field-value--mono">{image.width} × {image.height}</dd>
             <dt>Seed</dt>
-            <dd>{provenance.seed ?? '—'}</dd>
-            <dt>管线</dt>
-            <dd>
-              {!provenance.job_id
-                ? '外部导入'
-                : provenance.kind === 'upscaled'
-                  ? `基础生成 → 高清${provenance.scale && provenance.scale > 1 ? ` ×${provenance.scale}` : ''}`
-                  : MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id ?? '—'}
+            <dd className="gal-field-value--mono">{image.seed ?? '—'}</dd>
+            <dt>生成时间</dt>
+            <dd className="gal-field-value--mono">{formatDateTime(image.created_at)}</dd>
+            <dt>来源</dt>
+            <dd className="gal-field-value--mono gal-detail-source">
+              <span>{sourceModule ? MODULE_LABEL[sourceModule] ?? sourceModule : IMAGE_SOURCE_LABEL[image.source] ?? image.source}</span>
+              <span aria-hidden="true">/</span>
+              <span>{image.job_id ? shortJobId(image.job_id) : '外部导入'}</span>
             </dd>
+            <dt>类型</dt>
+            <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
+            <dt>Prompt</dt>
+            <dd><pre>{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
+            <dt>Negative</dt>
+            <dd><pre>{job?.negative_prompt_snapshot || '（无）'}</pre></dd>
           </dl>
-          <details>
+        </section>
+
+        <section className="gal-detail-section" aria-labelledby="gal-actions-title">
+          <h3 id="gal-actions-title" className="gal-section-title">操作</h3>
+          <div className="gal-actions gal-actions--primary">
+            <Button size="sm" variant="primary" disabled={!image.job_id} onClick={() => openInWorkbench(false)}>
+              在生成工作台中打开
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!image.job_id} onClick={() => openInWorkbench(true)}>
+              使用原图 Seed
+            </Button>
+            <a
+              className="ds-btn ds-btn--secondary ds-btn--sm gal-detail__download"
+              href={imageContentUrl(image.id)}
+              download
+              title="下载原图"
+              aria-label="下载原图"
+            >
+              下载原图
+            </a>
+          </div>
+          <div className="gal-actions">
+            <Button size="sm" variant="secondary" onClick={() => onUseAsInput(image)}>
+              用作输入图片
+            </Button>
+            <Button size="sm" variant="secondary" onClick={startImg2Img}>
+              以此图进行图生图
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void copyPrompt()}>
+              复制 Prompt
+            </Button>
+            <Button
+              size="sm" variant={displayStatus === 'KEEP' || displayStatus === 'ARCHIVED' ? 'primary' : 'secondary'}
+              disabled={busy}
+              onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'KEEP' }), '已保留') }}
+            >
+              保留 (K)
+            </Button>
+            {displayStatus !== 'NEW' && (
+              <Button
+                size="sm" variant="ghost" disabled={busy}
+                onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'NEW' }), '已恢复为待审核') }}
+              >
+                取消审核
+              </Button>
+            )}
+            <Button
+              size="sm" variant="ghost" disabled={busy}
+              onClick={() => { onFavoriteStart(image.favorite); void run(() => imageApi.favorite(image.id, !image.favorite), image.favorite ? '已取消收藏' : '已收藏') }}
+            >
+              {image.favorite ? '★ 已收藏' : '☆ 收藏 (F)'}
+            </Button>
+          </div>
+        </section>
+
+        <section className="gal-detail-section" aria-labelledby="gal-versions-title">
+          <h3 id="gal-versions-title" className="gal-section-title">版本</h3>
+          <div className="gal-version-links">
+            <Button size="sm" variant="secondary" disabled={upscaling} onClick={() => onUpscale(image.id)}>
+              {upscaling ? '提交中…' : '高清放大'}
+            </Button>
+            {versions?.parent && (
+              <Button size="sm" variant="ghost" onClick={() => onSelectImage(versions.parent as ImageDTO)}>
+                来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看
+              </Button>
+            )}
+            {(versions?.children.length ?? 0) > 0 ? (
+              <div className="gal-version-children">
+                <span className="muted">派生版本：</span>
+                {versions!.children.map((child) => {
+                  const scale = image.width > 0 ? Math.round(child.width / image.width) : 0
+                  return (
+                    <Button
+                      key={child.id}
+                      size="sm" variant="ghost"
+                      onClick={() => onSelectImage(child)}
+                    >
+                      {IMAGE_KIND_LABEL[child.kind] ?? child.kind}
+                      <span className="gal-field-value--mono">
+                        {scale > 1 ? ` ×${scale}` : ''} · {child.width}×{child.height}
+                      </span>
+                    </Button>
+                  )
+                })}
+              </div>
+            ) : (
+              !versions?.parent && <p className="muted gal-version-empty">暂无派生版本</p>
+            )}
+          </div>
+        </section>
+
+        <section className="gal-detail-section" aria-labelledby="gal-advanced-title">
+          <h3 id="gal-advanced-title" className="gal-section-title">高级信息</h3>
+          <details className="gal-detail-advanced">
             <summary className="muted">高级信息（来源原图 / Stage / Workflow 版本）</summary>
             <dl className="gal-fields">
+              <dt>来源任务</dt>
+              <dd className="gal-field-value--mono">{provenance?.job_id ? shortJobId(provenance.job_id) : image.job_id ? shortJobId(image.job_id) : '外部导入'}</dd>
+              <dt>Seed</dt>
+              <dd className="gal-field-value--mono">{provenance?.seed ?? '—'}</dd>
+              <dt>管线</dt>
+              <dd>
+                {!image.job_id
+                  ? '外部导入'
+                  : provenance?.kind === 'upscaled'
+                    ? `基础生成 → 高清${provenance.scale && provenance.scale > 1 ? ` ×${provenance.scale}` : ''}`
+                    : sourceModule ? MODULE_LABEL[sourceModule] ?? sourceModule : '—'}
+              </dd>
               <dt>来源原图</dt>
-              <dd>{provenance.parent_image_id ?? '（本身为原图）'}</dd>
+              <dd className="gal-field-value--mono">{provenance?.parent_image_id ?? image.parent_image_id ?? '（本身为原图）'}</dd>
               <dt>Stage</dt>
-              <dd>{provenance.stage_index ?? '—'}</dd>
+              <dd className="gal-field-value--mono">{provenance?.stage_index ?? '—'}</dd>
               <dt>模块</dt>
-              <dd>{provenance.module_id ?? '—'}{provenance.module_version ? ` ${provenance.module_version}` : ''}</dd>
+              <dd className="gal-field-value--mono">{sourceModule ?? '—'}{provenance?.module_version ? ` ${provenance.module_version}` : ''}</dd>
               <dt>引擎 / Binding</dt>
-              <dd>{provenance.provider ?? '—'}{provenance.binding_version ? ` ${provenance.binding_version}` : ''}</dd>
+              <dd className="gal-field-value--mono">{provenance?.provider ?? job?.provider ?? '—'}{provenance?.binding_version ? ` ${provenance.binding_version}` : ''}</dd>
               <dt>workflow_hash</dt>
-              <dd>{provenance.workflow_hash ?? '—'}</dd>
+              <dd className="gal-field-value--mono">{provenance?.workflow_hash ?? job?.workflow_hash ?? '—'}</dd>
               <dt>binding_hash</dt>
-              <dd>{provenance.binding_hash ?? '—'}</dd>
+              <dd className="gal-field-value--mono">{provenance?.binding_hash ?? job?.binding_hash ?? '—'}</dd>
             </dl>
           </details>
-        </div>
-      )}
+        </section>
 
-      <div className="gal-actions">
-        <Button size="sm" variant="primary" disabled={!image.job_id} onClick={() => openInWorkbench(false)}>
-          在生成工作台中打开
-        </Button>
-        <Button size="sm" variant="secondary" disabled={!image.job_id} onClick={() => openInWorkbench(true)}>
-          使用原图 Seed
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => onUseAsInput(image)}>
-          用作输入图片
-        </Button>
-        <Button size="sm" variant="secondary" onClick={startImg2Img}>
-          以此图进行图生图
-        </Button>
-        <Button size="sm" variant="secondary" disabled={upscaling} onClick={() => onUpscale(image.id)}>
-          {upscaling ? '提交中…' : '高清放大'}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => void copyPrompt()}>
-          复制 Prompt
-        </Button>
-      </div>
+        {message && <p className="ds-notice ds-notice--success" role="status">{message}</p>}
+        {error && <p className="ds-notice ds-notice--error">{error}</p>}
 
-      {message && <p className="ds-notice ds-notice--success" role="status">{message}</p>}
-      {error && <p className="ds-notice ds-notice--error">{error}</p>}
-
-      <dl className="gal-fields">
-        <dt>Prompt</dt>
-        <dd><pre>{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
-        <dt>Negative</dt>
-        <dd><pre>{job?.negative_prompt_snapshot || '（无）'}</pre></dd>
-        <dt>Seed</dt>
-        <dd>{image.seed ?? '—'}</dd>
-        <dt>任务</dt>
-        <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
-        <dt>类型</dt>
-        <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
-        <dt>来源</dt>
-        <dd>{IMAGE_SOURCE_LABEL[image.source] ?? image.source}</dd>
-        <dt>时间</dt>
-        <dd>{formatDateTime(image.created_at)}</dd>
-        <dt>尺寸</dt>
-        <dd>{image.width} × {image.height}</dd>
-        <dt>审核</dt>
-        <dd>{IMAGE_STATUS_LABEL[displayStatus]}</dd>
-      </dl>
-
-      {/* 从图库创建素材（§四十八） */}
-      <section className="gal-asset-edit">
-        <h4 className="gal-section-title">创建素材（独立资产文件，图片以后被清理不影响素材）</h4>
-        <Field label="类型">
-          <Select
-            value={assetType}
-            onChange={(event) => setAssetType(event.target.value as AssetType)}
-            options={ASSET_TYPES.map(({ key, label }) => ({ value: key, label }))}
-          />
-        </Field>
-        <Field label="名称">
-          <Input value={assetName} onChange={(event) => setAssetName(event.target.value)} />
-        </Field>
-        <Button
-          size="sm" variant="primary"
-          disabled={busy || !assetName.trim()}
-          onClick={() => void createAsset()}
-        >
-          创建素材
-        </Button>
-      </section>
-
-      {/* Phase 0.11：设为 Prompt 封面 */}
-      <section className="gal-asset-edit">
-        <h4 className="gal-section-title">设为 Prompt 封面</h4>
-        {promptChoices.length === 0 ? (
-          <Button size="sm" variant="secondary" disabled={busy} onClick={openPromptChooser}>
-            选择 Prompt
+        {/* 从图库创建素材（§四十八） */}
+        <section className="gal-detail-section gal-asset-edit">
+          <h3 className="gal-section-title">创建素材（独立资产文件，图片以后被清理不影响素材）</h3>
+          <Field label="类型">
+            <Select
+              value={assetType}
+              onChange={(event) => setAssetType(event.target.value as AssetType)}
+              options={ASSET_TYPES.map(({ key, label }) => ({ value: key, label }))}
+            />
+          </Field>
+          <Field label="名称">
+            <Input value={assetName} onChange={(event) => setAssetName(event.target.value)} />
+          </Field>
+          <Button
+            size="sm" variant="primary"
+            disabled={busy || !assetName.trim()}
+            onClick={() => void createAsset()}
+          >
+            创建素材
           </Button>
-        ) : (
-          <>
-            <Field label="Prompt">
-              <Select
-                value={coverPromptId}
-                onChange={(event) => setCoverPromptId(event.target.value)}
-                options={[{ value: '', label: '（请选择）' }, ...promptChoices.map((p) => ({ value: p.id, label: p.name }))]}
-              />
-            </Field>
-            <Button size="sm" variant="primary" disabled={busy || !coverPromptId} onClick={() => void applyPromptCover()}>
-              设为封面
-            </Button>
-          </>
-        )}
-      </section>
+        </section>
 
-      {/* Phase 0.11.1：删除语义——普通图仅淘汰(REJECT)；仅 REJECT 图才永久物理删除 */}
-      <section className="gal-asset-edit">
-        <h4 className="gal-section-title">{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h4>
-        {displayStatus !== 'REJECT' ? (
-          <>
-            <p className="muted">仅将状态置为 REJECT（文件保留），之后可在「清理废片」中永久删除。</p>
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => void softReject()}>
-              {busy ? '处理中…' : '淘汰此图'}
+        {/* Phase 0.11：设为 Prompt 封面 */}
+        <section className="gal-detail-section gal-asset-edit">
+          <h3 className="gal-section-title">设为 Prompt 封面</h3>
+          {promptChoices.length === 0 ? (
+            <Button size="sm" variant="secondary" disabled={busy} onClick={openPromptChooser}>
+              选择 Prompt
             </Button>
-          </>
-        ) : (
-          <>
-            <p className="muted">删除前会检查引用；被 Prompt / 素材 / 配方引用的图片将被保护，不会删除。</p>
-            {!deleteArm ? (
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleteArm(true)}>
-                永久删除此废片
+          ) : (
+            <>
+              <Field label="Prompt">
+                <Select
+                  value={coverPromptId}
+                  onChange={(event) => setCoverPromptId(event.target.value)}
+                  options={[{ value: '', label: '（请选择）' }, ...promptChoices.map((p) => ({ value: p.id, label: p.name }))]}
+                />
+              </Field>
+              <Button size="sm" variant="primary" disabled={busy || !coverPromptId} onClick={() => void applyPromptCover()}>
+                设为封面
               </Button>
-            ) : (
-              <div className="gal-actions">
-                <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
-                  {busy ? '处理中…' : '确认删除（不可恢复）'}
+            </>
+          )}
+        </section>
+
+        {/* Phase 0.11.1：删除语义——普通图仅淘汰(REJECT)；仅 REJECT 图才永久物理删除 */}
+        <section className="gal-detail-section gal-detail-section--danger" aria-labelledby="gal-danger-title">
+          <h3 id="gal-danger-title" className="gal-section-title">危险区</h3>
+          <div className="gal-actions">
+            <Button
+              size="sm" variant="danger"
+              disabled={busy}
+              onClick={() => { onReviewStart(displayStatus); void run(() => imageApi.setStatus(image.id, { status: 'REJECT' }), '已淘汰') }}
+            >
+              淘汰 (R)
+            </Button>
+          </div>
+          <h4 className="gal-danger-title">{displayStatus === 'REJECT' ? '永久删除此废片' : '淘汰图片'}</h4>
+          {displayStatus !== 'REJECT' ? (
+            <>
+              <p className="muted">仅将状态置为 REJECT（文件保留），之后可在「清理废片」中永久删除。</p>
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => void softReject()}>
+                {busy ? '处理中…' : '淘汰此图'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="muted">删除前会检查引用；被 Prompt / 素材 / 配方引用的图片将被保护，不会删除。</p>
+              {!deleteArm ? (
+                <Button size="sm" variant="danger" disabled={busy} onClick={() => setDeleteArm(true)}>
+                  永久删除此废片
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>
-                  取消
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+              ) : (
+                <div className="gal-actions">
+                  <Button size="sm" variant="danger" disabled={busy} onClick={() => void deleteImage()}>
+                    {busy ? '处理中…' : '确认删除（不可恢复）'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setDeleteArm(false)}>
+                    取消
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
     </Drawer>
   )
 }
