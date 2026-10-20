@@ -8,17 +8,18 @@
 """
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.ids import PROMPT, PROMPT_VERSION, new_id
-from app.models import Prompt, PromptVersion
+from app.models import Prompt, PromptEvaluation, PromptVersion
 from app.services import image_service
 from app.services.prompt_composer import compose_structured, dumps_structured
 
 PROMPT_MODES = ("structured", "full")
+LIST_SORTS = ("updated_desc", "score_desc", "score_asc")
 
 
 def get_prompt(session: Session, prompt_id: str) -> Prompt:
@@ -235,32 +236,62 @@ def list_prompts(
     archived: bool | None = False,
     limit: int = 50,
     offset: int = 0,
+    sort: str = "updated_desc",
+    status: str | None = None,
 ) -> tuple[list[Prompt], int]:
-    """列表统一参数：search / favorite / archived / limit / offset（规范 §三十五）。"""
+    """列表统一筛选、排序与分页（规范 §三十五）。"""
     if limit < 1 or limit > 200:
         raise ValidationError("limit 取值范围为 1-200")
     if offset < 0:
         raise ValidationError("offset 不能为负")
+    if sort not in LIST_SORTS:
+        raise ValidationError("sort 仅支持 updated_desc / score_desc / score_asc")
 
-    query = select(Prompt)
-    if archived is None:
-        pass  # 不过滤
-    else:
-        query = query.where(Prompt.archived == archived)
+    filters = []
+    if archived is not None:
+        filters.append(Prompt.archived == archived)
     if favorite is not None:
-        query = query.where(Prompt.favorite == favorite)
+        filters.append(Prompt.favorite == favorite)
+    if status is not None:
+        filters.append(Prompt.status == status)
     if search:
         like = f"%{search.strip()}%"
         current_version = select(PromptVersion.id).where(
             PromptVersion.prompt_id == Prompt.id,
             PromptVersion.positive_prompt.like(like),
         )
-        query = query.where(or_(Prompt.name.like(like), Prompt.id.in_(current_version)))
+        filters.append(or_(Prompt.name.like(like), Prompt.id.in_(current_version)))
 
-    total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
-    items = list(
-        session.execute(query.order_by(Prompt.updated_at.desc()).limit(limit).offset(offset)).scalars()
-    )
+    total = session.execute(
+        select(func.count()).select_from(Prompt).where(*filters),
+    ).scalar_one()
+    query = select(Prompt).where(*filters)
+    if sort in ("score_desc", "score_asc"):
+        ranked = select(
+            PromptEvaluation.prompt_id.label("prompt_id"),
+            PromptEvaluation.overall_score.label("overall_score"),
+            func.row_number().over(
+                partition_by=PromptEvaluation.prompt_id,
+                order_by=(PromptEvaluation.created_at.desc(), PromptEvaluation.id.desc()),
+            ).label("position"),
+        ).subquery()
+        latest = select(
+            ranked.c.prompt_id, ranked.c.overall_score,
+        ).where(ranked.c.position == 1).subquery()
+        score_order = (
+            latest.c.overall_score.desc()
+            if sort == "score_desc"
+            else latest.c.overall_score.asc()
+        )
+        query = query.outerjoin(latest, latest.c.prompt_id == Prompt.id).order_by(
+            case((latest.c.overall_score.is_(None), 1), else_=0),
+            score_order,
+            Prompt.updated_at.desc(),
+            Prompt.id.desc(),
+        )
+    else:
+        query = query.order_by(Prompt.updated_at.desc(), Prompt.id.desc())
+    items = list(session.execute(query.limit(limit).offset(offset)).scalars())
     return items, int(total)
 
 

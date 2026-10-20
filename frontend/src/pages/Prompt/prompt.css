@@ -9,6 +9,12 @@
 }
 .pp-toolbar__spacer { flex: 1; }
 .pp-toolbar .ds-input { min-width: 240px; }
+.pp-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pp-toolbar__filters .ds-select { min-width: 136px; }
 
 .pp-count {
   font-size: var(--text-sm);

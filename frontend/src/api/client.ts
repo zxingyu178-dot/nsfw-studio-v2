@@ -76,6 +76,7 @@ import type {
   ModuleCapabilitiesDTO,
   PromptDTO,
   PromptEvaluationDTO,
+  PromptListParams,
   PromptMode,
   PromptStatus,
   PromptVersionDTO,
@@ -88,19 +89,9 @@ import type {
 } from '../types/workbench'
 import type { HealthInfo } from './health'
 
-export interface PromptListParams {
-  search?: string
-  favorite?: boolean | null
-  archived?: boolean | null
-  limit?: number
-  offset?: number
-  /** Phase 0.17.2：附带每条提示词最近生成的图（默认 false，保持旧响应体积不变）。 */
-  include_images?: boolean
-  /** 每条提示词最多返回几张图（1–10，默认 3）。 */
-  images_limit?: number
-  /** Phase 0.17.3：附带每条提示词最近一次评分。 */
-  include_evaluation?: boolean
-}
+export type { PromptListParams } from '../types/workbench'
+
+type CommonListParams = Omit<PromptListParams, 'sort' | 'status'>
 
 function buildQuery(params: object): string {
   const search = new URLSearchParams()
@@ -182,7 +173,7 @@ export const promptApi = {
 }
 
 // ===== Asset =====
-export interface AssetListParams extends PromptListParams {
+export interface AssetListParams extends CommonListParams {
   type?: AssetType | null
 }
 
@@ -218,7 +209,7 @@ export const assetApi = {
 
 // ===== Recipe =====
 export const recipeApi = {
-  list(params: PromptListParams = {}): Promise<ListResponse<RecipeDTO>> {
+  list(params: CommonListParams = {}): Promise<ListResponse<RecipeDTO>> {
     return request(`/api/v1/recipes${buildQuery(params)}`)
   },
   get(id: string): Promise<RecipeDTO> {

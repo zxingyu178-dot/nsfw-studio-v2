@@ -2,6 +2,32 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.21.0] — 2026-10-20
+
+> Minor：提示词库支持「按评分排序 + 按状态筛选」，是人工评分系统的配套检索能力。
+
+### Added
+
+- **后端**：`GET /api/v1/prompts` 新增
+  - `sort`: `updated_desc`（默认） / `score_desc` / `score_asc`
+  - `status`: `keep` / `candidate` / `eliminated`（不传 = 全部）
+  非法值由 FastAPI `Literal` 校验自动返回 422。
+- 评分排序用窗口函数 `row_number() over (partition by prompt_id order by created_at desc, id desc)`
+  取每个提示词的最新一条 evaluation，LEFT JOIN 后排序；未评分一律排在已评分之后，
+  再以 `updated_at DESC, id DESC` 保证分页稳定。
+- 状态过滤直接进 SQL `WHERE`；计数查询独立，不受评分 JOIN 影响。
+- **前端**：「我的 Prompt」工具栏新增「排序 / 状态」两个 DS `Select`，切换后重新加载第一页
+  （复用 `useInfiniteList`）；默认值不发送冗余参数。
+- 测试：`tests/backend/test_prompt_list_sorting.py`（7 例）、
+  `frontend/src/pages/Prompt/PromptTab.sortfilter.test.tsx`（3 例）。
+
+### Notes
+
+- 本版由 Codex 子智能体实现（后端 / 前端两条 lite 任务并行），Lead 审查后把隐式的
+  `Session.info` 参数桥重构为显式 `sort/status` 透传（API → prompt_image_service → prompt_service）。
+- 本地验证：后端目标测试 7 passed；前端 Prompt 8 文件 25 用例全过；`tsc -b` / `vite build` 通过；
+  后端全量套件存在既有队列时序偶发（`test_priority_next_inserts_after_running`，单独重跑通过），以 CI 为准。
+
 ## [0.20.3] — 2026-10-20
 
 > Patch：DESIGN.md 落地 D —— 提示词 / 素材 / 设置页收口。DESIGN.md 四批（A–D）全部落地。
