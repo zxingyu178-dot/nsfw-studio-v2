@@ -2,6 +2,43 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.26.0] — 2026-10-20
+
+> Minor：V1 旧数据迁移工具（提示词库 + 人脸库）与部署脚本；图库竖图裁切修复随 0.25.1 发布。
+
+### Added
+
+- `scripts/migrate_v1_legacy.py`：从 V1 归档导入 **98 条提示词** + **3 个人脸**（Asset + AssetVersion +
+  预览图）到 V2；默认 dry-run，`--apply` 前要求 1 小时内有数据库备份；幂等；映射写入
+  `DataRoot/backups/v1-migration-map-<time>.json`。
+- `tests/backend/test_migrate_v1_legacy.py`；`docs/V1_DATA_MIGRATION.md`（字段映射、执行步骤、未迁移项）。
+- `scripts/deploy_app_dist.ps1` / `scripts/check_app_dist.ps1`：部署实例前端 dist 构建同步与只读一致性检查；
+  AGENTS/README 增加"发布必须 pull + 构建同步"纪律（v0.25.1）。
+
+### Changed
+
+- 任务清理：删除废弃计划任务 `\AIHome\NSFWStudioV2Frontend`（指向已不存在的 dev 脚本，属错误版本启动源）。
+- 图库修复（v0.25.1）：清理固定高度旧规则，竖图按原始比例完整显示；新增 `GalleryCard.layout.test.tsx`。
+
+### Notes
+
+- 真实机器验收 A–E、F1 已 PASS；F2 大图已生成，Canvas Fit/100% 视觉确认待人工。
+- 本机沙箱限制 CLI Python 写 DataRoot，真实 `--apply` 需在用户终端或经授权的一次性任务执行。
+
+## [0.25.1] — 2026-10-20
+
+> Patch：图库竖图裁切修复 + 部署脚本。
+
+### Fixed
+
+- 图库竖图只显示顶部：`.gal-grid--large .gal-card__media { height:220px }` 优先级高于后置覆盖，
+  导致固定高度裁切。清理旧 Grid/100/150/220px 与 `height:100%` 冲突规则，媒体自然高度 + `object-fit: contain`。
+
+### Added
+
+- `scripts/deploy_app_dist.ps1`（拉取→构建→写 `.build_commit`→同步 dist→校验资源）与
+  `scripts/check_app_dist.ps1`（只读一致性检查）；AGENTS/README 部署纪律更新。
+
 ## [0.25.0] — 2026-10-20
 
 > Minor：提示词筛选偏好本地记忆（跨会话记住上次筛选）+ 「重置筛选」入口。
