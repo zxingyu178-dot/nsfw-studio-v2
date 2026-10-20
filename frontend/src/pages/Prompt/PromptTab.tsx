@@ -23,6 +23,7 @@ import {
   imagePreviewUrl,
   imageThumbUrl,
   type PromptDTO,
+  type PromptImageDTO,
   type PromptMode,
   type PromptVersionDTO,
   type StructuredPrompt,
@@ -44,6 +45,9 @@ export function PromptTab() {
         archived: showArchived ? null : false,
         limit,
         offset,
+        // Phase 0.17.2：卡片下直接展示「这条提示词生成过的图」。
+        include_images: true,
+        images_limit: 3,
       }),
     [search, showArchived],
   )
@@ -179,6 +183,8 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [favBusy, setFavBusy] = useState(false)
+  // Phase 0.17.2：卡片下展示该提示词生成过的图；点击看大图。
+  const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // v0.15.1：DB 有 preview_image_id 但 rendition 缺失/损坏时，统一回退“暂未生成”占位，
   // 而不是把 img 隐藏后留下一个空白 preview 区。
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -252,6 +258,31 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
         </div>
       )}
 
+      {prompt.images && prompt.images.length > 0 && (
+        <div
+          className="pp-card__gallery"
+          aria-label={`该提示词生成过的图片，共 ${prompt.images_total ?? prompt.images.length} 张`}
+        >
+          {prompt.images.map((image) => (
+            <button
+              key={image.id}
+              type="button"
+              className="pp-card__gallery-thumb"
+              onClick={() => setGalleryImage(image)}
+              title={image.module_id ? `由 ${image.module_id} 生成` : '查看大图'}
+              aria-label={`查看生成图 ${image.id}`}
+            >
+              <img src={image.thumbnail_url} loading="lazy" alt="" />
+            </button>
+          ))}
+          {(prompt.images_total ?? 0) > prompt.images.length && (
+            <span className="pp-card__gallery-more" aria-hidden="true">
+              +{(prompt.images_total ?? 0) - prompt.images.length}
+            </span>
+          )}
+        </div>
+      )}
+
       <footer className="pp-card__foot">
         <span className="pp-card__time">{formatDateTime(prompt.updated_at)}</span>
         <span className="pp-card__actions">
@@ -283,6 +314,12 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
       {previewOpen && prompt.preview_image_id && (
         <Modal open title={prompt.name} onClose={() => setPreviewOpen(false)}>
           <img className="pp-card__preview-modal" src={imageContentUrl(prompt.preview_image_id)} alt={prompt.name} />
+        </Modal>
+      )}
+
+      {galleryImage && (
+        <Modal open title={`${prompt.name} · 生成图`} onClose={() => setGalleryImage(null)}>
+          <img className="pp-card__preview-modal" src={galleryImage.preview_url} alt="" />
         </Modal>
       )}
     </article>

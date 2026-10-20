@@ -92,6 +92,10 @@ export interface PromptListParams {
   archived?: boolean | null
   limit?: number
   offset?: number
+  /** Phase 0.17.2：附带每条提示词最近生成的图（默认 false，保持旧响应体积不变）。 */
+  include_images?: boolean
+  /** 每条提示词最多返回几张图（1–10，默认 3）。 */
+  images_limit?: number
 }
 
 function buildQuery(params: object): string {
