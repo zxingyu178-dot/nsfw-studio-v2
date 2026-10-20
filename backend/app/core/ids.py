@@ -15,6 +15,7 @@ import uuid
 
 PROMPT = "prm"
 PROMPT_VERSION = "prmv"
+PROMPT_EVALUATION = "prev"
 ASSET = "ast"
 ASSET_VERSION = "astv"
 RECIPE = "rcp"

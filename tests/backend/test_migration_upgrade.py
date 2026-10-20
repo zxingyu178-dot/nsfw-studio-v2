@@ -38,7 +38,7 @@ def test_upgrade_from_v012_database(settings, monkeypatch):
         "0011_image_import_dedup_unique", "0012_stage_item_reuse_trace",
         "0013_client_request_fingerprint", "0014_prompt_preview_image",
         "0015_image_variant_system", "0016_image_review_status",
-        "0017_image_review_semantics", "0018_mobile_review_bridge",
+        "0017_image_review_semantics", "0018_mobile_review_bridge", "0019_prompt_scoring",
     ]
 
     # 3) 旧数据仍在 + 新表可写

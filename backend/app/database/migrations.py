@@ -689,6 +689,30 @@ MIGRATIONS: tuple[Migration, ...] = (
             "CREATE INDEX idx_mobile_session_items_image ON mobile_review_session_items(image_id)",
         ),
     ),
+    Migration(
+        migration_id="0019_prompt_scoring",
+        version="0.17.3",
+        description="Phase 0.17.3：提示词人工评分与手动保留、候选、淘汰状态",
+        statements=(
+            """
+            CREATE TABLE prompt_evaluations (
+                id TEXT PRIMARY KEY,
+                prompt_id TEXT NOT NULL REFERENCES prompts(id),
+                prompt_version_id TEXT REFERENCES prompt_versions(id),
+                overall_score INTEGER NOT NULL CHECK (overall_score BETWEEN 1 AND 5),
+                dimension_scores_json TEXT NOT NULL DEFAULT '{}',
+                source TEXT NOT NULL DEFAULT 'user',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_prompt_evaluations_prompt_id ON prompt_evaluations(prompt_id)",
+            "CREATE INDEX idx_prompt_evaluations_created_at ON prompt_evaluations(created_at)",
+            "ALTER TABLE prompts ADD COLUMN status TEXT NOT NULL DEFAULT 'candidate' "
+            "CHECK (status IN ('keep', 'candidate', 'eliminated'))",
+            "ALTER TABLE prompts ADD COLUMN status_reason TEXT NOT NULL DEFAULT ''",
+        ),
+    ),
 )
 
 
