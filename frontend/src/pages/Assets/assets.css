@@ -105,3 +105,56 @@
   margin-top: var(--space-4);
 }
 .as-loadmore .muted { font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* ===== Phase 0.17.5 视觉升级第三批：素材 ===== */
+.as-toolbar {
+  flex-wrap: wrap;
+}
+
+.as-toolbar .ds-input {
+  width: auto;
+  flex: 1 1 320px;
+  max-width: 520px;
+  min-width: 240px;
+}
+
+.as-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.as-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.as-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.as-card__thumb {
+  height: auto;
+  aspect-ratio: 3 / 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-soft);
+}
+
+.as-card__body {
+  padding: 10px 12px 12px;
+}
+
+.as-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
