@@ -91,6 +91,15 @@ export default function GalleryPage() {
     setDetail((current) => (current && current.id === updated.id ? updated : current))
   }
 
+  /** Phase 0.18 C：卡片 hover 操作层的收藏切换（失败回写到页面错误条）。 */
+  async function handleToggleFavorite(image: ImageDTO): Promise<void> {
+    try {
+      handleUpdated(await imageApi.favorite(image.id, !image.favorite))
+    } catch (err) {
+      query.setError(err instanceof ApiRequestError ? err.message : '收藏操作失败')
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (detailTimer.current !== null) window.clearTimeout(detailTimer.current)
@@ -440,6 +449,7 @@ export default function GalleryPage() {
           fit={prefs.fit}
           onCardClick={handleCardClick}
           onCardDoubleClick={handleCardDoubleClick}
+          onToggleFavorite={handleToggleFavorite}
           sentinelRef={query.sentinelRef}
         />
       )}
