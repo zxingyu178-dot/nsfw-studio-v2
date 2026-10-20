@@ -166,3 +166,59 @@ body {
     gap: 16px;
   }
 }
+
+/* ===== Phase 0.17.5 视觉升级：全局排版与顶部导航 ===== */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.topnav {
+  height: 58px;
+  padding: 0 28px;
+  gap: 28px;
+  background: color-mix(in srgb, var(--bg-soft) 94%, transparent);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.topnav__brand {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.topnav__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.topnav__link {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.topnav__link:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+.topnav__link--active {
+  color: var(--text-primary);
+  background: var(--surface-3);
+  font-weight: 500;
+}
+
+.topnav__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

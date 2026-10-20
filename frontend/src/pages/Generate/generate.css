@@ -996,3 +996,158 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
+
+/* ===== Phase 0.17.5 视觉升级第二批：生成工作台 =====
+   目标：三栏成为「卡片»，画幅瓦片对齐，Canvas 成为视觉焦点，顶栏/任务坞更精致。 */
+.generate {
+  background:
+    radial-gradient(1200px 520px at 16% -12%, rgba(111, 91, 246, 0.1), transparent 62%),
+    var(--bg);
+}
+
+.wb4-columns {
+  gap: 12px;
+  padding: 12px 16px 8px;
+}
+
+.wb4-pane > .wb-pane {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.wb-pane__header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wb-pane__title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.wb-pane__body {
+  padding: 10px 12px 14px;
+}
+
+.wb-pane__footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 90%, black);
+}
+
+/* 画幅 / 分辨率瓦片：统一单元格高度，形状居中，选中用内描边强调 */
+.wb4-inspector__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ui3-tile {
+  min-height: 58px;
+  padding: 8px 6px;
+  border-radius: var(--radius-md);
+  justify-content: center;
+}
+
+.ui3-tile--selected {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.ui3-tile__label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.ui3-tile--selected .ui3-tile__label {
+  color: var(--text-primary);
+}
+
+/* 中央 Canvas 舞台 */
+.wb4-stage {
+  padding: 14px 16px 10px;
+}
+
+.wb4-stage__topbar {
+  padding: 2px 2px 10px;
+}
+
+.wb4-stage__canvas {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+}
+
+.wb4-stage__hud {
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.wb-thumbs {
+  padding: 10px 2px 0;
+}
+
+.wb-thumbs__item {
+  border-radius: var(--radius-sm);
+  border-color: var(--border);
+}
+
+/* 顶部工作台条 / 底部任务坞 */
+.wb4-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.wb4-dock {
+  margin: 0 16px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.wb4-dock__bar {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.wb4-dock__title {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.wb4-dock__overall {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* ===== Phase 0.17.5 第二批补充：Prompt 槽位与控件微调 ===== */
+.wb-structured-field {
+  padding: 6px 8px 8px;
+  margin: 0 -8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-divider) 80%, transparent);
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.wb-structured-field:hover {
+  background: color-mix(in srgb, var(--surface-3) 60%, transparent);
+}
+
+.wb-structured-field:focus-within {
+  background: color-mix(in srgb, var(--surface-3) 80%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.wb-param__label {
+  letter-spacing: 0.04em;
+}
+
+.wb4-stage__canvas {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
