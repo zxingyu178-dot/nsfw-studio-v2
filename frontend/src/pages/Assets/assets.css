@@ -172,3 +172,27 @@
   box-shadow: none;
   transform: none;
 }
+
+/* ===== Phase 0.18 D：素材卡片 hover 语言统一 ===== */
+.as-card {
+  position: relative;
+  cursor: pointer;
+}
+
+.as-card:hover .as-card__thumb::after {
+  opacity: 1;
+}
+
+.as-card__thumb::after {
+  content: '打开';
+  position: absolute;
+  inset: auto 8px 8px auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}

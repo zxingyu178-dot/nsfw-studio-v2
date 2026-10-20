@@ -65,8 +65,8 @@ function renderTab() {
   )
 }
 
-describe('Prompt 可视化卡片（v0.15：预览在文本下方）', () => {
-  it('有 preview_image_id：预览图用 thumbnail，且位于名称/摘要之后（文本下方）', async () => {
+describe('Prompt 可视化卡片（Phase 0.18 D：图片优先，DOM 仍保持 head → excerpt → preview）', () => {
+  it('有 preview_image_id：预览图用 thumbnail，DOM 位于名称/摘要之后（CSS order 置顶展示）', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
     const { container } = renderTab()
@@ -80,7 +80,7 @@ describe('Prompt 可视化卡片（v0.15：预览在文本下方）', () => {
     expect(img).toBeTruthy()
     expect(img.getAttribute('loading')).toBe('lazy')
     expect(img.getAttribute('src')).toBe(imageThumbUrl('img_cover'))
-    // DOM 顺序：head → excerpt → preview（预览在文本下方）
+    // DOM 顺序：head → excerpt → preview；视觉上由 CSS `order: -1` 把预览置顶（图片优先）。
     expect(head.compareDocumentPosition(excerpt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(excerpt.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // 不再使用旧的顶部封面

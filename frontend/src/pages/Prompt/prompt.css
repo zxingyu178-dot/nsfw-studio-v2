@@ -616,3 +616,91 @@
 .pp-card__action {
   border-radius: var(--radius-sm);
 }
+
+/* ===== Phase 0.18 D：提示词卡片「图片优先」（对齐 DESIGN.md）=====
+   图片置顶铺满卡片，文本与元信息在下方；数字/评分用等宽字体。 */
+.pp-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pp-card__preview {
+  order: -1;
+  margin: 0;
+  border-radius: 0;
+  aspect-ratio: 16 / 9;
+  border-bottom: 1px solid var(--border);
+}
+
+.pp-card__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pp-card__head {
+  padding: 12px 14px 0;
+}
+
+.pp-card__excerpt {
+  padding: 0 14px;
+  margin: 8px 0 0;
+}
+
+.pp-card__score {
+  padding: 0 14px;
+  margin: 10px 0 0;
+}
+
+.pp-card__score-value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.pp-card__gallery {
+  padding: 0 14px;
+  margin: 10px 0 0;
+}
+
+.pp-card__gallery-thumb {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.pp-card__foot {
+  padding: 10px 14px 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pp-card__status {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-pill);
+}
+
+.pp-card__status--keep {
+  color: var(--ok);
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.pp-card__status--eliminated {
+  color: var(--danger);
+  background: rgba(244, 80, 99, 0.12);
+  border-color: rgba(244, 80, 99, 0.35);
+}
+
+.pp-card__status--candidate {
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  border-color: var(--border);
+}
+
+.pp-card__badges .ds-badge {
+  font-size: 11px;
+  border-radius: var(--radius-pill);
+}

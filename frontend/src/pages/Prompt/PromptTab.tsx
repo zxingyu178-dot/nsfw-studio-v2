@@ -255,7 +255,7 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
         </div>
       )}
 
-      {/* 预览图：位于文本下方；无图或加载失败统一为低对比“暂未生成”占位（固定比例，不裂图、不留空白）。 */}
+      {/* 预览图：Phase 0.18 D 起图片优先——DOM 仍在文本之后，由 CSS `order: -1` 置顶铺满卡片。 */}
       {hasPreview && prompt.preview_image_id ? (
         <button
           type="button"
