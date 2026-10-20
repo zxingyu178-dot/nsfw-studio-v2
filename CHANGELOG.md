@@ -2,6 +2,28 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.25.0] — 2026-10-20
+
+> Minor：提示词筛选偏好本地记忆（跨会话记住上次筛选）+ 「重置筛选」入口。
+
+### Added
+
+- `frontend/src/pages/Prompt/promptFilterPrefs.ts`：`prompt.filters.v1` 偏好读写（字段白名单校验、
+  JSON / localStorage 不可用时静默回退、全默认值时移除存储项）。
+- 工具栏「重置筛选」（仅存在非默认筛选时显示）：清空 URL 四个筛选参数 + 本地偏好。
+
+### Changed
+
+- 提示词筛选优先级固定为 **URL > localStorage > 默认值**：
+  - 首次打开且 URL 无筛选参数时，读取上次偏好并通过 `replace` 写回 URL（之后仍以 URL 为唯一事实源）；
+  - 任何筛选 / 搜索变化同步写入 localStorage（默认值不写）。
+- 纯空白搜索词按默认值处理，不写入 URL / 存储。
+
+### Notes
+
+- 实现来自 Codex 子智能体（lite）；Lead 跑全量单 fork 测试（连续 2 次）、`tsc -b`、`vite build` 与截图验收。
+- 新增 `PromptTab.prefs.test.tsx`（5 例：偏好生效、写入、URL 优先、重置、非法 JSON 回退）。
+
 ## [0.24.0] — 2026-10-20
 
 > Minor：图库详情抽屉按 DESIGN.md 重做（分区 + 等宽参数 + 危险区），并加固前端测试竞态。
