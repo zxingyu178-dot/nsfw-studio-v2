@@ -18,6 +18,7 @@ import { formatDateTime } from '../../utils/format'
 import { useInfiniteList } from './useInfiniteList'
 import {
   STRUCTURED_FIELDS,
+  PROMPT_STATUS_LABEL,
   emptyStructured,
   imageContentUrl,
   imagePreviewUrl,
@@ -29,6 +30,7 @@ import {
   type StructuredPrompt,
   type WorkbenchSnapshot,
 } from '../../types/workbench'
+import { PromptScoringDialog } from './PromptScoringDialog'
 
 /** 我的 Prompt（§三十八-§四十、§四十九、§五十四、§五十五）。 */
 export function PromptTab() {
@@ -48,6 +50,8 @@ export function PromptTab() {
         // Phase 0.17.2：卡片下直接展示「这条提示词生成过的图」。
         include_images: true,
         images_limit: 3,
+        // Phase 0.17.3：附带最近一次评分，卡片上展示评分与状态。
+        include_evaluation: true,
       }),
     [search, showArchived],
   )
@@ -185,6 +189,8 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [favBusy, setFavBusy] = useState(false)
   // Phase 0.17.2：卡片下展示该提示词生成过的图；点击看大图。
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
+  // Phase 0.17.3：人工评分弹窗。
+  const [scoringOpen, setScoringOpen] = useState(false)
   // v0.15.1：DB 有 preview_image_id 但 rendition 缺失/损坏时，统一回退“暂未生成”占位，
   // 而不是把 img 隐藏后留下一个空白 preview 区。
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -226,12 +232,28 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
           {prompt.name}
           {prompt.archived && <Badge>已归档</Badge>}
         </h3>
-        <Badge tone="accent">
-          {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
-        </Badge>
+        <span className="pp-card__badges">
+          <Badge tone="accent">
+            {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
+          </Badge>
+          <span className={`pp-card__status pp-card__status--${prompt.status ?? 'candidate'}`}>
+            {PROMPT_STATUS_LABEL[prompt.status ?? 'candidate']}
+          </span>
+        </span>
       </header>
 
       <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
+
+      {prompt.latest_evaluation && (
+        <div
+          className="pp-card__score"
+          aria-label={`最近评分 ${prompt.latest_evaluation.overall_score} 分（满分 5）`}
+        >
+          <span className="pp-card__score-value">{prompt.latest_evaluation.overall_score}</span>
+          <span className="pp-card__score-label">/ 5</span>
+          {prompt.status_reason && <span className="pp-card__score-note">{prompt.status_reason}</span>}
+        </div>
+      )}
 
       {/* 预览图：位于文本下方；无图或加载失败统一为低对比“暂未生成”占位（固定比例，不裂图、不留空白）。 */}
       {hasPreview && prompt.preview_image_id ? (
@@ -300,6 +322,9 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
           <button type="button" className="pp-card__action" onClick={() => onOpen(prompt)}>
             编辑
           </button>
+          <button type="button" className="pp-card__action" onClick={() => setScoringOpen(true)}>
+            {prompt.latest_evaluation ? '重新评分' : '评分'}
+          </button>
           <button
             type="button"
             className="pp-card__action"
@@ -321,6 +346,10 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
         <Modal open title={`${prompt.name} · 生成图`} onClose={() => setGalleryImage(null)}>
           <img className="pp-card__preview-modal" src={galleryImage.preview_url} alt="" />
         </Modal>
+      )}
+
+      {scoringOpen && (
+        <PromptScoringDialog prompt={prompt} onClose={() => setScoringOpen(false)} onSaved={onChanged} />
       )}
     </article>
   )
