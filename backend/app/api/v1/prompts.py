@@ -9,6 +9,9 @@ from app.schemas.prompt import (
     ComposeRequest,
     ComposeResponse,
     PromptCreateRequest,
+    PromptEvaluationCreateRequest,
+    PromptEvaluationResponse,
+    PromptStatusRequest,
     PromptListResponse,
     PromptImagesResponse,
     PromptMetaUpdateRequest,
@@ -17,9 +20,10 @@ from app.schemas.prompt import (
     PromptVersionResponse,
     PreviewImageRequest,
     prompt_response,
+    prompt_evaluation_response,
     prompt_version_response,
 )
-from app.services import prompt_image_service, prompt_service
+from app.services import prompt_image_service, prompt_scoring_service, prompt_service
 from app.services.prompt_composer import compose_structured
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
@@ -43,12 +47,37 @@ def list_prompts(
     offset: int = Query(default=0, ge=0),
     include_images: bool = Query(default=False),
     images_limit: int = Query(default=3, ge=1, le=10),
+    include_evaluation: bool = Query(default=False),
     session: Session = Depends(get_session),
 ) -> PromptListResponse:
     return prompt_image_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
         include_images=include_images, images_limit=images_limit,
+        include_evaluation=include_evaluation,
     )
+
+
+@router.post("/{prompt_id}/evaluations", response_model=PromptEvaluationResponse, status_code=201,
+             summary="创建人工评分")
+def create_prompt_evaluation(
+    prompt_id: str, request: PromptEvaluationCreateRequest, session: Session = Depends(get_session),
+) -> PromptEvaluationResponse:
+    return prompt_evaluation_response(prompt_scoring_service.create_evaluation(session, prompt_id, request))
+
+
+@router.get("/{prompt_id}/evaluations", response_model=list[PromptEvaluationResponse], summary="人工评分历史")
+def list_prompt_evaluations(
+    prompt_id: str, session: Session = Depends(get_session),
+) -> list[PromptEvaluationResponse]:
+    return [prompt_evaluation_response(item) for item in prompt_scoring_service.list_evaluations(session, prompt_id)]
+
+
+@router.post("/{prompt_id}/status", response_model=PromptResponse, summary="手动设置提示词状态")
+def set_prompt_status(
+    prompt_id: str, request: PromptStatusRequest, session: Session = Depends(get_session),
+) -> PromptResponse:
+    prompt = prompt_scoring_service.set_status(session, prompt_id, request)
+    return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
 
 
 @router.get("/{prompt_id}/images", response_model=PromptImagesResponse, summary="Prompt 生成图片")

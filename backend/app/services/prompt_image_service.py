@@ -6,9 +6,9 @@ from app.models import Image, Job, PromptVersion
 from app.schemas.image import image_response
 from app.schemas.prompt import (
     PromptImageResponse, PromptImagesResponse, PromptListItemResponse,
-    PromptListResponse, prompt_response,
+    PromptListResponse, prompt_evaluation_response, prompt_response,
 )
-from app.services import prompt_service
+from app.services import prompt_scoring_service, prompt_service
 
 
 def _source_prompt_id():
@@ -76,6 +76,7 @@ def list_prompts(
     session: Session, *, search: str | None = None, favorite: bool | None = None,
     archived: bool | None = False, limit: int = 50, offset: int = 0,
     include_images: bool = False, images_limit: int = 3,
+    include_evaluation: bool = False,
 ) -> PromptListResponse:
     prompts, total = prompt_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
@@ -88,9 +89,15 @@ def list_prompts(
         )
     } if version_ids else {}
     images = _batch_images(session, [prompt.id for prompt in prompts], images_limit) if include_images and prompts else {}
+    evaluations = prompt_scoring_service.latest_evaluations(
+        session, [prompt.id for prompt in prompts],
+    ) if include_evaluation else {}
     items = []
     for prompt in prompts:
         data = prompt_response(prompt, versions.get(prompt.current_version_id)).model_dump()
+        if include_evaluation:
+            evaluation = evaluations.get(prompt.id)
+            data["latest_evaluation"] = prompt_evaluation_response(evaluation) if evaluation else None
         if include_images:
             data["images"], data["images_total"] = images[prompt.id]
         items.append(PromptListItemResponse(**data))
