@@ -6,7 +6,7 @@
  * 底部固定 SplitGenerateAction（左 生成 N 张 / 右 ⚡ 插队）。
  */
 import { Field, Switch } from '../../../components/ui'
-import { IconButton, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
+import { IconButton, IconChevronDown, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import {
   hasUpscaleModule,
   isImageStartModule,
@@ -25,7 +25,13 @@ import { ModuleParameterField } from '../components/ModuleParameterField'
 import { Pane } from '../Pane'
 import { SplitGenerateAction } from './SplitGenerateAction'
 
-export function InspectorPanel({ imageGenAvailable }: { imageGenAvailable: boolean | null }) {
+export function InspectorPanel({
+  imageGenAvailable,
+  onCollapse,
+}: {
+  imageGenAvailable: boolean | null
+  onCollapse?: () => void
+}) {
   const state = useWorkbench()
 
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
@@ -40,7 +46,19 @@ export function InspectorPanel({ imageGenAvailable }: { imageGenAvailable: boole
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
 
   return (
-    <Pane title="参数" footer={<SplitGenerateAction imageGenAvailable={imageGenAvailable} />}>
+    <Pane
+      title="参数"
+      actions={
+        onCollapse ? (
+          <IconButton
+            icon={<IconChevronDown size={14} className="wb-pane__collapse-icon wb-pane__collapse-icon--right" />}
+            label="收起参数栏"
+            onClick={onCollapse}
+          />
+        ) : undefined
+      }
+      footer={<SplitGenerateAction imageGenAvailable={imageGenAvailable} />}
+    >
       {/* ===== 工作流 ===== */}
       <div className="wb4-inspector__group">
         <div className="wb-param">

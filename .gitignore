@@ -49,3 +49,6 @@ configs/config.local.yaml
 .vscode/
 .DS_Store
 Thumbs.db
+
+# TypeScript incremental build cache (tsc -b)
+*.tsbuildinfo

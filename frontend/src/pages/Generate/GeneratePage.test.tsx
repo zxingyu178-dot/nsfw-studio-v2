@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import GeneratePage from './GeneratePage'
+import { __resetLayoutForTest } from './workbench/workbenchLayout'
 
 // 无后端环境：让所有 API 请求快速失败，组件自身已做错误兜底。
 beforeEach(() => {
+  __resetLayoutForTest()
   vi.stubGlobal(
     'fetch',
     vi.fn(() => Promise.reject(new Error('no backend')))
@@ -38,3 +40,41 @@ describe('GeneratePage 工作台骨架', () => {
     expect(buttons.length).toBeGreaterThan(0)
   })
 })
+
+describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
+  it('左栏可收起为竖栏并可再展开', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '收起 Prompt 栏' }))
+    // 收起后内容不再挂载，只保留展开竖栏
+    expect(screen.queryByRole('heading', { name: 'Prompt 编辑' })).toBeNull()
+    const expand = screen.getByRole('button', { name: '展开Prompt 栏' })
+    expect(expand).toBeInTheDocument()
+
+    fireEvent.click(expand)
+    expect(screen.getByRole('heading', { name: 'Prompt 编辑' })).toBeInTheDocument()
+  })
+
+  it('右栏可收起为竖栏并可再展开', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '收起参数栏' }))
+    expect(screen.queryByRole('heading', { name: '参数' })).toBeNull()
+    const expand = screen.getByRole('button', { name: '展开参数栏' })
+
+    fireEvent.click(expand)
+    expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
+  })
+
+  it('收起状态写入 CSS 变量，宽度让给 Canvas（collapse 后 --left-w 为 44px）', () => {
+    const { container } = renderPage()
+    const columns = container.querySelector('.wb4-columns') as HTMLElement
+    expect(columns.style.getPropertyValue('--left-w')).toBe('320px')
+
+    fireEvent.click(screen.getByRole('button', { name: '收起 Prompt 栏' }))
+    expect(columns.style.getPropertyValue('--left-w')).toBe('44px')
+  })
+})
+

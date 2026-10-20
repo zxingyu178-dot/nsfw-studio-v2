@@ -2,6 +2,26 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.17.0] — 2026-10-20
+
+> Minor：Phase 0.17.1 一屏工作台骨架（第一批）。给「注意力被三栏切碎」「队列进度不直观」两个
+> 用户反馈痛点提供直接解法：左右栏可收起把空间让给 Canvas，队列条收起态常驻阶段与真实 Step。
+> 不改业务模型 / API / 队列语义；无数据库迁移。
+
+### Added
+
+- **左右栏可收起**：Prompt 栏 / 参数栏各有一个收起按钮，收起后保留 44px 竖栏（点击展开），
+  状态持久化到 localStorage（`workbench.leftCollapsed` / `workbench.rightCollapsed`）；
+  收起后 `--left-w/--right-w` 切到 44px，宽度让给 Canvas。
+- **队列条常驻阶段与 Step**：TaskDock 收起态新增「阶段 x/y · 阶段名」与真实采样
+  「Step x/y」；非采样阶段（如高清放大）不伪造 Step（沿用 v0.15.1 语义）。
+- 回归测试：GeneratePage 收起/展开 3 例、TaskDock 阶段与 Step 2 例。
+
+### Notes
+
+- 参数分层沿用 v0.15 的「常用项常驻 + 高级参数折叠」；提示词库与评分系统分别在 0.17.2 / 0.17.3。
+- 本版本是 Phase 0.17 的第一批；完整设计见 `docs/PHASE017_UI_REDESIGN_PLAN.md`。
+
 ## [0.16.1] — 2026-10-20
 
 > Patch：修复画幅选择瓦片的尺寸预览（Phase 0.17.1 首个切片，用户反馈"选择尺寸的预览图都是一样的"）。

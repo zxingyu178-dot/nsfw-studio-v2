@@ -38,8 +38,17 @@ export function TaskDock() {
           <div className="wb4-dock__status">
             <span className="wb4-dock__dot wb4-dock__dot--run" aria-hidden="true" />
             <span className="wb4-dock__label">{running.status === 'RUNNING' ? 'RUNNING' : 'QUEUED'}</span>
+            {hud?.stageIndex != null && hud.stageCount > 1 && (
+              <span className="wb4-dock__stage">
+                阶段 {hud.stageIndex}/{hud.stageCount}
+                {hud.stageLabel ? ` · ${hud.stageLabel}` : ''}
+              </span>
+            )}
             {hud?.currentItem != null && hud.itemTotal != null && (
               <span className="wb4-dock__item">第 {hud.currentItem}/{hud.itemTotal} 张</span>
+            )}
+            {!hud?.indeterminate && hud?.step != null && hud?.maxStep != null && (
+              <span className="wb4-dock__step">Step {hud.step}/{hud.maxStep}</span>
             )}
             <span className="wb4-dock__overall">{hud?.overall ?? 0}%</span>
           </div>
