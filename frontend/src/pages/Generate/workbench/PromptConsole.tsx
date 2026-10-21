@@ -179,6 +179,7 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
                 label={label}
                 value={state.structured[key]}
                 active={activeSlot === key}
+                placeholder={key === 'style' ? '例如：写实人像摄影、胶片质感、85mm 自然光…' : undefined}
                 assetName={slotRef?.name ?? null}
                 onActivate={() => activateSlot(key)}
                 onChange={(value) => setStructuredField(key, value)}

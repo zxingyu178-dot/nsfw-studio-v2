@@ -1,7 +1,7 @@
 {
   "name": "nsfw-studio-frontend",
   "private": true,
-  "version": "0.30.0",
+  "version": "0.30.1",
   "type": "module",
   "engines": {
     "node": ">=22.22.2 <23"
