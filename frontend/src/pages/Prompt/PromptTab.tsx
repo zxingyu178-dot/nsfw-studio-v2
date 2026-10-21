@@ -320,7 +320,7 @@ interface PromptCardProps {
 /**
  * Prompt 可视化卡片（v0.15 Task 13/14）：
  * 名称 → 摘要（≤3 行）→ 预览图（在文本下方）→ 更新时间 → 使用 / 复制 / 编辑 / 收藏。
- * 无图统一低对比“暂未生成”占位（固定 aspect ratio、绝不 broken-image）；点图才打开预览，无图不弹错。
+ * 无图不渲染媒体区；点图才打开预览，无图不弹错。
  * 不自动覆盖封面，封面仍在编辑抽屉里显式“设为 Prompt 封面”。
  */
 function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
@@ -331,8 +331,7 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // Phase 0.17.3：人工评分弹窗。
   const [scoringOpen, setScoringOpen] = useState(false)
-  // v0.15.1：DB 有 preview_image_id 但 rendition 缺失/损坏时，统一回退“暂未生成”占位，
-  // 而不是把 img 隐藏后留下一个空白 preview 区。
+  // DB 有 preview_image_id 但 rendition 缺失/损坏时，移除整个媒体区。
   const [previewFailed, setPreviewFailed] = useState(false)
 
   // 封面 id 变化（重新设置封面）时重置失败态，允许重试新加载。
@@ -396,7 +395,7 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
       )}
 
       {/* 预览图：Phase 0.18 D 起图片优先——DOM 仍在文本之后，由 CSS `order: -1` 置顶铺满卡片。 */}
-      {hasPreview && prompt.preview_image_id ? (
+      {hasPreview && prompt.preview_image_id && (
         <button
           type="button"
           className="pp-card__preview"
@@ -409,15 +408,11 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
             loading="lazy"
             alt=""
             onError={() => {
-              // 后端清了文件但元数据仍在 / rendition 损坏：进入统一占位，不显示 broken-image、不留空白。
+              // 后端清了文件但元数据仍在 / rendition 损坏：移除媒体区。
               setPreviewFailed(true)
             }}
           />
         </button>
-      ) : (
-        <div className="pp-card__preview pp-card__preview--empty" aria-label="暂未生成预览">
-          <span>暂未生成</span>
-        </div>
       )}
 
       {prompt.images && prompt.images.length > 0 && (

@@ -72,7 +72,10 @@ Asset 按 `type=face + 同 name + 当前版本同 tag 集合` 查重，tag 顺�
   SQLite WAL 只读连接仍可能创建空 `-wal` / `-shm` 辅助文件并维护共享内存读锁；
   这不是业务写入。不能用 `immutable=1` 忽略现存 WAL，否则计划会漏读未 checkpoint 数据。
 - apply 要求 `backups/studio-*.db` 为非空文件且 mtime 位于过去一小时，未来时间不接受。
-  此门禁只核查文件及时间，不替代备份恢复演练；必须使用官方 `backup_db.py` 生成。
+  同时拒绝当前数据库的链接/硬链接，检查 SQLite quick_check、foreign_key_check，
+  以及四张目标表和 migration 表的结构一致性，拒绝文本伪备份、损坏库和异构库。
+  同结构的另一套数据库仍可能通过，门禁不能证明备份来源；必须使用官方 `backup_db.py`
+  为明确的同一 DataRoot 生成，不替代备份恢复演练。
   `--force` 只绕过该门禁，始终输出危险警告，不隐含 apply，不绕过其他校验。
 - apply 用 `BEGIN IMMEDIATE` 先取写锁再查重，两次迁移不会同时插入重复记录；
   与其他写入竞争超时则失败，由 Lead 择空闲窗口重试。
@@ -142,7 +145,7 @@ if ($LASTEXITCODE -ne 0) { throw "迁移未确认成功，请按映射核查数�
 ## 验收记录
 
 测试命令：`.venv\Scripts\python -m pytest tests/backend/test_migrate_v1_legacy.py -q`。
-2026-10-20 专项结果：16 项通过，1 条现有 Starlette/httpx 弃用警告，无新增依赖。
+2026-10-20 最终专项 19 项通过（退出码 0）。存在 1 条现有 Starlette/httpx 弃用警告，无新增依赖。
 临时 fixture 覆盖 dry-run、apply、幂等、备份门禁、force、配置优先级、图片损坏、
 事务失败、映射失败、INSERT-only 约束、缺失源 ID、扩展名与内容格式不一致，
 以及临时数据库 backup API 恢复。最终测试结果见本次交付汇报；
@@ -165,3 +168,19 @@ dry-run：只读检查完成；未写数据库、图片或映射文件。
 ```
 
 另一次 dry-run 前后，目标数据库主文件及已有 WAL 内容的 SHA-256 对比一致。
+
+额外执行 `.venv\Scripts\python -m pytest`：541 passed、2 failed、3 skipped，
+耗时 1063.72 秒。本轮不是全绿：现有 `test_job_queue.py` 中
+`test_priority_next_inserts_after_running` 等待 RUNNING 时已是 COMPLETED；
+`test_queue_reorder` 返回 400，缺失 `queued`。未修改现有队列实现或测试。
+全量执行期间专项用例仍在补充，最终迁移专项结果单独列出，不能视为最终版本单轮全量全绿。
+上述两项队列测试单独复跑仍失败；独立只读审查已复核最终备份门禁。
+
+本会话末次真实 dry-run 发现外部状态已变化，输出变为
+`prompts=98 faces=3 待新增=0 skipped=101`，只读计数为 99 prompts / 4 assets；
+出现映射 `v1-migration-map-20261020T135425300651Z.json`。
+本实施会话没有执行真实 apply 或 commit/push/tag，不能把该外部迁移记作本会话执行。
+上文 `待新增=101 skipped=0` 是较早时点的真实计划，二者不是同一时点的数据。
+
+本会话测试临时目录清理请求被自动审批策略拒绝（`blocked by policy`），未绕过，
+临时 fixture 数据保留，不涉及生产数据或其他 Agent 文件。

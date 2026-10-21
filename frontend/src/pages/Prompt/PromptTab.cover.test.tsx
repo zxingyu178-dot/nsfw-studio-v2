@@ -87,21 +87,19 @@ describe('Prompt 可视化卡片（Phase 0.18 D：图片优先，DOM 仍保持 h
     expect(card.querySelector('.pp-card__cover')).toBeNull()
   })
 
-  it('无 preview_image_id：显示固定比例低对比“暂未生成”占位，不出现 broken-image/无封面', async () => {
+  it('无 preview_image_id：不渲染任何媒体区或占位', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt({ preview_image_id: null })] } as never)
     const { container } = renderTab()
     await screen.findByText('测试 Prompt')
 
-    expect(screen.getByText('暂未生成')).toBeInTheDocument()
+    expect(screen.queryByText('暂未生成')).toBeNull()
     expect(screen.queryByText('无封面')).toBeNull()
-    const placeholder = container.querySelector('.pp-card__preview--empty') as HTMLElement
-    expect(placeholder).toBeTruthy()
-    // 固定 aspect ratio（CSS 层断言在 generateCssDedupe/样式测试，这里保证无 img）
-    expect(placeholder.querySelector('img')).toBeNull()
+    expect(container.querySelector('.pp-card__preview')).toBeNull()
+    expect(container.querySelector('.pp-card__preview--empty')).toBeNull()
   })
 
-  it('v0.15.1：有 preview_image_id 但缩略图加载失败（onError）→ 统一“暂未生成”占位，不残留 img/空白', async () => {
+  it('有 preview_image_id 但缩略图加载失败（onError）→ 移除整个媒体区，不渲染占位', async () => {
     const { promptApi } = await import('../../api/client')
     vi.mocked(promptApi.list).mockResolvedValue({ items: [makePrompt()] } as never)
     const { container } = renderTab()
@@ -111,9 +109,9 @@ describe('Prompt 可视化卡片（Phase 0.18 D：图片优先，DOM 仍保持 h
     expect(img).toBeTruthy()
     fireEvent.error(img) // 模拟 rendition 缺失/损坏
 
-    expect(await screen.findByText('暂未生成')).toBeInTheDocument()
-    expect(container.querySelector('.pp-card__preview img')).toBeNull()
-    expect(container.querySelector('.pp-card__preview--empty')).toBeTruthy()
+    expect(screen.queryByText('暂未生成')).toBeNull()
+    expect(container.querySelector('.pp-card__preview')).toBeNull()
+    expect(container.querySelector('.pp-card__preview--empty')).toBeNull()
   })
 
   it('v0.15.1：编辑抽屉小封面使用 preview（1536 渐进图）而非 original content，降低 IO', async () => {

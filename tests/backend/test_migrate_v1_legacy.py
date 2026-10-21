@@ -271,3 +271,19 @@ def test_backup_restore_roundtrip_preserves_existing_prompt(migration_data, sess
         assert conn.execute("SELECT id,name FROM prompts").fetchone() == (existing_id, "已有记录")
         assert conn.execute("SELECT positive_prompt FROM prompt_versions").fetchone()[0] == "不可覆盖"
     assert len(list((migration_data[1] / "assets/face").rglob("preview.jpg"))) == 1
+
+
+@pytest.mark.parametrize("kind", ["text", "wrong_schema", "live_hardlink"])
+def test_invalid_backup_cannot_unlock_apply(migration_data, kind):
+    path = migration_data[1] / "backups/studio-invalid.db"
+    if kind == "text":
+        path.write_text("这不是数据库备份", encoding="utf-8")
+    elif kind == "wrong_schema":
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE unrelated (id)")
+    else:
+        os.link(migration_data[2], path)
+    result = run_cli(migration_data, "--apply")
+    assert result.returncode != 0
+    assert "backup_db.py" in result.stderr
+    assert counts(migration_data[2]) == (0, 0, 0, 0)

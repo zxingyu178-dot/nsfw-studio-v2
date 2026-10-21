@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import io
@@ -107,13 +108,33 @@ def load_source(source: Path) -> tuple[list[dict], list[dict]]:
 
 
 def recent_backup(root: Path) -> Path | None:
+    """时效之外校验 SQLite 完整性与目标结构；不能替代来源确认和恢复演练。"""
     now = time.time()
+    database = under(root, "database/studio.db")
     candidates = [
         p for p in under(root, "backups").glob("studio-*.db")
         if p.is_file() and p.resolve().is_relative_to(root)
+        and not p.samefile(database)
         and p.stat().st_size > 0 and 0 <= now - p.stat().st_mtime <= 3600
     ]
-    return max(candidates, key=lambda p: p.stat().st_mtime, default=None)
+    if not candidates:
+        return None
+    schema_sql = ("SELECT name,sql FROM sqlite_master WHERE type='table' "
+                  "AND name IN ('prompts','prompt_versions','assets','asset_versions','migration') "
+                  "ORDER BY name")
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as target:
+        expected = target.execute(schema_sql).fetchall()
+    for candidate in sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with closing(sqlite3.connect(candidate.resolve().as_uri() + "?mode=ro", uri=True)) as saved:
+                if (saved.execute("PRAGMA quick_check").fetchall() == [("ok",)]
+                        and not saved.execute("PRAGMA foreign_key_check").fetchall()
+                        and len(expected) == 5
+                        and saved.execute(schema_sql).fetchall() == expected):
+                    return candidate
+        except sqlite3.DatabaseError:
+            continue
+    return None
 
 
 def connect(database: Path, apply: bool) -> sqlite3.Connection:
@@ -235,12 +256,14 @@ def migrate(source: Path, root: Path, *, apply: bool = False, force: bool = Fals
     database = under(root, "database/studio.db")
     if not database.is_file():
         raise ValueError(f"目标数据库不存在，请先通过 V2 正常初始化：{database}")
-    backup = recent_backup(root)
+    backup = recent_backup(root) if apply else None
     if apply:
         if force:
             print("危险警告：--force 已启用，绕过最近一小时备份门禁；可能无法安全回滚。")
         elif backup is None:
-            raise ValueError("拒绝执行：最近一小时内无 studio-*.db 备份。请先运行 scripts/backup_db.py。")
+            raise ValueError("拒绝执行：最近一小时内无有效 studio-*.db 备份"
+                             "（需完整性和结构校验通过，且不是当前数据库）。"
+                             "请先运行 scripts/backup_db.py。")
     prompts, faces = load_source(source)
     print(f"源目录：{source}\nDataRoot：{root}")
     conn = connect(database, apply)
