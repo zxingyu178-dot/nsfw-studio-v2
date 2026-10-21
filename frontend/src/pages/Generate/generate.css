@@ -1285,3 +1285,43 @@
   padding: 3px 8px;
   font-size: 11px;
 }
+
+/* ===== Prompt 库一键填入（Drawer） ===== */
+.prompt-library { display: flex; flex-direction: column; gap: var(--space-3); }
+.prompt-library__search { width: 100%; }
+.prompt-library__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.prompt-library__item { display: flex; align-items: stretch; gap: var(--space-2); }
+.prompt-library__pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.prompt-library__pick:hover:not(:disabled) { border-color: var(--control-border); background: var(--surface-3); }
+.prompt-library__pick:disabled { opacity: 0.5; cursor: not-allowed; }
+.prompt-library__head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.prompt-library__name { font-weight: 600; }
+.prompt-library__mode {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
+}
+.prompt-library__fav { color: var(--warn); }
+.prompt-library__excerpt { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.5; }

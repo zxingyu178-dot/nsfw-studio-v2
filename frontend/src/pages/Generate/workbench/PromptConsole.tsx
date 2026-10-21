@@ -30,6 +30,7 @@ import { AssetPickerDrawer } from '../AssetPickerDrawer'
 import { CollapsibleSection } from '../components/CollapsibleSection'
 import { Pane } from '../Pane'
 import { PromptSlotRow } from './PromptSlotRow'
+import { PromptLibraryDrawer } from './PromptLibraryDrawer'
 
 const SLOT_KEYS: AssetType[] = ['face', 'clothing', 'pose', 'scene']
 const ACTIVE_SLOT_KEY = 'workbench.activePromptSlot'
@@ -42,6 +43,7 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
   const state = useWorkbench()
   const [pickerSlot, setPickerSlot] = useState<AssetType | null>(null)
   const [imagePickerOpen, setImagePickerOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -115,6 +117,9 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
             ]}
             ariaLabel="Prompt 编辑模式"
           />
+          <Button size="xs" variant="secondary" onClick={() => setLibraryOpen(true)}>
+            提示词库
+          </Button>
           {onCollapse && (
             <IconButton
               icon={<IconChevronDown size={14} className="wb-pane__collapse-icon wb-pane__collapse-icon--left" />}
@@ -246,6 +251,8 @@ export function PromptConsole({ onCollapse }: { onCollapse?: () => void } = {}) 
           }}
         />
       )}
+
+      <PromptLibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
 
       {imagePickerOpen && (
         <ImagePickerDrawer
