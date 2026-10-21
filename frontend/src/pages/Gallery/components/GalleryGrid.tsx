@@ -1,6 +1,7 @@
-import type { MutableRefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { ImageDTO } from '../../../types/workbench'
 import type { GalleryDensity, GalleryFit } from '../hooks/useGalleryPrefs'
+import { distributeColumns } from '../lib/distributeColumns'
 import { GalleryCard } from './GalleryCard'
 
 /**
@@ -28,6 +29,30 @@ export function GalleryGrid({
   items, total, hasNext, loading, loadingMore, selectedIds, selectMode,
   density, fit, onCardClick, onCardDoubleClick, onToggleFavorite, sentinelRef,
 }: GalleryGridProps) {
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const [columnCount, setColumnCount] = useState(1)
+
+  useEffect(() => {
+    const element = gridRef.current
+    if (!element) return
+    const targetWidth = density === 'compact' ? 170 : density === 'large' ? 280 : 220
+    const update = (width: number) => {
+      setColumnCount(Math.max(1, Math.floor((width + 12) / (targetWidth + 12))))
+    }
+    update(element.clientWidth)
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      update(entries[0]?.contentRect.width ?? element.clientWidth)
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [density])
+
+  const columns = useMemo(
+    () => distributeColumns(items, columnCount, imageAspect),
+    [items, columnCount],
+  )
+
   return (
     <>
       {loading && <p className="muted">加载中…</p>}
@@ -38,17 +63,21 @@ export function GalleryGrid({
         </div>
       )}
       <p className="gal-count">共 {total} 张</p>
-      <div className={`gal-grid gal-grid--${density} gal-grid--fit-${fit}`}>
-        {items.map((image) => (
-          <GalleryCard
-            key={image.id}
-            image={image}
-            selected={selectedIds.includes(image.id)}
-            selectMode={selectMode}
-            onCardClick={onCardClick}
-            onCardDoubleClick={onCardDoubleClick}
-            onToggleFavorite={onToggleFavorite}
-          />
+      <div ref={gridRef} className={`gal-grid gal-grid--${density} gal-grid--fit-${fit}`}>
+        {columns.map((column, columnIndex) => (
+          <div className="gal-col" key={columnIndex}>
+            {column.map((image) => (
+              <GalleryCard
+                key={image.id}
+                image={image}
+                selected={selectedIds.includes(image.id)}
+                selectMode={selectMode}
+                onCardClick={onCardClick}
+                onCardDoubleClick={onCardDoubleClick}
+                onToggleFavorite={onToggleFavorite}
+              />
+            ))}
+          </div>
         ))}
       </div>
       {/* 无限滚动哨兵 */}
@@ -56,4 +85,8 @@ export function GalleryGrid({
       {loadingMore && <p className="muted">加载更多…</p>}
     </>
   )
+}
+
+function imageAspect(image: ImageDTO): number {
+  return image.width > 0 && image.height > 0 ? image.width / image.height : 1
 }
