@@ -176,6 +176,25 @@ export function CanvasStage() {
 
   const lightboxIndex = shown ? Math.max(0, images.findIndex((i) => i.id === shown.id)) : 0
 
+  // 键盘 ←/→ 在 Canvas 内切换当前图片（输入框聚焦时不拦截；Lightbox 打开时由 Lightbox 自己处理）。
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (lightboxOpen) return
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      const target = event.target as HTMLElement | null
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+      if (images.length < 2) return
+      event.preventDefault()
+      const currentIndex = shown ? images.findIndex((image) => image.id === shown.id) : -1
+      const delta = event.key === 'ArrowLeft' ? -1 : 1
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + delta + images.length) % images.length
+      setSelectedId(images[nextIndex]!.id)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [images, shown, lightboxOpen])
+
   return (
     <div className="wb4-stage">
       <div className="wb4-stage__topbar">
