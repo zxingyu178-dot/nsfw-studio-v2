@@ -44,6 +44,7 @@ IMAGE_KIND_DIRS = {
     "upscaled": "images/upscaled",
     "processed": "images/processed",
 }
+IMAGE_IDS_LIMIT = 10_000
 
 logger = logging.getLogger(__name__)
 
@@ -624,6 +625,19 @@ def _apply_image_filters(
     return query
 
 
+def _image_order_by(sort: str):
+    """返回图库列表与 ID 查询共用的稳定排序。"""
+    if sort == "created_asc":
+        return (Image.created_at.asc(), Image.id.asc())
+    if sort == "favorite":
+        return (Image.favorite.desc(), Image.created_at.desc(), Image.id.desc())
+    if sort == "size":
+        return ((Image.width * Image.height).desc(), Image.created_at.desc(), Image.id.desc())
+    if sort == "created_desc":
+        return (Image.created_at.desc(), Image.id.desc())
+    raise ValidationError(f"非法排序: {sort}", code="IMAGE_SORT_INVALID")
+
+
 def list_images(
     session: Session,
     *,
@@ -645,8 +659,7 @@ def list_images(
     if offset < 0:
         raise ValidationError("offset 不能为负")
     _validate_filter_values(review_status=review_status, status=status)
-    if sort not in ("created_desc", "created_asc", "favorite", "size"):
-        raise ValidationError(f"非法排序: {sort}", code="IMAGE_SORT_INVALID")
+    order_by = _image_order_by(sort)
 
     query = _apply_image_filters(
         select(Image),
@@ -663,19 +676,40 @@ def list_images(
     #   像素数由列直接可得、确定性可排序，避免为排序而全库读文件）。
     # Phase 0.11.1：所有排序补稳定 tie-breaker（created_at, id），
     # 保证连续页无重复/遗漏（同 created_at 时按 id 确定性排序）。
-    if sort == "created_asc":
-        order_by = (Image.created_at.asc(), Image.id.asc())
-    elif sort == "favorite":
-        order_by = (Image.favorite.desc(), Image.created_at.desc(), Image.id.desc())
-    elif sort == "size":
-        order_by = ((Image.width * Image.height).desc(), Image.created_at.desc(), Image.id.desc())
-    else:
-        order_by = (Image.created_at.desc(), Image.id.desc())
-
     items = list(session.execute(
         query.order_by(*order_by).limit(limit).offset(offset)
     ).scalars())
     return items, int(total)
+
+
+def list_image_ids(
+    session: Session,
+    *,
+    job_id: str | None = None,
+    review_status: str | None = None,
+    favorite: bool | None = None,
+    source: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    status: str | None = None,
+    sort: str = "created_desc",
+    limit: int = IMAGE_IDS_LIMIT,
+) -> tuple[list[str], int]:
+    """按图库列表相同筛选与排序返回 ID；total 始终为截断前匹配数。"""
+    if limit < 1:
+        raise ValidationError("limit 必须大于 0")
+    _validate_filter_values(review_status=review_status, status=status)
+    order_by = _image_order_by(sort)
+    query = _apply_image_filters(
+        select(Image.id),
+        job_id=job_id, review_status=review_status, favorite=favorite, source=source,
+        kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+    )
+    total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+    ids = list(session.execute(query.order_by(*order_by).limit(limit)).scalars())
+    return ids, int(total)
 
 
 def image_stats(

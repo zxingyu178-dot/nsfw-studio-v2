@@ -9,6 +9,9 @@ import { Badge, Button } from '../../../components/ui'
 interface GallerySelectionBarProps {
   count: number
   upscaling: boolean
+  selectingAll: boolean
+  busy: boolean
+  onSelectAll: () => void
   onUpscale: () => void
   onBatchKeep: () => void
   onBatchReject: () => void
@@ -18,7 +21,7 @@ interface GallerySelectionBarProps {
 }
 
 export function GallerySelectionBar({
-  count, upscaling, onUpscale, onBatchKeep, onBatchReject, onBatchArchive,
+  count, upscaling, selectingAll, busy, onSelectAll, onUpscale, onBatchKeep, onBatchReject, onBatchArchive,
   onBatchFavorite, onExitSelect,
 }: GallerySelectionBarProps) {
   const none = count === 0
@@ -26,22 +29,25 @@ export function GallerySelectionBar({
     <div className="gal-selection-bar">
       <Badge tone="accent">已选 {count} 张</Badge>
       <div className="gal-selection-bar__actions">
-        <Button size="sm" variant="primary" disabled={upscaling || none} onClick={onUpscale}>
+        <Button size="sm" variant="secondary" disabled={selectingAll || busy} onClick={onSelectAll}>
+          {selectingAll ? '选择中…' : '全选当前筛选'}
+        </Button>
+        <Button size="sm" variant="primary" disabled={upscaling || busy || none} onClick={onUpscale}>
           {upscaling ? '提交中…' : '高清放大'}
         </Button>
-        <Button size="sm" variant="secondary" disabled={none} onClick={onBatchKeep}>
+        <Button size="sm" variant="secondary" disabled={busy || none} onClick={onBatchKeep}>
           保留
         </Button>
-        <Button size="sm" variant="secondary" disabled={none} onClick={onBatchReject}>
+        <Button size="sm" variant="secondary" disabled={busy || none} onClick={onBatchReject}>
           淘汰
         </Button>
-        <Button size="sm" variant="secondary" disabled={none} onClick={onBatchArchive}>
+        <Button size="sm" variant="secondary" disabled={busy || none} onClick={onBatchArchive}>
           归档
         </Button>
-        <Button size="sm" variant="secondary" disabled={none} onClick={onBatchFavorite}>
+        <Button size="sm" variant="secondary" disabled={busy || none} onClick={onBatchFavorite}>
           收藏
         </Button>
-        <Button size="sm" variant="ghost" onClick={onExitSelect}>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onExitSelect}>
           取消选择
         </Button>
       </div>
