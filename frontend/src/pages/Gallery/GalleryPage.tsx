@@ -396,8 +396,6 @@ export default function GalleryPage() {
         onSortChange={query.setSort}
         density={prefs.density}
         onDensityChange={prefs.setDensity}
-        fit={prefs.fit}
-        onFitChange={prefs.setFit}
         selectMode={selection.selectMode}
         onToggleSelect={selection.toggleSelectMode}
         onStartReview={startReview}
