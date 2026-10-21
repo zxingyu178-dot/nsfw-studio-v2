@@ -2,6 +2,15 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.32.1] — 2026-10-22
+
+> Patch：Canvas 键盘切换。
+
+### Added
+
+- Canvas 内按 **← / →** 按 filmstrip 顺序切换当前图片（首尾循环）；输入框/文本域/下拉聚焦时不拦截，
+  带 Ctrl/⌘/Alt 修饰键不响应；Lightbox 打开时由 Lightbox 自身箭头逻辑处理，避免双重切换。
+- 新增 `CanvasStage.keyboard.test.tsx`（上一张 / 循环 / 输入框忽略）；前端全量 426 用例通过。
 ## [0.32.0] — 2026-10-22
 
 > Minor：生成工作台参数记忆。
