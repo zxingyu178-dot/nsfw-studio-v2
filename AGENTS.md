@@ -156,8 +156,10 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 
 - **常规任务** → `subagent_codex_lite`（`gpt-5.6-sol`，medium 思考）。适用于：后端服务/测试、
   前端组件与样式、文档整理、refactor、CI 修复等边界清楚的任务。
-- **复杂任务** → `subagent_codex`（`gpt-6-astra`）。仅用于跨模块设计、难 bug、性能/并发等
-  需要强推理的工作。Plus 会员有 5 小时额度，注意节省。
+- **复杂任务** → `subagent_codex`（`gpt-6-astra`，**medium 思考强度**）。仅用于跨模块设计、
+  难 bug、性能/并发等需要强推理的工作。Plus 会员有 5 小时额度，注意节省。
+  astra 一律保持原生 `model_reasoning_effort=medium`，**禁止调高思考强度**（用户 2026-10-21 明确要求，
+  否则额度很快用完）；任务本身也该拆小、给足上下文，避免长链思考。
 - Codex 只改代码、不提交：禁止 `git commit / push / tag`，交付后由 Lead 审查并提交。
 - 派单必须写清：工作目录、允许改动的范围、验收标准（`pytest` / `vitest` / `tsc -b` / `npm run build`）、
   禁止事项（新增依赖、改技术栈、动 DataRoot、写 BOM、修改 `docs/DESIGN.md` 之外的设计约定）。
