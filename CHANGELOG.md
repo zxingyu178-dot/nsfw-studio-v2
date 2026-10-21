@@ -2,6 +2,19 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.33.0] — 2026-10-22
+
+> Minor：工作台「提示词库一键填入」。
+
+### Added
+
+- 工作台左栏 Prompt 标题行新增「提示词库」按钮，打开 Drawer：
+  - 搜索（名称/内容）、最近更新优先、名称 + 正向摘要 + 模式 + 收藏标记；
+  - 点选结构化提示词 → 逐字段回填 structured 并切「结构化」；完整提示词 → 回填 fullPrompt 并切「完整」；
+  - 两种模式都回填 negative_prompt，并记录 `source_prompt_id/version`：
+    提交的 Job 带来源，图库/提示词页可回溯（Provenance）。
+- `workbenchStore` 新增 `setSourcePrompt`。
+- 新增 `PromptLibraryDrawer.test.tsx`（结构化回填 / 完整回填 / 空态）；前端全量 429 用例通过。
 ## [0.32.1] — 2026-10-22
 
 > Patch：Canvas 键盘切换。
