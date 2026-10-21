@@ -102,7 +102,7 @@ describe('GalleryGrid stable columns', () => {
     resize(684)
 
     expect(container.querySelectorAll('.gal-col')).toHaveLength(3)
-    expect(columnIds(container)).toEqual([['a'], ['b', 'd'], ['c']])
+    expect(columnIds(container)).toEqual([['a'], ['b'], ['c', 'd']])
     const renderedIds = columnIds(container).flat()
     expect(renderedIds).toHaveLength(items.length)
     expect(new Set(renderedIds)).toEqual(new Set(items.map((item) => item.id)))

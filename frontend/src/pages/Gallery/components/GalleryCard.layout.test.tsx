@@ -33,10 +33,28 @@ function declarationsFor(selectorFragment: string, property: string): string[] {
 }
 
 describe('GalleryCard 瀑布流布局', () => {
-  it('所有密度下媒体与图片都按原始宽高比自适应，不保留固定高度', () => {
+  it('媒体容器按服务端宽高比预留高度，图片填满容器（避免加载瞬间抖动）', () => {
+    // 媒体容器高度由 aspect-ratio 决定（height:auto 不保留固定高度）。
     expect(declarationsFor('.gal-card__media', 'height')).toEqual(['auto'])
-    expect(declarationsFor('.gal-card__img', 'height')).toEqual(['auto'])
+    // 图片填满容器，object-fit contain 保持完整构图；容器 aspect-ratio 由 GalleryCard inline style 提供。
+    expect(declarationsFor('.gal-card__img', 'height')).toEqual(['100%'])
     expect(declarationsFor('.gal-card__img', 'object-fit')).toEqual(['contain'])
+  })
+
+  it('媒体容器 inline 设置真实宽高比，缩略图加载前后高度不变', () => {
+    const { container } = render(
+      <GalleryCard
+        image={portrait}
+        selected={false}
+        selectMode={false}
+        onCardClick={vi.fn()}
+        onCardDoubleClick={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />,
+    )
+
+    const media = container.querySelector<HTMLElement>('.gal-card__media')
+    expect(media?.style.aspectRatio).toBe('1088 / 1920')
   })
 
   it('DOM 保持媒体容器包裹图片，比例标签与 hover 覆盖层位于卡片上层', () => {

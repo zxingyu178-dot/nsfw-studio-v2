@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.29.3] — 2026-10-22
+
+> Patch：图库缩略图加载抖动（瀑布流竖向跳动）彻底修复。
+
+### Fixed
+
+- 卡片媒体容器按服务端 `width/height` 用 inline `aspect-ratio` **提前预留真实高度**，
+  图片 `height:100%` + `object-fit:contain` 填满容器；缩略图从占位切到真实图时不再改变卡片高度。
+  （此前占位固定 3:4，而实际有 9:16 等比例，加载完成即整体上下跳动。）
+- 修正瀑布流列高估算：`imageAspect = height/width`（原 `width/height` 把竖图当矮图，列高分布失衡）。
+- 测试：GalleryCard 断言 aspect-ratio 预留与图片填充；列分配期望同步；Gallery 64 用例、全量 398 通过。
 ## [0.29.2] — 2026-10-22
 
 > Patch：修复用户反馈的两个 UI 问题。

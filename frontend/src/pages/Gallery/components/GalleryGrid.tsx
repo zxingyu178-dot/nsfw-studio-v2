@@ -88,5 +88,6 @@ export function GalleryGrid({
 }
 
 function imageAspect(image: ImageDTO): number {
-  return image.width > 0 && image.height > 0 ? image.width / image.height : 1
+  // 相对高度 = height / width（竖图更大），用于"放进当前最矮列"的估算。
+  return image.width > 0 && image.height > 0 ? image.height / image.width : 1
 }
