@@ -2,7 +2,7 @@
  * SplitGenerateAction（v0.15 Task 11）：拆分为左「✦ 生成 N 张」(normal) + 右「⚡」(next 插队)。
  * 不再上下叠放两个大按钮；Gate 判定与 submitGeneration/snapshot 全部沿用 GenerateAction 逻辑。
  */
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { IconStart } from '../../../components/ui/ui3'
 import { isImageCapablePrimary, snapshotFromState, useWorkbench } from '../../../stores/workbenchStore'
 import { submitGeneration, useJobStore } from '../../../stores/jobStore'
@@ -41,7 +41,7 @@ export function SplitGenerateAction({ imageGenAvailable }: { imageGenAvailable: 
   const disabled = store.submitting || gateReason !== undefined
   const label = state.count > 1 ? `生成 ${state.count} 张` : '生成'
 
-  async function handleGenerate(queueMode: 'normal' | 'next'): Promise<void> {
+  const handleGenerate = useCallback(async (queueMode: 'normal' | 'next'): Promise<void> => {
     setNotice(null)
     const created = await submitGeneration(snapshotFromState(), queueMode)
     if (!created) return
@@ -54,7 +54,19 @@ export function SplitGenerateAction({ imageGenAvailable }: { imageGenAvailable: 
           : `已加入队列 ${shortJobId(created.id)}`,
       )
     }
-  }
+  }, [])
+
+  // 快捷键：Ctrl+Enter / ⌘+Enter 提交普通生成（不抢占输入框内的 Enter 换行）。
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return
+      event.preventDefault()
+      if (disabled) return
+      void handleGenerate('normal')
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [disabled, handleGenerate])
 
   return (
     <div className="wb4-generate">
@@ -78,7 +90,8 @@ export function SplitGenerateAction({ imageGenAvailable }: { imageGenAvailable: 
           type="button"
           className="generate-action wb4-generate__main"
           disabled={disabled}
-          title={gateReason ?? undefined}
+          title={gateReason ?? '生成（Ctrl+Enter）'}
+          aria-keyshortcuts="Control+Enter"
           aria-busy={store.submitting || undefined}
           onClick={() => void handleGenerate('normal')}
         >
