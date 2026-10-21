@@ -13,7 +13,7 @@ import {
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
-import { useGalleryQuery } from './hooks/useGalleryQuery'
+import { useGalleryQuery, type GallerySource } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
 import { useGalleryPrefs } from './hooks/useGalleryPrefs'
 import { createReviewSessionAdapter, type ReviewSessionAdapter } from './hooks/useReviewSession'
@@ -42,10 +42,13 @@ export default function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const jobFilter = searchParams.get('job')
+  const sourceParam = searchParams.get('source')
+  const sourceFilter: GallerySource =
+    sourceParam === 'comfyui' || sourceParam === 'import' ? sourceParam : ''
 
   const [view, setView] = useState<'flat' | 'group'>('flat')
 
-  const query = useGalleryQuery(jobFilter)
+  const query = useGalleryQuery(jobFilter, sourceFilter)
   const selection = useGallerySelection()
   const prefs = useGalleryPrefs()
 
@@ -71,6 +74,13 @@ export default function GalleryPage() {
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
   const [cleanupBusy, setCleanupBusy] = useState(false)
 
+  useEffect(() => {
+    if (sourceParam === null || sourceFilter !== '') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('source')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, sourceFilter, sourceParam])
+
   // 按任务分组：进入 group 视图且无 jobFilter 时加载第一页
   useEffect(() => {
     if (view !== 'group' || jobFilter) return
@@ -83,6 +93,13 @@ export default function GalleryPage() {
     const next = new URLSearchParams(searchParams)
     if (jobId) next.set('job', jobId)
     else next.delete('job')
+    setSearchParams(next)
+  }
+
+  function applySourceFilter(source: GallerySource): void {
+    const next = new URLSearchParams(searchParams)
+    if (source) next.set('source', source)
+    else next.delete('source')
     setSearchParams(next)
   }
 
@@ -372,6 +389,8 @@ export default function GalleryPage() {
         onToggleView={() => setView(view === 'group' ? 'flat' : 'group')}
         subStatus={query.subStatus}
         onSubStatusChange={query.setSubStatus}
+        source={sourceFilter}
+        onSourceChange={applySourceFilter}
         sort={query.sort}
         onSortChange={query.setSort}
         density={prefs.density}
