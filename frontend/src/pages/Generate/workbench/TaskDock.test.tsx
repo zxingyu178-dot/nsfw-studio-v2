@@ -25,6 +25,7 @@ vi.mock('../../../stores/jobStore', () => ({
 
 import { TaskDock } from './TaskDock'
 import { setDockOpen } from './workbenchLayout'
+import { cancelJob } from '../../../stores/jobStore'
 
 function queuedJob(index: number) {
   return {
@@ -241,5 +242,71 @@ describe('TaskDock Phase 0.17.1：收起态常驻阶段与真实 Step', () => {
     render(<TaskDock />)
     const dock = screen.getByTestId('task-dock')
     expect(dock.textContent).not.toContain('Step')
+  })
+})
+
+describe('TaskDock 收起态：运行中快捷取消 + 进度条', () => {
+  it('运行中显示“取消当前任务”按钮，点击调用 cancelJob', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: runningJob(),
+          queued: [],
+          paused: [],
+        },
+      }),
+    )
+    setDockOpen(false)
+    render(<TaskDock />)
+    const button = screen.getByRole('button', { name: '取消当前任务' })
+    fireEvent.click(button)
+    expect(cancelJob).toHaveBeenCalledWith('job_running_1')
+  })
+
+  it('运行中显示整体进度条，空闲时不显示', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: runningJob(),
+          queued: [],
+          paused: [],
+        },
+      }),
+    )
+    setDockOpen(false)
+    const { unmount } = render(<TaskDock />)
+    expect(screen.getByTestId('dock-progress')).toBeInTheDocument()
+
+    unmount()
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: null,
+          queued: [],
+          paused: [],
+        },
+      }),
+    )
+    render(<TaskDock />)
+    expect(screen.queryByTestId('dock-progress')).toBeNull()
+  })
+
+  it('取消请求已发出时取消按钮禁用，避免重复点击', () => {
+    mockUseJobStore.mockReturnValue(
+      storeWithQueue({
+        queue: {
+          worker: { running: true, queue_paused: false, queue_paused_reason: null },
+          running: runningJob({ cancel_requested: true }),
+          queued: [],
+          paused: [],
+        },
+      }),
+    )
+    setDockOpen(false)
+    render(<TaskDock />)
+    expect(screen.getByRole('button', { name: '取消当前任务' })).toBeDisabled()
   })
 })

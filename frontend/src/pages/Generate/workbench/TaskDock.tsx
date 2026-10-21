@@ -4,7 +4,7 @@
  * 展开态：Current Job（去掉进度条/Stage/elapsed/第N张——这些已在 Canvas HUD）+ 队列全部能力（QueuePanel 原样复用）。
  */
 import { Button, StatusBadge, Tooltip } from '../../../components/ui'
-import { IconButton, IconChevronDown, IconPause, IconResume } from '../../../components/ui/ui3'
+import { IconButton, IconCancel, IconChevronDown, IconPause, IconResume } from '../../../components/ui/ui3'
 import { cancelJob, pauseJob, pauseQueue, resumeJob, resumeQueue, useJobStore } from '../../../stores/jobStore'
 import { MODULE_LABEL, shortJobId, type JobDTO } from '../../../types/workbench'
 import { QueuePanel } from '../components/QueuePanel'
@@ -64,6 +64,16 @@ export function TaskDock() {
         </span>
 
         <div className="wb4-dock__bar-actions">
+          {running && (
+            <Tooltip content="取消当前运行任务（队列中其他任务不受影响）" side="top">
+              <IconButton
+                icon={<IconCancel size={14} />}
+                label="取消当前任务"
+                disabled={busy || running.cancel_requested}
+                onClick={() => void cancelJob(running.id)}
+              />
+            </Tooltip>
+          )}
           <Tooltip content="只暂停任务调度，不停止 Python/ComfyUI 引擎（释放/停止引擎请用顶部 Power）" side="top">
             {paused ? (
               <IconButton icon={<IconResume size={14} />} label="继续后续任务" onClick={() => void resumeQueue()} />
@@ -73,6 +83,12 @@ export function TaskDock() {
           </Tooltip>
         </div>
       </div>
+
+      {running && (
+        <div className="wb4-dock__progress" data-testid="dock-progress" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(0, hud?.overall ?? 0))}%` }} />
+        </div>
+      )}
 
       {/* 展开态：当前任务（无进度细节）+ 队列全能力 */}
       {open && (
