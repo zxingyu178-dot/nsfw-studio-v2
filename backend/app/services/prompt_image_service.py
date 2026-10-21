@@ -1,7 +1,7 @@
 """提示词图片只读查询：按生成 Job 的来源快照归属，不遍历任务项。"""
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, literal, select, true
 from sqlalchemy.orm import Session
 
 from app.models import Image, Job, PromptVersion
@@ -15,6 +15,43 @@ from app.services import prompt_scoring_service, prompt_service
 
 def _source_prompt_id():
     return func.json_extract(Job.workbench_snapshot_json, "$.source_prompt_id")
+
+
+def _prompt_image_links(*, prompt_id: str | None = None, version_id: str | None = None):
+    """合并 Job 快照与 V1 导入元数据中的提示词归属。"""
+    job_prompt_id = _source_prompt_id()
+    job_links = select(
+        Image.id.label("image_id"),
+        job_prompt_id.label("prompt_id"),
+        Job.status.label("job_status"),
+        Job.module_id.label("module_id"),
+    ).join(Job, Image.job_id == Job.id)
+    if prompt_id is not None:
+        job_links = job_links.where(job_prompt_id == prompt_id)
+    if version_id is not None:
+        job_links = job_links.where(
+            func.json_extract(Job.workbench_snapshot_json, "$.source_prompt_version_id") == version_id,
+        )
+
+    imported_prompt = func.json_each(
+        Image.metadata_json, "$.v1_output.prompts",
+    ).table_valued("key", "value").alias("imported_prompt")
+    imported_prompt_id = func.json_extract(imported_prompt.c.value, "$.prompt_id")
+    imported_links = select(
+        Image.id.label("image_id"),
+        imported_prompt_id.label("prompt_id"),
+        literal("IMPORTED").label("job_status"),
+        cast(literal(None), String).label("module_id"),
+    ).select_from(Image).join(imported_prompt, true()).where(Image.source == "import")
+    if prompt_id is not None:
+        imported_links = imported_links.where(imported_prompt_id == prompt_id)
+    if version_id is not None:
+        imported_links = imported_links.where(
+            func.json_extract(imported_prompt.c.value, "$.version_id") == version_id,
+        )
+
+    # 导入元数据若意外重复同一个提示词记录，也只把图片计入一次。
+    return job_links.union_all(imported_links.distinct()).subquery()
 
 
 def _image_response(image: Image, job_status: str, module_id: str | None) -> PromptImageResponse:
@@ -35,13 +72,10 @@ def list_prompt_images(
     prompt_service.get_prompt(session, prompt_id)
     if version_id is not None:
         prompt_service.get_version(session, prompt_id, version_id)
-    query = select(Image, Job.status, Job.module_id).join(Job, Image.job_id == Job.id).where(
-        _source_prompt_id() == prompt_id,
+    links = _prompt_image_links(prompt_id=prompt_id, version_id=version_id)
+    query = select(Image, links.c.job_status, links.c.module_id).join(
+        links, links.c.image_id == Image.id,
     )
-    if version_id is not None:
-        query = query.where(
-            func.json_extract(Job.workbench_snapshot_json, "$.source_prompt_version_id") == version_id,
-        )
     total = session.scalar(select(func.count()).select_from(query.subquery()))
     rows = session.execute(query.order_by(Image.created_at.desc(), Image.id.desc()).limit(limit).offset(offset))
     return PromptImagesResponse(
@@ -51,15 +85,15 @@ def list_prompt_images(
 
 def _batch_images(session: Session, prompt_ids: list[str], limit: int):
     """同一次 SQL 计算每组总数并截取最近 N 张；数据库不会返回全部历史图片。"""
-    source = _source_prompt_id()
+    links = _prompt_image_links()
     ranked = select(
-        Image.id.label("image_id"), source.label("prompt_id"),
-        Job.status.label("job_status"), Job.module_id.label("module_id"),
-        func.count().over(partition_by=source).label("total"),
+        Image.id.label("image_id"), links.c.prompt_id,
+        links.c.job_status, links.c.module_id,
+        func.count().over(partition_by=links.c.prompt_id).label("total"),
         func.row_number().over(
-            partition_by=source, order_by=(Image.created_at.desc(), Image.id.desc()),
+            partition_by=links.c.prompt_id, order_by=(Image.created_at.desc(), Image.id.desc()),
         ).label("position"),
-    ).join(Job, Image.job_id == Job.id).where(source.in_(prompt_ids)).subquery()
+    ).join(links, links.c.image_id == Image.id).where(links.c.prompt_id.in_(prompt_ids)).subquery()
     rows = session.execute(
         select(Image, ranked.c.prompt_id, ranked.c.job_status, ranked.c.module_id, ranked.c.total)
         .join(ranked, ranked.c.image_id == Image.id)
