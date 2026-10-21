@@ -66,4 +66,22 @@ describe('GalleryCard 瀑布流布局', () => {
     expect(card?.querySelector(':scope > .gal-card__ratio')).toHaveTextContent('1088×1920')
     expect(card?.querySelector(':scope > .gal-card__overlay')).not.toBeNull()
   })
+
+  it('外部导入图片在 title 与覆盖层中显示导入标识', () => {
+    const imported = { ...portrait, job_id: null }
+    const { container } = render(
+      <GalleryCard
+        image={imported}
+        selected={false}
+        selectMode={false}
+        onCardClick={vi.fn()}
+        onCardDoubleClick={vi.fn()}
+        onToggleFavorite={vi.fn()}
+      />,
+    )
+
+    const card = container.querySelector('.gal-card')
+    expect(card).toHaveAttribute('title', 'generated · 外部导入 · 待审核')
+    expect(card?.querySelector('.gal-card__overlay-import')).toHaveTextContent('导入')
+  })
 })

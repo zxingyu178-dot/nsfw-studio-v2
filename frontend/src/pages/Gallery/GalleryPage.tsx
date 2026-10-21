@@ -167,14 +167,15 @@ export default function GalleryPage() {
     }
   }
 
-  /** Phase 0.12：批量审核（多选条）。保留/淘汰走 batchStatus；收藏逐条 favorite。 */
-  async function batchReview(status: 'KEEP' | 'REJECT'): Promise<void> {
+  /** Phase 0.12：批量审核（多选条）。保留/淘汰/归档走 batchStatus；收藏逐条 favorite。 */
+  async function batchReview(status: 'KEEP' | 'REJECT' | 'ARCHIVED'): Promise<void> {
     const ids = selection.selectedIds
     if (ids.length === 0) return
     setNotice(null)
     try {
       const result = await imageApi.batchStatus({ image_ids: ids, status })
-      setNotice({ text: `已批量${status === 'KEEP' ? '保留' : '淘汰'} ${result.updated ?? ids.length} 张` })
+      const action = status === 'KEEP' ? '批量保留' : status === 'REJECT' ? '批量淘汰' : '归档'
+      setNotice({ text: `已${action} ${result.updated ?? ids.length} 张` })
       query.loadFirst()
       selection.exitSelect()
     } catch (err) {
@@ -414,6 +415,7 @@ export default function GalleryPage() {
           onUpscale={() => void submitUpscale(selection.selectedIds)}
           onBatchKeep={() => void batchReview('KEEP')}
           onBatchReject={() => void batchReview('REJECT')}
+          onBatchArchive={() => void batchReview('ARCHIVED')}
           onBatchFavorite={() => void batchFavorite()}
           onExitSelect={selection.exitSelect}
         />

@@ -15,6 +15,7 @@ vi.mock('../../api/client', () => ({
     upscale: vi.fn(),
     workbench: vi.fn(),
     importFiles: vi.fn(),
+    batchStatus: vi.fn(),
     jobSummary: vi.fn(),
     jobGroups: vi.fn(),
   },
@@ -93,6 +94,22 @@ describe('GalleryPage 图库', () => {
     fireEvent.click(screen.getByRole('button', { name: '选择' }))
     expect(screen.getByText('已选 0 张')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '高清放大' })).toBeDisabled()
+  })
+
+  it('批量归档所选图片并显示归档数量', async () => {
+    vi.mocked(imageApi.list).mockResolvedValue({ items: [baseImage], total: 1 } as never)
+    vi.mocked(imageApi.batchStatus).mockResolvedValue({ updated: 1, items: [] } as never)
+    const { container } = renderPage()
+    await screen.findByText('共 1 张')
+
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
+    fireEvent.click(container.querySelector('.gal-card') as HTMLElement)
+    fireEvent.click(screen.getByRole('button', { name: '归档' }))
+
+    await waitFor(() => {
+      expect(imageApi.batchStatus).toHaveBeenCalledWith({ image_ids: ['img_1'], status: 'ARCHIVED' })
+    })
+    expect(await screen.findByRole('status')).toHaveTextContent('已归档 1 张')
   })
 
   it('切换到按任务查看时通过 jobGroups 聚合加载任务分组', async () => {
