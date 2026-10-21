@@ -43,12 +43,14 @@ export function GalleryCard({
   image, selected, selectMode, onCardClick, onCardDoubleClick, onToggleFavorite,
 }: GalleryCardProps) {
   const status = normalizeImageStatus(image)
+  const imported = !image.job_id
+  const jobLabel = image.job_id ? shortJobId(image.job_id) : '外部导入'
   return (
     <div
       className={`gal-card${selected ? ' gal-card--selected' : ''}`}
       onClick={() => onCardClick(image)}
       onDoubleClick={() => onCardDoubleClick(image)}
-      title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${shortJobId(image.job_id ?? '')} · ${IMAGE_STATUS_LABEL[status]}`}
+      title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${jobLabel} · ${IMAGE_STATUS_LABEL[status]}`}
     >
       <GalleryThumb image={image} />
       <span className="gal-card__ratio">{ratioLabel(image.width, image.height)}</span>
@@ -64,6 +66,7 @@ export function GalleryCard({
         <span className="gal-card__overlay-meta">
           {image.kind === 'upscaled' && <span className="gal-card__overlay-hd">HD</span>}
           {image.width}×{image.height} · {IMAGE_STATUS_LABEL[status]}
+          {imported && <span className="gal-card__overlay-import">导入</span>}
         </span>
         <span className="gal-card__overlay-actions">
           <button

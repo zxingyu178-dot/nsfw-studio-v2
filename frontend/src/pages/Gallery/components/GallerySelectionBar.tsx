@@ -2,7 +2,7 @@ import { Badge, Button } from '../../../components/ui'
 
 /**
  * Phase 0.12 Task6：多选 sticky 操作条。
- * 已选 N 张 → [高清放大][保留][淘汰][收藏][取消选择]；保留/淘汰走批量审核 API，
+ * 已选 N 张 → [高清放大][保留][淘汰][归档][收藏][取消选择]；审核状态走批量审核 API，
  * 收藏逐条 favorite。进入选择模式后替代第二条普通 Toolbar。
  */
 
@@ -12,12 +12,14 @@ interface GallerySelectionBarProps {
   onUpscale: () => void
   onBatchKeep: () => void
   onBatchReject: () => void
+  onBatchArchive: () => void
   onBatchFavorite: () => void
   onExitSelect: () => void
 }
 
 export function GallerySelectionBar({
-  count, upscaling, onUpscale, onBatchKeep, onBatchReject, onBatchFavorite, onExitSelect,
+  count, upscaling, onUpscale, onBatchKeep, onBatchReject, onBatchArchive,
+  onBatchFavorite, onExitSelect,
 }: GallerySelectionBarProps) {
   const none = count === 0
   return (
@@ -32,6 +34,9 @@ export function GallerySelectionBar({
         </Button>
         <Button size="sm" variant="secondary" disabled={none} onClick={onBatchReject}>
           淘汰
+        </Button>
+        <Button size="sm" variant="secondary" disabled={none} onClick={onBatchArchive}>
+          归档
         </Button>
         <Button size="sm" variant="secondary" disabled={none} onClick={onBatchFavorite}>
           收藏

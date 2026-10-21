@@ -529,6 +529,15 @@ button.gal-group__main {
   font-size: 10px;
 }
 
+.gal-card__overlay-import {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 10px;
+}
+
 .gal-card__overlay-actions {
   display: flex;
   gap: 4px;
