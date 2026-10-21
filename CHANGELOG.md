@@ -2,6 +2,18 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.32.0] — 2026-10-22
+
+> Minor：生成工作台参数记忆。
+
+### Added
+
+- **记住上次参数**：尺寸（width/height）、数量（count）、Seed 模式（random/fixed + seed）写入
+  `localStorage["generate.params.v1"]`，刷新/重开页面后恢复，不再回默认 1024×1024 / 1 张。
+- `stores/workbenchPrefs.ts`：严格字段校验（128–4096、1–64 等），损坏 JSON 或非法字段静默回退，不影响主流程。
+- 只在用户显式改参数时写偏好；Recipe/History hydrate 带出的参数不写回，Prompt 内容不持久化。
+- 新增 `workbenchPrefs.test.ts`（5 例）+ `workbenchStore.paramsPersist.test.ts`（3 例，含 resetModules 模拟刷新）；
+  前端全量 423 用例通过；tsc/build 通过。
 ## [0.31.1] — 2026-10-22
 
 > Patch：任务坞收起态增强。
