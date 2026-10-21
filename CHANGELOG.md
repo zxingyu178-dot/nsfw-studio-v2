@@ -2,6 +2,22 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.29.2] — 2026-10-22
+
+> Patch：修复用户反馈的两个 UI 问题。
+
+### Fixed
+
+- **图库竖向跳动**：原 CSS multi-column 瀑布流在无限滚动追加时重新平衡所有列，旧卡片上下跳动。
+  改为 JS 列分配（`distributeColumns` + `ResizeObserver`）：按列渲染，追加新数据只投向当前最短列，
+  已有卡片位置不变；保留懒加载/overlay/选择/导入徽标等能力。新增分布确定性与"追加不重排"测试。
+- **右上角鼠标悬停页面闪烁**：右上角电源按钮 tooltip 居中 + `nowrap`，在视口右缘横向溢出产生
+  横向滚动条，鼠标移开又消失 → 页面宽度反复变化。修复：tooltip 限宽换行、
+  `.topnav__right` 内 top/bottom tooltip 改为右缘锚定，`.app-shell` 增加 `overflow-x: clip` 兜底。
+
+### Verified
+
+- 前端全量 397 用例通过；tsc / vite build 通过；新增 3 组回归测试。
 ## [0.29.1] — 2026-10-21
 
 > Patch：图库导入图标识 + 批量归档。
