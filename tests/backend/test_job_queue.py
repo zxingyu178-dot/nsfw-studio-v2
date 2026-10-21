@@ -61,6 +61,19 @@ def mock_client(settings):
         yield test_client
 
 
+@pytest.fixture()
+def slow_mock_client(settings):
+    """慢速 Mock：保证"当前 Job"在队列操作期间保持 RUNNING。
+
+    默认 mock 适配器 50ms/次、两次 poll 即完成，在快机器上会在创建后续任务前就结束，
+    导致「优先插入 / 拖拽排序」用例看到 RUNNING 已被消费而随机失败（环境敏感）。
+    这里把单次 poll 放慢到 800ms（Job 约 2 次 poll 完成 ≈1.6s），让队列断言稳定。
+    """
+    app = create_app(mock_settings(settings, delay_per_item_ms=800))
+    with __import__("fastapi.testclient", fromlist=["TestClient"]).TestClient(app) as test_client:
+        yield test_client
+
+
 def test_job_lifecycle_serial_completion(mock_client):
     """8 张任务正常串行：逐张完成、completed_count 递增、每张 Seed 独立。"""
     response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=8)})
@@ -135,33 +148,33 @@ def test_cancel_then_resume_creates_child_job(mock_client):
     assert not (parent_seeds & child_seeds), "续跑应使用新随机 Seed"
 
 
-def test_priority_next_inserts_after_running(mock_client):
+def test_priority_next_inserts_after_running(slow_mock_client):
     """优先任务只插到当前 Job 后（规范 §十五）：B C 等待中，next X → X B C。"""
-    first = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    b = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    c = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    wait_for(mock_client, first["id"], lambda j: j["status"] == "RUNNING")
-    x = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1), "queue_mode": "next"}).json()
-    queue = mock_client.get("/api/v1/queue").json()
+    first = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    b = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    c = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    wait_for(slow_mock_client, first["id"], lambda j: j["status"] == "RUNNING")
+    x = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1), "queue_mode": "next"}).json()
+    queue = slow_mock_client.get("/api/v1/queue").json()
     queued_ids = [j["id"] for j in queue["queued"]]
     assert queued_ids == [x["id"], b["id"], c["id"]]
     assert queue["running"]["id"] == first["id"]
 
 
-def test_queue_reorder(mock_client):
+def test_queue_reorder(slow_mock_client):
     """多个等待任务拖拽排序：仅 QUEUED 可排序。"""
-    holder = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    wait_for(mock_client, holder["id"], lambda j: j["status"] == "RUNNING")
-    a = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    b = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
-    c = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    holder = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    wait_for(slow_mock_client, holder["id"], lambda j: j["status"] == "RUNNING")
+    a = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    b = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+    c = slow_mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
 
-    reordered = mock_client.post("/api/v1/queue/reorder",
+    reordered = slow_mock_client.post("/api/v1/queue/reorder",
                                  json={"ordered_job_ids": [c["id"], a["id"], b["id"]]}).json()
     assert [j["id"] for j in reordered["queued"]] == [c["id"], a["id"], b["id"]]
 
     # RUNNING 不在排序列表里 → 请求被拒绝
-    bad = mock_client.post("/api/v1/queue/reorder",
+    bad = slow_mock_client.post("/api/v1/queue/reorder",
                            json={"ordered_job_ids": [holder["id"], a["id"], b["id"]]})
     assert bad.status_code == 400
 
