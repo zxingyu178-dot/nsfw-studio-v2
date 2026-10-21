@@ -344,6 +344,15 @@ export interface ImageListParams {
   offset?: number
 }
 
+export type ImageIdsParams = Omit<ImageListParams, 'page' | 'page_size' | 'limit' | 'offset'>
+
+export interface ImageIdsResponse {
+  ids: string[]
+  total: number
+  truncated: boolean
+  limit: number
+}
+
 /** Phase 0.12 全局图库统计过滤参数（与 GET /images 同口径；不含 sort/page/limit 分页参数）。 */
 export interface ImageStatsParams {
   job_id?: string | null
@@ -363,6 +372,10 @@ export const imageApi = {
    *  同时兼容旧 limit/offset/review_status（选择器 / 生成结果面板）。 */
   list(params: ImageListParams = {}): Promise<ImagePage<ImageDTO>> {
     return request(`/api/v1/images${buildQuery(params)}`)
+  },
+  /** 返回当前筛选命中的图片 ID，供跨页批量选择。 */
+  ids(params: ImageIdsParams = {}): Promise<ImageIdsResponse> {
+    return request(`/api/v1/images/ids${buildQuery(params)}`)
   },
   /** Phase 0.12：全局图库统计（与 list 同过滤口径；SQL 单行聚合）。
    *  各状态计数与收藏计数都是命中过滤后的全局数字；favorites 为独立 favorite=true 交叉计数。 */

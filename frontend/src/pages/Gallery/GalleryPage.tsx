@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, imageApi, type ImageStatsParams } from '../../api/client'
 import { emptyWorkbenchSnapshot } from '../../stores/workbenchStore'
-import { Badge, Button } from '../../components/ui'
+import { Badge, Button, ConfirmModal } from '../../components/ui'
 import {
   normalizeImageStatus,
   shortJobId,
@@ -38,6 +38,21 @@ interface UndoEntry {
   label: string
 }
 
+type BatchReviewStatus = 'KEEP' | 'REJECT' | 'ARCHIVED'
+
+interface PendingBatchReview {
+  status: BatchReviewStatus
+  ids: string[]
+}
+
+const BATCH_STATUS_LIMIT = 500
+
+function batchActionLabel(status: BatchReviewStatus): string {
+  if (status === 'KEEP') return '保留'
+  if (status === 'REJECT') return '淘汰'
+  return '归档'
+}
+
 export default function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -56,6 +71,9 @@ export default function GalleryPage() {
   const detailTimer = useRef<number | null>(null)
 
   const [upscaling, setUpscaling] = useState(false)
+  const [selectingAll, setSelectingAll] = useState(false)
+  const [batchBusy, setBatchBusy] = useState(false)
+  const [pendingBatchReview, setPendingBatchReview] = useState<PendingBatchReview | null>(null)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [notice, setNotice] = useState<{ text: string; undoable?: boolean } | null>(null)
@@ -167,20 +185,64 @@ export default function GalleryPage() {
     }
   }
 
-  /** Phase 0.12：批量审核（多选条）。保留/淘汰/归档走 batchStatus；收藏逐条 favorite。 */
-  async function batchReview(status: 'KEEP' | 'REJECT' | 'ARCHIVED'): Promise<void> {
-    const ids = selection.selectedIds
-    if (ids.length === 0) return
+  async function selectCurrentFilter(): Promise<void> {
+    setSelectingAll(true)
+    query.setError(null)
     setNotice(null)
     try {
-      const result = await imageApi.batchStatus({ image_ids: ids, status })
-      const action = status === 'KEEP' ? '批量保留' : status === 'REJECT' ? '批量淘汰' : '归档'
-      setNotice({ text: `已${action} ${result.updated ?? ids.length} 张` })
-      query.loadFirst()
-      selection.exitSelect()
+      const { page: _page, page_size: _pageSize, ...filters } = query.listQuery()
+      const result = await imageApi.ids(filters)
+      selection.setSelectedIds(result.ids)
+      if (result.truncated || result.total > result.ids.length) {
+        setNotice({ text: `仅选中前 ${result.ids.length} 张（当前筛选共 ${result.total} 张）` })
+      }
     } catch (err) {
-      query.setError(err instanceof ApiRequestError ? err.message : '批量操作失败')
+      query.setError(err instanceof ApiRequestError ? err.message : '全选当前筛选失败')
+    } finally {
+      setSelectingAll(false)
     }
+  }
+
+  /** 批量审核按后端上限顺序分块；失败时保留选择，便于用户判断后续动作。 */
+  async function batchReview(status: BatchReviewStatus, ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    const action = batchActionLabel(status)
+    let processed = 0
+    let updated = 0
+    setBatchBusy(true)
+    query.setError(null)
+    setNotice({ text: `${action}中 0/${ids.length}` })
+    try {
+      for (let start = 0; start < ids.length; start += BATCH_STATUS_LIMIT) {
+        const chunk = ids.slice(start, start + BATCH_STATUS_LIMIT)
+        // 后端限制每次最多 500 个 ID，必须保持顺序逐块提交。
+        // eslint-disable-next-line no-await-in-loop
+        const result = await imageApi.batchStatus({ image_ids: chunk, status })
+        processed += chunk.length
+        updated += result.updated ?? chunk.length
+        setNotice({ text: `${action}中 ${processed}/${ids.length}` })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量操作失败'
+      query.setError(`${action}失败：已成功 ${updated}/${ids.length} 张；${message}`)
+      setNotice(null)
+      return
+    } finally {
+      setBatchBusy(false)
+    }
+    setNotice({ text: `已${action} ${updated} 张` })
+    query.loadFirst()
+    selection.exitSelect()
+  }
+
+  function requestBatchReview(status: BatchReviewStatus): void {
+    const ids = [...selection.selectedIds]
+    if (ids.length === 0) return
+    if ((status === 'REJECT' || status === 'ARCHIVED') && ids.length > 100) {
+      setPendingBatchReview({ status, ids })
+      return
+    }
+    void batchReview(status, ids)
   }
 
   async function batchFavorite(): Promise<void> {
@@ -410,10 +472,13 @@ export default function GalleryPage() {
         <GallerySelectionBar
           count={selection.selectedIds.length}
           upscaling={upscaling}
+          selectingAll={selectingAll}
+          busy={batchBusy}
+          onSelectAll={() => void selectCurrentFilter()}
           onUpscale={() => void submitUpscale(selection.selectedIds)}
-          onBatchKeep={() => void batchReview('KEEP')}
-          onBatchReject={() => void batchReview('REJECT')}
-          onBatchArchive={() => void batchReview('ARCHIVED')}
+          onBatchKeep={() => requestBatchReview('KEEP')}
+          onBatchReject={() => requestBatchReview('REJECT')}
+          onBatchArchive={() => requestBatchReview('ARCHIVED')}
           onBatchFavorite={() => void batchFavorite()}
           onExitSelect={selection.exitSelect}
         />
@@ -531,6 +596,26 @@ export default function GalleryPage() {
         busy={cleanupBusy}
         onCancel={() => setCleanupPreview(null)}
         onConfirm={() => void confirmCleanup()}
+      />
+
+      <ConfirmModal
+        open={pendingBatchReview !== null}
+        title={pendingBatchReview
+          ? `确认${batchActionLabel(pendingBatchReview.status)} ${pendingBatchReview.ids.length} 张图片？`
+          : '确认批量操作？'}
+        message={pendingBatchReview
+          ? `将${batchActionLabel(pendingBatchReview.status)}已选的 ${pendingBatchReview.ids.length} 张图片。此操作将分批执行。`
+          : ''}
+        confirmText={pendingBatchReview ? `确认${batchActionLabel(pendingBatchReview.status)}` : '确认'}
+        cancelText="取消"
+        danger={pendingBatchReview?.status === 'REJECT'}
+        onCancel={() => setPendingBatchReview(null)}
+        onConfirm={() => {
+          if (!pendingBatchReview) return
+          const pending = pendingBatchReview
+          setPendingBatchReview(null)
+          void batchReview(pending.status, pending.ids)
+        }}
       />
     </>
   )
