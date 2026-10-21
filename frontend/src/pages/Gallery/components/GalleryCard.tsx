@@ -97,7 +97,12 @@ export function GalleryCard({
   )
 }
 
-/** 卡片缩略图：进入 viewport+300px 才加载，带占位 / 错误重试 */
+/** 卡片缩略图：进入 viewport+300px 才加载，带占位 / 错误重试。
+ *
+ * 关键：媒体容器在图片加载前就按服务端给出的宽高比预留高度（aspect-ratio），
+ * 否则占位 3:4 与真实比例（如 9:16）不一致，缩略图加载完成的瞬间卡片高度变化，
+ * 整个瀑布流会上下抖动（用户反馈的"竖着刷新"）。
+ */
 function GalleryThumb({ image }: { image: ImageDTO }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [inView, setInView] = useState(false)
@@ -124,8 +129,12 @@ function GalleryThumb({ image }: { image: ImageDTO }) {
     return () => obs.disconnect()
   }, [])
 
+  const aspectRatio = image.width > 0 && image.height > 0
+    ? `${image.width} / ${image.height}`
+    : undefined
+
   return (
-    <div className="gal-card__media" ref={ref}>
+    <div className="gal-card__media" ref={ref} style={aspectRatio ? { aspectRatio } : undefined}>
       {!inView ? (
         <div className="gal-card__ph" aria-hidden="true" />
       ) : error ? (
