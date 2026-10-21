@@ -139,6 +139,8 @@ function GalleryThumb({ image }: { image: ImageDTO }) {
           className="gal-card__img"
           src={imageThumbUrl(image.id)}
           alt=""
+          loading="lazy"
+          decoding="async"
           onError={() => setError(true)}
         />
       )}

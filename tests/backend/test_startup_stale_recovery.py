@@ -51,10 +51,17 @@ def test_clear_stale_jobs_cancels_all_active(session_factory):
 
 
 def test_clear_stale_endpoint(client, session_factory):
-    """POST /api/v1/jobs/queue/clear-stale 路由可用（Desktop loopback）。"""
-    from app.services import job_service
-    with session_factory() as session:
-        _make_job(session, "QUEUED", "q1")
-    r = client.post("/api/v1/queue/clear-stale")
-    assert r.status_code == 200
-    assert r.json()["cancelled"] >= 1
+    """POST /api/v1/jobs/queue/clear-stale 路由可用（Desktop loopback）。
+
+    先全局暂停队列：否则测试 Worker 可能在 create → clear-stale 之间抢先消费该 QUEUED Job，
+    导致 cancelled=0 的随机失败（环境敏感竞态，非产品缺陷）。
+    """
+    client.post("/api/v1/queue/pause")
+    try:
+        with session_factory() as session:
+            _make_job(session, "QUEUED", "q1")
+        r = client.post("/api/v1/queue/clear-stale")
+        assert r.status_code == 200
+        assert r.json()["cancelled"] >= 1
+    finally:
+        client.post("/api/v1/queue/resume")

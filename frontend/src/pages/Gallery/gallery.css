@@ -435,6 +435,7 @@ button.gal-group__main {
   display: block;
   column-width: 220px;
   column-gap: 12px;
+  contain: layout paint;
 }
 
 .gal-grid--compact { column-width: 170px; }
@@ -451,6 +452,8 @@ button.gal-group__main {
   background: var(--surface-3);
   overflow: hidden;
   cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 260px 360px;
 }
 
 .gal-card__media {

@@ -2,6 +2,33 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.28.0] — 2026-10-21
+
+> Minor：提示词页展示 V1 导入图；图库大库渲染优化；再修一个环境敏感测试。
+
+### Added
+
+- `GET /api/v1/prompts/{id}/images` 与列表批量 `images` 现在**同时返回**：
+  - Job 快照关联的生成图（原有行为）；
+  - 通过 `Image.metadata_json.v1_output.prompts[].prompt_id` 关联的 V1 导入图
+    （`job_status="IMPORTED"`，支持 `version_id` 过滤，统一排序/分页/计数）。
+  实现用 SQLite `json_each` 单查询合并，无 N+1；新增 `test_prompt_imported_images.py`（4 例）。
+
+### Changed
+
+- **图库渲染优化（3714 张规模）**：`.gal-grid` 增加 `contain: layout paint`；
+  `.gal-card` 增加 `content-visibility: auto` + `contain-intrinsic-size: 260px 360px`；
+  卡片图片 `decoding="async"`。视口外卡片跳过布局/绘制，降低滚动主线程开销。
+  新增 `GalleryCard.perf.test.tsx`。
+
+### Fixed
+
+- `test_startup_stale_recovery::test_clear_stale_endpoint`：先暂停队列再清理，避免 Worker 在
+  create → clear-stale 之间抢消费 QUEUED Job 导致的随机失败。
+
+### Notes
+
+- 本地验证：后端全量 pytest 通过；前端全量 380 用例通过；tsc/build 通过。
 ## [0.27.0] — 2026-10-21
 
 > Minor：移除提示词卡片「暂未生成」占位；V1 旧输出图片批量接入（实际执行完成）。
