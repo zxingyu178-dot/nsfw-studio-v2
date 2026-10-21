@@ -2,6 +2,20 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.29.4] — 2026-10-22
+
+> Patch：图库滚动抖动最终修复（content-visibility 估算高度）。
+
+### Fixed
+
+- 移除卡片层 `content-visibility: auto` 与 `contain-intrinsic-size`：其视口外估算高度
+  与实际 9:16 等竖图差异较大，卡片进入视口时高度突变（实测 40→160 张时 10 张卡片位移 4~70px），
+  同列下方图片上下跳动。保留 `.gal-grid { contain: layout paint }`、懒加载与 `decoding="async"`。
+- 卡片新增 `data-image-id` 便于回归定位。
+- **CDP 真机验证**（v0.29.4 构建，真实 3754 张图库）：首屏 40 张 → 滚动加载到 160 张，
+  按卡片 id 对比位置与高度 **changed_by_id = 0**；右上角 hover tooltip 前后
+  `scrollWidth == clientWidth`，无横向溢出。
+- 全量前端 398 用例、tsc/build 通过。
 ## [0.29.3] — 2026-10-22
 
 > Patch：图库缩略图加载抖动（瀑布流竖向跳动）彻底修复。
