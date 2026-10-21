@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.31.0] — 2026-10-22
+
+> Minor：生成工作台快捷键。
+
+### Added
+
+- **Ctrl+Enter / ⌘+Enter 快捷提交生成**：Gate 通过时等价点击「✦ 生成 N 张」；
+  Gate 阻断（未填 Prompt/引擎离线/缺输入图）或提交中时不响应，避免误提交。
+- 主生成按钮 `title` 提示「生成（Ctrl+Enter）」，并设置 `aria-keyshortcuts="Control+Enter"`。
+- 新增 `SplitGenerateAction.shortcut.test.tsx`（Ctrl/⌘/Gate 阻断/提交中防重/属性），
+  Generate 111 用例、前端全量 412 用例通过；tsc/build 通过。
 ## [0.30.1] — 2026-10-22
 
 > Patch：生成工作台槽位占位文案修正。
