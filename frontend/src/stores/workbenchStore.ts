@@ -378,6 +378,14 @@ export function setWorkbenchMode(mode: WorkbenchMode): void {
   })
 }
 
+/**
+ * 提示词库一键填入时记录来源（Provenance）：提交的 Job 会带 source_prompt_id/version_id，
+ * 图库/提示词页即可回溯"这张图来自哪条提示词"。不改变 Prompt 文本本身。
+ */
+export function setSourcePrompt(promptId: string | null, versionId: string | null = null): void {
+  setState({ sourcePromptId: promptId, sourcePromptVersionId: versionId })
+}
+
 /** /modules 能力目录注入（Task7：Gate 判定唯一依据 available=true；同时校正 Primary Module） */
 export function setModuleCatalog(catalog: ModuleCapabilitiesDTO[]): void {
   setState({
