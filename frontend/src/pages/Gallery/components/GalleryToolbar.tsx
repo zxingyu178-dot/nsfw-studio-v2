@@ -2,7 +2,7 @@ import { useState, type MutableRefObject } from 'react'
 import { Button, Select, Tabs } from '../../../components/ui'
 import type { ImageReviewStatus, ImageSort } from '../../../types/workbench'
 import type { GallerySource, TabKey } from '../hooks/useGalleryQuery'
-import { DENSITY_OPTIONS, type GalleryDensity, type GalleryFit } from '../hooks/useGalleryPrefs'
+import { DENSITY_OPTIONS, type GalleryDensity } from '../hooks/useGalleryPrefs'
 
 /**
  * Phase 0.12 Task4：Gallery Toolbar 2.0 两层结构。
@@ -51,8 +51,6 @@ interface GalleryToolbarProps {
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
   onDensityChange: (value: GalleryDensity) => void
-  fit: GalleryFit
-  onFitChange: (value: GalleryFit) => void
   selectMode: boolean
   onToggleSelect: () => void
   onStartReview: () => void
@@ -66,7 +64,7 @@ interface GalleryToolbarProps {
 export function GalleryToolbar({
   tab, onTabChange, view, onToggleView,
   subStatus, onSubStatusChange, source, onSourceChange, sort, onSortChange,
-  density, onDensityChange, fit, onFitChange,
+  density, onDensityChange,
   selectMode, onToggleSelect, onStartReview,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
 }: GalleryToolbarProps) {
@@ -125,20 +123,6 @@ export function GalleryToolbar({
           onChange={(event) => onDensityChange(event.target.value as GalleryDensity)}
           options={DENSITY_OPTIONS.map(({ value, label }) => ({ value, label }))}
         />
-        <div className="gal-segmented gal-segmented--xs" role="group" aria-label="图片适应方式">
-          <Button
-            size="xs" variant={fit === 'contain' ? 'primary' : 'ghost'}
-            onClick={() => onFitChange('contain')}
-          >
-            适应
-          </Button>
-          <Button
-            size="xs" variant={fit === 'cover' ? 'primary' : 'ghost'}
-            onClick={() => onFitChange('cover')}
-          >
-            填充
-          </Button>
-        </div>
 
         <span className="gal-toolbar__spacer" />
 

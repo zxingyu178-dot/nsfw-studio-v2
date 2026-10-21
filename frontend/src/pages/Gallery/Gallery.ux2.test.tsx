@@ -96,36 +96,30 @@ describe('Gallery UX 2.0：两层 Toolbar', () => {
     // 第二层：筛选 selects
     expect(screen.getByLabelText('网格密度')).toBeInTheDocument()
     expect(screen.getByLabelText('排序')).toBeInTheDocument()
-    // 适应 | 填充 segmented
-    expect(screen.getByRole('button', { name: '适应' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '填充' })).toBeInTheDocument()
+    // 适应/填充已移除：图片始终按原始比例完整显示
+    expect(screen.queryByRole('button', { name: '适应' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '填充' })).toBeNull()
   })
 })
 
-describe('Gallery UX 2.0：密度 / 适应偏好', () => {
-  it('默认 contain + normal 网格修饰类', async () => {
+describe('Gallery UX 2.0：密度偏好', () => {
+  it('默认 normal 网格修饰类', async () => {
     vi.mocked(imageApi.list).mockResolvedValue({ items: [baseImage], total: 1 } as never)
     const { container } = renderPage()
     await screen.findByText('共 1 张')
     const grid = container.querySelector('.gal-grid') as HTMLElement
     expect(grid.className).toContain('gal-grid--normal')
-    expect(grid.className).toContain('gal-grid--fit-contain')
   })
 
-  it('切换密度为 compact / 填充为 cover 后网格修饰类随之更新', async () => {
+  it('切换密度为 compact 后网格修饰类随之更新', async () => {
     vi.mocked(imageApi.list).mockResolvedValue({ items: [baseImage], total: 1 } as never)
     const { container } = renderPage()
     await screen.findByText('共 1 张')
 
     fireEvent.change(screen.getByLabelText('网格密度'), { target: { value: 'compact' } })
-    let grid = container.querySelector('.gal-grid') as HTMLElement
+    const grid = container.querySelector('.gal-grid') as HTMLElement
     expect(grid.className).toContain('gal-grid--compact')
     expect(localStorage.getItem('gallery.density')).toBe('compact')
-
-    fireEvent.click(screen.getByRole('button', { name: '填充' }))
-    grid = container.querySelector('.gal-grid') as HTMLElement
-    expect(grid.className).toContain('gal-grid--fit-cover')
-    expect(localStorage.getItem('gallery.fit')).toBe('cover')
   })
 })
 
