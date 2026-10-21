@@ -60,10 +60,10 @@ describe('GalleryCard performance guards', () => {
     expect(thumbnail).toHaveAttribute('decoding', 'async')
   })
 
-  it('contains offscreen cards with a stable intrinsic placeholder size', () => {
+  it('不从卡片层使用 content-visibility（避免 intrinsic-size 估算导致进入视口时跳动）', () => {
     const cardRule = finalRule('.gal-card')
-    expect(cardRule).toMatch(/content-visibility\s*:\s*auto\s*;/)
-    expect(cardRule).toMatch(/contain-intrinsic-size\s*:\s*260px\s+360px\s*;/)
+    expect(cardRule).not.toMatch(/content-visibility/)
+    expect(cardRule).not.toMatch(/contain-intrinsic-size/)
   })
 
   it('contains gallery grid layout and painting', () => {

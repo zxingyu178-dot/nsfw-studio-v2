@@ -47,6 +47,7 @@ export function GalleryCard({
   const jobLabel = image.job_id ? shortJobId(image.job_id) : '外部导入'
   return (
     <div
+      data-image-id={image.id}
       className={`gal-card${selected ? ' gal-card--selected' : ''}`}
       onClick={() => onCardClick(image)}
       onDoubleClick={() => onCardDoubleClick(image)}
