@@ -455,8 +455,6 @@ button.gal-group__main {
   background: var(--surface-3);
   overflow: hidden;
   cursor: pointer;
-  content-visibility: auto;
-  contain-intrinsic-size: 260px 360px;
 }
 
 .gal-card__media {
