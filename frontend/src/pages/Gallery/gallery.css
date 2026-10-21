@@ -428,24 +428,27 @@ button.gal-group__main {
 }
 
 /* ===== Phase 0.18 C：图库瀑布流 + hover 操作层（对齐 DESIGN.md）=====
-   - CSS columns 瀑布流：220px 列宽、12px 间距、8px 圆角卡片；
+   - 稳定列式瀑布流：按密度计算目标列数、12px 间距、8px 圆角卡片；
    - 图片按原始比例排布（不再固定高度拉伸）；
    - hover 底部升起黑色渐变层：尺寸/状态 + 收藏 + 下载。 */
 .gal-grid {
-  display: block;
-  column-width: 220px;
-  column-gap: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   contain: layout paint;
 }
 
-.gal-grid--compact { column-width: 170px; }
-.gal-grid--large { column-width: 280px; }
+.gal-col {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
 
 .gal-card {
   display: block;
   width: 100%;
-  margin: 0 0 12px;
-  break-inside: avoid;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
