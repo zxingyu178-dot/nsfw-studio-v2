@@ -1,7 +1,7 @@
 import { useState, type MutableRefObject } from 'react'
 import { Button, Select, Tabs } from '../../../components/ui'
 import type { ImageReviewStatus, ImageSort } from '../../../types/workbench'
-import type { TabKey } from '../hooks/useGalleryQuery'
+import type { GallerySource, TabKey } from '../hooks/useGalleryQuery'
 import { DENSITY_OPTIONS, type GalleryDensity, type GalleryFit } from '../hooks/useGalleryPrefs'
 
 /**
@@ -32,6 +32,12 @@ const SUB_STATUS_OPTIONS: { value: '' | ImageReviewStatus; label: string }[] = [
   { value: 'REJECT', label: '淘汰' },
 ]
 
+const SOURCE_OPTIONS: { value: GallerySource; label: string }[] = [
+  { value: '', label: '来源：全部' },
+  { value: 'comfyui', label: '生成' },
+  { value: 'import', label: 'V1 导入' },
+]
+
 interface GalleryToolbarProps {
   tab: TabKey
   onTabChange: (tab: TabKey) => void
@@ -39,6 +45,8 @@ interface GalleryToolbarProps {
   onToggleView: () => void
   subStatus: '' | ImageReviewStatus
   onSubStatusChange: (value: '' | ImageReviewStatus) => void
+  source: GallerySource
+  onSourceChange: (value: GallerySource) => void
   sort: ImageSort
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
@@ -57,7 +65,7 @@ interface GalleryToolbarProps {
 
 export function GalleryToolbar({
   tab, onTabChange, view, onToggleView,
-  subStatus, onSubStatusChange, sort, onSortChange,
+  subStatus, onSubStatusChange, source, onSourceChange, sort, onSortChange,
   density, onDensityChange, fit, onFitChange,
   selectMode, onToggleSelect, onStartReview,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
@@ -98,6 +106,12 @@ export function GalleryToolbar({
           value={subStatus}
           onChange={(event) => onSubStatusChange(event.target.value as '' | ImageReviewStatus)}
           options={SUB_STATUS_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <Select
+          aria-label="来源"
+          value={source}
+          onChange={(event) => onSourceChange(event.target.value as GallerySource)}
+          options={SOURCE_OPTIONS.map(({ value, label }) => ({ value, label }))}
         />
         <Select
           aria-label="排序"

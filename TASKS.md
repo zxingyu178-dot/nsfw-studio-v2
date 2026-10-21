@@ -81,6 +81,11 @@
 - [x] 图库渲染优化：content-visibility/contain/async decoding
 - [x] 修复 clear-stale 测试 Worker 抢消费竞态
 
+## Phase 0.26：图库来源筛选（v0.29.0）
+
+- [x] 图库工具栏「来源」筛选（全部/生成/V1 导入），URL 同步 + 非法值回退
+- [x] 列表/分页/统计统一携带 source；切换重置第 1 页
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。

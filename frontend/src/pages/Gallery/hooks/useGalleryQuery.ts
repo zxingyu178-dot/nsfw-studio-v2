@@ -16,6 +16,7 @@ import type {
  */
 
 export type TabKey = 'ALL' | 'NEW' | 'FAVORITE' | 'ARCHIVED'
+export type GallerySource = '' | 'comfyui' | 'import'
 
 export const PAGE_SIZE = 40
 
@@ -26,9 +27,13 @@ export interface GalleryListQuery {
   page_size: number
   status?: ImageReviewStatus | null
   favorite?: boolean
+  source?: Exclude<GallerySource, ''>
 }
 
-export function useGalleryQuery(jobFilter: string | null | undefined) {
+export function useGalleryQuery(
+  jobFilter: string | null | undefined,
+  sourceFilter: GallerySource = '',
+) {
   const [tab, setTab] = useState<TabKey>('ALL')
   const [subStatus, setSubStatus] = useState<'' | ImageReviewStatus>('')
   const [sort, setSort] = useState<ImageSort>('created_desc')
@@ -61,6 +66,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
     else if (tab === 'NEW') query.status = 'NEW'
     else if (tab === 'ARCHIVED') query.status = 'ARCHIVED'
     else if (tab === 'FAVORITE') query.favorite = true
+    if (sourceFilter) query.source = sourceFilter
     return query
   }
 
@@ -82,7 +88,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
         if (seq === requestSeq.current) setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter])
 
   useEffect(() => {
     loadFirst()
@@ -110,7 +116,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
       .then((s) => setServerStats(s))
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -147,7 +153,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
         if (seq === requestSeq.current) setLoadingMore(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter])
+  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter])
 
   // 哨兵进入视口 → 加载下一页
   useEffect(() => {
@@ -185,6 +191,7 @@ export function useGalleryQuery(jobFilter: string | null | undefined) {
     else if (tab === 'NEW') params.status = 'NEW'
     else if (tab === 'ARCHIVED') params.status = 'ARCHIVED'
     else if (tab === 'FAVORITE') params.favorite = true
+    if (sourceFilter) params.source = sourceFilter
     return params
   }
 
