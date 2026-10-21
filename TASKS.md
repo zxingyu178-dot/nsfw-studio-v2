@@ -75,6 +75,12 @@
 - [x] 移除提示词卡片「暂未生成」占位（v0.27.0）
 - [x] 接入 V1 prompt_cache：导入 2620 张旧图（4.28GB）+ 163 个提示词（v0.27.0）\n- [ ] 可选：V1 history.json（1 条）后续接入；导入图与 Prompt 页生成图列表的 UI 关系（另开任务）
 
+## Phase 0.25：提示词↔导入图 + 图库性能（v0.28.0）
+
+- [x] 提示词接口/列表批量返回 V1 导入图（json_each 合并，无 N+1）
+- [x] 图库渲染优化：content-visibility/contain/async decoding
+- [x] 修复 clear-stale 测试 Worker 抢消费竞态
+
 ## 版本时间线（v0.10–v0.16.0）
 
 > 真相源：`CHANGELOG.md`；发布报告：`docs/release/`、`docs/phase011/`。
