@@ -93,6 +93,29 @@ def list_images(
     )
 
 
+@router.get("/ids", summary="按图库筛选返回全部匹配图片 ID（上限 10000）")
+def list_image_ids(
+    job_id: str | None = Query(default=None),
+    review_status: str | None = Query(default=None),
+    favorite: bool | None = Query(default=None),
+    source: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    search: str | None = Query(default=None, description="按导入文件名搜索"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
+    session: Session = Depends(get_session),
+) -> dict[str, object]:
+    limit = image_service.IMAGE_IDS_LIMIT
+    ids, total = image_service.list_image_ids(
+        session, job_id=job_id, review_status=review_status, favorite=favorite,
+        source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
+        status=status, sort=sort, limit=limit,
+    )
+    return {"ids": ids, "total": total, "truncated": total > limit, "limit": limit}
+
+
 @router.post("/import", response_model=ImageImportResponse, status_code=201,
              summary="导入外部图片（多张；sha256 去重；单张失败不影响整批）")
 async def import_images(
