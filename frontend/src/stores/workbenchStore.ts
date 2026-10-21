@@ -13,6 +13,7 @@ import {
   type WorkbenchSnapshot,
   type WorkflowModuleRef,
 } from '../types/workbench'
+import { loadWorkbenchParams, saveWorkbenchParams } from './workbenchPrefs'
 
 /** 生成模式（Phase 5 §二十）：文生图 / 图片生成（图片生成需要输入图片 + 可用 Module） */
 export type WorkbenchMode = 'text' | 'image'
@@ -47,6 +48,8 @@ export interface WorkbenchState {
 }
 
 function initialState(): WorkbenchState {
+  // 记住上次使用的尺寸/数量/Seed 模式（参数偏好，不含 Prompt 内容）。
+  const params = loadWorkbenchParams()
   return {
     promptMode: 'structured',
     structured: emptyStructured(),
@@ -55,17 +58,28 @@ function initialState(): WorkbenchState {
     selectedAssets: {},
     mode: 'text',
     inputImages: [],
-    width: 1024,
-    height: 1024,
-    count: 1,
-    seedMode: 'random',
-    seed: null,
+    width: params.width,
+    height: params.height,
+    count: params.count,
+    seedMode: params.seedMode,
+    seed: params.seed,
     workflowModules: [{ module_id: 'basic_generate' }],
     moduleCatalog: [],
     sourcePromptId: null,
     sourcePromptVersionId: null,
     sourceRecipeId: null,
   }
+}
+
+/** 把当前参数写入偏好（仅用户显式改参数时调用；hydrate 不写回）。 */
+function persistParams(): void {
+  saveWorkbenchParams({
+    width: state.width,
+    height: state.height,
+    count: state.count,
+    seedMode: state.seedMode,
+    seed: state.seed,
+  })
 }
 
 let state: WorkbenchState = initialState()
@@ -321,15 +335,18 @@ export function setNegativePrompt(value: string): void {
 
 export function setSize(width: number, height: number): void {
   setState({ width, height })
+  persistParams()
 }
 
 export function setCount(count: number): void {
   // §0.4：固定 Seed 仅用于单张精确复现；用户把数量改成 >1 → 自动切回随机 Seed
   if (count > 1 && state.seedMode === 'fixed') {
     setState({ count, seedMode: 'random', seed: null })
+    persistParams()
     return
   }
   setState({ count })
+  persistParams()
 }
 
 /** 固定 Seed（"使用此图 Seed"）或恢复随机（seed = null） */
@@ -337,9 +354,11 @@ export function setSeed(seed: number | null): void {
   // §0.4：固定 Seed 自动收敛为单张（count = 1）
   if (seed !== null) {
     setState({ seedMode: 'fixed', seed, count: 1 })
+    persistParams()
     return
   }
   setState({ seedMode: 'random', seed: null })
+  persistParams()
 }
 
 /** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
