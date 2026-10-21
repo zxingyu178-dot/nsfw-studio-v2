@@ -26,7 +26,7 @@ V2 有 1094 条 Image：1091 条 `source=comfyui`、3 条 `source=import`；不�
 
 **不能按路径关联。** 文件名、文件大小只能筛选候选，不能证明内容一致；本次可靠判据是原始文件字节 SHA-256 相等。重编码、PNG 元数据改变或裁剪后的视觉相似图不会被这种判据认定为相同，不能据此断言视觉上完全不重叠。591 个丢失文件无法验证内容。
 
-3258 条的 positive 原文（不 trim、不改大小写、不改标点）去重后 **387 条**。V2 当前 99 个 Prompt 中，98 个当前版本携带 `_v1_migration` 标记，原文均唯一：
+3258 条的 positive 原文（不 trim、不改大小写、不改标点）去重后 **387 条，含 1 个空字符串，即 386 条非空文本**。有 34 条缓存的 positive 为空，其中 25 个文件存在、9 个缺失；空文本图片正常扫描、去重、导入，但不创建空 Prompt。V2 当前 99 个 Prompt 中，98 个当前版本携带 `_v1_migration` 标记，原文均唯一：
 
 - 完全相等：69 个 cache 唯一文本，对应 69 个已迁移文本。
 - 严格包含（排除完全相等，任一方向的非空子串）：0 个 cache 文本、0 对。
@@ -83,7 +83,53 @@ $env:NSFW_STUDIO_DATA_ROOT = 'D:/NSFW-Studio-Data'
 
 ## 验证记录
 
-命令 `.venv\Scripts\python -m pytest tests/backend/test_import_v1_outputs.py -q`：**9 项通过，退出码 0**。现有环境有一条 Starlette/httpx 弃用警告，未新增依赖或修改既有测试。指定测试全部在临时 DataRoot 中调用 apply 方法，未对真实 DataRoot 使用 `--apply`。覆盖 dry-run 不改库/图片、创建和复用 Prompt、重复 apply、缺失/过期备份、limit、重复内容多提示词、生成图实际哈希判重、缺失/越界/非法文件、服务失败整轮业务回滚、扫描后源文件变化拒绝、清单写入失败阻止 apply。
+### 真实 dry-run 输出与阻塞
+
+最终命令：`.venv\Scripts\python -u scripts/import_v1_outputs.py --dry-run --data-root D:/NSFW-Studio-Data`。
+
+```json
+{
+  "cache_entries": 3258,
+  "existing_files": 2667,
+  "missing_files": 591,
+  "outside_root": 0,
+  "invalid_files": 17,
+  "invalid_cache": 0,
+  "empty_positive_entries": 34,
+  "unique_positive_prompts": 387,
+  "v2_images": 1094,
+  "v2_missing_files": 0,
+  "v2_prompts": 99,
+  "migrated_prompts": 98,
+  "exact_library_overlap": 69,
+  "strict_contains_cache_texts": 0,
+  "unique_source_hashes": 2644,
+  "duplicate_cache_files": 6,
+  "existing_matches": 24,
+  "matching_v2_images": 24,
+  "will_import": 2620,
+  "will_create_prompts": 163,
+  "deferred_limit": 0,
+  "will_copy_bytes": 4284822608,
+  "skipped_or_duplicate": 638
+}
+```
+
+17 个 `invalid_files` 全部为现有导入服务拒绝的 `FILE_TOO_LARGE`（超过 **10 MB**），不是已确认文件损坏。它们全部来自空 positive 记录，例如 `upscale-4x/高清_00001_.png`、`upscale-4x/高清_00002_.png`、`upscale-seedvr2/高清_00003_.png`。没有绕过服务大小限制、压缩或改写源图。
+
+**两种哈希统计口径必须区分**：全部存在文件有 2661 个唯一哈希、33 个 V2 重叠；通过现有导入校验的文件有 2644 个唯一哈希、24 个 V2 重叠。17 个超限文件中，9 个已有精确匹配、8 个不在 V2；因此最终计划新增 2620 张，而非只按原始哈希计算的 2628 张。638 条跳过/重复 = 591 缺失 + 17 超限 + 6 cache 重复 + 24 已存在。新增原图约 4.285 GB（另需缩略图与日志空间）。
+
+**未完成的验收项：真实清单没有落盘。** 最终命令退出码 **1**：
+
+```text
+导入失败：[Errno 13] Permission denied: 'D:\NSFW-Studio-Data\backups\v1-outputs-plan-20261020T235900439203Z.json'
+```
+
+此前两次同目录写入也被拒绝。目录 ACL 显示当前用户所属组有写权限，未定位到最终拒绝来源；没有修改 ACL、安全设置或尝试绕过保护。上述目标文件不存在，不能当作已交付的清单链接。Lead 需要在有权写入该 backups 目录的执行环境重新运行 dry-run；确认实际清单生成成功后再决定后续 apply。当前代码与临时 DataRoot 验证已完成，**真实 dry-run 验收未全部完成**。真实库复查仍为 1094 张 Image、99 个 Prompt，未运行真实 apply。
+
+### 隔离测试与复核
+
+命令 `.venv\Scripts\python -m pytest tests/backend/test_import_v1_outputs.py -q`：**10 项通过，退出码 0**。现有环境有一条 Starlette/httpx 弃用警告，未新增依赖或修改既有测试。指定测试全部在临时 DataRoot 中调用 apply 方法，未对真实 DataRoot 使用 `--apply`。覆盖 dry-run 不改库/图片、创建和复用 Prompt、重复 apply、缺失/过期备份、limit、重复内容多提示词、生成图实际哈希判重、缺失/越界/非法文件、服务失败整轮业务回滚、扫描后源文件变化拒绝、清单写入失败阻止 apply、空 positive 图片导入但不创建空 Prompt。
 
 额外启动的完整后端 pytest 已中止，没有完整结果；本次仅声称定向验证通过，不声称项目全量后端验收通过。Python AST、UTF-8 无 BOM 与 Registry JSON 检查通过。
 

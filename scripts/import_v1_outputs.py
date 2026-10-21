@@ -74,13 +74,15 @@ def make_plan(source: Path, output: Path, root: Path, limit: int | None) -> dict
             prompt_index.setdefault(row["positive_prompt"], row)
     groups, skipped, texts = {}, [], set()
     exists = 0
+    empty_positive = 0
     for raw_path, value in sorted(cache.items()):
         if (not isinstance(value, list) or len(value) != 2
-                or not isinstance(value[1], str) or not value[1].strip()
+                or not isinstance(value[1], str)
                 or isinstance(value[0], bool) or not isinstance(value[0], (int, float))):
             skipped.append({"path": raw_path, "reason": "invalid_cache"})
             continue
         texts.add(value[1])
+        empty_positive += not value[1].strip()
         path = Path(raw_path).resolve()
         if not Path(raw_path).is_absolute() or not path.is_relative_to(output):
             skipped.append({"path": raw_path, "reason": "outside_root"})
@@ -114,11 +116,11 @@ def make_plan(source: Path, output: Path, root: Path, limit: int | None) -> dict
             group["action"] = "import"
             selected += 1
             new_texts.update(row["positive_prompt"] for row in group["sources"]
-                             if row["positive_prompt"] not in prompt_index)
+                             if row["positive_prompt"].strip() and row["positive_prompt"] not in prompt_index)
         group["prompts"] = [{"positive_prompt": text,
                              "prompt_id": prompt_index[text]["id"] if text in prompt_index else None,
                              "version_id": prompt_index[text]["version_id"] if text in prompt_index else None}
-                            for text in sorted({row["positive_prompt"] for row in group["sources"]})]
+                            for text in sorted({row["positive_prompt"] for row in group["sources"]}) if text.strip()]
     migrated = [row for row in prompts if "_v1_migration" in json.loads(row["structured_json"])]
     library = {row["positive_prompt"] for row in migrated}
     stats = {
@@ -127,11 +129,12 @@ def make_plan(source: Path, output: Path, root: Path, limit: int | None) -> dict
         "outside_root": sum(row["reason"] == "outside_root" for row in skipped),
         "invalid_files": sum(row["reason"] == "invalid_file" for row in skipped),
         "invalid_cache": sum(row["reason"] == "invalid_cache" for row in skipped),
+        "empty_positive_entries": empty_positive,
         "unique_positive_prompts": len(texts), "v2_images": len(images),
         "v2_missing_files": len(missing_v2), "v2_prompts": len(prompts),
         "migrated_prompts": len(migrated), "exact_library_overlap": len(texts & library),
         "strict_contains_cache_texts": sum(any(t != p and (t in p or p in t)
-            for p in library if p) for t in texts),
+            for p in library if p) for t in texts if t),
         "unique_source_hashes": len(groups),
         "duplicate_cache_files": sum(len(g["sources"]) - 1 for g in groups.values()),
         "existing_matches": sum(len(g["sources"]) for g in groups.values() if g["existing_image_ids"]),

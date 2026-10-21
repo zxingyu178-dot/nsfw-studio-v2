@@ -193,3 +193,19 @@ def test_plan_write_failure_prevents_apply(sample, session_factory, monkeypatch,
     assert counts(session_factory) == (0, 0)
     assert not list((root / "images/originals").glob("*/original.png"))
     assert '"will_import": 3' in capsys.readouterr().out
+
+
+def test_empty_positive_still_imports_image_without_empty_prompt(sample, session_factory):
+    source, output, root = sample
+    cache_path = source / "runtime/prompt_cache.json"
+    cache = json.loads(cache_path.read_text())
+    cache[str(output / "0.png")][1] = ""
+    cache_path.write_text(json.dumps(cache))
+    backup(root)
+    plan = importer().run(source, output, root, apply=True)
+    assert plan["stats"]["existing_files"] == 3
+    assert plan["stats"]["unique_positive_prompts"] == 3
+    assert plan["stats"]["empty_positive_entries"] == 1
+    assert counts(session_factory) == (3, 2)
+    with session_factory() as session:
+        assert all(v.positive_prompt for v in session.scalars(select(PromptVersion)))
