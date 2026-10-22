@@ -90,6 +90,7 @@ export default function GalleryPage() {
     statsParams?: ImageStatsParams
   } | null>(null)
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
+  const [cleanupImageIds, setCleanupImageIds] = useState<string[] | null>(null)
   const [cleanupBusy, setCleanupBusy] = useState(false)
 
   useEffect(() => {
@@ -407,12 +408,17 @@ export default function GalleryPage() {
     })
   }
 
-  /** Phase 0.11：废片清理——先预览（confirm=false） */
-  async function openCleanup(): Promise<void> {
+  /** 废片清理——全局入口不传 image_ids，多选入口冻结当前选择并复用同一确认对话框。 */
+  async function openCleanup(imageIds?: string[]): Promise<void> {
+    const targetIds = imageIds ? [...imageIds] : null
     setCleanupBusy(true)
     query.setError(null)
     try {
-      const result = await imageApi.cleanupRejected({ confirm: false })
+      const result = await imageApi.cleanupRejected({
+        ...(targetIds ? { image_ids: targetIds } : {}),
+        confirm: false,
+      })
+      setCleanupImageIds(targetIds)
       setCleanupPreview(result)
     } catch (err) {
       query.setError(err instanceof ApiRequestError ? err.message : '无法预览废片清理')
@@ -423,8 +429,12 @@ export default function GalleryPage() {
 
   async function confirmCleanup(): Promise<void> {
     setCleanupBusy(true)
+    query.setError(null)
     try {
-      const result = await imageApi.cleanupRejected({ confirm: true })
+      const result = await imageApi.cleanupRejected({
+        ...(cleanupImageIds ? { image_ids: cleanupImageIds } : {}),
+        confirm: true,
+      })
       // eslint-disable-next-line no-console
       const bytes = result.deleted_bytes ?? 0
       const released = bytes < 1024 ? `${bytes} B`
@@ -435,7 +445,14 @@ export default function GalleryPage() {
         text: `清理完成：已删除 ${result.deleted_count ?? 0} 张，释放 ${released}；受保护未删 ${result.protected_count ?? 0} 张`,
       })
       setCleanupPreview(null)
+      setCleanupImageIds(null)
       query.loadFirst()
+      if (cleanupImageIds) selection.exitSelect()
+      try {
+        await imageApi.stats(query.buildStatsParams())
+      } catch (err) {
+        query.setError(err instanceof ApiRequestError ? err.message : '统计刷新失败')
+      }
     } catch (err) {
       query.setError(err instanceof ApiRequestError ? err.message : '清理失败')
     } finally {
@@ -479,6 +496,7 @@ export default function GalleryPage() {
           onBatchKeep={() => requestBatchReview('KEEP')}
           onBatchReject={() => requestBatchReview('REJECT')}
           onBatchArchive={() => requestBatchReview('ARCHIVED')}
+          onDelete={() => void openCleanup(selection.selectedIds)}
           onBatchFavorite={() => void batchFavorite()}
           onExitSelect={selection.exitSelect}
         />
@@ -594,7 +612,7 @@ export default function GalleryPage() {
       <CleanupRejectedDialog
         preview={cleanupPreview}
         busy={cleanupBusy}
-        onCancel={() => setCleanupPreview(null)}
+        onCancel={() => { setCleanupPreview(null); setCleanupImageIds(null) }}
         onConfirm={() => void confirmCleanup()}
       />
 

@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  ConfirmModal,
   Drawer,
   Field,
   Input,
@@ -74,6 +75,7 @@ export function PromptTab() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [showArchived, setShowArchived] = useState(false)
   const [drawer, setDrawer] = useState<{ open: boolean; prompt: PromptDTO | null }>({ open: false, prompt: null })
+  const [actionNotice, setActionNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   const hasExplicitFilterParams = PROMPT_FILTER_PARAM_NAMES.some((name) => searchParams.has(name))
   const [initialFilterPrefs] = useState<PromptFilterPrefs | null>(() =>
@@ -174,6 +176,20 @@ export function PromptTab() {
     navigate('/generate', { state: { workbench: promptToSnapshot(prompt) } })
   }
 
+  async function archivePrompt(prompt: PromptDTO): Promise<void> {
+    setActionNotice(null)
+    try {
+      await promptApi.archive(prompt.id)
+      setActionNotice({ kind: 'ok', text: '已软删除 Prompt，可在“显示已归档”中找回' })
+      reload()
+    } catch (archiveError) {
+      setActionNotice({
+        kind: 'error',
+        text: archiveError instanceof ApiRequestError ? archiveError.message : '删除失败',
+      })
+    }
+  }
+
   return (
     <div>
       <div className="pp-toolbar">
@@ -231,7 +247,14 @@ export function PromptTab() {
         </Button>
       </div>
 
-      {initialLoading && <p className="muted">加载中…</p>}
+      {actionNotice && (
+        <p
+          className={`ds-notice ds-notice--${actionNotice.kind === 'ok' ? 'success' : 'error'}`}
+          role="status"
+        >
+          {actionNotice.text}
+        </p>
+      )}
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
       {!initialLoading && !error && items.length === 0 && (
         <div className="pp-empty">
@@ -240,17 +263,22 @@ export function PromptTab() {
         </div>
       )}
 
-      <div className="pp-grid">
-        {items.map((prompt) => (
-          <PromptCard
-            key={prompt.id}
-            prompt={prompt}
-            onOpen={(p) => setDrawer({ open: true, prompt: p })}
-            onUse={openInWorkbench}
-            onChanged={reload}
-          />
-        ))}
-      </div>
+      {initialLoading ? (
+        <PromptListSkeleton />
+      ) : (
+        <div className="pp-grid pp-grid--single">
+          {items.map((prompt) => (
+            <PromptCard
+              key={prompt.id}
+              prompt={prompt}
+              onOpen={(p) => setDrawer({ open: true, prompt: p })}
+              onUse={openInWorkbench}
+              onArchive={archivePrompt}
+              onChanged={reload}
+            />
+          ))}
+        </div>
+      )}
 
       {!initialLoading && !error && items.length > 0 && (
         <div className="pp-loadmore">
@@ -273,6 +301,22 @@ export function PromptTab() {
           onOpenInWorkbench={openInWorkbench}
         />
       )}
+    </div>
+  )
+}
+
+function PromptListSkeleton() {
+  return (
+    <div className="pp-grid pp-grid--single pp-skeleton-list" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <article className="pp-skeleton" key={index}>
+          <div className="pp-skeleton__head" />
+          <div className="pp-skeleton__text" />
+          <div className="pp-skeleton__text pp-skeleton__text--short" />
+          <div className="pp-skeleton__media" />
+          <div className="pp-skeleton__actions" />
+        </article>
+      ))}
     </div>
   )
 }
@@ -313,17 +357,19 @@ interface PromptCardProps {
   onOpen: (prompt: PromptDTO) => void
   /** 一键带入工作台（使用）。 */
   onUse: (prompt: PromptDTO) => void
+  /** 软删除并刷新外层列表。 */
+  onArchive: (prompt: PromptDTO) => Promise<void>
   /** 收藏等元数据变化后刷新外层列表。 */
   onChanged: () => void
 }
 
 /**
- * Prompt 可视化卡片（v0.15 Task 13/14）：
- * 名称 → 摘要（≤3 行）→ 预览图（在文本下方）→ 更新时间 → 使用 / 复制 / 编辑 / 收藏。
+ * Prompt 整行卡片：
+ * 名称/状态/评分 → 摘要（≤2 行）→ 图片 → 更新时间与操作。
  * 无图不渲染媒体区；点图才打开预览，无图不弹错。
  * 不自动覆盖封面，封面仍在编辑抽屉里显式“设为 Prompt 封面”。
  */
-function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
+function PromptCard({ prompt, onOpen, onUse, onArchive, onChanged }: PromptCardProps) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [favBusy, setFavBusy] = useState(false)
@@ -331,6 +377,8 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // Phase 0.17.3：人工评分弹窗。
   const [scoringOpen, setScoringOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   // DB 有 preview_image_id 但 rendition 缺失/损坏时，移除整个媒体区。
   const [previewFailed, setPreviewFailed] = useState(false)
 
@@ -363,6 +411,17 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
     }
   }
 
+  async function handleArchive(): Promise<void> {
+    if (deleteBusy) return
+    setDeleteBusy(true)
+    try {
+      await onArchive(prompt)
+      setDeleteOpen(false)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   return (
     <article className="pp-card">
       <header className="pp-card__head">
@@ -371,30 +430,31 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
           {prompt.name}
           {prompt.archived && <Badge>已归档</Badge>}
         </h3>
-        <span className="pp-card__badges">
-          <Badge tone="accent">
-            {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
-          </Badge>
-          <span className={`pp-card__status pp-card__status--${prompt.status ?? 'candidate'}`}>
-            {PROMPT_STATUS_LABEL[prompt.status ?? 'candidate']}
+        <div className="pp-card__meta">
+          <span className="pp-card__badges">
+            <Badge tone="accent">
+              {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
+            </Badge>
+            <span className={`pp-card__status pp-card__status--${prompt.status ?? 'candidate'}`}>
+              {PROMPT_STATUS_LABEL[prompt.status ?? 'candidate']}
+            </span>
           </span>
-        </span>
+          {prompt.latest_evaluation && (
+            <div
+              className="pp-card__score"
+              aria-label={`最近评分 ${prompt.latest_evaluation.overall_score} 分（满分 5）`}
+            >
+              <span className="pp-card__score-value">{prompt.latest_evaluation.overall_score}</span>
+              <span className="pp-card__score-label">/ 5</span>
+              {prompt.status_reason && <span className="pp-card__score-note">{prompt.status_reason}</span>}
+            </div>
+          )}
+        </div>
       </header>
 
       <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
 
-      {prompt.latest_evaluation && (
-        <div
-          className="pp-card__score"
-          aria-label={`最近评分 ${prompt.latest_evaluation.overall_score} 分（满分 5）`}
-        >
-          <span className="pp-card__score-value">{prompt.latest_evaluation.overall_score}</span>
-          <span className="pp-card__score-label">/ 5</span>
-          {prompt.status_reason && <span className="pp-card__score-note">{prompt.status_reason}</span>}
-        </div>
-      )}
-
-      {/* 预览图：Phase 0.18 D 起图片优先——DOM 仍在文本之后，由 CSS `order: -1` 置顶铺满卡片。 */}
+      {/* 封面预览保留在摘要下方；生成图继续使用独立缩略行。 */}
       {hasPreview && prompt.preview_image_id && (
         <button
           type="button"
@@ -406,6 +466,7 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
           <img
             src={imageThumbUrl(prompt.preview_image_id)}
             loading="lazy"
+            decoding="async"
             alt=""
             onError={() => {
               // 后端清了文件但元数据仍在 / rendition 损坏：移除媒体区。
@@ -429,7 +490,7 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
               title={image.module_id ? `由 ${image.module_id} 生成` : '查看大图'}
               aria-label={`查看生成图 ${image.id}`}
             >
-              <img src={image.thumbnail_url} loading="lazy" alt="" />
+              <img src={image.thumbnail_url} loading="lazy" decoding="async" alt="" />
             </button>
           ))}
           {(prompt.images_total ?? 0) > prompt.images.length && (
@@ -468,8 +529,30 @@ function PromptCard({ prompt, onOpen, onUse, onChanged }: PromptCardProps) {
           >
             {prompt.favorite ? '★ 已收藏' : '☆ 收藏'}
           </button>
+          {!prompt.archived && (
+            <button
+              type="button"
+              className="pp-card__action pp-card__action--danger"
+              onClick={() => setDeleteOpen(true)}
+            >
+              删除
+            </button>
+          )}
         </span>
       </footer>
+
+      <ConfirmModal
+        open={deleteOpen}
+        title={`删除 Prompt“${prompt.name}”？`}
+        message="软删除后，可在“显示已归档”中找回。"
+        confirmText={deleteBusy ? '删除中…' : '确认删除'}
+        cancelText="取消"
+        danger
+        onCancel={() => {
+          if (!deleteBusy) setDeleteOpen(false)
+        }}
+        onConfirm={() => void handleArchive()}
+      />
 
       {previewOpen && prompt.preview_image_id && (
         <Modal open title={prompt.name} onClose={() => setPreviewOpen(false)}>

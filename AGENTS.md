@@ -161,6 +161,10 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
   astra 一律保持原生 `model_reasoning_effort=medium`，**禁止调高思考强度**（用户 2026-10-21 明确要求，
   否则额度很快用完）；任务本身也该拆小、给足上下文，避免长链思考。
 - Codex 只改代码、不提交：禁止 `git commit / push / tag`，交付后由 Lead 审查并提交。
+- **每次执行任务前先检查 Codex 额度（用户 2026-10-22 要求）**：先派一个最小空任务探测
+  （例如 `subagent_codex_lite` 仅回复 `OK`，不读文件/不改代码）；成功则本轮优先用 Codex，
+  返回 limit/失败则改用 Lead 执行，不得把大面积工作押在可能失败的派单上。探测任务必须极小，
+  禁止用真实任务做额度探测。
 - 派单必须写清：工作目录、允许改动的范围、验收标准（`pytest` / `vitest` / `tsc -b` / `npm run build`）、
   禁止事项（新增依赖、改技术栈、动 DataRoot、写 BOM、修改 `docs/DESIGN.md` 之外的设计约定）。
 - 视觉任务必须遵守 `docs/DESIGN.md`；业务任务必须遵守本文件第 3/4 节架构红线。
