@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.34.2] — 2026-10-22
+
+> Patch：桌面启动器无控制台窗口（wscript 隐藏启动）。
+
+### Added
+
+- `scripts/launch_studio_hidden.vbs`：用 wscript 以 **SW_HIDE** 方式运行 `launch_studio.ps1`，
+  启动全过程**不出现命令行窗口**、不留下常驻控制台；stdout/stderr 写入
+  `runtime/logs/launcher-last.log`，失败时弹窗提示日志位置。
+- 桌面快捷方式「NSFW Studio」改为指向该 VBS（保留原图标），并删除不再需要的
+  「停止 NSFW Studio」快捷方式（停止走 ControlHub lifecycle / 现有运维流程）。
 ## [0.34.1] — 2026-10-22
 
 > Patch：Agent CLI 自动读取本机 token（减少手动复制）。
