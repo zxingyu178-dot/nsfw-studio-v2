@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_v1_router
@@ -136,11 +137,37 @@ async def lifespan(application: FastAPI):
 
     worker.start()
 
+    async def _warm_list_caches() -> None:
+        """启动后异步预热列表查询（Prompt/Gallery），让用户首次点开页面不再吃冷查询成本。
+
+        只读、单次、失败忽略；不阻塞启动，也不改变任何业务状态。
+        """
+        try:
+            from app.services import image_service, prompt_image_service
+
+            def _warm() -> None:
+                with session_factory() as session:
+                    prompt_image_service.list_prompts(
+                        session, limit=40, include_images=True, images_limit=3,
+                        include_evaluation=True, sort="updated_desc",
+                    )
+                    image_service.list_images(session, limit=40, sort="created_desc")
+
+            await asyncio.to_thread(_warm)
+            logger.info("列表缓存预热完成")
+        except Exception:
+            logger.debug("列表缓存预热失败（忽略）", exc_info=True)
+
+    application.state.warmup_task = asyncio.create_task(_warm_list_caches())
+
     logging.getLogger(__name__).info(
         "后端启动完成 version=%s data_root=%s engine=%s recovered_items=%s",
         settings.app.version, report.data_root, adapter.name, len(recovered),
     )
     yield
+    warmup_task = getattr(application.state, "warmup_task", None)
+    if warmup_task is not None and not warmup_task.done():
+        warmup_task.cancel()
     application.state.backfill_runner.shutdown()
     await worker.stop()
     engine.dispose()
@@ -151,6 +178,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     application = FastAPI(title="NSFW Studio API", version=settings.app.version, lifespan=lifespan)
     application.state.settings = settings
+
+    # JSON 响应 gzip（Prompt 列表 500KB+ / 图库列表等），显著降低本地首屏传输与解析开销。
+    application.add_middleware(GZipMiddleware, minimum_size=1024)
 
     application.add_middleware(
         CORSMiddleware,

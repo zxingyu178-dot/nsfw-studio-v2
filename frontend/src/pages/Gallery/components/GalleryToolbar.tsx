@@ -7,8 +7,7 @@ import { DENSITY_OPTIONS, type GalleryDensity } from '../hooks/useGalleryPrefs'
 /**
  * Phase 0.12 Task4：Gallery Toolbar 2.0 两层结构。
  * - 第一层（浏览模式）：全部|待审核|收藏|归档，右侧 网格/按任务 切换。
- * - 第二层（筛选操作）：左 状态/排序/网格密度/适应|填充；右 开始审核/选择/导入/更多▾。
- *   危险操作「清理废片」收进「更多/维护」，不再长期以红色主按钮抢视觉。
+ * - 第二层（筛选操作）：左 状态/排序/网格密度；右 开始审核/选择/导入/删除淘汰图/更多▾。
  */
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -141,6 +140,9 @@ export function GalleryToolbar({
           onClick={() => importInputRef.current?.click()}
         >
           {importProgress ? `导入中 ${importProgress.done} / ${importProgress.total}` : '导入'}
+        </Button>
+        <Button size="sm" variant="danger" disabled={cleanupBusy} onClick={onOpenCleanup}>
+          {cleanupBusy ? '准备中…' : '删除淘汰图'}
         </Button>
 
         <div className="gal-more">
