@@ -16,7 +16,7 @@
         --prompt "1girl, red dress, night city, neon lights, anime style, masterpiece" --out D:\\ai_out
 
 安全（推荐）：在 configs/config.local.yaml 配置 agent.token 后，
-设置环境变量 NSFW_STUDIO_AGENT_TOKEN=<同一个 token>，脚本会自动走受保护的
+脚本会自动读取该文件（也可用环境变量 NSFW_STUDIO_AGENT_TOKEN 覆盖），并走受保护的
 POST /api/v1/agent/jobs（Bearer token + 每分钟限速 + 幂等）。未配置 token 时
 仍走本机 /jobs（向后兼容；8000 只绑 loopback，外部 AI 无法直连）。
 """
@@ -53,6 +53,25 @@ def get(api: str, path: str) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def load_token(cli_value: str = "", config_path: Path | None = None) -> str:
+    """解析 Agent token：CLI/环境变量优先，否则读本机私有 config.local.yaml。
+
+    只返回字符串，绝不打印 token 本身；文件不存在/解析失败时回退为空（走旧路径）。
+    """
+    token = (cli_value or "").strip()
+    if token:
+        return token
+    path = config_path or (Path(__file__).resolve().parents[1] / "configs" / "config.local.yaml")
+    try:
+        import yaml  # 项目 venv 已包含 pyyaml（配置加载依赖）
+
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        agent = data.get("agent") if isinstance(data, dict) else None
+        return str((agent or {}).get("token") or "").strip() if isinstance(agent, dict) else ""
+    except Exception:
+        return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="本机生图 CLI（AI 助手调用入口）")
     parser.add_argument("--prompt", required=True, help="正向提示词（中文/英文标签均可）")
@@ -80,7 +99,7 @@ def main() -> int:
     if args.upscale:
         modules.append({"module_id": "upscale"})
 
-    token = (args.token or "").strip()
+    token = load_token(args.token)
     if token and not args.legacy:
         # 加固路径：专用 Agent 端点，Bearer token + 服务端限速 + 幂等键。
         job = post(args.api, "/agent/jobs", {

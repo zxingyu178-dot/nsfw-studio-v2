@@ -78,7 +78,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 
 ## 5. CLI（更推荐给豆包用）
 
-豆包只需给你一行命令，你在本机跑（自动读环境变量 `NSFW_STUDIO_AGENT_TOKEN`）：
+豆包只需给你一行命令，你在本机跑（脚本自动读取 `configs/config.local.yaml` 的 `agent.token`，环境变量 `NSFW_STUDIO_AGENT_TOKEN` 可覆盖）：
 
 ```powershell
 $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
