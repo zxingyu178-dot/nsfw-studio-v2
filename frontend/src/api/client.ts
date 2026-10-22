@@ -83,6 +83,7 @@ import type {
   QueueDTO,
   RecipeDTO,
   RecipeVersionDTO,
+  ResumeInterruptedResult,
   ReviewStatus,
   SystemStatus,
   WorkbenchSnapshot,
@@ -271,6 +272,9 @@ export const jobApi = {
   },
   resumeRemaining(id: string): Promise<JobDTO> {
     return request(`/api/v1/jobs/${id}/resume-remaining`, jsonInit('POST', {}))
+  },
+  resumeInterrupted(): Promise<ResumeInterruptedResult> {
+    return request('/api/v1/jobs/resume-interrupted', { method: 'POST' })
   },
   queue(): Promise<QueueDTO> {
     return request('/api/v1/queue')

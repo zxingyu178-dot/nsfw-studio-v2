@@ -75,6 +75,13 @@ def create_job(
     return response
 
 
+@router.post("/jobs/resume-interrupted",
+             summary="一键恢复所有被中断任务（未开始重排队 + 已开始续跑剩余）")
+def resume_interrupted_jobs(session: Session = Depends(get_session)) -> dict:
+    """用户显式触发；启动流程仍不自动重放（v0.13.2 事故修复语义不变）。"""
+    return job_service.resume_interrupted_jobs(session)
+
+
 @router.get("/jobs", response_model=JobListResponse, summary="任务列表")
 def list_jobs(
     status: str | None = Query(default=None),

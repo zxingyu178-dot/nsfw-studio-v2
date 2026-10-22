@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { HistoryTab } from './HistoryTab'
@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
   ApiRequestError: class extends Error {},
   historyApi: { list: vi.fn() },
   imageApi: { list: vi.fn(), get: vi.fn() },
-  jobApi: { resumeRemaining: vi.fn() },
+  jobApi: { resumeRemaining: vi.fn(), resumeInterrupted: vi.fn() },
   moduleApi: { list: vi.fn() },
 }))
 
@@ -34,6 +34,10 @@ function makeFamily(offset: number, i: number): HistoryEntryDTO {
 }
 
 describe('HistoryTab offset 分页（移除 limit=100 假全集，按 root family）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('加载更多取回 offset=30 / 60，越过 100 条上限可达 70 个任务族', async () => {
     const { historyApi } = await import('../../api/client')
     // 共 70 个任务族，每页 30
@@ -64,5 +68,33 @@ describe('HistoryTab offset 分页（移除 limit=100 假全集，按 root famil
     expect(historyApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 30, offset: 60 }))
 
     await waitFor(() => expect(screen.getByText('已加载全部 70 个任务族')).toBeInTheDocument())
+  })
+
+  it('继续全部中断任务后显示结果并重新加载历史', async () => {
+    const { historyApi, jobApi } = await import('../../api/client')
+    vi.mocked(historyApi.list).mockResolvedValue({ items: [], total: 0, limit: 30, offset: 0 } as never)
+    vi.mocked(jobApi.resumeInterrupted).mockResolvedValue({
+      requeued: [],
+      resumed: [],
+      skipped: [],
+      errors: [],
+      requeued_count: 0,
+      resumed_count: 0,
+      remaining_images: 0,
+    } as never)
+
+    const { container } = render(
+      <MemoryRouter>
+        <HistoryTab />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(historyApi.list).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: '继续全部中断任务' }))
+
+    await waitFor(() => expect(jobApi.resumeInterrupted).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText('已恢复 0 个任务，剩余 0 张')).toBeInTheDocument()
+    expect(container.querySelector('.ds-notice--error')).not.toBeInTheDocument()
+    await waitFor(() => expect(historyApi.list).toHaveBeenCalledTimes(2))
   })
 })

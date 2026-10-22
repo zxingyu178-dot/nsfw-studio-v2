@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { TopNav } from '../components/TopNav'
+import { ResumeInterruptedPrompt } from '../components/ResumeInterruptedPrompt'
 import { startJobStore, stopJobStore } from '../stores/jobStore'
 
 export function MainLayout() {
@@ -17,6 +18,7 @@ export function MainLayout() {
 
   return (
     <div className="app-shell">
+      <ResumeInterruptedPrompt />
       <TopNav />
       <main
         className={`app-shell__main${isWorkspace ? ' app-shell__main--workspace' : ''}`.trim()}

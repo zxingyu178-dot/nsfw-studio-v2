@@ -75,6 +75,9 @@ export function HistoryTab() {
   const [bucket, setBucket] = useState<HistoryBucket>('all')
   const [source, setSource] = useState<string | null>(null)
   const [detailJob, setDetailJob] = useState<JobDTO | null>(null)
+  const [resumeBusy, setResumeBusy] = useState(false)
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null)
+  const [resumeError, setResumeError] = useState<string | null>(null)
 
   // Phase 0.12：移除 limit=100 假全集。按 root family 稳定 offset 分页（resumes 随 root 一起返回）。
   const fetcher = useCallback(
@@ -99,6 +102,22 @@ export function HistoryTab() {
     fallbackError: '加载历史失败',
   })
 
+  async function resumeInterrupted(): Promise<void> {
+    setResumeBusy(true)
+    setResumeNotice(null)
+    setResumeError(null)
+    try {
+      const result = await jobApi.resumeInterrupted()
+      const recovered = result.requeued_count + result.resumed_count
+      setResumeNotice(`已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张`)
+      reload()
+    } catch (resumeFailure) {
+      setResumeError(resumeFailure instanceof ApiRequestError ? resumeFailure.message : '恢复中断任务失败')
+    } finally {
+      setResumeBusy(false)
+    }
+  }
+
   return (
     <div>
       <div className="pp-toolbar">
@@ -118,8 +137,18 @@ export function HistoryTab() {
           onChange={(event) => setSource(event.target.value || null)}
           options={SOURCE_FILTERS.map(({ key, label }) => ({ value: key ?? '', label }))}
         />
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={resumeBusy}
+          onClick={() => void resumeInterrupted()}
+        >
+          继续全部中断任务
+        </Button>
       </div>
 
+      {resumeNotice && <p className="ds-notice ds-notice--success" role="status">{resumeNotice}</p>}
+      {resumeError && <p className="ds-notice ds-notice--error">{resumeError}</p>}
       {error && <p className="ds-notice ds-notice--error">{error}</p>}
       {loading && <p className="muted">加载中…</p>}
 
