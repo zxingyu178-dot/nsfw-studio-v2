@@ -2,6 +2,17 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.34.1] — 2026-10-22
+
+> Patch：Agent CLI 自动读取本机 token（减少手动复制）。
+
+### Changed
+
+- `scripts/agent_generate.py`：token 解析顺序改为 CLI 参数 / 环境变量 `NSFW_STUDIO_AGENT_TOKEN`
+  **> 自动读取 `configs/config.local.yaml` 的 `agent.token`**；不再需要手动导出环境变量即可走
+  加固端点 `/api/v1/agent/jobs`。token 只用于请求头，不打印、不写日志。
+- 新增 `tests/backend/test_agent_generate_script.py`（优先级 / 回退 / 缺失/损坏配置），
+  与 Agent 端点测试合计 10 例通过。
 ## [0.34.0] — 2026-10-22
 
 > Minor：AI/Agent 提交端点安全加固（豆包工作流）。
