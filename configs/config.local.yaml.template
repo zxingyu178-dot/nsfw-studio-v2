@@ -53,3 +53,10 @@ mobile_review:
   enabled: <LOCAL_ONLY true|false>
   host: <LOCAL_ONLY 0.0.0.0>
   port: 8767
+
+# Agent / AI 提交端点（Phase 0.34）：默认关闭；配置 token 后才启用 POST /api/v1/agent/jobs。
+# token 只写本机 config.local.yaml（gitignore），不要提交、不要写进日志/截图。
+# 8000 仍固定 loopback；远程/云端 AI 请通过"豆包写命令 + 本机执行 CLI"方式，不要直接暴露端口。
+# agent:
+#   token: "<LOCAL_ONLY 32+ random chars>"
+#   rate_limit_per_min: 30

@@ -1,5 +1,11 @@
 # TASKS — NSFW Studio V2
 
+## Phase 0.34：AI/Agent 提交端点安全加固（2026-10-22，v0.34.0）
+
+- [x] `POST /api/v1/agent/jobs`：token 鉴权 + 限速 + 幂等 + 模块白名单，默认关闭
+- [x] `docs/AGENT_SUBMISSION.md`、`AI_IMAGE_GENERATION_GUIDE` 安全说明、CLI 支持 token
+- [x] Registry 登记 `scripts/agent_generate.py`；8000 保持 loopback-only
+
 ## Phase 0.24–0.33：旧数据接入 + UI 收尾 + 工作台体验 ✅（2026-10-21 ~ 10-22，v0.25.1 → v0.33.0）
 
 - [x] **V1 数据迁移**：98 条提示词 + 3 张人脸（v0.26.0；已执行 created=101，备份 + 映射文件留痕）

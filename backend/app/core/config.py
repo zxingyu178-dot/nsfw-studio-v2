@@ -32,6 +32,8 @@ DEFAULT_DATA_ROOT = Path.home() / "NSFW-Studio-Data"
 ENV_DATA_ROOT = "NSFW_STUDIO_DATA_ROOT"
 ENV_HOST = "NSFW_STUDIO_HOST"
 ENV_PORT = "NSFW_STUDIO_PORT"
+ENV_AGENT_TOKEN = "NSFW_STUDIO_AGENT_TOKEN"
+ENV_AGENT_RATE_LIMIT = "NSFW_STUDIO_AGENT_RATE_LIMIT"
 
 # 规范 §九：DataRoot 默认目录布局（storage.yaml 缺失时的兜底）
 DEFAULT_LAYOUT: tuple[str, ...] = (
@@ -97,6 +99,7 @@ class Settings:
     engine_runtime: dict[str, Any] = field(default_factory=dict)  # 受管 ComfyUI 运行时配置
     mobile_review: dict[str, Any] = field(default_factory=dict)  # Mobile Review Bridge 配置
     controlhub: dict[str, Any] = field(default_factory=dict)  # ControlHub lifecycle CLI 连接配置（python_exe/data_root）
+    agent: dict[str, Any] = field(default_factory=dict)  # Agent 提交端点（token / rate_limit_per_min）
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -154,4 +157,5 @@ def load_settings(config_dir: Path | None = None) -> Settings:
         engine_runtime=merged_cfg.get("engine_runtime", {}) or {},
         mobile_review=merged_cfg.get("mobile_review", {}) or {},
         controlhub=merged_cfg.get("controlhub", {}) or {},
+        agent=merged_cfg.get("agent", {}) or {},
     )

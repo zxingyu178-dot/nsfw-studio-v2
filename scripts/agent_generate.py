@@ -14,11 +14,17 @@
 示例（豆包只需改提示词）：
     .venv/Scripts/python scripts/agent_generate.py --module anime_generate \
         --prompt "1girl, red dress, night city, neon lights, anime style, masterpiece" --out D:\\ai_out
+
+安全（推荐）：在 configs/config.local.yaml 配置 agent.token 后，
+设置环境变量 NSFW_STUDIO_AGENT_TOKEN=<同一个 token>，脚本会自动走受保护的
+POST /api/v1/agent/jobs（Bearer token + 每分钟限速 + 幂等）。未配置 token 时
+仍走本机 /jobs（向后兼容；8000 只绑 loopback，外部 AI 无法直连）。
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -26,11 +32,13 @@ import uuid
 from pathlib import Path
 
 
-def post(api: str, path: str, payload: dict) -> dict:
+def post(api: str, path: str, payload: dict, token: str | None = None) -> dict:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # 中文安全：UTF-8 字节
+    headers = {"Content-Type": "application/json; charset=utf-8"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
-        api + path, data=data, method="POST",
-        headers={"Content-Type": "application/json; charset=utf-8"},
+        api + path, data=data, method="POST", headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
@@ -62,29 +70,50 @@ def main() -> int:
     parser.add_argument("--out", default=".", help="输出目录（默认当前目录）")
     parser.add_argument("--api", default="http://127.0.0.1:8000/api/v1")
     parser.add_argument("--timeout-min", type=int, default=120, help="单任务超时（分钟）")
+    parser.add_argument("--token", default=os.environ.get("NSFW_STUDIO_AGENT_TOKEN", ""),
+                        help="Agent token（默认读 NSFW_STUDIO_AGENT_TOKEN；配置后走受保护的 /agent/jobs）")
+    parser.add_argument("--legacy", action="store_true",
+                        help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
     args = parser.parse_args()
 
     modules = [{"module_id": args.module}]
     if args.upscale:
         modules.append({"module_id": "upscale"})
 
-    job = post(args.api, "/jobs", {
-        "source": "doubao",
-        "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
-        "queue_mode": "next" if args.queue_next else "normal",
-        "snapshot": {
-            "prompt_mode": "full",
-            "full_prompt": args.prompt,
+    token = (args.token or "").strip()
+    if token and not args.legacy:
+        # 加固路径：专用 Agent 端点，Bearer token + 服务端限速 + 幂等键。
+        job = post(args.api, "/agent/jobs", {
+            "prompt": args.prompt,
             "negative_prompt": args.negative,
-            "count": args.count,
+            "module_id": args.module,
+            "upscale": args.upscale,
             "width": args.width,
             "height": args.height,
-            "seed_mode": "fixed" if args.seed is not None else "random",
+            "count": args.count,
             "seed": args.seed,
-            "workflow_modules": modules,
-            "input_images": [],
-        },
-    })
+            "queue_mode": "next" if args.queue_next else "normal",
+            "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
+        }, token=token)
+    else:
+        # 旧路径：本机 loopback UI 同款 /jobs（未配置 token 时保持向后兼容）。
+        job = post(args.api, "/jobs", {
+            "source": "doubao",
+            "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
+            "queue_mode": "next" if args.queue_next else "normal",
+            "snapshot": {
+                "prompt_mode": "full",
+                "full_prompt": args.prompt,
+                "negative_prompt": args.negative,
+                "count": args.count,
+                "width": args.width,
+                "height": args.height,
+                "seed_mode": "fixed" if args.seed is not None else "random",
+                "seed": args.seed,
+                "workflow_modules": modules,
+                "input_images": [],
+            },
+        })
     job_id = job["id"]
     print(f"[..] job={job_id}  状态={job['status']}  模块={[m['module_id'] for m in modules]}")
 
