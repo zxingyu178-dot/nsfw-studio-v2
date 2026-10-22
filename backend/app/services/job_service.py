@@ -13,7 +13,7 @@ import hashlib
 import json
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -976,6 +976,125 @@ def mark_interrupted_at_startup(session: Session) -> list[str]:
     for job_id in interrupted_jobs:
         _publish("JOB_UPDATED", job_id, payload={"status": "INTERRUPTED"})
     return interrupted_jobs
+
+
+def resume_interrupted_jobs(session: Session) -> dict[str, Any]:
+    """一键恢复所有 INTERRUPTED 任务（用户显式触发；启动流程仍不自动重放）。
+
+    两条路径：
+    - **从未真正开始**（completed=0 且任何 StageItem 都没有 engine_job_id / output / COMPLETED）：
+      原地恢复为 QUEUED，保留原 Job/提示词/Seed，排到当前等待队列末尾；
+    - **已有部分完成/启动证据**：调用 ``resume_remaining`` 创建子 Job（新 Seed 跑剩余槽位）。
+
+    每个 Job 独立提交/回滚；已存在续跑子 Job 的跳过（防重复点击）。
+    """
+    job_ids = list(session.execute(
+        select(Job.id).where(Job.status == "INTERRUPTED").order_by(Job.created_at, Job.id)
+    ).scalars())
+    result: dict[str, Any] = {
+        "requeued": [], "resumed": [], "skipped": [], "errors": [],
+        "requeued_count": 0, "resumed_count": 0, "remaining_images": 0,
+    }
+    if not job_ids:
+        return result
+
+    next_position = session.execute(
+        select(func.max(Job.queue_position)).where(Job.status == "QUEUED")
+    ).scalar()
+    next_position = int(next_position or 0)
+
+    for job_id in job_ids:
+        job = session.get(Job, job_id)
+        if job is None or job.status != "INTERRUPTED":
+            continue
+        remaining = max(0, int(job.requested_count or 0) - int(job.completed_count or 0))
+        existing_child = session.execute(
+            select(Job.id).where(Job.resume_of_job_id == job.id).limit(1)
+        ).scalar()
+        if existing_child:
+            result["skipped"].append({"job_id": job_id, "reason": "ALREADY_RESUMED"})
+            continue
+        if remaining <= 0:
+            result["skipped"].append({"job_id": job_id, "reason": "NO_REMAINING"})
+            continue
+
+        started_evidence = session.execute(
+            select(func.count(JobStageItem.id))
+            .join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+            .where(
+                JobStage.job_id == job.id,
+                or_(
+                    JobStageItem.engine_job_id.is_not(None),
+                    JobStageItem.output_image_id.is_not(None),
+                    JobStageItem.status == "COMPLETED",
+                ),
+            )
+        ).scalar_one()
+
+        if int(job.completed_count or 0) == 0 and not started_evidence:
+            # 纯排队任务：原地恢复，保留原 Job/Seed/提示词（不生成子 Job）。
+            try:
+                next_position += 1
+                job.status = "QUEUED"
+                job.queue_position = next_position
+                job.started_at = None
+                job.finished_at = None
+                job.error_type = None
+                job.error_message = None
+                job.pause_requested = False
+                job.cancel_requested = False
+                for item in session.execute(
+                    select(JobItem).where(JobItem.job_id == job.id)
+                ).scalars():
+                    item.status = "QUEUED"
+                    item.started_at = None
+                    item.finished_at = None
+                    item.error_type = None
+                    item.error_message = None
+                for stage in session.execute(
+                    select(JobStage).where(JobStage.job_id == job.id)
+                ).scalars():
+                    stage.status = "QUEUED"
+                    stage.started_at = None
+                    stage.finished_at = None
+                for stage_item in session.execute(
+                    select(JobStageItem)
+                    .join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+                    .where(JobStage.job_id == job.id)
+                ).scalars():
+                    stage_item.status = "QUEUED"
+                    stage_item.engine_job_id = None
+                    stage_item.started_at = None
+                    stage_item.finished_at = None
+                    stage_item.error_type = None
+                    stage_item.error_message = None
+                record_event(session, job.id, "JOB_REQUEUED",
+                             payload={"reason": "startup_resume"})
+                session.commit()
+                result["requeued"].append(job.id)
+                result["requeued_count"] += 1
+                result["remaining_images"] += remaining
+                _publish("JOB_UPDATED", job.id, payload={
+                    "status": "QUEUED", "queue_position": job.queue_position,
+                })
+            except Exception as error:  # 单个 Job 失败不影响其他任务
+                session.rollback()
+                result["errors"].append({"job_id": job_id, "message": str(error)[:300]})
+            continue
+
+        try:
+            child, _created = resume_remaining(session, job.id)
+            result["resumed"].append({
+                "parent_job_id": job.id, "child_job_id": child.id,
+            })
+            result["resumed_count"] += 1
+            result["remaining_images"] += remaining
+            _publish("JOB_UPDATED", job.id, payload={"status": "QUEUED", "resumed_as": child.id})
+        except Exception as error:
+            session.rollback()
+            result["errors"].append({"job_id": job_id, "message": str(error)[:300]})
+
+    return result
 
 
 def clear_stale_jobs(session: Session) -> dict:

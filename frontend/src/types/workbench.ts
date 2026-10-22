@@ -371,6 +371,16 @@ export interface ListResponse<T> {
   offset: number
 }
 
+export interface ResumeInterruptedResult {
+  requeued: string[]
+  resumed: { parent_job_id: string; child_job_id: string }[]
+  skipped: { job_id: string; reason: string }[]
+  errors: { job_id: string; message: string }[]
+  requeued_count: number
+  resumed_count: number
+  remaining_images: number
+}
+
 /** prompt_text 合成预览（后端权威规则） */
 export interface ComposeResult {
   composed_prompt: string

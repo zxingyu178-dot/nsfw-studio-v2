@@ -2,6 +2,22 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.36.0] — 2026-10-22
+
+> Minor：重启/更新后「一键继续」全部中断任务（不再逐个点续跑）。
+
+### Added
+
+- 后端 `POST /api/v1/jobs/resume-interrupted`：
+  - **纯排队（从未开始）**的中断任务 → 原地恢复 `QUEUED`（保留原 Job / 提示词 / Seed），追加到等待队列末尾；
+  - **已生成部分**的中断任务 → 复用现有 Stage-aware `resume_remaining` 创建子 Job（只跑剩余张数、新 Seed）；
+  - 已存在续跑子 Job 的跳过（防重复点击）；单任务失败不影响其他任务；
+  - 启动时仍**不自动重放**（v0.13.2 安全语义不变，只由用户一键触发）。
+- 前端启动弹窗 `ResumeInterruptedPrompt`：打开 Studio 检测到 `INTERRUPTED` 任务时提示
+  「检测到 N 个中断任务 → 一键继续全部 / 稍后」；「稍后」仅本次会话不再提示。
+- 历史页工具栏新增「继续全部中断任务」按钮（兜底入口）。
+- 测试：后端 `test_resume_interrupted.py`（原地恢复保留 Seed / 部分完成创建子 Job / 幂等 / 空场景）；
+  前端启动弹窗与历史按钮测试。
 ## [0.35.0] — 2026-10-22
 
 > Minor：图库删除入口 + 「我的 Prompt」整行布局/删除 + 列表性能。
