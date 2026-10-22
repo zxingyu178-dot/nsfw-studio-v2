@@ -14,6 +14,9 @@
       尺寸/数量/Seed 参数记忆、Canvas ←/→ 切图、提示词库一键填入（v0.30.1~v0.33.0）
 - [x] **工程收尾**：部署脚本（pull+build+sync+check）、废弃计划任务 NSFWStudioV2Frontend 删除、
       队列时序测试去抖、CI main/develop 全绿
+- [x] **2026-10-22 最终收口（用户要求）**：删除 V1 归档 `archive/projects/nsfw-studio-v1`（72.4MB）、
+      旧交接包、Registry 中 V1 退役墓碑；清理 `temp/` 旧 nsfw 备份（≈1.35GB）与空 Trae 工作树；
+      清空 C/D 回收站（D 释放 ≈29.6GB，C ≈20MB）。清理后仅剩开发工作树 + 部署实例两个 worktree。
 - [ ] 后续：图库虚拟滚动；V1 `history.json`（1 条）接入；导入图 ↔ Prompt 页生成图列表的完整 UI 关系；
       F2 Canvas Fit/100% 人工视觉确认
 
