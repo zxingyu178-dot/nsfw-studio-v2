@@ -59,6 +59,12 @@
 （可加 `--upscale` 高清、`--next` 插队、`--width/--height/--count/--seed` 等；`--module`
 可选 `anime_generate`（动漫）或 `basic_generate`（写实）。）
 
+> **安全加固（v0.34.0 起）**：Studio 8000 固定只绑 `127.0.0.1`（云端 AI 无法直连）；
+> 新增 `POST /api/v1/agent/jobs` **默认关闭**，需在 `configs/config.local.yaml` 配置 `agent.token`
+> 才启用，并带 Bearer token + 每分钟限速（默认 30）+ `client_request_id` 幂等。
+> 豆包仍推荐"写命令 → 本机执行 CLI"；脚本会自动读取 `NSFW_STUDIO_AGENT_TOKEN` 走加固端点。
+> 完整安全模型与示例见 **`docs/AGENT_SUBMISSION.md`**。
+
 如果希望豆包生成独立脚本而不是用 CLI：
 
 1. 把 §2 的 `gen.py` 模板保存到你电脑（例如 `D:\gen.py`），只需改开头的 `PROMPT` 等参数；

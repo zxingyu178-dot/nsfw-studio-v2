@@ -42,9 +42,23 @@ class ConflictError(AppError):
     code = "CONFLICT"
 
 
+class UnauthorizedError(AppError):
+    """缺少或无效凭据（Agent Bearer token / Mobile token）。"""
+
+    status_code = 401
+    code = "UNAUTHORIZED"
+
+
 class ForbiddenError(AppError):
     status_code = 403
     code = "FORBIDDEN"
+
+
+class TooManyRequestsError(AppError):
+    """限速（Agent 提交频率）。"""
+
+    status_code = 429
+    code = "TOO_MANY_REQUESTS"
 
 
 class FileValidationError(AppError):

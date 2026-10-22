@@ -2,6 +2,27 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.34.0] — 2026-10-22
+
+> Minor：AI/Agent 提交端点安全加固（豆包工作流）。
+
+### Added
+
+- `POST /api/v1/agent/jobs`：给豆包/本地 AI 的安全提交入口（**默认关闭**）：
+  - Bearer token（`configs/config.local.yaml` 的 `agent.token` 或环境变量 `NSFW_STUDIO_AGENT_TOKEN`）；
+  - 每分钟限速（默认 30，`agent.rate_limit_per_min` / `NSFW_STUDIO_AGENT_RATE_LIMIT`）；
+  - `client_request_id` 幂等、Prompt 长度上限、磁盘空间 Gate、模块白名单
+    （`basic_generate` / `anime_generate` + 可选 `upscale`），复用 JobService 同一执行链；
+  - 新增错误码：401 `AGENT_TOKEN_MISSING/INVALID`、403 `AGENT_API_DISABLED`、429 `AGENT_RATE_LIMITED`。
+- `scripts/agent_generate.py`：支持读取 `NSFW_STUDIO_AGENT_TOKEN`，自动走加固端点（`--legacy` 保留旧路径）；
+- `docs/AGENT_SUBMISSION.md`（威胁模型、配置步骤、curl/CLI 示例、测试覆盖）；
+  `docs/AI_IMAGE_GENERATION_GUIDE.md` 补充安全加固说明；Registry 登记 agent_generate 脚本。
+- 安全边界不变：8000 仍固定 `127.0.0.1` loopback，云端 AI 无法直连；不提供 0.0.0.0 暴露开关。
+
+### Tests
+
+- `tests/backend/test_agent_submission.py`（7 例：默认关闭/缺 token/错 token/成功入队/幂等/限速/参数校验）；
+- 后端相关测试通过。
 ## [0.33.0] — 2026-10-22
 
 > Minor：工作台「提示词库一键填入」。

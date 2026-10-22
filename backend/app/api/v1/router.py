@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    agent,
     assets,
     engine_runtime,
     health,
@@ -17,6 +18,7 @@ from app.api.v1 import (
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(health.router)
+api_v1_router.include_router(agent.router)
 api_v1_router.include_router(prompts.router)
 api_v1_router.include_router(assets.router)
 api_v1_router.include_router(recipes.router)
