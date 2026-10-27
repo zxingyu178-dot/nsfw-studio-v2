@@ -32,7 +32,8 @@ import uuid
 from pathlib import Path
 
 
-def post(api: str, path: str, payload: dict, token: str | None = None) -> dict:
+def post(api: str, path: str, payload: dict, token: str | None = None, *, optional: bool = False):
+    """POST JSON。``optional=True`` 时失败不中断（返回 None），用于可降级的辅助步骤。"""
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # 中文安全：UTF-8 字节
     headers = {"Content-Type": "application/json; charset=utf-8"}
     if token:
@@ -45,6 +46,8 @@ def post(api: str, path: str, payload: dict, token: str | None = None) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
+        if optional:
+            return None
         raise SystemExit(f"[FAIL] HTTP {error.code}: {body[:600]}") from error
 
 
@@ -108,9 +111,13 @@ def main() -> int:
         prompt_link = post(args.api, "/prompts/ensure", {
             "positive_prompt": args.prompt,
             "negative_prompt": args.negative,
-        })
-        print(f"[..] 提示词库 {prompt_link['prompt_id']} v={prompt_link['version_id']}"
-              f" {'新建' if prompt_link.get('created') else '复用'}")
+        }, optional=True)
+        if prompt_link:
+            print(f"[..] 提示词库 {prompt_link['prompt_id']} v={prompt_link['version_id']}"
+                  f" {'新建' if prompt_link.get('created') else '复用'}")
+        else:
+            print("[!] 服务端尚不支持提示词入库（旧版本）：本次任务不关联提示词库；"
+                  "服务重启后自动生效")
 
     token = load_token(args.token)
     if token and not args.legacy:
