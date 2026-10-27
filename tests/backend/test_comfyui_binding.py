@@ -60,7 +60,7 @@ def test_build_prompt_injects_standard_inputs():
     assert prompt["5"]["inputs"]["height"] == 960
     assert prompt["6"]["inputs"]["seed"] == 424242
     # 未映射参数保持模板 / defaults 原值
-    assert prompt["6"]["inputs"]["steps"] == 25
+    assert prompt["6"]["inputs"]["steps"] == 8
     assert prompt["4"]["inputs"]["resolution"] == 1024
     assert prompt["5"]["inputs"]["batch_size"] == 1
     assert prompt["8"]["inputs"]["filename_prefix"].startswith("NSFWStudio/")

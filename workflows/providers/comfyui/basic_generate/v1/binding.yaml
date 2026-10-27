@@ -24,10 +24,10 @@ inputs:
   height:          {node: "5", field: "height"}
   seed:            {node: "6", field: "seed"}
 
-# 固定默认（nightbatch 实测值；Module 标准输入不暴露）
+# 固定默认（turbo8 LoRA 配套：8 步；Module 标准输入不暴露）
 defaults:
   "4": {resolution: 1024}
-  "6": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
+  "6": {steps: 8, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
 
 # Seed 范围（KSampler 惯例，与 nightbatch 一致）
 seed_range: {min: 0, max: 2147483647}

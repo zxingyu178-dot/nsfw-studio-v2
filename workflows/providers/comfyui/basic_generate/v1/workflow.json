@@ -24,12 +24,32 @@
     "class_type": "EmptyLatentImage",
     "inputs": {"width": 1024, "height": 1024, "batch_size": 1}
   },
+  "9": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["2", 0],
+      "lora_name": "qwen_image_2.1_turbo8_lora.safetensors",
+      "strength_model": 1.0,
+      "strength_clip": 1.0
+    }
+  },
+  "10": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["9", 0],
+      "clip": ["9", 1],
+      "lora_name": "f23gg_nsfw_qwen21.safetensors",
+      "strength_model": 0.8,
+      "strength_clip": 1.0
+    }
+  },
   "6": {
     "class_type": "KSampler",
     "inputs": {
-      "model": ["1", 0],
+      "model": ["10", 0],
       "seed": 0,
-      "steps": 25,
+      "steps": 8,
       "cfg": 1.0,
       "sampler_name": "euler",
       "scheduler": "simple",

@@ -2,6 +2,24 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.36.1] — 2026-10-27
+
+> Patch：`basic_generate` 工作流正式纳入 turbo8 LoRA 链，采样步数修正为 8。
+
+### Changed
+
+- `workflows/providers/comfyui/basic_generate/v1/workflow.json`：新增
+  `qwen_image_2.1_turbo8_lora` 与 `f23gg_nsfw_qwen21` 两个 LoraLoader。
+- `binding.yaml`：`defaults."6".steps` 由 25 改为 8（binding defaults 会覆盖 workflow 节点值，
+  此前实际采样仍为 25 步）。
+- **工作流版本策略**：维持单目录 `v1`，不新建 `v2`；版本靠 git 历史演进。代价：历史 Job 的
+  `workflow_hash` / `binding_hash` 不再匹配，旧任务不可续跑（用户已确认接受）。
+
+### Tests
+
+- 后端 `tests/backend` 全量：581 passed / 3 skipped（584 collected）；`test_comfyui_binding.py`
+  断言同步为 8 步。
+
 ## [0.36.0] — 2026-10-22
 
 > Minor：重启/更新后「一键继续」全部中断任务（不再逐个点续跑）。

@@ -14,18 +14,17 @@
 - 用户界面语言：中文；代码标识符 / API 字段：英文。
 - 不得擅自替换以上技术栈。
 
-## 3. 阶段纪律（当前 v0.36.0，2026-10-27）
+## 3. 阶段纪律（当前 v0.36.1，2026-10-27）
 
-**当前状态**：v0.36.0（2026-10-22）= 重启/更新后「一键继续全部中断任务」（纯排队原地恢复
-QUEUED、部分完成走 Stage-aware 子 Job）；基线延续 v0.35.0（图库删除入口 +「我的 Prompt」
-整行列表 + 列表 gzip/预热性能）与 v0.16.0 Anima 动漫模块。
+**当前状态**：v0.36.1（2026-10-27）= `basic_generate` 工作流正式纳入 turbo8 LoRA 链并把采样
+默认改为 8 步；功能基线沿用 v0.36.0（重启/更新后「一键继续全部中断任务」）、v0.35.0（图库
+删除入口 +「我的 Prompt」整行列表 + 列表 gzip/预热性能）与 v0.16.0 Anima 动漫模块。
 
-**配置事实（2026-10-26 起，用户确认的有意变更）**：`workflows/providers/comfyui/
-basic_generate/v1/workflow.json` 已加入 `qwen_image_2.1_turbo8_lora` 与
-`f23gg_nsfw_qwen21` 两个 LoraLoader（steps 25→8），当前正在生图使用中，**不得擅自还原或
-覆盖**。该变更使 v1 的 workflow_hash 与历史提交不同；正式化的正确路径是等批次结束后复制为
-`basic_generate/v2/`（workflow.json + binding.yaml）并注册 module_version=v2，v1 目录随后
-恢复为原提交内容，保证历史 Job 可复现。
+**工作流版本策略（2026-10-27 用户确认，方案 A：单目录）**：
+`workflows/providers/comfyui/basic_generate/v1/` 是唯一目录，不新建 v2。workflow.json 内含
+`qwen_image_2.1_turbo8_lora` + `f23gg_nsfw_qwen21` 两个 LoraLoader；采样步数由 binding 的
+`defaults."6".steps = 8` 决定（binding defaults 覆盖 workflow 节点值）。版本演进靠 git 历史，
+不再按目录分版本；代价是历史 Job 的 workflow_hash/binding_hash 不再匹配，旧任务不可续跑。
 
 **历史基线 v0.16.0**：Anima 动漫生图模块上线（从 v0.9.0 归档分支移植到 v0.15.1 基线，
 `anime_generate` + `comfyui/anime_generate/v1` binding，核心执行逻辑零改动）。
