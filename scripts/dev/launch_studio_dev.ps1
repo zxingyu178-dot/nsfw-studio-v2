@@ -15,11 +15,15 @@
     可选：显式传入项目根。默认按脚本位置自动定位。
 
 .PARAMETER Port
-    开发用端口（默认 8000）。仅开发可用；生产端口固定为 8000 且不接受参数。
+    开发用端口（默认 8100）。生产端口 8000 受保护，需显式 -AllowProductionPort 才能占用。
+
+.PARAMETER AllowProductionPort
+    仅在确需临时接管 8000 时使用；平时禁止，避免出现 ControlHub 无法托管的游离实例。
 #>
 param(
     [string]$ProjectRoot = "",
-    [int]$Port = 8000
+    [int]$Port = 8100,
+    [switch]$AllowProductionPort
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +43,14 @@ $BaseUrl    = "http://127.0.0.1:$Port"
 if (-not (Test-Path $VenvPython)) {
     Write-Host "[DEV] 未找到虚拟环境：$VenvPython" -ForegroundColor Red
     exit 1
+}
+
+# 统一入口保护：8000 只允许 ControlHub 托管，防止出现"能开不能停"的游离实例
+if ($Port -eq 8000 -and -not $AllowProductionPort) {
+    Write-Host "[DEV] 拒绝启动：生产端口 8000 仅由 ControlHub 托管。" -ForegroundColor Red
+    Write-Host "[DEV] 启动：scripts\\launch_studio.ps1    停止：scripts\\stop_studio.ps1" -ForegroundColor Red
+    Write-Host "[DEV] 开发请用默认端口 8100，并设置 NSFW_STUDIO_API_URL=http://127.0.0.1:8100" -ForegroundColor Red
+    exit 2
 }
 
 Write-Host "[DEV] 直连后台 uvicorn：127.0.0.1:$Port（生产请用 launch_studio.ps1）" -ForegroundColor Yellow

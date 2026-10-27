@@ -1,19 +1,34 @@
 @echo off
-rem NSFW Studio V2 - å¯åŠ¨åç«¯å¼€å‘æœåŠ¡å™¨ï¼ˆé¦–æ¬¡è¿è¡Œè‡ªåŠ¨åˆ›å»ºè™šæ‹Ÿç¯å¢ƒï¼‰
-rem æœ¬è„šæœ¬ä¸ä¾èµ–ä»»ä½•å›ºå®šæœºå™¨è·¯å¾„ï¼›Python ä»ç³»ç»Ÿ PATH è§£æã€‚
+rem NSFW Studio V2 - Æô¶¯ºó¶Ë¿ª·¢·şÎñÆ÷£¨Ê×´ÎÔËĞĞ×Ô¶¯´´½¨ĞéÄâ»·¾³£©
+rem ±¾½Å±¾²»ÒÀÀµÈÎºÎ¹Ì¶¨»úÆ÷Â·¾¶£»Python ´ÓÏµÍ³ PATH ½âÎö¡£
+rem
+rem Í³Ò»Èë¿Ú±£»¤£ºÉú²ú¶Ë¿Ú 8000 ½öÓÉ ControlHub ÍĞ¹Ü¡£±¾¿ª·¢½Å±¾Ä¬ÈÏÊ¹ÓÃ
+rem 8100£¬±ÜÃâ³öÏÖ ControlHub ÎŞ·¨ stop µÄÓÎÀë uvicorn ÊµÀı¡£
+rem ÓÃ·¨£ºdev_backend.bat [port]     Ä¬ÈÏ 8100
 setlocal
+set "PORT=%~1"
+if "%PORT%"=="" set "PORT=8100"
+
+if "%PORT%"=="8000" (
+  echo [NSFW Studio][DEV] ¾Ü¾øÆô¶¯£ºÉú²ú¶Ë¿Ú 8000 ½öÓÉ ControlHub ÍĞ¹Ü¡£
+  echo [NSFW Studio][DEV] Æô¶¯£ºscripts\launch_studio.ps1    Í£Ö¹£ºscripts\stop_studio.ps1
+  echo [NSFW Studio][DEV] ¿ª·¢ÇëÓÃÄ¬ÈÏ¶Ë¿Ú 8100£¬²¢ÉèÖÃ NSFW_STUDIO_API_URL=http://127.0.0.1:8100
+  exit /b 2
+)
+
 cd /d "%~dp0..\backend"
 
 where python >nul 2>nul
 if errorlevel 1 (
-  echo [NSFW Studio] æœªæ‰¾åˆ° Pythonã€‚è¯·å®‰è£… Python 3.11+ å¹¶åŠ å…¥ PATHã€‚
+  echo [NSFW Studio] Î´ÕÒµ½ Python¡£Çë°²×° Python 3.11+ ²¢¼ÓÈë PATH¡£
   pause & exit /b 1
 )
 
 if not exist "..\.venv\Scripts\python.exe" (
-  echo [NSFW Studio] é¦–æ¬¡è¿è¡Œï¼šåˆ›å»ºè™šæ‹Ÿç¯å¢ƒå¹¶å®‰è£…ä¾èµ–...
-  python -m venv "..\.venv" || (echo è™šæ‹Ÿç¯å¢ƒåˆ›å»ºå¤±è´¥ & pause & exit /b 1)
-  "..\.venv\Scripts\python.exe" -m pip install -r requirements.txt || (echo ä¾èµ–å®‰è£…å¤±è´¥ & pause & exit /b 1)
+  echo [NSFW Studio] Ê×´ÎÔËĞĞ£º´´½¨ĞéÄâ»·¾³²¢°²×°ÒÀÀµ...
+  python -m venv "..\.venv" || (echo ĞéÄâ»·¾³´´½¨Ê§°Ü & pause & exit /b 1)
+  "..\.venv\Scripts\python.exe" -m pip install -r requirements.txt || (echo ÒÀÀµ°²×°Ê§°Ü & pause & exit /b 1)
 )
 
-"..\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+echo [NSFW Studio][DEV] ¿ª·¢ºó¶Ë£ºhttp://127.0.0.1:%PORT% £¨Ç°¶ËĞèÉè NSFW_STUDIO_API_URL=http://127.0.0.1:%PORT%£©
+"..\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload --host 127.0.0.1 --port %PORT%

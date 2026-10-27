@@ -96,17 +96,30 @@ Set-Content -Path $StampFile -Value $commit -NoNewline -Encoding Ascii
 Write-Host "[NSFW Studio] 构建已记录：$commit -> $StampFile" -ForegroundColor Green
 
 # ---- 5. 桌面快捷方式（仅创建 .lnk，不复制项目到桌面）----
+# 统一入口：优先指向静默启动器 .vbs（内部仍走 launch_studio.ps1 → ControlHub），
+# 避免出现控制台窗口；.bat 仅作为 .vbs 缺失时的兼容回退。
+$LauncherVbs = Join-Path $ScriptDir "launch_studio_hidden.vbs"
 $LauncherBat = Join-Path $ScriptDir "launch_studio.bat"
-if (-not (Test-Path $LauncherBat)) { Fail-Step "未找到启动器脚本：$LauncherBat" }
+if (Test-Path $LauncherVbs) {
+    $ShortcutTarget = "$env:WINDIR\System32\wscript.exe"
+    $ShortcutArguments = '"' + $LauncherVbs + '"'
+}
+elseif (Test-Path $LauncherBat) {
+    $ShortcutTarget = $LauncherBat
+    $ShortcutArguments = '"' + $ProjectRoot + '"'
+}
+else {
+    Fail-Step "未找到启动器脚本：$LauncherVbs 或 $LauncherBat"
+}
 
 $Desktop = [Environment]::GetFolderPath("Desktop")
 $LnkPath = Join-Path $Desktop "NSFW Studio.lnk"
 
 $WsShell  = New-Object -ComObject WScript.Shell
 $Shortcut = $WsShell.CreateShortcut($LnkPath)
-$Shortcut.TargetPath = $LauncherBat
+$Shortcut.TargetPath = $ShortcutTarget
 # 用参数把项目根显式传进去；launch_studio.ps1 也会自行定位，这里作为显式传参。
-$Shortcut.Arguments       = '"' + $ProjectRoot + '"'
+$Shortcut.Arguments       = $ShortcutArguments
 $Shortcut.WorkingDirectory = $ProjectRoot
 $Shortcut.Description     = "NSFW Studio V2 本地生图工作台（FastAPI 直出 frontend/dist）"
 
