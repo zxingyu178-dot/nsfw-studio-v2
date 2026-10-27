@@ -54,6 +54,11 @@ class SingleQueueWorker:
 
     name = "single-queue-worker"
 
+    # 启动恢复：孤儿引擎任务的宽限期（Studio 已中断、引擎仍在跑）。
+    # 先短暂等待它自然完成，避免白扔掉一张快出完的图；仍未完成则取消，释放显卡。
+    orphan_grace_polls = 3
+    orphan_grace_seconds = 2.0
+
     def __init__(
         self,
         session_factory: sessionmaker,
@@ -999,6 +1004,8 @@ class SingleQueueWorker:
                 status = await self._adapter.get_job_status(engine_job_id)
             except Exception:
                 status = None
+            if status is not None and status.state in ("running", "queued"):
+                status = await self._reconcile_orphan_engine_job(engine_job_id, status)
             if status is not None and status.state == "succeeded":
                 try:
                     outputs = await self._adapter.get_job_outputs(engine_job_id)
@@ -1024,6 +1031,28 @@ class SingleQueueWorker:
                                          item_id=stage_item.job_item_id, payload={"image_ids": image_ids})
             session.commit()
         return True
+
+    async def _reconcile_orphan_engine_job(self, engine_job_id: str, status):
+        """孤儿任务收口：Studio 已停止跟踪，但引擎里可能还在跑。
+
+        强杀 Studio 时引擎常常仍占着显卡跑那张图。这里先给一小段宽限期，让它自然出完
+        （能导入就不浪费）；仍未完成则取消，避免下次重启后新任务排在它后面干等。
+        """
+        for _ in range(self.orphan_grace_polls):
+            await asyncio.sleep(self.orphan_grace_seconds)
+            try:
+                status = await self._adapter.get_job_status(engine_job_id)
+            except Exception:
+                break
+            if status is None or status.state not in ("running", "queued"):
+                break
+        if status is not None and status.state in ("running", "queued"):
+            try:
+                await self._adapter.cancel_job(engine_job_id)
+                logger.info("崩溃恢复：已取消引擎孤儿任务 %s（任务将按剩余张数重跑）", engine_job_id)
+            except Exception:
+                logger.warning("崩溃恢复：取消引擎孤儿任务失败 %s", engine_job_id, exc_info=True)
+        return status
 
     def _scan_stage_outputs(self, job_id: str, stage: JobStage, stage_item_id: str) -> list:
         """文件级恢复兜底（§九）：只扫描 Studio 自己命名的输出（命名模板来自 provider binding）。"""

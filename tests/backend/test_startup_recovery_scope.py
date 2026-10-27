@@ -18,8 +18,10 @@ class _CountingAdapter(EngineAdapter):
 
     name = "counting"
 
-    def __init__(self) -> None:
+    def __init__(self, state: str = "succeeded") -> None:
         self.scans = 0
+        self.cancelled: list[str] = []
+        self._state = state
 
     async def health(self):
         from app.engine.base import EngineHealth
@@ -30,13 +32,16 @@ class _CountingAdapter(EngineAdapter):
         raise NotImplementedError
 
     async def get_job_status(self, engine_job_id: str):
-        return None
+        from app.engine.base import EngineJobStatus
+
+        return EngineJobStatus(state=self._state)
 
     async def get_job_outputs(self, engine_job_id: str):
         return []
 
-    async def cancel_job(self, engine_job_id: str) -> None:
-        return None
+    async def cancel_job(self, engine_job_id: str) -> bool:
+        self.cancelled.append(engine_job_id)
+        return True
 
     def scan_stage_outputs(self, ref, *, job_id: str, stage_index: int, stage_item_id: str):
         self.scans += 1
@@ -101,3 +106,44 @@ def test_started_items_are_still_reconciled(session_factory):
     worker = SingleQueueWorker(session_factory, adapter)
     asyncio.run(worker.recover_interrupted())
     assert adapter.scans == 1, "动过的槽位必须核对（引擎 history 或文件兜底）"
+
+
+def test_orphan_engine_job_is_cancelled_after_grace(session_factory):
+    """强杀 Studio 后引擎仍在跑：宽限期一过就取消，避免占着显卡、堵住后续任务。"""
+    _make_job(session_factory)
+    from app.models import JobStageItem
+
+    with session_factory() as session:
+        item = session.query(JobStageItem).first()
+        item.engine_job_id = "engine-orphan-1"
+        item.started_at = "2026-01-01T00:00:00Z"
+        item.status = "RUNNING"
+        session.commit()
+
+    adapter = _CountingAdapter(state="running")
+    worker = SingleQueueWorker(session_factory, adapter)
+    worker.orphan_grace_polls = 1
+    worker.orphan_grace_seconds = 0
+    asyncio.run(worker.recover_interrupted())
+    assert adapter.cancelled == ["engine-orphan-1"]
+
+
+def test_completed_orphan_is_imported_not_cancelled(session_factory):
+    """宽限期内引擎自然出完：不该取消，按正常恢复路径核对。"""
+    _make_job(session_factory)
+    from app.models import JobStageItem
+
+    with session_factory() as session:
+        item = session.query(JobStageItem).first()
+        item.engine_job_id = "engine-orphan-2"
+        item.started_at = "2026-01-01T00:00:00Z"
+        item.status = "RUNNING"
+        session.commit()
+
+    adapter = _CountingAdapter(state="succeeded")
+    worker = SingleQueueWorker(session_factory, adapter)
+    worker.orphan_grace_polls = 1
+    worker.orphan_grace_seconds = 0
+    asyncio.run(worker.recover_interrupted())
+    assert adapter.cancelled == []
+    assert adapter.scans == 1
