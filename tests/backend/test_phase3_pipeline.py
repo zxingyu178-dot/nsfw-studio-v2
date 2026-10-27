@@ -396,9 +396,9 @@ def test_worker_internal_error_pauses_queue(mock_client):
     wait_for(mock_client, job_b["id"], lambda j: j["status"] == "COMPLETED", timeout=30)
 
 
-# ===== §二十五(12)：workflow_hash 不一致 → 系统性拒绝（队列暂停） =====
+# ===== §二十五(12)：workflow_hash 不一致 → 任务级拒绝（只失败该 Job，不暂停队列） =====
 
-def test_workflow_hash_mismatch_fails_systemically(mock_client):
+def test_workflow_hash_mismatch_fails_job_only(mock_client):
     from app.engine.base import EngineError
 
     adapter = mock_client.app.state.adapter
@@ -412,7 +412,8 @@ def test_workflow_hash_mismatch_fails_systemically(mock_client):
         job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot()}).json()
         final = wait_for(mock_client, job["id"], lambda j: j["status"] == "FAILED", timeout=30)
         assert final["error_type"] == "WORKFLOW_HASH_MISMATCH"
-        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is True
+        # 指纹过期只属于当前任务，不得暂停整队列（其他任务可能用新版本工作流）
+        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is False
     finally:
         adapter.submit_job = original_submit
         mock_client.post("/api/v1/queue/resume")

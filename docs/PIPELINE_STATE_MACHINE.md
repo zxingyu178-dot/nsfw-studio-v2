@@ -68,10 +68,13 @@ JOB_RECOVERED_COMPLETED              # 恢复归并完成
 
 ## 5. 队列暂停（queue_paused）触发条件
 
-- 系统性引擎失败（`ENGINE_OFFLINE / OUT_OF_MEMORY / WORKFLOW_ERROR / BINDING_NOT_FOUND /
-  WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH / BINDING_IDENTITY_MISMATCH /
+- 系统性引擎失败（`ENGINE_OFFLINE / OUT_OF_MEMORY / WORKFLOW_ERROR /
   ENGINE_INPUT_UNSUPPORTED / MODEL_MISSING / NODE_MISSING`）；
   Phase 4 起"构造引擎请求"阶段的系统性错误（如上传输入图片失败/不支持）同样触发队列暂停，
   与提交阶段行为一致；
 - Worker / 循环级代码异常（`WORKER_INTERNAL_ERROR`，§0.1）；
 - 用户处理后经 `POST /api/v1/queue/resume` 恢复。
+
+**任务级指纹错误（不暂停队列）**：`WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH /
+BINDING_IDENTITY_MISMATCH / BINDING_NOT_FOUND` 只让当前 Job FAILED，
+`queue_paused` 保持 false（其余任务可能使用新版本工作流）。

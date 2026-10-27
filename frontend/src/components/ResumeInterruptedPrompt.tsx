@@ -53,7 +53,20 @@ export function ResumeInterruptedPrompt() {
     try {
       const result = await jobApi.resumeInterrupted()
       const recovered = result.requeued_count + result.resumed_count
-      toast.success(`已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张`)
+      const stale = result.skipped.filter((entry) => entry.reason === 'WORKFLOW_CHANGED').length
+      if (recovered === 0 && stale > 0) {
+        toast.info(
+          `${stale} 个旧任务的工作流已改版，无法继续；请到队列面板「清理陈旧任务」后重新生成。`,
+          6000,
+        )
+      } else if (stale > 0) {
+        toast.success(
+          `已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张；` +
+            `${stale} 个旧任务因工作流改版已跳过`,
+        )
+      } else {
+        toast.success(`已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张`)
+      }
       sessionStorage.setItem(DISMISSED_KEY, '1')
       setOpen(false)
     } catch (resumeError) {

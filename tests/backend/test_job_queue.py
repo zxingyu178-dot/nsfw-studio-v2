@@ -12,6 +12,7 @@ import time
 import pytest
 
 from app.core.config import Settings, WorkflowConfig
+from app.engine.base import EngineError
 from app.main import create_app
 
 
@@ -234,6 +235,37 @@ def test_workflow_error_no_retry_pauses_queue(mock_client):
         assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is True
     finally:
         adapter.mode = "success"
+        mock_client.post("/api/v1/queue/resume")
+
+
+def test_fingerprint_error_fails_job_without_pausing_queue(mock_client):
+    """旧工作流指纹不匹配：只失败当前 Job，队列继续执行（不得自动暂停整队列）。
+
+    旧实现把 WORKFLOW_HASH_MISMATCH 当系统性错误 → 每次点"继续"都失败并暂停队列，
+    形成"点继续 → 失败 → 再暂停"的死循环。
+    """
+    adapter = mock_client.app.state.adapter
+    original_submit = adapter.submit_job
+    state = {"fired": False}
+
+    async def submit_with_stale_fingerprint(request):
+        if not state["fired"]:
+            state["fired"] = True
+            raise EngineError("WORKFLOW_HASH_MISMATCH", "workflow_hash 不一致: job=old 磁盘=new")
+        return await original_submit(request)
+
+    adapter.submit_job = submit_with_stale_fingerprint
+    try:
+        stale = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=2)}).json()
+        follower = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
+        failed = wait_for(mock_client, stale["id"], lambda j: j["status"] == "FAILED", timeout=30)
+        assert failed["error_type"] == "WORKFLOW_HASH_MISMATCH"
+        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is False, \
+            "任务级指纹错误不得暂停队列"
+        # 队列未被暂停 → 后续任务照常执行完成
+        wait_for(mock_client, follower["id"], lambda j: j["status"] == "COMPLETED", timeout=30)
+    finally:
+        adapter.submit_job = original_submit
         mock_client.post("/api/v1/queue/resume")
 
 

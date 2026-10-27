@@ -249,7 +249,7 @@ def test_binding_hash_recorded_in_job_stage_snapshot_and_api(mock_client):
     assert final["stages"][1]["binding_hash"] == "bd_hash_22222222"
 
 
-def test_binding_hash_mismatch_is_systemic_at_execution(mock_client):
+def test_binding_hash_mismatch_fails_job_only(mock_client):
     adapter = mock_client.app.state.adapter
     original_submit = adapter.submit_job
 
@@ -261,7 +261,8 @@ def test_binding_hash_mismatch_is_systemic_at_execution(mock_client):
         job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot()}).json()
         final = wait_for(mock_client, job["id"], lambda j: j["status"] == "FAILED", timeout=30)
         assert final["error_type"] == "BINDING_HASH_MISMATCH"
-        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is True
+        # 任务级指纹错误只失败当前 Job，不暂停队列
+        assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is False
     finally:
         adapter.submit_job = original_submit
         mock_client.post("/api/v1/queue/resume")

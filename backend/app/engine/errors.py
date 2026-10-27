@@ -42,6 +42,16 @@ _SYSTEMIC_TYPES = {
     "NODE_MISSING",
 }
 
+# 任务级失败：只说明**这一个 Job** 携带的工作流身份与磁盘不再一致（工作流改版/绑定被移除），
+# 与引擎整体健康无关。只把该 Job 置 FAILED 即可，不得暂停整队列（否则旧指纹任务会反复
+# "点继续 → 失败 → 自动暂停"，其他新版本任务永远排不进去）。
+_JOB_SCOPED_TYPES = {
+    "BINDING_NOT_FOUND",
+    "WORKFLOW_HASH_MISMATCH",
+    "BINDING_HASH_MISMATCH",
+    "BINDING_IDENTITY_MISMATCH",
+}
+
 _MODEL_HINTS = re.compile(r"checkpoint|model.*(not|missing|failed to load)|weights", re.IGNORECASE)
 _NODE_HINTS = re.compile(r"node.*(not found|missing)|custom node|unknown node", re.IGNORECASE)
 _OOM_HINTS = re.compile(r"out of memory|cuda oom|not enough memory", re.IGNORECASE)
@@ -66,3 +76,8 @@ def classify_engine_message(message: str) -> str:
 def is_systemic(error_type: str) -> bool:
     """系统性失败（规范 §二十一）：Job FAILED + 队列自动暂停，不继续烧完队列。"""
     return error_type in _SYSTEMIC_TYPES
+
+
+def is_job_scoped(error_type: str) -> bool:
+    """任务级失败：只让当前 Job FAILED，不暂停队列（其余任务可能使用其他工作流版本）。"""
+    return error_type in _JOB_SCOPED_TYPES

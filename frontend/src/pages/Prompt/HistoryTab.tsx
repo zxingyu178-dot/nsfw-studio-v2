@@ -109,7 +109,19 @@ export function HistoryTab() {
     try {
       const result = await jobApi.resumeInterrupted()
       const recovered = result.requeued_count + result.resumed_count
-      setResumeNotice(`已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张`)
+      const stale = result.skipped.filter((entry) => entry.reason === 'WORKFLOW_CHANGED').length
+      if (recovered === 0 && stale > 0) {
+        setResumeNotice(
+          `${stale} 个旧任务的工作流已改版，无法继续；请到队列面板「清理陈旧任务」后重新生成。`,
+        )
+      } else if (stale > 0) {
+        setResumeNotice(
+          `已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张；` +
+            `${stale} 个旧任务因工作流改版已跳过`,
+        )
+      } else {
+        setResumeNotice(`已恢复 ${recovered} 个任务，剩余 ${result.remaining_images} 张`)
+      }
       reload()
     } catch (resumeFailure) {
       setResumeError(resumeFailure instanceof ApiRequestError ? resumeFailure.message : '恢复中断任务失败')

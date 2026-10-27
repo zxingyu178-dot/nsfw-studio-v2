@@ -32,6 +32,9 @@
    ComfyUI `/system_stats` 可访问。
 5. **队列若处于暂停**（历史 `WORKFLOW_HASH_MISMATCH` / 手动暂停会留下暂停态）：
    `Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/v1/queue/resume`
+   - 需要续跑被中断的旧任务时：`POST /api/v1/jobs/resume-interrupted`；
+     返回的 `skipped[].reason=WORKFLOW_CHANGED` 表示该任务的工作流指纹已过期（工作流改版后不可续跑），
+     **不要反复重试**，改用 `POST /api/v1/queue/clear-stale` 归档后再按新工作流重新生成。
 6. **生图**：`.venv\Scripts\python scripts\agent_generate.py --module basic_generate --prompt "…" --out D:\ai_out`
    （`anime_generate` 用于动漫；`agent/jobs` 端点默认关闭，优先用本机 CLI）
 7. **停止**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop_studio.ps1`

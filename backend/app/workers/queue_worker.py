@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.timeutil import utc_now_iso
 from app.engine.base import EngineAdapter, EngineBindingRef, EngineError, EngineJobRequest
-from app.engine.errors import classify_engine_message, is_systemic
+from app.engine.errors import classify_engine_message, is_job_scoped, is_systemic
 from app.models import Job, JobItem, JobStage, JobStageItem
 from app.services import job_service
 from app.workflows.pipeline import PipelineExecutor
@@ -396,7 +396,10 @@ class SingleQueueWorker:
             )
         except EngineError as error:
             if is_systemic(error.error_type):
-                return self._systemic_failure(job_id, stage_item_id, error)
+                return self._systemic_failure(
+                    job_id, stage_item_id, error,
+                    pause_queue=not is_job_scoped(error.error_type),
+                )
             return self._stage_item_failed(job_id, stage_item_id, error.error_type, error.message)
 
         # 提交（瞬态网络错误重试 ≤2，规范 §三十六）
@@ -409,8 +412,12 @@ class SingleQueueWorker:
                 break
             except EngineError as error:
                 if is_systemic(error.error_type):
-                    # 系统性（离线/绑定缺失/hash 不一致/工作流错误等）→ Job FAILED + 队列暂停
-                    return self._systemic_failure(job_id, stage_item_id, error)
+                    # 系统性（离线/工作流错误等）→ Job FAILED + 队列暂停；
+                    # 但与"这一个 Job 的旧指纹"有关的错误只失败该 Job，不暂停整队列
+                    return self._systemic_failure(
+                        job_id, stage_item_id, error,
+                        pause_queue=not is_job_scoped(error.error_type),
+                    )
                 attempt += 1
                 if error.transient and attempt <= MAX_SUBMIT_RETRIES:
                     await asyncio.sleep(0.5 * attempt)
@@ -451,7 +458,10 @@ class SingleQueueWorker:
                 status = await self._adapter.get_job_status(engine_job_id)
             except EngineError as error:
                 if is_systemic(error.error_type):
-                    return self._systemic_failure(job_id, stage_item_id, error)
+                    return self._systemic_failure(
+                        job_id, stage_item_id, error,
+                        pause_queue=not is_job_scoped(error.error_type),
+                    )
                 with self._session_factory() as session:
                     stage_item = session.get(JobStageItem, stage_item_id)
                     retry = False
@@ -788,8 +798,14 @@ class SingleQueueWorker:
             session.commit()
         return "FAILED"
 
-    def _systemic_failure(self, job_id: str, stage_item_id: str, error: EngineError) -> str:
-        """系统性失败（规范 §二十一）：Job FAILED + 队列自动暂停；Stage FAILED，后续 Stage 不启动。"""
+    def _systemic_failure(
+        self, job_id: str, stage_item_id: str, error: EngineError, *, pause_queue: bool = True
+    ) -> str:
+        """系统性失败（规范 §二十一）：Job FAILED +（默认）队列自动暂停；Stage FAILED，后续 Stage 不启动。
+
+        ``pause_queue=False`` 用于任务级指纹错误（见 ``errors.is_job_scoped``）：
+        只有该 Job 的工作流身份过期，不应该拖停整个队列。
+        """
         with self._session_factory() as session:
             stage_item = session.get(JobStageItem, stage_item_id)
             stage = session.get(JobStage, stage_item.job_stage_id) if stage_item is not None else None
@@ -828,7 +844,8 @@ class SingleQueueWorker:
                     "error_type": error.error_type, "message": error.message,
                 })
             session.commit()
-        self._pause_queue(f"{error.error_type}: {error.message}")
+        if pause_queue:
+            self._pause_queue(f"{error.error_type}: {error.message}")
         return "SYSTEMIC"
 
     def _cancel_remaining(self, session: Session, job: Job) -> None:

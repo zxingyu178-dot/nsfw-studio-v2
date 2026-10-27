@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from app.core.config import Settings
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.ids import JOB, JOB_ITEM, JOB_STAGE, JOB_STAGE_ITEM, new_id
 from app.core.timeutil import utc_now_iso
@@ -978,13 +979,40 @@ def mark_interrupted_at_startup(session: Session) -> list[str]:
     return interrupted_jobs
 
 
-def resume_interrupted_jobs(session: Session) -> dict[str, Any]:
+def _workflow_identity_error(settings: Settings, workflow_snapshot_json: str) -> str | None:
+    """续跑前校验：历史 Job 的工作流身份是否仍能在当前磁盘上精确重现。
+
+    工作流/binding 改版后，旧 Job 快照里的 workflow_hash / binding_hash 已不可满足，
+    若仍入队，Worker 必然以 WORKFLOW_HASH_MISMATCH 失败。这里提前判定为"工作流已变更"，
+    返回错误描述；兼容时返回 None。
+    """
+    from app.engine.factory import resolve_workflow_modules
+
+    try:
+        payload = json.loads(workflow_snapshot_json or "{}")
+    except (TypeError, ValueError):
+        return "SNAPSHOT_INVALID: workflow_snapshot_json 无法解析"
+    if not isinstance(payload, dict):
+        return "SNAPSHOT_INVALID: workflow_snapshot_json 结构非法"
+    modules = payload.get("modules") or []
+    try:
+        resolve_workflow_modules(settings, modules)
+    except EngineError as error:
+        return f"{error.error_type}: {error.message}"
+    return None
+
+
+def resume_interrupted_jobs(session: Session, settings: Settings) -> dict[str, Any]:
     """一键恢复所有 INTERRUPTED 任务（用户显式触发；启动流程仍不自动重放）。
 
     两条路径：
     - **从未真正开始**（completed=0 且任何 StageItem 都没有 engine_job_id / output / COMPLETED）：
       原地恢复为 QUEUED，保留原 Job/提示词/Seed，排到当前等待队列末尾；
     - **已有部分完成/启动证据**：调用 ``resume_remaining`` 创建子 Job（新 Seed 跑剩余槽位）。
+
+    恢复前先用 Job 自己的工作流快照做指纹兼容性校验：工作流/binding 已改版的旧 Job
+    直接 ``skipped``（reason=WORKFLOW_CHANGED），既不排队也不生成子 Job，避免
+    "恢复 → WORKFLOW_HASH_MISMATCH → 队列自动暂停"的死循环。
 
     每个 Job 独立提交/回滚；已存在续跑子 Job 的跳过（防重复点击）。
     """
@@ -1002,20 +1030,30 @@ def resume_interrupted_jobs(session: Session) -> dict[str, Any]:
         select(func.max(Job.queue_position)).where(Job.status == "QUEUED")
     ).scalar()
     next_position = int(next_position or 0)
+    compat_cache: dict[str, str | None] = {}
 
     for job_id in job_ids:
         job = session.get(Job, job_id)
         if job is None or job.status != "INTERRUPTED":
             continue
         remaining = max(0, int(job.requested_count or 0) - int(job.completed_count or 0))
+        if remaining <= 0:
+            result["skipped"].append({"job_id": job_id, "reason": "NO_REMAINING"})
+            continue
         existing_child = session.execute(
             select(Job.id).where(Job.resume_of_job_id == job.id).limit(1)
         ).scalar()
         if existing_child:
             result["skipped"].append({"job_id": job_id, "reason": "ALREADY_RESUMED"})
             continue
-        if remaining <= 0:
-            result["skipped"].append({"job_id": job_id, "reason": "NO_REMAINING"})
+        snapshot_key = job.workflow_snapshot_json or ""
+        if snapshot_key not in compat_cache:
+            compat_cache[snapshot_key] = _workflow_identity_error(settings, snapshot_key)
+        compat_error = compat_cache[snapshot_key]
+        if compat_error:
+            result["skipped"].append({
+                "job_id": job_id, "reason": "WORKFLOW_CHANGED", "message": compat_error,
+            })
             continue
 
         started_evidence = session.execute(

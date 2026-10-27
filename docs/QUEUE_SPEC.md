@@ -56,6 +56,17 @@
 - 用户处理问题后 `POST /api/v1/queue/resume` 恢复；
 - 队列暂停是**内存态**（重启后自然恢复运行，Job 本身状态不受影响）。
 
+**例外：任务级指纹错误不暂停队列**
+
+`WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH / BINDING_IDENTITY_MISMATCH /
+BINDING_NOT_FOUND` 只说明**当前 Job** 固化的历史工作流身份已无法在磁盘上重现
+（工作流改版 / binding 被移除），与引擎整体健康无关。此时仅当前 Job FAILED，
+**不写 queue_paused**，后续任务继续执行——否则旧指纹任务会形成
+"点继续 → 失败 → 队列暂停 → 再点继续"的死循环。
+
+同时 `POST /api/v1/jobs/resume-interrupted` 在恢复前会按 Job 自己的工作流快照做指纹
+兼容性校验，不兼容的旧任务记为 `skipped / WORKFLOW_CHANGED`，不进队列、不生成子 Job。
+
 ## 5. 队列查询（GET /api/v1/queue）
 
 ```jsonc

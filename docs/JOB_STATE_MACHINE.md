@@ -62,6 +62,8 @@ POST /jobs/{id}/cancel
   统计（存在 FAILED Item → Job FAILED）；
 - 系统性失败（`_systemic_failure`）：当前 Item FAILED、未执行 Item CANCELLED、
   Job FAILED + **队列自动暂停**（等待用户处理）；后续 Stage 不启动。
+  例外：任务级指纹错误（`WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH /
+  BINDING_IDENTITY_MISMATCH / BINDING_NOT_FOUND`）只失败当前 Job，**不暂停队列**。
 
 ## 5. Seed 规则（Phase 3 §0.4，冻结）
 

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import json
+
 from app.models import Job, JobItem, JobStage, JobStageItem
 
 
@@ -36,12 +38,12 @@ def _make_unstarted_job(session) -> None:
     session.commit()
 
 
-def test_requeue_unstarted_job_in_place(session_factory):
+def test_requeue_unstarted_job_in_place(session_factory, settings):
     from app.services import job_service
 
     with session_factory() as session:
         _make_unstarted_job(session)
-        result = job_service.resume_interrupted_jobs(session)
+        result = job_service.resume_interrupted_jobs(session, settings)
 
     assert result["requeued"] == ["job_queued_only"]
     assert result["resumed"] == []
@@ -63,20 +65,67 @@ def test_requeue_unstarted_job_in_place(session_factory):
 
     # 再次调用：已不是 INTERRUPTED，不会重复恢复
     with session_factory() as session:
-        again = job_service.resume_interrupted_jobs(session)
+        again = job_service.resume_interrupted_jobs(session, settings)
     assert again["requeued_count"] == 0
     assert again["resumed_count"] == 0
 
 
-def test_empty_when_no_interrupted_jobs(session_factory):
+def test_empty_when_no_interrupted_jobs(session_factory, settings):
     from app.services import job_service
 
     with session_factory() as session:
-        result = job_service.resume_interrupted_jobs(session)
+        result = job_service.resume_interrupted_jobs(session, settings)
     assert result == {
         "requeued": [], "resumed": [], "skipped": [], "errors": [],
         "requeued_count": 0, "resumed_count": 0, "remaining_images": 0,
     }
+
+
+def _make_stale_workflow_job(session) -> None:
+    """工作流改版前的旧 Job：快照里固化的是旧 workflow_hash / binding_hash。"""
+    job = Job(
+        id="job_stale_workflow", source="web", status="INTERRUPTED", prompt_mode="full",
+        positive_prompt_snapshot="old workflow prompt",
+        workbench_snapshot_json='{"full_prompt":"old workflow prompt"}',
+        generation_settings_json="{}", requested_count=2, completed_count=0, queue_position=3,
+        workflow_snapshot_json=json.dumps({"modules": [{
+            "module_id": "basic_generate", "module_version": "v1", "provider": "comfyui",
+            "binding_version": "v1", "workflow_hash": "oldhash", "binding_hash": "oldbind",
+        }]}),
+    )
+    session.add(job)
+    session.add_all([
+        JobItem(id="item_s0", job_id=job.id, item_index=0, status="INTERRUPTED"),
+        JobItem(id="item_s1", job_id=job.id, item_index=1, status="INTERRUPTED"),
+    ])
+    session.commit()
+
+
+def test_stale_workflow_job_skipped_not_requeued(session_factory, settings, monkeypatch):
+    """旧指纹任务：恢复时直接 skipped/WORKFLOW_CHANGED，不排队、不生成子 Job。"""
+    from app.engine import factory
+    from app.engine.base import EngineError
+    from app.services import job_service
+
+    def _raise_mismatch(_settings, _requested):
+        raise EngineError("WORKFLOW_HASH_MISMATCH", "job=oldhash 磁盘=newhash")
+
+    monkeypatch.setattr(factory, "resolve_workflow_modules", _raise_mismatch)
+
+    with session_factory() as session:
+        _make_stale_workflow_job(session)
+        result = job_service.resume_interrupted_jobs(session, settings)
+
+    assert result["requeued"] == []
+    assert result["resumed"] == []
+    assert result["skipped"] == [{
+        "job_id": "job_stale_workflow", "reason": "WORKFLOW_CHANGED",
+        "message": "WORKFLOW_HASH_MISMATCH: job=oldhash 磁盘=newhash",
+    }]
+
+    with session_factory() as session:
+        # 原 Job 保持 INTERRUPTED，不被静默重排
+        assert session.get(Job, "job_stale_workflow").status == "INTERRUPTED"
 
 
 def test_partial_job_creates_child_and_is_idempotent(client, session_factory):
