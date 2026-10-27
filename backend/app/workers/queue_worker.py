@@ -28,7 +28,7 @@ import logging
 import random
 import time
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.timeutil import utc_now_iso
@@ -963,7 +963,18 @@ class SingleQueueWorker:
                 rows = session.execute(
                     select(JobStageItem, JobStage)
                     .join(JobStage, JobStage.id == JobStageItem.job_stage_id)
-                    .where(JobStage.job_id == job_id, JobStageItem.status == "INTERRUPTED")
+                    .where(
+                        JobStage.job_id == job_id,
+                        JobStageItem.status == "INTERRUPTED",
+                        # 只有"确实动过"的槽位才需要向引擎核对：提交过（engine_job_id）、
+                        # 有产出、或已开始执行。从未开始的槽位不可能产生输出，
+                        # 逐个扫描/加载 binding 只会拖慢启动（会撞上载体就绪超时）。
+                        or_(
+                            JobStageItem.engine_job_id.is_not(None),
+                            JobStageItem.output_image_id.is_not(None),
+                            JobStageItem.started_at.is_not(None),
+                        ),
+                    )
                     .order_by(JobStage.stage_index, JobStageItem.item_index)
                 ).all()
                 targets = [
