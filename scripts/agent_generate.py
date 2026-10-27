@@ -93,11 +93,24 @@ def main() -> int:
                         help="Agent token（默认读 NSFW_STUDIO_AGENT_TOKEN；配置后走受保护的 /agent/jobs）")
     parser.add_argument("--legacy", action="store_true",
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
+    parser.add_argument("--no-prompt-library", action="store_true",
+                        help="不把这段提示词写入提示词库（默认写入并按提示词关联生成图）")
     args = parser.parse_args()
 
     modules = [{"module_id": args.module}]
     if args.upscale:
         modules.append({"module_id": "upscale"})
+
+    # 基础可追溯：提交前先保证提示词入库（同文自动复用），Job 快照带 id，
+    # 生成图在提示词库按提示词可见；图片本身仍落在 DataRoot 下由服务统一管理。
+    prompt_link: dict | None = None
+    if not args.no_prompt_library:
+        prompt_link = post(args.api, "/prompts/ensure", {
+            "positive_prompt": args.prompt,
+            "negative_prompt": args.negative,
+        })
+        print(f"[..] 提示词库 {prompt_link['prompt_id']} v={prompt_link['version_id']}"
+              f" {'新建' if prompt_link.get('created') else '复用'}")
 
     token = load_token(args.token)
     if token and not args.legacy:
@@ -131,6 +144,8 @@ def main() -> int:
                 "seed": args.seed,
                 "workflow_modules": modules,
                 "input_images": [],
+                **({"source_prompt_id": prompt_link["prompt_id"],
+                    "source_prompt_version_id": prompt_link["version_id"]} if prompt_link else {}),
             },
         })
     job_id = job["id"]

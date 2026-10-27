@@ -31,7 +31,7 @@ from app.core.errors import ForbiddenError, TooManyRequestsError, UnauthorizedEr
 from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
-from app.services import job_service
+from app.services import job_service, prompt_service
 
 router = APIRouter(tags=["agent"])
 
@@ -118,6 +118,14 @@ def submit_agent_job(
         workflow_modules=workflow_modules,
     )
     snapshot = snapshot_model.model_dump()
+    # 基础可追溯：AI 提交的每段提示词先入提示词库（同文复用），Job 快照带 source_prompt_id，
+    # 生成图因此在提示词库按提示词可见（与 Web 工作台路径一致）。显式传了 id 则尊重调用方。
+    if not snapshot.get("source_prompt_id"):
+        prompt, version, _ = prompt_service.assign_ai_prompt(
+            session, positive_prompt=body.prompt, negative_prompt=body.negative_prompt
+        )
+        snapshot["source_prompt_id"] = prompt.id
+        snapshot["source_prompt_version_id"] = version.id
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
 
     job, created = job_service.create_job(

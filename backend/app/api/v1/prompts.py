@@ -11,6 +11,8 @@ from app.schemas.prompt import (
     ComposeRequest,
     ComposeResponse,
     PromptCreateRequest,
+    PromptEnsureRequest,
+    PromptEnsureResponse,
     PromptEvaluationCreateRequest,
     PromptEvaluationResponse,
     PromptStatusRequest,
@@ -111,6 +113,18 @@ def create_prompt(request: PromptCreateRequest, session: Session = Depends(get_s
         favorite=request.favorite,
     )
     return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
+
+
+@router.post("/ensure", response_model=PromptEnsureResponse,
+             summary="保证提示词入库（AI/Agent 提交前复用或新建，避免重复条目）")
+def ensure_prompt(request: PromptEnsureRequest, session: Session = Depends(get_session)) -> PromptEnsureResponse:
+    prompt, version, created = prompt_service.assign_ai_prompt(
+        session,
+        positive_prompt=request.positive_prompt,
+        negative_prompt=request.negative_prompt,
+        name=request.name,
+    )
+    return PromptEnsureResponse(prompt_id=prompt.id, version_id=version.id, created=created)
 
 
 @router.get("/{prompt_id}", response_model=PromptResponse, summary="Prompt 详情")

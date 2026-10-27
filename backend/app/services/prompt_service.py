@@ -139,6 +139,43 @@ def _content_fields(
     return (mode, positive, negative_prompt or "", dumps_structured(structured))
 
 
+def assign_ai_prompt(
+    session: Session, *, positive_prompt: str, negative_prompt: str = "", name: str | None = None
+) -> tuple[Prompt, PromptVersion, bool]:
+    """AI/Agent 提交前的提示词入库保证：同一段提示词已有则复用，否则建 Prompt + v1。
+
+    判定同一段提示词 = 「mode=full + 正向 + 反向」完全一致（且未归档）；
+    避免 AI 每次提交都在库里堆重复条目，同时保证生成图始终能在提示词库追溯。
+    返回 (prompt, version, created)。
+    """
+    positive = (positive_prompt or "").strip()
+    negative = (negative_prompt or "").strip()
+    if not positive:
+        raise ValidationError("提示词不能为空", code="PROMPT_EMPTY")
+    existing = session.execute(
+        select(Prompt, PromptVersion)
+        .join(PromptVersion, PromptVersion.prompt_id == Prompt.id)
+        .where(
+            Prompt.archived.is_(False),
+            PromptVersion.mode == "full",
+            PromptVersion.positive_prompt == positive,
+            PromptVersion.negative_prompt == negative,
+        )
+        .order_by(PromptVersion.version_no.desc())
+        .limit(1)
+    ).first()
+    if existing is not None:
+        return existing[0], existing[1], False
+    prompt = create_prompt(
+        session, name=(name or positive[:24]), mode="full",
+        positive_prompt=positive, negative_prompt=negative,
+    )
+    version = get_current_version(session, prompt)
+    if version is None:  # create_prompt 必然建 v1；这里只是类型收敛，不做兜底逻辑
+        raise ValidationError("提示词版本创建失败", code="PROMPT_VERSION_MISSING")
+    return prompt, version, True
+
+
 def add_prompt_version(
     session: Session,
     prompt_id: str,

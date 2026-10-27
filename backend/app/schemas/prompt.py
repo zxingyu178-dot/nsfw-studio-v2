@@ -23,6 +23,20 @@ class PromptMetaUpdateRequest(BaseModel):
     favorite: bool | None = None
 
 
+class PromptEnsureRequest(BaseModel):
+    """AI 提交前的提示词入库请求：同一段提示词已有则复用，否则自动新建。"""
+
+    positive_prompt: str
+    negative_prompt: str = ""
+    name: str | None = None
+
+
+class PromptEnsureResponse(BaseModel):
+    prompt_id: str
+    version_id: str
+    created: bool
+
+
 class PreviewImageRequest(BaseModel):
     image_id: str
 
