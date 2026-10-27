@@ -20,6 +20,9 @@ projectRoot = fso.GetParentFolderName(scriptsDir)
 ps1Path = fso.BuildPath(scriptsDir, "launch_studio.ps1")
 logDir = fso.BuildPath(projectRoot, "runtime\logs")
 
+If Not fso.FolderExists(fso.BuildPath(projectRoot, "runtime")) Then
+    fso.CreateFolder fso.BuildPath(projectRoot, "runtime")
+End If
 If Not fso.FolderExists(logDir) Then
     fso.CreateFolder logDir
 End If

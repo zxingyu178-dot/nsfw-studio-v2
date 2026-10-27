@@ -137,6 +137,23 @@ if ($IcoFile) {
 
 $Shortcut.Save()
 Write-Host "[NSFW Studio] 已创建桌面快捷方式：$LnkPath" -ForegroundColor Green
+
+# ---- 6. 「停止」快捷方式（静默，成功不打扰，失败弹退出码）----
+$StopperVbs = Join-Path $ScriptDir "stop_studio_hidden.vbs"
+if (Test-Path $StopperVbs) {
+    $StopLnkPath = Join-Path $Desktop "NSFW Studio · 停止.lnk"
+    $StopShortcut = $WsShell.CreateShortcut($StopLnkPath)
+    $StopShortcut.TargetPath       = "$env:WINDIR\System32\wscript.exe"
+    $StopShortcut.Arguments        = '"' + $StopperVbs + '"'
+    $StopShortcut.WorkingDirectory = $ProjectRoot
+    $StopShortcut.Description      = "NSFW Studio V2 一键停止（队列→Bridge→Studio→ComfyUI）"
+    if ($IcoFile) { $StopShortcut.IconLocation = $IcoFile.FullName }
+    $StopShortcut.Save()
+    Write-Host "[NSFW Studio] 已创建桌面快捷方式：$StopLnkPath" -ForegroundColor Green
+}
+else {
+    Write-Host "[NSFW Studio] 未找到停止包装器 $StopperVbs，跳过停止快捷方式。" -ForegroundColor Yellow
+}
 Write-Host ""
-Write-Host "[NSFW Studio] 安装完成。以后双击桌面「NSFW Studio」即可启动。" -ForegroundColor Green
+Write-Host "[NSFW Studio] 安装完成。双击「NSFW Studio」启动，双击「NSFW Studio · 停止」收工。" -ForegroundColor Green
 exit 0

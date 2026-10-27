@@ -22,10 +22,12 @@
    `Invoke-RestMethod http://127.0.0.1:8188/system_stats`
 2. **启动 Studio**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\launch_studio.ps1`
    - 已在运行 → 只打开浏览器，**不要重复起进程**；端口被非 Studio 占用 → 脚本会报 PID 并退出 3。
-3. **启动 ComfyUI（8188 未在线时）**：
-   `. scripts\runtime\resolve_aihome.ps1`
-   `& $AIHOME_ENV.CONTROLHUB_PYTHON -m control_hub.lifecycle_cli start comfyui --data-root $AIHOME_ENV.CONTROLHUB_DATA_ROOT`
-   （UI 内「启动生图引擎」按钮等价，且只作用于 comfyui）
+3. **启动 ComfyUI（8188 未在线时）**，二选一：
+   - 首选：`Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/v1/engine/runtime/start -TimeoutSec 300`
+     （UI 里「启动生图引擎」按钮调用同一接口，只作用于 comfyui）；停止/重启把末段换成 `stop` / `restart`。
+   - 备选（Studio 也离线、或 API 无响应时）：`. scripts\runtime\resolve_aihome.ps1`
+     `& $AIHOME_ENV.CONTROLHUB_PYTHON -m control_hub.lifecycle_cli start comfyui --data-root $AIHOME_ENV.CONTROLHUB_DATA_ROOT`
+   - **冷启动可能耗时数分钟（加载模型），必须轮询 `/system_stats` 直到返回，不要用 30 秒级短超时误判失败。**
 4. **确认可生图**：`/api/v1/health` 正常；`GET /api/v1/modules` 中目标模块 `available=true`；
    ComfyUI `/system_stats` 可访问。
 5. **队列若处于暂停**（历史 `WORKFLOW_HASH_MISMATCH` / 手动暂停会留下暂停态）：
@@ -33,7 +35,7 @@
 6. **生图**：`.venv\Scripts\python scripts\agent_generate.py --module basic_generate --prompt "…" --out D:\ai_out`
    （`anime_generate` 用于动漫；`agent/jobs` 端点默认关闭，优先用本机 CLI）
 7. **停止**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop_studio.ps1`
-   （依次暂停队列 → 停 Bridge → 停 Studio → 停 ComfyUI，并核验端口）
+   （依次暂停队列 → 停 Bridge → 停 Studio → 停 ComfyUI，并核验端口；桌面「NSFW Studio · 停止」等价）
 
 红线：禁止手工 `uvicorn` 占 8000；禁止 8001/8002 自动换口；禁止前端直连 ComfyUI 建 Job；
 禁止在 `basic_generate/v1` 之外再建同模块目录（版本靠 git 历史）。
