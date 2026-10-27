@@ -2,6 +2,44 @@
 
 > 本规则服从 `D:\AIHome_2.0_L1_L2\AGENTS.md`（全局规则），只做更严格的补充，不做削弱。
 
+## 0. AI 快速操作卡：启动生图（用户说「查看 nsfwv2 项目，帮我启动生图」时先看这里）
+
+**不要自己写 uvicorn / npm 启动链，不要换端口。** 唯一生产链已固定，照下面执行即可。
+
+固定事实：
+
+- 日常生图实例（部署实例）：`projects\nsfw-studio-v2-app`，分支 `deploy/app-instance`（跟踪 `origin/main`）。
+- 唯一启动链：桌面「NSFW Studio」→ `scripts\launch_studio_hidden.vbs` → `scripts\launch_studio.ps1` → ControlHub lifecycle CLI。
+- 端口：Studio `127.0.0.1:8000`、ComfyUI `8188`、Mobile Review `8767`（随 Studio 退出）。
+- 业务数据：DataRoot `D:\NSFW-Studio-Data`（提示词 / 图片 / 人脸库 / 数据库）；工作流目录不含数据。
+- 当前工作流：`basic_generate/v1` 含 turbo8 LoRA，采样 8 步（binding `defaults."6".steps`）。
+
+步骤（在 `projects\nsfw-studio-v2-app` 下执行）：
+
+1. **查现状**（只读，先看再动）：
+   `Invoke-RestMethod http://127.0.0.1:8000/api/v1/health`
+   `Invoke-RestMethod http://127.0.0.1:8000/api/v1/engine/status`
+   `Invoke-RestMethod http://127.0.0.1:8188/system_stats`
+2. **启动 Studio**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\launch_studio.ps1`
+   - 已在运行 → 只打开浏览器，**不要重复起进程**；端口被非 Studio 占用 → 脚本会报 PID 并退出 3。
+3. **启动 ComfyUI（8188 未在线时）**：
+   `. scripts\runtime\resolve_aihome.ps1`
+   `& $AIHOME_ENV.CONTROLHUB_PYTHON -m control_hub.lifecycle_cli start comfyui --data-root $AIHOME_ENV.CONTROLHUB_DATA_ROOT`
+   （UI 内「启动生图引擎」按钮等价，且只作用于 comfyui）
+4. **确认可生图**：`/api/v1/health` 正常；`GET /api/v1/modules` 中目标模块 `available=true`；
+   ComfyUI `/system_stats` 可访问。
+5. **队列若处于暂停**（历史 `WORKFLOW_HASH_MISMATCH` / 手动暂停会留下暂停态）：
+   `Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/v1/queue/resume`
+6. **生图**：`.venv\Scripts\python scripts\agent_generate.py --module basic_generate --prompt "…" --out D:\ai_out`
+   （`anime_generate` 用于动漫；`agent/jobs` 端点默认关闭，优先用本机 CLI）
+7. **停止**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop_studio.ps1`
+   （依次暂停队列 → 停 Bridge → 停 Studio → 停 ComfyUI，并核验端口）
+
+红线：禁止手工 `uvicorn` 占 8000；禁止 8001/8002 自动换口；禁止前端直连 ComfyUI 建 Job；
+禁止在 `basic_generate/v1` 之外再建同模块目录（版本靠 git 历史）。
+
+详细生图与编码避坑：`docs/AI_IMAGE_GENERATION_GUIDE.md`；Agent 接入安全：`docs/AGENT_SUBMISSION.md`。
+
 ## 1. 项目身份
 
 - 项目 ID：`nsfw-studio-v2`，位于 `D:\AIHome_2.0_L1_L2\projects\nsfw-studio-v2`。
