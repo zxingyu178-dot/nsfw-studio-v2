@@ -121,8 +121,12 @@ export function PromptTab() {
     if (changed) setSearchParams(next, { replace: true })
   }, [scored, scoredParam, search, searchParams, setSearchParams, sortParam, status, statusParam])
 
+  // 防抖回调可能晚于其它筛选变更执行，必须读取最新的 URL 参数，避免用旧快照覆盖新条件。
+  const searchParamsRef = useRef(searchParams)
+  searchParamsRef.current = searchParams
+
   function updateFilter(name: 'q' | 'sort' | 'status' | 'scored', value: string): void {
-    const next = new URLSearchParams(searchParams)
+    const next = new URLSearchParams(searchParamsRef.current)
     const normalizedValue = name === 'q' && value.trim() === '' ? '' : value
     const isDefault = normalizedValue === '' || (name === 'sort' && normalizedValue === 'updated_desc')
     if (isDefault) next.delete(name)
@@ -132,7 +136,7 @@ export function PromptTab() {
   }
 
   function resetFilters(): void {
-    const next = new URLSearchParams(searchParams)
+    const next = new URLSearchParams(searchParamsRef.current)
     PROMPT_FILTER_PARAM_NAMES.forEach((name) => next.delete(name))
     setInitialPrefsApplied(true)
     clearPromptFilterPrefs()
