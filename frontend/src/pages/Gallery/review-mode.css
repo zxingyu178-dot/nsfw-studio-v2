@@ -103,5 +103,23 @@
 .rv-done__counts { margin: 0; font-size: var(--text-md); }
 .rv-done__counts strong { font-size: var(--text-lg); margin: 0 var(--space-1); }
 .rv-done__remaining { margin: 0; font-size: var(--text-sm); }
-.rv-done__actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); }
+.rv-done__actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); flex-wrap: wrap; justify-content: center; }
 .rv-btn--secondary { border-color: var(--accent); }
+
+/* ===== v0.37：批次之外的新图提示 / 显式换批入口 ===== */
+.rv-new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.rv-link {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.rv-link:disabled { opacity: 0.5; cursor: default; }

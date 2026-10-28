@@ -596,6 +596,8 @@ export interface ReviewSessionSummaryDTO {
   created_at: string
   updated_at: string
   filter: Record<string, unknown>
+  /** v0.37：ACTIVE 为 null；COMPLETED / ABANDONED / EMPTY */
+  ended_reason?: 'COMPLETED' | 'ABANDONED' | 'EMPTY' | null
 }
 
 /** MobileImageSummary DTO：字段与手机端一致（image_id / is_favorite，不是 id / favorite） */
@@ -640,10 +642,34 @@ export interface ReviewSessionCompleteDTO extends ReviewSessionSummaryDTO {
   remaining_count: number
 }
 
+export interface ReviewSessionAbandonDTO extends ReviewSessionSummaryDTO {
+  abandoned: boolean
+  remaining_count: number
+}
+
+export interface ReviewNewCountDTO {
+  session_id: string
+  count: number
+  filter: Record<string, unknown>
+}
+
+export interface CreateReviewSessionBody {
+  filter?: Record<string, unknown> | null
+  /** all=全部未审核（默认）；only_new=仅新到（排除旧会话成员） */
+  mode?: 'all' | 'only_new'
+  exclude_session_id?: string | null
+  /** 显式换批时把旧 ACTIVE 会话标为 ABANDONED */
+  close_active?: boolean
+}
+
 export const reviewSessionApi = {
   /** 创建冻结审核会话（filter 默认 status=NEW, created_desc） */
-  createSession(filter?: Record<string, unknown>): Promise<ReviewSessionSummaryDTO> {
-    return request('/api/v1/review/sessions', jsonInit('POST', { filter: filter ?? null }))
+  createSession(
+    filter?: Record<string, unknown>,
+    options: Omit<CreateReviewSessionBody, 'filter'> = {},
+  ): Promise<ReviewSessionSummaryDTO> {
+    const body: CreateReviewSessionBody = { filter: filter ?? null, ...options }
+    return request('/api/v1/review/sessions', jsonInit('POST', body))
   },
   /** 恢复最近会话（不重建；无会话 404 REVIEW_SESSION_NOT_FOUND） */
   latestSession(): Promise<ReviewSessionSummaryDTO> {
@@ -672,6 +698,14 @@ export const reviewSessionApi = {
   /** 标记完成（仍有未审则返回 remaining_count，不强完成） */
   complete(sessionId: string): Promise<ReviewSessionCompleteDTO> {
     return request(`/api/v1/review/sessions/${sessionId}/complete`, jsonInit('POST', {}))
+  },
+  /** 显式放弃会话（保留 items，不删除数据） */
+  abandon(sessionId: string): Promise<ReviewSessionAbandonDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/abandon`, jsonInit('POST', {}))
+  },
+  /** 当前会话之外的待审核图片数量（真实 DB 查询，排除会话成员） */
+  newCount(sessionId: string): Promise<ReviewNewCountDTO> {
+    return request(`/api/v1/review/sessions/${sessionId}/new-count`)
   },
 }
 

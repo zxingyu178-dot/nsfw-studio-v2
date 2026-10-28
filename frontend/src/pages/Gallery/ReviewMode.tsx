@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiRequestError, imageApi, type ImageStatsParams, type ReviewQueueImageDTO } from '../../api/client'
+import {
+  ApiRequestError,
+  imageApi,
+  type ImageStatsParams,
+  type ReviewQueueImageDTO,
+  type ReviewSessionSummaryDTO,
+} from '../../api/client'
 import {
   imageContentUrl,
   imagePreviewUrl,
@@ -8,7 +14,7 @@ import {
   type ImageReviewStatus,
   type ImageStatsResponse,
 } from '../../types/workbench'
-import type { ReviewSessionAdapter, SessionImage } from './hooks/useReviewSession'
+import type { ReviewBatchMode, ReviewSessionAdapter, SessionImage } from './hooks/useReviewSession'
 import './review-mode.css'
 
 /**
@@ -23,6 +29,11 @@ import './review-mode.css'
  * - ReviewMode 自维护 undo stack，Ctrl+Z 撤销上一条打标/收藏；
  * - 队列耗尽（无下一页且到末尾）显示结束态：本次审核完成 保留X/淘汰X/收藏X + [返回图库][继续审核下一批]；
  * - 跨分页：has_next 预取直到 false。
+ *
+ * v0.37（P0-A）：
+ * - 新图不再被旧冻结会话挡住：头部「检查新图」走真实 DB 计数，可显式换批；
+ * - 结束态提供「审新一批（仅新图）」与「审核全部未审核」两种显式入口；
+ * - 换批 = 放弃旧 ACTIVE 会话（保留 items）+ 新建冻结队列，索引不重排、队列不压缩。
  */
 
 /** 分页加载器：page 从 1 起。返回本页 items + 是否还有下一页 + 服务端 total。
@@ -94,6 +105,11 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
   // 结束态：仅当用户在队列末尾再按"下一张"（越界前进且无下一页）时进入；
   // 普通浏览 / 放大最后一张不会被结束态覆盖。
   const [finished, setFinished] = useState(false)
+  // v0.37：当前批次摘要 + 批次之外的待审图片数量 + 显式换批状态
+  const [batchInfo, setBatchInfo] = useState<ReviewSessionSummaryDTO | null>(null)
+  const [newCount, setNewCount] = useState<number | null>(null)
+  const [switching, setSwitching] = useState(false)
+  const batchSeqRef = useRef(0)
   const undoRef = useRef<UndoEntry[]>([])
 
   const loadedPageRef = useRef(0)
@@ -104,12 +120,64 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
     imageApi
       .stats(statsParams)
       .then((s) => setServerStats(s))
-      .catch(() => {})
+      .catch((err: unknown) => {
+        // 统计只影响顶部辅助信息，失败不打断审核，但要留下可诊断记录
+        console.warn('[review] 统计刷新失败', err)
+      })
   }, [statsParams])
 
   useEffect(() => {
     refreshStats()
   }, [refreshStats])
+
+  /** 真实 DB 计数：当前批次之外还有多少张待审（含换批后新生成的图）。 */
+  const checkNewCount = useCallback(async (): Promise<void> => {
+    if (!sessionAdapter) return
+    try {
+      setNewCount(await sessionAdapter.countOutsideBatch())
+      setBatchInfo(sessionAdapter.getSummary())
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : '新图数量检查失败')
+    }
+  }, [sessionAdapter])
+
+  /** 显式换批：放弃当前 ACTIVE 会话 → 按 mode 新建冻结队列 → 重新加载第 1 页。 */
+  const switchBatch = useCallback(
+    async (mode: ReviewBatchMode): Promise<void> => {
+      if (!loader || switching) return
+      const seq = ++batchSeqRef.current
+      setSwitching(true)
+      setError(null)
+      try {
+        if (sessionAdapter) await sessionAdapter.startNextBatch(mode)
+        const page = await loader.loadPage(1)
+        if (seq !== batchSeqRef.current) return
+        loadedPageRef.current = page.startPage ?? 1
+        setList(page.items)
+        setHasNext(page.has_next)
+        setServerTotal(page.total)
+        setIndex(page.initialIndex ?? 0)
+        setFinished(false)
+        setZoomed(false)
+        setSessionKept(0)
+        setSessionRejected(0)
+        setSessionFavorited(0)
+        undoRef.current = []
+        refreshStats()
+        if (sessionAdapter) {
+          setBatchInfo(sessionAdapter.getSummary())
+          setNewCount(await sessionAdapter.countOutsideBatch())
+        }
+      } catch (err) {
+        if (seq === batchSeqRef.current) {
+          setError(err instanceof ApiRequestError ? err.message : '切换审核批次失败')
+        }
+      } finally {
+        if (seq === batchSeqRef.current) setSwitching(false)
+      }
+    },
+    [loader, sessionAdapter, switching, refreshStats],
+  )
 
   // 分页模式：首屏加载第一页
   useEffect(() => {
@@ -125,6 +193,8 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
         setHasNext(page.has_next)
         setServerTotal(page.total)
         setIndex(page.initialIndex ?? 0)
+        setBatchInfo(sessionAdapter?.getSummary() ?? null)
+        void checkNewCount()
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof ApiRequestError ? err.message : '加载审核列表失败')
@@ -390,18 +460,69 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
     if (cur) sessionAdapter.reportPosition(cur as SessionImage)
   }, [clamped, list, sessionAdapter])
 
-  // Phase 0.13：进入结束态时标记会话完成（仍有未审由后端不强完成）
+  // Phase 0.13 / v0.37：进入结束态时标记会话完成（仍有未审由后端不强完成）；
+  // 完成后立即按该会话统计批次之外的新图，供“审新一批”入口使用。
   const isComplete = finished && !loadingMore
   useEffect(() => {
-    if (isComplete && sessionAdapter) sessionAdapter.finish()
-  }, [isComplete, sessionAdapter])
+    if (!isComplete || !sessionAdapter) return
+    let cancelled = false
+    sessionAdapter
+      .finish()
+      .then(() => {
+        if (cancelled) return
+        setBatchInfo(sessionAdapter.getSummary())
+        return checkNewCount()
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof ApiRequestError ? err.message : '标记审核完成失败')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isComplete, sessionAdapter, checkNewCount])
 
   if (list.length === 0 || !current) {
+    const ended = batchInfo?.status === 'COMPLETED'
     return (
       <div className="rv-overlay" role="dialog" aria-modal="true" aria-label="审核模式">
         <div className="rv-top">
-          <span className="rv-progress">{loadingMore ? '加载中…' : '没有可审核的图片'}</span>
+          <span className="rv-progress">
+            {loadingMore ? '加载中…' : ended ? '上一批审核已结束' : '没有可审核的图片'}
+          </span>
           <button type="button" onClick={onClose}>关闭</button>
+        </div>
+        {error && <p className="rv-error">{error}</p>}
+        <div className="rv-done">
+          <h2 className="rv-done__title">{ended ? '上一批审核已结束' : '暂无待审核图片'}</h2>
+          <p className="rv-done__remaining muted">
+            {newCount === null
+              ? '正在检查新图…'
+              : newCount > 0
+                ? `批次之外还有 ${newCount} 张待审核图片`
+                : '当前没有新的待审核图片'}
+          </p>
+          <div className="rv-done__actions">
+            {newCount !== null && newCount > 0 && (
+              <button
+                type="button" className="rv-btn rv-btn--keep" disabled={switching}
+                onClick={() => void switchBatch('only_new')}
+              >
+                {switching ? '切换中…' : `审新图（${newCount} 张）`}
+              </button>
+            )}
+            <button
+              type="button" className="rv-btn rv-btn--secondary" disabled={switching}
+              onClick={() => void switchBatch('all')}
+            >
+              审核全部未审核
+            </button>
+            <button type="button" className="rv-btn" disabled={switching} onClick={() => void checkNewCount()}>
+              检查新图
+            </button>
+            <button type="button" className="rv-btn" onClick={onClose}>返回图库</button>
+          </div>
         </div>
       </div>
     )
@@ -426,31 +547,27 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
           <div className="rv-done__actions">
             <button type="button" className="rv-btn rv-btn--keep" onClick={onClose}>返回图库</button>
             {loader && (
-              <button
-                type="button"
-                className="rv-btn rv-btn--secondary"
-                onClick={() => {
-                  // 继续审核下一批：冻结会话 → 开新 session（已打标图已离开 NEW 过滤集）
-                  loadedPageRef.current = 0
-                  setIndex(0)
-                  setHasNext(true)
-                  setZoomed(false)
-                  setFinished(false)
-                  refreshStats()
-                  const boot = (async () => {
-                    if (sessionAdapter) await sessionAdapter.startNextBatch()
-                    const page = await loader.loadPage(1)
-                    loadedPageRef.current = page.startPage ?? 1
-                    setList(page.items)
-                    setHasNext(page.has_next)
-                    setServerTotal(page.total)
-                    setIndex(page.initialIndex ?? 0)
-                  })()
-                  void boot.catch(() => {})
-                }}
-              >
-                继续审核下一批
-              </button>
+              <>
+                <button
+                  type="button" className="rv-btn rv-btn--secondary" disabled={switching}
+                  onClick={() => void switchBatch('only_new')}
+                >
+                  {switching
+                    ? '切换中…'
+                    : newCount !== null && newCount > 0
+                      ? `审新一批（仅新图 ${newCount} 张）`
+                      : '审新一批（仅新图）'}
+                </button>
+                <button
+                  type="button" className="rv-btn" disabled={switching}
+                  onClick={() => void switchBatch('all')}
+                >
+                  审核全部未审核
+                </button>
+                <button type="button" className="rv-btn" disabled={switching} onClick={() => void checkNewCount()}>
+                  刷新新图数量
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -473,6 +590,26 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
             ? `剩余待审 ${serverStats.new} · 全局 保留 ${serverStats.keep} · 淘汰 ${serverStats.reject} · 收藏 ${serverStats.favorites}`
             : `本次 保留 ${sessionKept} · 淘汰 ${sessionRejected} · 收藏 ${sessionFavorited}`}
         </span>
+        {sessionAdapter && (
+          <span className="rv-new muted">
+            {newCount === null
+              ? '新图检查中…'
+              : newCount > 0
+                ? `另有 ${newCount} 张未纳入本批`
+                : '暂无新图'}
+            <button type="button" className="rv-link" disabled={switching} onClick={() => void checkNewCount()}>
+              检查
+            </button>
+            {newCount !== null && newCount > 0 && (
+              <button
+                type="button" className="rv-link" disabled={switching}
+                onClick={() => void switchBatch('only_new')}
+              >
+                换批审新图
+              </button>
+            )}
+          </span>
+        )}
         <button type="button" onClick={onClose}>退出审核</button>
       </div>
 

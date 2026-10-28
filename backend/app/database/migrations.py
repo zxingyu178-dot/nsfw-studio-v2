@@ -713,6 +713,18 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE prompts ADD COLUMN status_reason TEXT NOT NULL DEFAULT ''",
         ),
     ),
+    Migration(
+        migration_id="0020_review_session_end_reason",
+        version="0.37.0",
+        description=(
+            "v0.37：审核会话增加结束原因（COMPLETED / ABANDONED / EMPTY）。"
+            "status 仍只保留 ACTIVE / COMPLETED 两值，手机端契约不变；"
+            "放弃会话 = COMPLETED + ended_reason=ABANDONED，0 张会话 = COMPLETED + EMPTY。"
+        ),
+        statements=(
+            "ALTER TABLE mobile_review_sessions ADD COLUMN ended_reason TEXT",
+        ),
+    ),
 )
 
 

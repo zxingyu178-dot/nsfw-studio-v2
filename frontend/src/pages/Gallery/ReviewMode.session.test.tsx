@@ -5,6 +5,7 @@ import { ApiRequestError, imageApi } from '../../api/client'
 import { ReviewMode } from './ReviewMode'
 import type { ReviewSessionAdapter, SessionImage } from './hooks/useReviewSession'
 import type { ImageDTO } from '../../types/workbench'
+import type { ReviewSessionSummaryDTO } from '../../api/client'
 
 vi.mock('../../api/client', () => ({
   ApiRequestError: class extends Error {
@@ -54,7 +55,9 @@ function makeAdapter(): ReviewSessionAdapter {
     setFavorite: vi.fn(),
     resync: vi.fn(),
     reportPosition: vi.fn(),
-    finish: vi.fn(),
+    finish: vi.fn(async () => {}),
+    getSummary: vi.fn(() => null),
+    countOutsideBatch: vi.fn(async () => 0),
     startNextBatch: vi.fn(async () => {}),
   }
 }
@@ -131,5 +134,23 @@ describe('ReviewMode 冻结会话适配器（/api/v1/review/*）', () => {
     await waitFor(() =>
       expect(adapter.decideMark).toHaveBeenLastCalledWith(expect.anything(), 'NEW'),
     )
+  })
+
+  it('0 张批次：显示上一批已结束 + 批次外新图，可显式换批（only_new）', async () => {
+    const adapter = makeAdapter()
+    vi.mocked(adapter.loadPage).mockResolvedValue({ items: [], has_next: false, total: 0 })
+    vi.mocked(adapter.getSummary).mockReturnValue({
+      id: 'mrs_done', status: 'COMPLETED', total_count: 0, seen_count: 0,
+      current_index: 0, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00',
+      filter: {}, ended_reason: 'EMPTY',
+    } as ReviewSessionSummaryDTO)
+    vi.mocked(adapter.countOutsideBatch).mockResolvedValue(3)
+
+    renderMode(adapter)
+    expect(await screen.findByText('上一批审核已结束')).toBeInTheDocument()
+    expect(await screen.findByText('批次之外还有 3 张待审核图片')).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: '审新图（3 张）' }))
+    await waitFor(() => expect(adapter.startNextBatch).toHaveBeenCalledWith('only_new'))
   })
 })

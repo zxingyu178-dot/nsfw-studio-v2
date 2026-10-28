@@ -21,6 +21,11 @@ router = APIRouter(prefix="/review", tags=["review"])
 
 class CreateSessionRequest(BaseModel):
     filter: dict[str, Any] | None = None
+    # v0.37：all=全部未审核（默认，旧语义）；only_new=仅新到（排除旧会话成员）
+    mode: str = "all"
+    exclude_session_id: str | None = None
+    # 显式换批：把旧 ACTIVE 会话标为 ABANDONED（保留 items）
+    close_active: bool = False
 
 
 class DecisionRequest(BaseModel):
@@ -39,7 +44,10 @@ class PositionRequest(BaseModel):
 @router.post("/sessions", summary="创建冻结审核会话", status_code=201)
 def create_session(body: CreateSessionRequest,
                    session: Session = Depends(get_session)) -> dict:
-    return svc.create_session(session, body.filter).to_dict()
+    return svc.create_session(
+        session, body.filter, mode=body.mode,
+        exclude_session_id=body.exclude_session_id, close_active=body.close_active,
+    ).to_dict()
 
 
 @router.get("/sessions/latest", summary="恢复最近会话（不重建）")
@@ -78,3 +86,13 @@ def position(session_id: str, body: PositionRequest,
 @router.post("/sessions/{session_id}/complete", summary="标记完成（仍有未审则不强完成）")
 def complete(session_id: str, session: Session = Depends(get_session)) -> dict:
     return svc.complete_session(session, session_id)
+
+
+@router.post("/sessions/{session_id}/abandon", summary="显式放弃会话（保留 items，不删除）")
+def abandon(session_id: str, session: Session = Depends(get_session)) -> dict:
+    return svc.abandon_session(session, session_id)
+
+
+@router.get("/sessions/{session_id}/new-count", summary="会话之外的新待审图片数量")
+def new_count(session_id: str, session: Session = Depends(get_session)) -> dict:
+    return svc.count_new_since_session(session, session_id)

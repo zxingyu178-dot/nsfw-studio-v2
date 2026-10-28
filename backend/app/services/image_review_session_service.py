@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError, ConflictError, NotFoundError, ValidationError
@@ -28,6 +28,8 @@ from app.models.mobile_review import ImageReviewSession, ImageReviewSessionItem
 # decision action 取值（审核状态动作；favorite 由独立 bool 字段控制）
 DECISION_ACTIONS = ("KEEP", "REJECT", "RESET")
 DEFAULT_FILTER = {"status": "NEW", "sort": "created_desc"}
+# v0.37：建会话模式——all=全部未审核（旧语义）；only_new=排除已有会话成员（仅新到）
+SESSION_MODES = ("all", "only_new")
 
 
 class ReviewSessionNotFound(NotFoundError):
@@ -68,7 +70,7 @@ def _resolve_filter(filter_obj: dict[str, Any] | None) -> dict[str, Any]:
     return f
 
 
-def _freeze_query(f: dict[str, Any]):
+def _freeze_query(f: dict[str, Any], *, exclude_session_id: str | None = None):
     query = select(Image.id)
     status = f.get("status")
     if status is not None:
@@ -77,6 +79,18 @@ def _freeze_query(f: dict[str, Any]):
     if job_id is not None:
         # Gallery「按任务审核」：冻结某 job 产出图的稳定队列（口径对齐 image list）
         query = query.where(Image.job_id == job_id)
+    if exclude_session_id is not None:
+        # v0.37「仅新到」：用 NOT EXISTS 排除指定会话已冻结的 image_id，
+        # 避免旧会话未审完的图混入新批次（不是按 created_at 粗略推断）。
+        in_old = (
+            select(ImageReviewSessionItem.id)
+            .where(
+                ImageReviewSessionItem.session_id == exclude_session_id,
+                ImageReviewSessionItem.image_id == Image.id,
+            )
+            .exists()
+        )
+        query = query.where(~in_old)
     sort = f.get("sort", "created_desc")
     if sort == "created_asc":
         order_by = (Image.created_at.asc(), Image.id.asc())
@@ -98,6 +112,8 @@ class SessionSummary:
     created_at: str
     updated_at: str
     filter: dict[str, Any]
+    # v0.37：ACTIVE 时为 None；COMPLETED / ABANDONED / EMPTY（0 张建会话）
+    ended_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +125,7 @@ class SessionSummary:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "filter": self.filter,
+            "ended_reason": self.ended_reason,
         }
 
 
@@ -118,22 +135,72 @@ def _summary(row: ImageReviewSession) -> SessionSummary:
         seen_count=row.seen_count, current_index=row.current_index,
         created_at=row.created_at, updated_at=row.updated_at,
         filter=json.loads(row.filter_json or "{}"),
+        ended_reason=row.ended_reason,
     )
 
 
 # ---- CRUD ----
 
 
-def create_session(session: Session, filter_obj: dict[str, Any] | None = None) -> SessionSummary:
-    f = _resolve_filter(filter_obj)
-    image_ids: list[str] = list(session.execute(_freeze_query(f)).scalars().all())
+def _close_active_sessions(session: Session, *, reason: str = "ABANDONED") -> int:
+    """把当前所有 ACTIVE 会话显式结束（保留 items，供历史追溯），返回结束数量。"""
+    rows = session.execute(
+        select(ImageReviewSession).where(ImageReviewSession.status == "ACTIVE")
+    ).scalars().all()
+    now = utc_now_iso()
+    for row in rows:
+        row.status = "COMPLETED"
+        row.ended_reason = reason
+        row.updated_at = now
+    return len(rows)
 
+
+def create_session(
+    session: Session,
+    filter_obj: dict[str, Any] | None = None,
+    *,
+    mode: str = "all",
+    exclude_session_id: str | None = None,
+    close_active: bool = False,
+) -> SessionSummary:
+    """创建冻结审核会话。
+
+    - ``mode="all"``：旧语义，冻结当前 filter 命中的全部图片（含旧会话未审图片）。
+    - ``mode="only_new"``：NOT EXISTS 排除 ``exclude_session_id`` 已冻结的 image_id；
+      未显式给 exclude_session_id 时排除最近一个会话。
+    - ``close_active=True``：显式换批时把旧 ACTIVE 会话标为 ABANDONED（不删 items）。
+    - 0 张时立即 COMPLETED + ended_reason=EMPTY，避免空 ACTIVE 永久锁死恢复流程。
+    """
+    if mode not in SESSION_MODES:
+        raise ValidationError(f"非法 mode: {mode}", code="SESSION_MODE_INVALID")
+    f = _resolve_filter(filter_obj)
+    excluded: str | None = None
+    if mode == "only_new":
+        excluded = exclude_session_id
+        if excluded is None:
+            latest = session.execute(
+                select(ImageReviewSession)
+                .order_by(ImageReviewSession.created_at.desc(), ImageReviewSession.id.desc())
+                .limit(1)
+            ).scalars().first()
+            excluded = latest.id if latest is not None else None
+    image_ids: list[str] = list(
+        session.execute(_freeze_query(f, exclude_session_id=excluded)).scalars().all()
+    )
+    if close_active:
+        _close_active_sessions(session)
+
+    has_items = bool(image_ids)
     row = ImageReviewSession(
         id=new_id(MOBILE_REVIEW_SESSION),
-        filter_json=json.dumps(f, ensure_ascii=False),
+        filter_json=json.dumps(
+            {**f, **({"mode": mode, "exclude_session_id": excluded} if mode == "only_new" else {})},
+            ensure_ascii=False,
+        ),
         total_count=len(image_ids),
         seen_count=0,
-        status="ACTIVE",
+        status="ACTIVE" if has_items else "COMPLETED",
+        ended_reason=None if has_items else "EMPTY",
         current_index=0,
     )
     session.add(row)
@@ -151,12 +218,19 @@ def create_session(session: Session, filter_obj: dict[str, Any] | None = None) -
 
 
 def get_latest_session(session: Session) -> SessionSummary | None:
-    """恢复不重建：返回最近一个 ACTIVE 会话；无 ACTIVE 则返回最近创建的会话（可能 COMPLETED）。"""
+    """恢复不重建：优先最近 ACTIVE 会话；无 ACTIVE 才返回最近创建的会话（可能 COMPLETED）。"""
     row = session.execute(
         select(ImageReviewSession)
+        .where(ImageReviewSession.status == "ACTIVE")
         .order_by(ImageReviewSession.created_at.desc(), ImageReviewSession.id.desc())
         .limit(1)
     ).scalars().first()
+    if row is None:
+        row = session.execute(
+            select(ImageReviewSession)
+            .order_by(ImageReviewSession.created_at.desc(), ImageReviewSession.id.desc())
+            .limit(1)
+        ).scalars().first()
     if row is None:
         return None
     return _summary(row)
@@ -344,16 +418,58 @@ def update_position(session: Session, session_id: str, item_index: int) -> Sessi
 def complete_session(session: Session, session_id: str) -> dict[str, Any]:
     """标记会话完成；仍有 seen=false 则不强完成，返回 remaining_count。"""
     row = _must_get_session(session, session_id)
-    remaining = int(session.execute(
-        select(func.count()).select_from(ImageReviewSessionItem)
-        .where(ImageReviewSessionItem.session_id == session_id,
-               ImageReviewSessionItem.seen.is_(False))
-    ).scalar_one())
+    if row.status == "COMPLETED":
+        return {**_summary(row).to_dict(), "completed": True,
+                "remaining_count": _remaining_count(session, session_id)}
+    remaining = _remaining_count(session, session_id)
     summary = _summary(row).to_dict()
     if remaining > 0:
         return {**summary, "completed": False, "remaining_count": remaining}
     row.status = "COMPLETED"
+    row.ended_reason = "COMPLETED"
     row.updated_at = utc_now_iso()
     session.commit()
     session.refresh(row)
     return {**_summary(row).to_dict(), "completed": True, "remaining_count": 0}
+
+
+def _remaining_count(session: Session, session_id: str) -> int:
+    return int(session.execute(
+        select(func.count()).select_from(ImageReviewSessionItem)
+        .where(ImageReviewSessionItem.session_id == session_id,
+               ImageReviewSessionItem.seen.is_(False))
+    ).scalar_one())
+
+
+def abandon_session(session: Session, session_id: str) -> dict[str, Any]:
+    """显式放弃 ACTIVE 会话：标 COMPLETED + ended_reason=ABANDONED，保留 items 不删除。"""
+    row = _must_get_session(session, session_id)
+    remaining = _remaining_count(session, session_id)
+    if row.status != "ACTIVE":
+        return {**_summary(row).to_dict(), "abandoned": False, "remaining_count": remaining}
+    row.status = "COMPLETED"
+    row.ended_reason = "ABANDONED"
+    row.updated_at = utc_now_iso()
+    session.commit()
+    session.refresh(row)
+    return {**_summary(row).to_dict(), "abandoned": True, "remaining_count": remaining}
+
+
+def count_new_since_session(
+    session: Session, session_id: str,
+) -> dict[str, Any]:
+    """真实 DB 查询：当前 filter 下 NEW 且不在该会话冻结队列里的图片数量。
+
+    用于审核模式里“另外有 N 张新图待审核”——排除当前 session 成员，不按
+    created_at 粗略推断，也不把正在看的冻结队列算成新图。
+    """
+    row = _must_get_session(session, session_id)
+    f = _resolve_filter(json.loads(row.filter_json or "{}"))
+    ids = session.execute(
+        _freeze_query(f, exclude_session_id=session_id)
+    ).scalars().all()
+    return {
+        "session_id": session_id,
+        "count": len(ids),
+        "filter": {k: v for k, v in f.items() if k != "mode" and k != "exclude_session_id"},
+    }

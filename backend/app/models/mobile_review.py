@@ -48,6 +48,8 @@ class ImageReviewSession(Base):
     seen_count: Mapped[int] = mapped_column(nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE", index=True)
     current_index: Mapped[int] = mapped_column(nullable=False, default=0)
+    # v0.37：结束原因（COMPLETED / ABANDONED / EMPTY）；ACTIVE 时为 NULL。
+    ended_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
 
