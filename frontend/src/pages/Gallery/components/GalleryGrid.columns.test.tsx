@@ -1,7 +1,7 @@
 import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImageDTO } from '../../../types/workbench'
-import type { GalleryDensity } from '../hooks/useGalleryPrefs'
+import type { GalleryDensity, GalleryLayout } from '../hooks/useGalleryPrefs'
 import { GalleryGrid } from './GalleryGrid'
 
 vi.mock('./GalleryCard', () => ({
@@ -49,6 +49,7 @@ function renderGrid(
   items: ImageDTO[],
   sentinelRef = { current: null as HTMLDivElement | null },
   density: GalleryDensity = 'normal',
+  layout: GalleryLayout = 'waterfall',
 ) {
   return render(
     <GalleryGrid
@@ -61,6 +62,7 @@ function renderGrid(
       selectMode={false}
       density={density}
       fit="contain"
+      layout={layout}
       sentinelRef={sentinelRef}
       {...handlers}
     />,
@@ -126,6 +128,7 @@ describe('GalleryGrid stable columns', () => {
         selectMode={false}
         density="normal"
         fit="contain"
+        layout="waterfall"
         sentinelRef={sentinelRef}
         {...handlers}
       />,
@@ -154,5 +157,16 @@ describe('GalleryGrid stable columns', () => {
     const { container } = renderGrid([image('a', 100, 100)], sentinelRef)
 
     expect(container.querySelector('.gal-sentinel')).toBe(sentinelRef.current)
+  })
+
+  it('整齐网格：不再生成列包裹，卡片按行直接排列', () => {
+    const items = [image('a', 100, 100), image('b', 100, 200), image('c', 300, 100)]
+    const { container } = renderGrid(items, undefined, 'normal', 'grid')
+
+    expect(container.querySelector('.gal-grid--layout-grid')).toBeTruthy()
+    expect(container.querySelectorAll('.gal-col')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-image-id]')).toHaveLength(3)
+    const ids = [...container.querySelectorAll<HTMLElement>('[data-image-id]')].map((el) => el.dataset.imageId)
+    expect(ids).toEqual(['a', 'b', 'c'])
   })
 })

@@ -20,6 +20,8 @@ interface GalleryCardProps {
   image: ImageDTO
   selected: boolean
   selectMode: boolean
+  /** v0.37 P1-B：整齐网格使用统一媒体框，瀑布流保留原始比例。 */
+  layout?: 'grid' | 'waterfall'
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
   onToggleFavorite: (image: ImageDTO) => void
@@ -40,7 +42,8 @@ export function ratioLabel(width: number, height: number): string {
 }
 
 export function GalleryCard({
-  image, selected, selectMode, onCardClick, onCardDoubleClick, onToggleFavorite,
+  image, selected, selectMode, layout = 'waterfall',
+  onCardClick, onCardDoubleClick, onToggleFavorite,
 }: GalleryCardProps) {
   const status = normalizeImageStatus(image)
   const imported = !image.job_id
@@ -48,12 +51,12 @@ export function GalleryCard({
   return (
     <div
       data-image-id={image.id}
-      className={`gal-card${selected ? ' gal-card--selected' : ''}`}
+      className={`gal-card gal-card--layout-${layout}${selected ? ' gal-card--selected' : ''}`}
       onClick={() => onCardClick(image)}
       onDoubleClick={() => onCardDoubleClick(image)}
       title={`${IMAGE_KIND_LABEL[image.kind] ?? image.kind} · ${jobLabel} · ${IMAGE_STATUS_LABEL[status]}`}
     >
-      <GalleryThumb image={image} />
+      <GalleryThumb image={image} fixedBox={layout === 'grid'} />
       <span className="gal-card__ratio">{ratioLabel(image.width, image.height)}</span>
       <span className="gal-card__corner">
         {selectMode && (
@@ -104,7 +107,7 @@ export function GalleryCard({
  * 否则占位 3:4 与真实比例（如 9:16）不一致，缩略图加载完成的瞬间卡片高度变化，
  * 整个瀑布流会上下抖动（用户反馈的"竖着刷新"）。
  */
-function GalleryThumb({ image }: { image: ImageDTO }) {
+function GalleryThumb({ image, fixedBox }: { image: ImageDTO; fixedBox: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [inView, setInView] = useState(false)
   const [error, setError] = useState(false)
@@ -130,7 +133,8 @@ function GalleryThumb({ image }: { image: ImageDTO }) {
     return () => obs.disconnect()
   }, [])
 
-  const aspectRatio = image.width > 0 && image.height > 0
+  // 整齐网格由 CSS 统一媒体框（1:1），不再用真实比例撑高，避免行高参差。
+  const aspectRatio = !fixedBox && image.width > 0 && image.height > 0
     ? `${image.width} / ${image.height}`
     : undefined
 

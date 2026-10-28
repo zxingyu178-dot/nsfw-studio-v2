@@ -8,6 +8,18 @@ import { useState } from 'react'
 
 export type GalleryDensity = 'compact' | 'normal' | 'large'
 export type GalleryFit = 'contain' | 'cover'
+/** v0.37 P1-B：整齐网格（默认，统一媒体框）| 瀑布流（按原始比例错列）。 */
+export type GalleryLayout = 'grid' | 'waterfall'
+
+export const LAYOUT_OPTIONS: { value: GalleryLayout; label: string }[] = [
+  { value: 'grid', label: '整齐网格' },
+  { value: 'waterfall', label: '瀑布流' },
+]
+
+export const FIT_OPTIONS: { value: GalleryFit; label: string }[] = [
+  { value: 'contain', label: '完整显示' },
+  { value: 'cover', label: '填充显示' },
+]
 
 export const DENSITY_OPTIONS: { value: GalleryDensity; label: string }[] = [
   { value: 'compact', label: '小' },
@@ -17,6 +29,7 @@ export const DENSITY_OPTIONS: { value: GalleryDensity; label: string }[] = [
 
 const DENSITY_KEY = 'gallery.density'
 const FIT_KEY = 'gallery.fit'
+const LAYOUT_KEY = 'gallery.layout'
 
 function readPref<T>(key: string, fallback: T, valid: readonly T[]): T {
   try {
@@ -43,6 +56,9 @@ export function useGalleryPrefs() {
   const [fit, setFitState] = useState<GalleryFit>(() =>
     readPref(FIT_KEY, 'contain', ['contain', 'cover'] as const),
   )
+  const [layout, setLayoutState] = useState<GalleryLayout>(() =>
+    readPref(LAYOUT_KEY, 'grid', ['grid', 'waterfall'] as const),
+  )
 
   const setDensity = (value: GalleryDensity): void => {
     setDensityState(value)
@@ -52,6 +68,10 @@ export function useGalleryPrefs() {
     setFitState(value)
     writePref(FIT_KEY, value)
   }
+  const setLayout = (value: GalleryLayout): void => {
+    setLayoutState(value)
+    writePref(LAYOUT_KEY, value)
+  }
 
-  return { density, setDensity, fit, setFit }
+  return { density, setDensity, fit, setFit, layout, setLayout }
 }

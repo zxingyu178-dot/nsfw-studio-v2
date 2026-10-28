@@ -475,6 +475,10 @@ export default function GalleryPage() {
         onSortChange={query.setSort}
         density={prefs.density}
         onDensityChange={prefs.setDensity}
+        layout={prefs.layout}
+        onLayoutChange={prefs.setLayout}
+        fit={prefs.fit}
+        onFitChange={prefs.setFit}
         selectMode={selection.selectMode}
         onToggleSelect={selection.toggleSelectMode}
         onStartReview={startReview}
@@ -524,6 +528,16 @@ export default function GalleryPage() {
 
       {query.error && <p className="ds-notice ds-notice--error">{query.error}</p>}
 
+      {/* v0.37 P1-B：深页浏览时新图只提示，不把已加载列表压回第一页。 */}
+      {query.newCount > 0 && (
+        <p className="ds-notice ds-notice--success" role="status">
+          有 {query.newCount} 张新图，
+          <Button size="xs" variant="ghost" onClick={query.applyNewImages}>
+            点击刷新
+          </Button>
+        </p>
+      )}
+
       {/* ===== 按任务分组 ===== */}
       {view === 'group' && !jobFilter && (
         <GalleryGroupView
@@ -549,6 +563,7 @@ export default function GalleryPage() {
           selectMode={selection.selectMode}
           density={prefs.density}
           fit={prefs.fit}
+          layout={prefs.layout}
           onCardClick={handleCardClick}
           onCardDoubleClick={handleCardDoubleClick}
           onToggleFavorite={handleToggleFavorite}

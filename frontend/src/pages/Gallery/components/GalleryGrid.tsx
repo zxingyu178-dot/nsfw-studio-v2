@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import type { ImageDTO } from '../../../types/workbench'
-import type { GalleryDensity, GalleryFit } from '../hooks/useGalleryPrefs'
+import type { GalleryDensity, GalleryFit, GalleryLayout } from '../hooks/useGalleryPrefs'
 import { distributeColumns } from '../lib/distributeColumns'
 import { GalleryCard } from './GalleryCard'
 
 /**
  * Phase 0.12 Task6：图片网格。密度（小/中/大）与适应方式（contain/cover）作为
- * 修饰类作用于 .gal-grid，CSS 据此切换 minmax 列宽与媒体框高度/object-fit。
+ * 修饰类作用于 .gal-grid，CSS 据此切换列宽与媒体框行为。
+ *
+ * v0.37 P1-B：默认「整齐网格」——真正的 CSS Grid，统一媒体框、逐行对齐；
+ * 「瀑布流」沿用原有最矮列分配算法。
  */
 
 interface GalleryGridProps {
@@ -19,6 +22,7 @@ interface GalleryGridProps {
   selectMode: boolean
   density: GalleryDensity
   fit: GalleryFit
+  layout: GalleryLayout
   onCardClick: (image: ImageDTO) => void
   onCardDoubleClick: (image: ImageDTO) => void
   onToggleFavorite: (image: ImageDTO) => void
@@ -27,12 +31,13 @@ interface GalleryGridProps {
 
 export function GalleryGrid({
   items, total, hasNext, loading, loadingMore, selectedIds, selectMode,
-  density, fit, onCardClick, onCardDoubleClick, onToggleFavorite, sentinelRef,
+  density, fit, layout, onCardClick, onCardDoubleClick, onToggleFavorite, sentinelRef,
 }: GalleryGridProps) {
   const gridRef = useRef<HTMLDivElement | null>(null)
   const [columnCount, setColumnCount] = useState(1)
 
   useEffect(() => {
+    if (layout !== 'waterfall') return
     const element = gridRef.current
     if (!element) return
     const targetWidth = density === 'compact' ? 170 : density === 'large' ? 280 : 220
@@ -46,11 +51,28 @@ export function GalleryGrid({
     })
     observer.observe(element)
     return () => observer.disconnect()
-  }, [density])
+  }, [density, layout])
 
   const columns = useMemo(
     () => distributeColumns(items, columnCount, imageAspect),
     [items, columnCount],
+  )
+
+  const cardProps = {
+    selectMode,
+    layout,
+    onCardClick,
+    onCardDoubleClick,
+    onToggleFavorite,
+  }
+
+  const renderCard = (image: ImageDTO) => (
+    <GalleryCard
+      key={image.id}
+      image={image}
+      selected={selectedIds.includes(image.id)}
+      {...cardProps}
+    />
   )
 
   return (
@@ -63,22 +85,17 @@ export function GalleryGrid({
         </div>
       )}
       <p className="gal-count">共 {total} 张</p>
-      <div ref={gridRef} className={`gal-grid gal-grid--${density} gal-grid--fit-${fit}`}>
-        {columns.map((column, columnIndex) => (
-          <div className="gal-col" key={columnIndex}>
-            {column.map((image) => (
-              <GalleryCard
-                key={image.id}
-                image={image}
-                selected={selectedIds.includes(image.id)}
-                selectMode={selectMode}
-                onCardClick={onCardClick}
-                onCardDoubleClick={onCardDoubleClick}
-                onToggleFavorite={onToggleFavorite}
-              />
+      <div
+        ref={gridRef}
+        className={`gal-grid gal-grid--${density} gal-grid--fit-${fit} gal-grid--layout-${layout}`}
+      >
+        {layout === 'grid'
+          ? items.map(renderCard)
+          : columns.map((column, columnIndex) => (
+              <div className="gal-col" key={columnIndex}>
+                {column.map(renderCard)}
+              </div>
             ))}
-          </div>
-        ))}
       </div>
       {/* 无限滚动哨兵 */}
       {hasNext && <div ref={sentinelRef} className="gal-sentinel" aria-hidden="true" />}

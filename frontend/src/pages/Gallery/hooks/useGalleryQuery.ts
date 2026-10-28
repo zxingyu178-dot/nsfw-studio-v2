@@ -55,6 +55,11 @@ export function useGalleryQuery(
   // T18 联合刷新：静默重拉后的全局统计（与 list 同过滤口径）
   const [serverStats, setServerStats] = useState<ImageStatsResponse | null>(null)
 
+  // v0.37 P1-B：窗口回焦时只探测新图数量；深页浏览不被压回第一页。
+  const [newCount, setNewCount] = useState(0)
+  const itemsRef = useRef<ImageDTO[]>([])
+  itemsRef.current = items
+
   const requestSeq = useRef(0)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const lastVisibleRefresh = useRef(0)
@@ -74,6 +79,7 @@ export function useGalleryQuery(
   const loadFirst = useCallback(() => {
     const seq = ++requestSeq.current
     setLoading(true)
+    setNewCount(0)
     setError(null)
     imageApi
       .list(listQuery())
@@ -106,15 +112,49 @@ export function useGalleryQuery(
       .list(listQuery())
       .then((page) => {
         if (seq !== requestSeq.current) return
-        setItems(page.items)
+        const known = new Set(itemsRef.current.map((img) => img.id))
+        const fresh = page.items.filter((img) => !known.has(img.id))
         setTotal(page.total)
-        setHasNext(page.has_next)
+        if (fresh.length === 0) {
+          setNewCount(0)
+          return
+        }
+        // 已在顶部（或列表为空）时直接并入，用户感知不到位置变化；否则只提示数量。
+        const atTop = itemsRef.current.length === 0 || (window.scrollY ?? 0) < 240
+        if (atTop) {
+          setItems((prev) => [...fresh, ...prev])
+          setHasNext(page.has_next || itemsRef.current.length + fresh.length < page.total)
+          setNewCount(0)
+        } else {
+          setNewCount(fresh.length)
+        }
       })
       .catch(() => {})
     imageApi
       .stats(buildStatsParams())
       .then((s) => setServerStats(s))
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, subStatus, sort, jobFilter, sourceFilter])
+
+  /** 用户显式点击「有新图」提示：拉取第一页并只并入新增项，保留已加载多页。 */
+  const applyNewImages = useCallback(() => {
+    const seq = ++requestSeq.current
+    imageApi
+      .list(listQuery())
+      .then((page) => {
+        if (seq !== requestSeq.current) return
+        const known = new Set(itemsRef.current.map((img) => img.id))
+        const fresh = page.items.filter((img) => !known.has(img.id))
+        setItems((prev) => {
+          const prevKnown = new Set(prev.map((img) => img.id))
+          return [...fresh.filter((img) => !prevKnown.has(img.id)), ...prev]
+        })
+        setTotal(page.total)
+        setHasNext(itemsRef.current.length + fresh.length < page.total)
+        setNewCount(0)
+      })
+      .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '刷新新图失败'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, subStatus, sort, jobFilter, sourceFilter])
 
@@ -216,6 +256,8 @@ export function useGalleryQuery(
     loadFirst, loadNext,
     sentinelRef, listQuery, buildStatsParams,
     applyItemUpdated, removeItem,
+    // v0.37 P1-B：新图提示 + 显式并入
+    newCount, applyNewImages,
     // T18
     serverStats,
     // 分组

@@ -2,7 +2,14 @@ import { useState, type MutableRefObject } from 'react'
 import { Button, Select, Tabs } from '../../../components/ui'
 import type { ImageReviewStatus, ImageSort } from '../../../types/workbench'
 import type { GallerySource, TabKey } from '../hooks/useGalleryQuery'
-import { DENSITY_OPTIONS, type GalleryDensity } from '../hooks/useGalleryPrefs'
+import {
+  DENSITY_OPTIONS,
+  FIT_OPTIONS,
+  LAYOUT_OPTIONS,
+  type GalleryDensity,
+  type GalleryFit,
+  type GalleryLayout,
+} from '../hooks/useGalleryPrefs'
 
 /**
  * Phase 0.12 Task4：Gallery Toolbar 2.0 两层结构。
@@ -50,6 +57,10 @@ interface GalleryToolbarProps {
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
   onDensityChange: (value: GalleryDensity) => void
+  layout: GalleryLayout
+  onLayoutChange: (value: GalleryLayout) => void
+  fit: GalleryFit
+  onFitChange: (value: GalleryFit) => void
   selectMode: boolean
   onToggleSelect: () => void
   onStartReview: () => void
@@ -63,7 +74,7 @@ interface GalleryToolbarProps {
 export function GalleryToolbar({
   tab, onTabChange, view, onToggleView,
   subStatus, onSubStatusChange, source, onSourceChange, sort, onSortChange,
-  density, onDensityChange,
+  density, onDensityChange, layout, onLayoutChange, fit, onFitChange,
   selectMode, onToggleSelect, onStartReview,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
 }: GalleryToolbarProps) {
@@ -121,6 +132,18 @@ export function GalleryToolbar({
           value={density}
           onChange={(event) => onDensityChange(event.target.value as GalleryDensity)}
           options={DENSITY_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <Select
+          aria-label="图库布局"
+          value={layout}
+          onChange={(event) => onLayoutChange(event.target.value as GalleryLayout)}
+          options={LAYOUT_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <Select
+          aria-label="图片适应"
+          value={fit}
+          onChange={(event) => onFitChange(event.target.value as GalleryFit)}
+          options={FIT_OPTIONS.map(({ value, label }) => ({ value, label }))}
         />
 
         <span className="gal-toolbar__spacer" />

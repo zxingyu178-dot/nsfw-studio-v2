@@ -744,3 +744,20 @@ button.gal-group__main {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== v0.37 P1-B：整齐网格（默认视图）=====
+   真正的 CSS Grid：统一 1:1 媒体框，逐行对齐；比例标签仍显示原始宽高比。
+   瀑布流（.gal-grid--layout-waterfall）继续使用 .gal-col 的列式分配。 */
+.gal-grid--layout-grid {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+}
+.gal-grid--layout-grid.gal-grid--compact { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.gal-grid--layout-grid.gal-grid--normal { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.gal-grid--layout-grid.gal-grid--large { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.gal-grid--layout-grid .gal-card__media {
+  aspect-ratio: 1 / 1;
+}
+/* contain 为默认；选择「填充显示」时统一裁剪铺满（整齐网格与瀑布流都适用）。 */
+.gal-grid--fit-cover .gal-card__media > img { object-fit: cover; }
