@@ -2,6 +2,39 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.37.0] — 2026-10-28
+
+> Minor：按 v0.37 日用开发指导书收口四个日常痛点（审核换批、Prompt 列表体感、关联图片、
+> 图库布局），并补齐工作台提示词选择器分页。
+
+### Fixed
+
+- **审核模式看不到新生成图片（P0-A）**。冻结式审核会话新增 `mode=all|only_new` 与
+  `exclude_session_id`：默认全量；「审新图」只取不在旧会话中的图片（`NOT EXISTS`，不按时间
+  粗略推断）。0 张批次立即 `COMPLETED` 且 `ended_reason=EMPTY`，不再把空会话当成「已审完」
+  卡死入口；新增 `POST /review/sessions/{id}/abandon`（`ended_reason=ABANDONED`，保留已审
+  记录）与 `GET /review/sessions/{id}/new-count`。前端改为显式「审新一批 / 审核全部未审核 /
+  检查新图」三入口，换批前先结束旧批次，去掉静默吞错。
+- **Prompt 列表收藏/评分触发整表 Skeleton 重载（P0-B）**。列表已有数据时只显示轻量
+  「刷新中…」，保留旧列表；收藏与评分改为乐观更新目标行，失败回滚并提示；搜索输入 300ms
+  防抖。图片关联查询把 `prompt_ids` 同时下推到 Web 任务与 V1 导入两个 UNION 分支。
+
+### Added
+
+- **Prompt 卡片 +N 查看全部关联图片（P1-A）**。卡片仍只预览 3 张，`+N` 打开抽屉按 40/页
+  服务端分页，支持类型（原图/放大/处理）与状态筛选；关闭重开复用已加载分页。
+  `GET /api/v1/prompts/{id}/images` 新增 `kind` / `status` 过滤。
+- **图库整齐网格（默认）+ 瀑布流（可选）（P1-B）**。整齐网格使用统一 1:1 媒体框逐行对齐；
+  密度与 contain/cover 持久化。窗口回焦时不再把已加载多页压回第一页：顶部自动并入新图，
+  深页只显示「有 N 张新图，点击刷新」，点击后增量合并。
+- **工作台提示词库抽屉搜索与分页（P1-C）**。去掉 `limit=50` 硬上限，改为 30/页 offset
+  分页 + 加载更多；搜索 300ms 防抖并用请求序号丢弃过期响应。
+
+### Changed
+
+- `mobile_review_sessions` 新增 `ended_reason`（迁移 0020）：`COMPLETED` / `ABANDONED` /
+  `EMPTY`；`status` 仍保持 `ACTIVE` / `COMPLETED` 二值，手机端契约不变。
+
 ## [0.36.2] — 2026-10-28
 
 > Patch：把「队列不再被旧任务拖停」「重启可恢复」「AI 提交自动进提示词库」三条日用链路补齐；
