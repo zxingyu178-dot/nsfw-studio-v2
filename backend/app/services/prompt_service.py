@@ -301,11 +301,12 @@ def list_prompts(
         filters.append(evaluation_exists if scored else ~evaluation_exists)
     if search:
         like = f"%{search.strip()}%"
-        current_version = select(PromptVersion.id).where(
+        # 必须选 prompt_id：与 Prompt.id 比较（此前误选 PromptVersion.id，导致内容搜索永不命中）
+        version_match = select(PromptVersion.prompt_id).where(
             PromptVersion.prompt_id == Prompt.id,
             PromptVersion.positive_prompt.like(like),
         )
-        filters.append(or_(Prompt.name.like(like), Prompt.id.in_(current_version)))
+        filters.append(or_(Prompt.name.like(like), Prompt.id.in_(version_match)))
 
     total = session.execute(
         select(func.count()).select_from(Prompt).where(*filters),

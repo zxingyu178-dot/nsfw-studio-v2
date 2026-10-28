@@ -119,3 +119,14 @@ def test_list_filters(session):
 
     items, _ = prompt_service.list_prompts(session, favorite=True, archived=None)
     assert [p.id for p in items] == [p2.id]
+
+
+def test_search_matches_prompt_content(session):
+    """搜索必须命中 Prompt 正文：曾经误把 Prompt.id 与 PromptVersion.id 比较，导致正文搜索永不命中。"""
+    hit = prompt_service.create_prompt(
+        session, name="p-main", mode="full", positive_prompt="sunset beach with umbrella",
+    )
+    prompt_service.create_prompt(session, name="p-other", mode="full", positive_prompt="indoor studio")
+    items, total = prompt_service.list_prompts(session, search="umbrella")
+    assert total == 1
+    assert [p.id for p in items] == [hit.id]
