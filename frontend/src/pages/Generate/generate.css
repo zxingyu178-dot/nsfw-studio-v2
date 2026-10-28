@@ -1298,6 +1298,14 @@
   gap: var(--space-2);
 }
 .prompt-library__item { display: flex; align-items: stretch; gap: var(--space-2); }
+/* v0.37 P1-C：分页脚 */
+.prompt-library__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
 .prompt-library__pick {
   flex: 1;
   min-width: 0;
