@@ -94,10 +94,14 @@ def list_prompt_images(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     version_id: str | None = Query(default=None),
+    # v0.37 P1-A：服务端类型 / 审核状态筛选（保证 total 与翻页口径一致）
+    kind: Literal["original", "upscaled", "processed"] | None = Query(default=None),
+    status: Literal["NEW", "KEEP", "FAVORITE", "REJECT", "ARCHIVED"] | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> PromptImagesResponse:
     return prompt_image_service.list_prompt_images(
         session, prompt_id, limit=limit, offset=offset, version_id=version_id,
+        kind=kind, status=status,
     )
 
 

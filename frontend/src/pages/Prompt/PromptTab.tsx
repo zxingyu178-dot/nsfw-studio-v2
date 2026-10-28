@@ -35,6 +35,7 @@ import {
   type WorkbenchSnapshot,
 } from '../../types/workbench'
 import { PromptScoringDialog } from './PromptScoringDialog'
+import { PromptImagesDrawer } from './PromptImagesDrawer'
 import {
   clearPromptFilterPrefs,
   readPromptFilterPrefs,
@@ -411,6 +412,9 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // Phase 0.17.3：人工评分弹窗。
   const [scoringOpen, setScoringOpen] = useState(false)
+  // v0.37 P1-A：全部关联图片抽屉（服务端分页），+N 与“查看全部”都可打开。
+  const [imagesOpen, setImagesOpen] = useState(false)
+  const [imagesTotal, setImagesTotal] = useState<number | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   // DB 有 preview_image_id 但 rendition 缺失/损坏时，移除整个媒体区。
@@ -534,11 +538,28 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
             </button>
           ))}
           {(prompt.images_total ?? 0) > prompt.images.length && (
-            <span className="pp-card__gallery-more" aria-hidden="true">
-              +{(prompt.images_total ?? 0) - prompt.images.length}
-            </span>
+            <button
+              type="button"
+              className="pp-card__gallery-more"
+              onClick={() => setImagesOpen(true)}
+              title="查看该提示词的全部关联图片"
+              aria-label={`查看全部 ${prompt.images_total} 张关联图片`}
+            >
+              +{(imagesTotal ?? prompt.images_total ?? 0) - prompt.images.length}
+            </button>
           )}
         </div>
+      )}
+
+      {imagesOpen && (
+        <PromptImagesDrawer
+          promptId={prompt.id}
+          promptName={prompt.name}
+          onClose={(total) => {
+            if (total !== undefined) setImagesTotal(total)
+            setImagesOpen(false)
+          }}
+        />
       )}
 
       <footer className="pp-card__foot">

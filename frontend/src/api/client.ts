@@ -76,6 +76,7 @@ import type {
   ModuleCapabilitiesDTO,
   PromptDTO,
   PromptEvaluationDTO,
+  PromptImageDTO,
   PromptListParams,
   PromptMode,
   PromptStatus,
@@ -170,6 +171,19 @@ export const promptApi = {
   /** Phase 0.17.3：手动设置状态（保留/候选/淘汰）。 */
   setStatus(id: string, body: { status: PromptStatus; reason?: string }): Promise<PromptDTO> {
     return request(`/api/v1/prompts/${id}/status`, jsonInit('POST', body))
+  },
+  /** v0.37 P1-A：该 Prompt 的全部关联图片（服务端稳定排序 + 分页 + 类型/状态筛选）。 */
+  listImages(
+    id: string,
+    params: {
+      limit?: number
+      offset?: number
+      version_id?: string
+      kind?: 'original' | 'upscaled' | 'processed'
+      status?: ImageReviewStatus
+    } = {},
+  ): Promise<ListResponse<PromptImageDTO>> {
+    return request(`/api/v1/prompts/${id}/images${buildQuery(params)}`)
   },
 }
 
