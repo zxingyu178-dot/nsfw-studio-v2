@@ -2,6 +2,66 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.36.2] — 2026-10-28
+
+> Patch：把「队列不再被旧任务拖停」「重启可恢复」「AI 提交自动进提示词库」三条日用链路补齐；
+> 同时修复启动恢复导致的就绪超时与引擎孤儿任务占用。
+
+### Fixed
+
+- **队列：旧指纹任务不再暂停整队列（P0）**。`engine/errors.py` 新增任务级错误集合
+  `BINDING_NOT_FOUND` / `WORKFLOW_HASH_MISMATCH` / `BINDING_HASH_MISMATCH` /
+  `BINDING_IDENTITY_MISMATCH` 与 `is_job_scoped()`：这类「只有该 Job 的工作流身份过期」的错误
+  只把当前 Job 置 `FAILED`，不再暂停整条队列（其余任务可能使用其他版本）。
+  `queue_worker._systemic_failure(..., pause_queue=False)` 承接；系统级错误（离线 / OOM /
+  WORKFLOW_ERROR 等）仍按规范暂停队列。
+- **续跑：恢复前先校验工作流兼容性**。`job_service.resume_interrupted_jobs()` 按
+  `workflow_snapshot_json` 调 `resolve_workflow_modules()` 预校验（带缓存），不兼容的任务
+  以 `skipped[].reason=WORKFLOW_CHANGED` 返回，不再生成注定失败的续跑子 Job。
+- **启动恢复：只核对真正动过的槽位**。强杀后重启时，大量从未开始的排队槽位也是
+  `INTERRUPTED`；旧实现逐个向引擎/文件核对，曾导致启动超过载体 88 秒就绪窗口而启动失败。
+  现在只核对 `engine_job_id` / `output_image_id` / `started_at` 至少有一项的槽位。
+- **启动恢复：自动清理引擎孤儿任务**。强杀 Studio 时引擎里仍在跑的任务会占住显卡、堵住
+  后续任务；恢复时先给 `3 × 2s` 宽限让自然出完（出完照常导入），仍未结束则 `cancel_job`，
+  该任务按剩余张数重跑。
+
+### Added
+
+- **`POST /api/v1/prompts/ensure`**：按 `positive_prompt + negative_prompt` 查找或创建
+  Prompt（+v1），供调用方在提交前建档并拿到 `prompt_id / prompt_version_id`。
+- **Agent 提交自动入库并关联**：`scripts/agent_generate.py` 提交前先调用 `ensure` 把提示词
+  写入提示词库（同文复用，不产生重复条目），并把 `source_prompt_id` /
+  `source_prompt_version_id` 写入 Job 快照 → 生成图在提示词库按提示词可查；
+  `--no-prompt-library` 可关闭。`POST /api/v1/agent/jobs` 同样自动建档并回填关联。
+- **静默停止入口**：`scripts/stop_studio.ps1` + 桌面「NSFW Studio · 停止」；修复 `.vbs`
+  日志目录不存在时的静默失败。
+- **项目规则 §0「AI 快速操作卡」**：写清黑盒契约（其他 AI 只允许按卡启动/提交/停止，
+  禁止改代码、直连数据库、绕过队列），并把启动/引擎/暂停/生图/停止的命令固化为唯一入口。
+
+### Changed
+
+- **启动入口统一**：开发脚本不再抢占 8000 生产端口；桌面「NSFW Studio」→
+  `launch_studio_hidden.vbs` → `launch_studio.ps1` → ControlHub lifecycle CLI 为唯一链路。
+- **CLI 在前端版本差异下可降级**：服务端没有 `prompts/ensure` 时不阻断提交（仅不建档），
+  避免调用方因服务未升级而整体失败。
+
+### Tests
+
+- 新增 `tests/backend/test_startup_recovery_scope.py`：未开始槽位不扫描 / 已开始必须核对 /
+  孤儿任务超宽限取消 / 宽限内出完不取消。
+- `tests/backend/test_job_queue.py`：指纹错误不暂停队列；`test_phase3_pipeline.py`、
+  `test_phase4_contract.py` 同步调整原「会暂停」断言；`test_resume_interrupted.py` 增加
+  `WORKFLOW_CHANGED` 跳过用例。
+- 前端：`ResumeInterruptedPrompt`、`HistoryTab` 明确区分「旧任务已跳过」。
+
+### Known limitations
+
+- `POST /api/v1/queue/clear-stale` 仍会取消**全部**非终态 Job（含新排队任务），
+  运行中不要用它归档旧任务；定向归档旧指纹任务的能力尚未提供。
+- 启动链不启动 ComfyUI：引擎离线时提交会 `ENGINE_OFFLINE` 并暂停队列，需先启动引擎。
+- 桌面端两个服务控制台窗口来自 Windows Terminal（本机为默认终端），无法用脚本内隐藏
+  `ShowWindow` 消除；需改为「不创建控制台」的启动方式（待办）。
+
 ## [0.36.1] — 2026-10-27
 
 > Patch：`basic_generate` 工作流正式纳入 turbo8 LoRA 链，采样步数修正为 8。

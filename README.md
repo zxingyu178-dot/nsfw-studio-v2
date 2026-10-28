@@ -4,12 +4,16 @@
 
 本地 AI 图像生产平台（单机优先，Windows 本地运行，公司/家里经 GitHub 切换开发）。
 
-**当前版本：v0.16.0（2026-10-20）— Anima 动漫生图模块上线。**
+**当前版本：v0.36.2（2026-10-28）— 日用链路收口（队列 / 恢复 / AI 提交入库）。**
 
-v0.16.0 将 2026-10-10 完成并离线验收的 `anime_generate` 模块（Anima-2.9B 动漫 / 插画链）
-从 v0.9.0 归档分支移植到 v0.15.1 基线：与 `basic_generate` 同一标准契约，仅覆写能力身份，
-provider binding `comfyui/anime_generate/v1` 双指纹固化；核心执行逻辑（QueueWorker /
-PipelineExecutor / 单队列）零改动。上一个基线版本 v0.15.1 为 Workbench 4.0 + 真实进度收口。
+v0.36.2 收口三条日用链路：① 旧工作流指纹任务只让自身 `FAILED`、不再拖停整队列（续跑前先按
+Job 快照校验，过期任务返回 `WORKFLOW_CHANGED` 而不是生成注定失败的子 Job）；② 重启恢复只核对
+「真正动过」的槽位（修复启动超过 88 秒就绪窗口导致的启动失败），并自动清理 Studio 已不跟踪的
+引擎孤儿任务（先给 6 秒宽限，仍未完成才取消）；③ AI 提交（`scripts/agent_generate.py` /
+`POST /api/v1/agent/jobs`）自动把提示词写入提示词库并回填 `source_prompt_id`，生成的图在提示词库
+按提示词可查。上一版 v0.36.1 把 `basic_generate` 正式纳入 turbo8 LoRA 链（binding
+`defaults."6".steps = 8`）；v0.36.0 提供「重启后一键继续全部中断任务」；功能基线 v0.16.0 =
+Anima 动漫生图模块上线（与 `basic_generate` 同一标准契约，核心执行逻辑零改动）。
 
 v0.10–v0.15 把「能生成」推进到「日用」：Generate 工作台重构为 Canvas First 三栏 + 底部
 TaskDock（Layout 4.0），Glass 设计体系与可视化 Prompt 库；后端把进度事件分流为瞬态 SSE 与
