@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, promptApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
@@ -140,6 +140,25 @@ export function PromptTab() {
 
   const hasNonDefaultFilters = search.trim() !== '' || sort !== 'updated_desc' || status !== '' || scored !== undefined
 
+  // v0.37：搜索输入本地即时反馈 + 300ms 防抖才写 URL；避免每敲一个字整表重载。
+  const [searchInput, setSearchInput] = useState(search)
+  const searchTimer = useRef<number | null>(null)
+  useEffect(() => {
+    setSearchInput(search)
+  }, [search])
+  useEffect(() => () => {
+    if (searchTimer.current !== null) window.clearTimeout(searchTimer.current)
+  }, [])
+  function handleSearchInput(value: string): void {
+    setSearchInput(value)
+    if (searchTimer.current !== null) window.clearTimeout(searchTimer.current)
+    searchTimer.current = window.setTimeout(() => {
+      searchTimer.current = null
+      if (value.trim() === search.trim()) return
+      updateFilter('q', value)
+    }, 300)
+  }
+
   // Phase 0.12：取消后端默认 50 的隐形上限，改为 offset 分页 + 加载更多（数据全可达）。
   const fetcher = useCallback(
     (limit: number, offset: number) =>
@@ -165,11 +184,19 @@ export function PromptTab() {
     total,
     hasMore,
     initialLoading,
+    refreshing,
     loadingMore,
     error,
     reload,
     loadMore,
+    updateItem,
   } = useInfiniteList<PromptDTO>({ pageSize: 50, fetcher, reloadDeps: [fetcher] })
+
+  /** 收藏/评分等元数据变化：只改这一张卡片，不重载整表、不闪骨架屏。 */
+  const patchPrompt = useCallback(
+    (id: string, patch: Partial<PromptDTO>) => updateItem(id, patch),
+    [updateItem],
+  )
 
   function openInWorkbench(prompt: PromptDTO): void {
     setDrawer({ open: false, prompt: null })
@@ -195,8 +222,8 @@ export function PromptTab() {
       <div className="pp-toolbar">
         <Input
           placeholder="搜索名称 / Prompt 内容"
-          value={search}
-          onChange={(event) => updateFilter('q', event.target.value)}
+          value={searchInput}
+          onChange={(event) => handleSearchInput(event.target.value)}
         />
         <Checkbox
           label="显示已归档"
@@ -242,6 +269,7 @@ export function PromptTab() {
           )}
         </div>
         <span className="pp-toolbar__spacer" />
+        {refreshing && <span className="muted" role="status">刷新中…</span>}
         <Button variant="primary" onClick={() => setDrawer({ open: true, prompt: null })}>
           新建 Prompt
         </Button>
@@ -274,7 +302,8 @@ export function PromptTab() {
               onOpen={(p) => setDrawer({ open: true, prompt: p })}
               onUse={openInWorkbench}
               onArchive={archivePrompt}
-              onChanged={reload}
+              onPatched={(patch) => patchPrompt(prompt.id, patch)}
+              onError={(text) => setActionNotice({ kind: 'error', text })}
             />
           ))}
         </div>
@@ -359,8 +388,10 @@ interface PromptCardProps {
   onUse: (prompt: PromptDTO) => void
   /** 软删除并刷新外层列表。 */
   onArchive: (prompt: PromptDTO) => Promise<void>
-  /** 收藏等元数据变化后刷新外层列表。 */
-  onChanged: () => void
+  /** 收藏 / 评分等元数据就地更新（不整表重载）。 */
+  onPatched: (patch: Partial<PromptDTO>) => void
+  /** 失败时回到页面错误条，不静默吞掉。 */
+  onError: (text: string) => void
 }
 
 /**
@@ -369,10 +400,13 @@ interface PromptCardProps {
  * 无图不渲染媒体区；点图才打开预览，无图不弹错。
  * 不自动覆盖封面，封面仍在编辑抽屉里显式“设为 Prompt 封面”。
  */
-function PromptCard({ prompt, onOpen, onUse, onArchive, onChanged }: PromptCardProps) {
+function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: PromptCardProps) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [favBusy, setFavBusy] = useState(false)
+  // v0.37：收藏先乐观更新本地，失败再回滚；不再触发整表重载。
+  const [favorite, setFavorite] = useState(prompt.favorite)
+  useEffect(() => setFavorite(prompt.favorite), [prompt.favorite])
   // Phase 0.17.2：卡片下展示该提示词生成过的图；点击看大图。
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // Phase 0.17.3：人工评分弹窗。
@@ -402,10 +436,16 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onChanged }: PromptCardP
 
   async function handleToggleFavorite(): Promise<void> {
     if (favBusy) return
+    const next = !favorite
     setFavBusy(true)
+    setFavorite(next)
+    onPatched({ favorite: next })
     try {
-      await promptApi.updateMeta(prompt.id, { favorite: !prompt.favorite })
-      onChanged()
+      await promptApi.updateMeta(prompt.id, { favorite: next })
+    } catch (err) {
+      setFavorite(!next)
+      onPatched({ favorite: !next })
+      onError(err instanceof ApiRequestError ? err.message : '收藏失败')
     } finally {
       setFavBusy(false)
     }
@@ -567,7 +607,11 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onChanged }: PromptCardP
       )}
 
       {scoringOpen && (
-        <PromptScoringDialog prompt={prompt} onClose={() => setScoringOpen(false)} onSaved={onChanged} />
+        <PromptScoringDialog
+          prompt={prompt}
+          onClose={() => setScoringOpen(false)}
+          onSaved={(patch) => onPatched(patch)}
+        />
       )}
     </article>
   )

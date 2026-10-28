@@ -16,10 +16,17 @@ import {
   type PromptStatus,
 } from '../../types/workbench'
 
+/** v0.37：保存后只回传这次变化的字段，外层卡片原地更新，不整表重载。 */
+export interface PromptScorePatch {
+  latest_evaluation: PromptDTO['latest_evaluation']
+  status: PromptStatus
+  status_reason: string
+}
+
 interface PromptScoringDialogProps {
   prompt: PromptDTO
   onClose: () => void
-  onSaved: () => void
+  onSaved: (patch: PromptScorePatch) => void
 }
 
 const SCORE_MIN = 1
@@ -63,7 +70,7 @@ export function PromptScoringDialog({ prompt, onClose, onSaved }: PromptScoringD
     setBusy(true)
     setError(null)
     try {
-      await promptApi.createEvaluation(prompt.id, {
+      const evaluation = await promptApi.createEvaluation(prompt.id, {
         overall_score: overall,
         dimension_scores: { ...dimensions },
         notes,
@@ -72,7 +79,7 @@ export function PromptScoringDialog({ prompt, onClose, onSaved }: PromptScoringD
       if (status !== (prompt.status ?? 'candidate') || reason !== (prompt.status_reason ?? '')) {
         await promptApi.setStatus(prompt.id, { status, reason })
       }
-      onSaved()
+      onSaved({ latest_evaluation: evaluation, status, status_reason: reason })
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存评分失败')

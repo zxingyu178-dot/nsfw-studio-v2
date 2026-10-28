@@ -17,8 +17,15 @@ def _source_prompt_id():
     return func.json_extract(Job.workbench_snapshot_json, "$.source_prompt_id")
 
 
-def _prompt_image_links(*, prompt_id: str | None = None, version_id: str | None = None):
-    """合并 Job 快照与 V1 导入元数据中的提示词归属。"""
+def _prompt_image_links(
+    *, prompt_id: str | None = None, version_id: str | None = None,
+    prompt_ids: Sequence[str] | None = None,
+):
+    """合并 Job 快照与 V1 导入元数据中的提示词归属。
+
+    v0.37：``prompt_ids`` 会把过滤条件下推到 UNION 的每个分支——列表页只关心
+    当前页 50 个 Prompt，不能先全表展开所有图片再丢弃。
+    """
     job_prompt_id = _source_prompt_id()
     job_links = select(
         Image.id.label("image_id"),
@@ -28,6 +35,8 @@ def _prompt_image_links(*, prompt_id: str | None = None, version_id: str | None 
     ).join(Job, Image.job_id == Job.id)
     if prompt_id is not None:
         job_links = job_links.where(job_prompt_id == prompt_id)
+    if prompt_ids is not None:
+        job_links = job_links.where(job_prompt_id.in_(prompt_ids))
     if version_id is not None:
         job_links = job_links.where(
             func.json_extract(Job.workbench_snapshot_json, "$.source_prompt_version_id") == version_id,
@@ -45,6 +54,8 @@ def _prompt_image_links(*, prompt_id: str | None = None, version_id: str | None 
     ).select_from(Image).join(imported_prompt, true()).where(Image.source == "import")
     if prompt_id is not None:
         imported_links = imported_links.where(imported_prompt_id == prompt_id)
+    if prompt_ids is not None:
+        imported_links = imported_links.where(imported_prompt_id.in_(prompt_ids))
     if version_id is not None:
         imported_links = imported_links.where(
             func.json_extract(imported_prompt.c.value, "$.version_id") == version_id,
@@ -67,8 +78,13 @@ def _image_response(image: Image, job_status: str, module_id: str | None) -> Pro
 
 def list_prompt_images(
     session: Session, prompt_id: str, *, limit: int = 50, offset: int = 0,
-    version_id: str | None = None,
+    version_id: str | None = None, kind: str | None = None, status: str | None = None,
 ) -> PromptImagesResponse:
+    """单个 Prompt 的全部关联图片（服务端稳定排序 + 分页）。
+
+    v0.37 P1-A：``kind``（original/upscaled/processed）与 ``status``（NEW/KEEP/...）
+    在服务端过滤，保证 total 与翻页口径一致；不在前端对已加载子集做假筛选。
+    """
     prompt_service.get_prompt(session, prompt_id)
     if version_id is not None:
         prompt_service.get_version(session, prompt_id, version_id)
@@ -76,6 +92,10 @@ def list_prompt_images(
     query = select(Image, links.c.job_status, links.c.module_id).join(
         links, links.c.image_id == Image.id,
     )
+    if kind is not None:
+        query = query.where(Image.kind == kind)
+    if status is not None:
+        query = query.where(Image.status == status)
     total = session.scalar(select(func.count()).select_from(query.subquery()))
     rows = session.execute(query.order_by(Image.created_at.desc(), Image.id.desc()).limit(limit).offset(offset))
     return PromptImagesResponse(
@@ -84,8 +104,12 @@ def list_prompt_images(
 
 
 def _batch_images(session: Session, prompt_ids: list[str], limit: int):
-    """同一次 SQL 计算每组总数并截取最近 N 张；数据库不会返回全部历史图片。"""
-    links = _prompt_image_links()
+    """同一次 SQL 计算每组总数并截取最近 N 张；数据库不会返回全部历史图片。
+
+    过滤条件下推到 UNION 两分支（只计算当前页 Prompt 的图片），
+    避免 5000+ 图片时先全量展开再丢弃。
+    """
+    links = _prompt_image_links(prompt_ids=prompt_ids)
     ranked = select(
         Image.id.label("image_id"), links.c.prompt_id,
         links.c.job_status, links.c.module_id,
