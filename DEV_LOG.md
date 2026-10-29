@@ -571,3 +571,8 @@
   `git ls-remote` 验证通过。`gh` CLI 仍未安装（AIHome tool-registry 登记 not_found）。
 - 同日应用户要求将仓库由私有**转为公开**（https://github.com/zxingyu178-dot/nsfw-studio-v2），用途：三方 AI 审核代码。
   已确认仓库内无凭据/密钥（.gitignore 排除 .env，代码零硬编码秘密）。
+
+## 2026-10-29 审核桥 v2（候选）
+用户已授权补齐审核桥。独立codex/mobile-review-v2基于94aa003；不包含其他工作区的pose_generate改动。复用8767、配对、图片读取和原评分服务；新增持久增量事件、生成快照详情、按image_id审核、版本评分/图组/回执。0021迁移新增事件与幂等/已看记录，SQLite触发器捕捉桌面变更；升级前须用scripts/backup_db.py一致备份，回滚应恢复配套程序与数据库，不只换旧代码。
+定向证据：手机分支整合164项JVM通过；审核桥feed首轮3项RED后3通过；补桌面变更及nonce后6项通过；评分首轮4项RED；评分及既有评分首轮23通过1旧迁移切片断言失败，修正按迁移ID选基线后核心36项通过；v2评分/旧配对/旧审核/图片/路由白名单22项通过；追加迁移回填/部分DDL恢复及health2项通过。不是单轮全量通过。证据在MediaReview review_meta/nsfw-integration-20261029。
+当前未部署：8000为Studio0.37.0，Bridge STOPPED。下一步保留数据部署、通过既有Studio runtime/start启动8767，手机Alpha23同证书覆盖联调。不得伪称完成照片审核联通或自动审阅用户照片；真实写入测试优先隔离样本。

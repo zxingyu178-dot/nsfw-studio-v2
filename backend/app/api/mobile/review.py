@@ -34,6 +34,24 @@ class PositionRequest(BaseModel):
     item_index: int = Field(ge=0)
 
 
+class ImageDecisionRequest(BaseModel):
+    action: str | None = None
+    favorite: bool | None = None
+    expected_updated_at: str = Field(min_length=1, max_length=64)
+    client_request_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/images/{image_id}/decision", summary="按图片身份审核，原子幂等")
+def image_decision(image_id: str, body: ImageDecisionRequest,
+                   db: Session = Depends(get_session),
+                   device: MobileReviewDevice = Depends(get_current_device)) -> dict:
+    from app.core.errors import ValidationError
+    from app.services import mobile_v2_service
+    if body.action not in (None, "KEEP", "REJECT", "RESET") or (body.action is None and body.favorite is None):
+        raise ValidationError("请选择审核或收藏操作")
+    return mobile_v2_service.decide(db, device.id, image_id, body.model_dump())
+
+
 @router.post("/sessions", summary="创建冻结审核会话（Bearer）", status_code=201)
 def create_session(body: CreateSessionRequest,
                    session: Session = Depends(get_session),

@@ -8,7 +8,7 @@ GET /mobile/images/{image_id}/thumbnail | preview | original
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,22 @@ from app.storage.manager import StorageManager
 router = APIRouter(prefix="/mobile/images", tags=["mobile-images"])
 
 _PRIVATE_CACHE = "private, max-age=300"
+
+
+@router.get("/feed", summary="有序图片增量（Bearer）")
+def feed(cursor: str | None = Query(default=None, max_length=512),
+         limit: int = Query(default=50, ge=1, le=100),
+         session: Session = Depends(get_session),
+         _device: MobileReviewDevice = Depends(get_current_device)) -> dict:
+    from app.services import mobile_v2_service
+    return mobile_v2_service.feed(session, cursor, limit)
+
+
+@router.get("/{image_id}/details", summary="生成快照详情（Bearer）")
+def details(image_id: str, session: Session = Depends(get_session),
+            _device: MobileReviewDevice = Depends(get_current_device)) -> dict:
+    from app.services import mobile_v2_service
+    return mobile_v2_service.image_details(session, image_service.get_image(session, image_id))
 
 
 def _file_response(absolute, *, etag: str, media_type: str) -> FileResponse:

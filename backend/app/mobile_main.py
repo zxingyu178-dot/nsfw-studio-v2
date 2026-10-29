@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.mobile import images, pairing, review, system
+from app.api.mobile import images, pairing, review, system, prompts
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.database.base import make_engine, make_session_factory
@@ -99,7 +99,7 @@ async def lifespan(application: FastAPI):
     application.state._stop_event = stop_event
     application.state._parent_watch = asyncio.create_task(_parent_watch(stop_event))
 
-    logger.info("Mobile Review Bridge 启动 version=0.13.0 port=%s", settings.mobile_review.get("port", 8767))
+    logger.info("Mobile Review Bridge 启动 version=0.38.0 port=%s", settings.mobile_review.get("port", 8767))
     yield
 
     stop_event.set()
@@ -115,7 +115,7 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
     # 对外合同产物以已提交的 docs/integration/openapi-mobile-review.json 为准。
     application = FastAPI(
         title="NSFW Studio Mobile Review Bridge",
-        version="0.13.0",
+        version="0.38.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -210,6 +210,7 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(pairing.router)
     application.include_router(images.router)
     application.include_router(review.router)
+    application.include_router(prompts.router)
 
     return application
 

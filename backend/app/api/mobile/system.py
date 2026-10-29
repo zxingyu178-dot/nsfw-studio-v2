@@ -17,6 +17,11 @@ CAPABILITIES = [
     "thumbnail",
     "preview",
     "original",
+    "mobile_feed_v2",
+    "mobile_image_details_v2",
+    "mobile_image_decision_v2",
+    "mobile_prompt_review_v2",
+    "mobile_prompt_evaluation_v2",
 ]
 
 
@@ -26,7 +31,7 @@ def health(request: Request) -> dict:
     return {
         "status": "ok",
         "product": "nsfw-studio",
-        "version": "0.13.0",
-        "api_contract": 1,
+        "version": "0.38.0",
+        "api_contract": 2,
         "capabilities": list(CAPABILITIES),
     }

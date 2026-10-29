@@ -728,6 +728,27 @@ MIGRATIONS: tuple[Migration, ...] = (
 )
 
 
+MIGRATIONS += (
+    Migration(
+        migration_id="0021_mobile_v2_events",
+        version="0.38.0",
+        description="手机增量事件、游标身份与原子写回执；桌面写入同事务记录变更。",
+        statements=(
+            "CREATE TABLE IF NOT EXISTS mobile_feed_identity (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL)",
+            "INSERT OR IGNORE INTO mobile_feed_identity VALUES (1, lower(hex(randomblob(32))))",
+            "CREATE TABLE IF NOT EXISTS mobile_image_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, image_id TEXT NOT NULL, event TEXT NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS idx_mobile_events_image ON mobile_image_events(image_id, seq)",
+            "INSERT INTO mobile_image_events(image_id,event) SELECT id,'UPSERT' FROM images WHERE NOT EXISTS (SELECT 1 FROM mobile_image_events) ORDER BY created_at,id",
+            "CREATE TRIGGER IF NOT EXISTS mobile_image_insert AFTER INSERT ON images BEGIN INSERT INTO mobile_image_events(image_id,event) VALUES (NEW.id,'UPSERT'); END",
+            "CREATE TRIGGER IF NOT EXISTS mobile_image_update AFTER UPDATE ON images BEGIN INSERT INTO mobile_image_events(image_id,event) VALUES (NEW.id,'UPSERT'); END",
+            "CREATE TRIGGER IF NOT EXISTS mobile_image_delete AFTER DELETE ON images BEGIN INSERT INTO mobile_image_events(image_id,event) VALUES (OLD.id,'REMOVE'); END",
+            "CREATE TABLE IF NOT EXISTS mobile_write_receipts (device_id TEXT NOT NULL REFERENCES mobile_review_devices(id), request_id TEXT NOT NULL, operation TEXT NOT NULL, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL, PRIMARY KEY(device_id,request_id))",
+            "CREATE TABLE IF NOT EXISTS mobile_image_seen (device_id TEXT NOT NULL REFERENCES mobile_review_devices(id), image_id TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE, seen INTEGER NOT NULL, PRIMARY KEY(device_id,image_id))",
+        ),
+    ),
+)
+
+
 def applied_migration_ids(engine: Engine) -> set[str]:
     """返回已成功完成的迁移 ID 集合（只认 status='applied'）。"""
     with engine.connect() as conn:
