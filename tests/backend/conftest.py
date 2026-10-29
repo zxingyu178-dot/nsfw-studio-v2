@@ -19,7 +19,7 @@ for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"
     os.environ.pop(_k, None)
 os.environ["NO_PROXY"] = "*"
 
-_BLOCKED_HOSTS_PORTS = {(("127.0.0.1"), p) for p in (8188, 8000, 8767)}
+_BLOCKED_HOSTS_PORTS = {(("127.0.0.1"), p) for p in (8188, 8000, 8767, 8877)}
 
 
 def _install_httpx_guard() -> None:

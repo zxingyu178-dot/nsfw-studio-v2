@@ -10,7 +10,7 @@ import {
 import { Button } from '../../components/ui'
 
 /**
- * Phase 0.13 Settings「手机审核」区：局域网手机审核桥（独立端口 8767）管理面板。
+ * Phase 0.13 Settings「手机审核」区：局域网手机审核桥（独立端口 8877）管理面板。
  *
  * - 运行状态 / 启停：复用 mobileReviewApi（与 EngineRuntime 同款受管 runtime，不写第二套）；
  * - 配对码：6 位一次性码 + 10 分钟倒计时；
@@ -23,7 +23,7 @@ const STATE_LABEL: Record<MobileReviewRuntimeState, string> = {
   STARTING: '启动中…',
   RUNNING: '运行中',
   STOPPING: '停止中…',
-  PORT_CONFLICT: '端口 8767 被占用（非本程序进程）',
+  PORT_CONFLICT: '端口 8877 被占用（非本程序进程）',
   ERROR: '启动失败',
 }
 

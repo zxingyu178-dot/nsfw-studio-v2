@@ -20,7 +20,7 @@
 
 - 日常生图实例（部署实例）：`projects\nsfw-studio-v2-app`，分支 `deploy/app-instance`（跟踪 `origin/main`）。
 - 唯一启动链：桌面「NSFW Studio」→ `scripts\launch_studio_hidden.vbs` → `scripts\launch_studio.ps1` → ControlHub lifecycle CLI。
-- 端口：Studio `127.0.0.1:8000`、ComfyUI `8188`、Mobile Review `8767`（随 Studio 退出）。
+- 端口：Studio `127.0.0.1:8000`、ComfyUI `8188`、Mobile Review `8877`（随 Studio 退出）。
 - 业务数据：DataRoot `D:\NSFW-Studio-Data`（提示词 / 图片 / 人脸库 / 数据库）；工作流目录不含数据。
 - 当前工作流：`basic_generate/v1` 含 turbo8 LoRA，采样 8 步（binding `defaults."6".steps`）。
 
@@ -136,7 +136,7 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 
 - 扩展参考能力：IPAdapter 类、ControlNet、FaceID、InstantID、局部重绘、蒙版编辑器、视频；
 - 豆包正式接入 / Agent 正式接入 / 全局搜索；
-- 手机端 App（局域网 Mobile Review Bridge 8767 是既有子运行时，不扩展为新端）；
+- 手机端 App（局域网 Mobile Review Bridge 8877 是既有子运行时，不扩展为新端）；
 - 多 GPU / 多 Worker / 多队列（系统永远只有一个逻辑队列 + 一个 Worker）。
 
 生成链路约束：
@@ -197,7 +197,7 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 - **生产运行时接入 ControlHub**（v0.14 起）：`nsfw-studio-v2`(8000) 与 `comfyui`(8188) 是
   独立已批准对象，生命周期只走官方 lifecycle CLI（`python -m control_hub.lifecycle_cli start|stop <id>
   --data-root <controlhub-data>`）；应用内「启动/停止生图引擎」只作用于 `comfyui`，
-  **绝不**对 `nsfw-studio-v2` 执行 start/stop。8767 Mobile Review Bridge 是随 Studio 退出的
+  **绝不**对 `nsfw-studio-v2` 执行 start/stop。8877 Mobile Review Bridge 是随 Studio 退出的
   子运行时，不是独立 ControlHub 对象。
 - 部署/日用实例 = `projects/nsfw-studio-v2-app`（worktree，分支 `deploy/app-instance`
   跟踪 `origin/main`）；开发主工作树 = `projects/nsfw-studio-v2`（main/develop）。
