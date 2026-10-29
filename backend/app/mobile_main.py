@@ -2,7 +2,7 @@
 
 安全红线（P0）：
 - 这是一个**独立** FastAPI app，由 uvicorn 以 ``app.mobile_main:app`` 拉起，监听
-  独立端口 8767（host 0.0.0.0，供同网段手机访问）；
+  独立端口 8877（host 0.0.0.0，供同网段手机访问）；
 - **只 include** mobile/system、mobile/pairing、mobile/images、mobile/review；
 - **禁止** include jobs / engine_runtime / prompts / recipes / assets / cleanup /
   modules / desktop SPA（route table 守卫测试会断言这些不存在）；
@@ -99,7 +99,7 @@ async def lifespan(application: FastAPI):
     application.state._stop_event = stop_event
     application.state._parent_watch = asyncio.create_task(_parent_watch(stop_event))
 
-    logger.info("Mobile Review Bridge 启动 version=0.38.0 port=%s", settings.mobile_review.get("port", 8767))
+    logger.info("Mobile Review Bridge 启动 version=0.38.0 port=%s", settings.mobile_review.get("port", 8877))
     yield
 
     stop_event.set()
@@ -111,7 +111,7 @@ async def lifespan(application: FastAPI):
 
 def create_mobile_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
-    # 安全硬化 O2：8767 在 LAN 暴露，关闭 /docs /redoc /openapi.json；
+    # 安全硬化 O2：8877 在 LAN 暴露，关闭 /docs /redoc /openapi.json；
     # 对外合同产物以已提交的 docs/integration/openapi-mobile-review.json 为准。
     application = FastAPI(
         title="NSFW Studio Mobile Review Bridge",

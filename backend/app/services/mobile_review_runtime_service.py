@@ -3,11 +3,11 @@
 复用 EngineRuntimeService 的成熟思路，但只管**自己启动的** Bridge 进程：
 
 - 状态机：STOPPED / STARTING / RUNNING / STOPPING / PORT_CONFLICT / ERROR；
-- 固定端口 8767，**禁止自动换口**；8000 始终 loopback，本服务绝不触碰；
+- 固定端口 8877，**禁止自动换口**；8000 始终 loopback，本服务绝不触碰；
 - **进程归属是硬安全**：只停止 Studio 自己启动的 PID，严禁 ``taskkill /IM python.exe``；
 - **Orphan 防护**：启动时记录父 PID（主 Studio）并经环境变量传给 Bridge，
   主 Studio 退出后 Bridge 自行退出（见 mobile_main 的 parent-watch）；
-- 启动命令固定：``uvicorn app.mobile_main:app --host 0.0.0.0 --port 8767``。
+- 启动命令固定：``uvicorn app.mobile_main:app --host 0.0.0.0 --port 8877``。
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from app.core.errors import ConflictError
 logger = logging.getLogger(__name__)
 
 DEFAULT_HOST = "0.0.0.0"
-FIXED_PORT = 8767
+FIXED_PORT = 8877
 
 STATE_STOPPED = "STOPPED"
 STATE_STARTING = "STARTING"
@@ -55,7 +55,7 @@ class BridgeNotOwned(ConflictError):
 class BridgePortConflict(ConflictError):
     status_code = 409
     code = "BRIDGE_PORT_CONFLICT"
-    message = "8767 已被非 Bridge 进程占用"
+    message = "8877 已被非 Bridge 进程占用"
 
 
 @dataclass

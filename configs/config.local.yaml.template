@@ -46,13 +46,13 @@ controlhub:
   data_root: <LOCAL_ONLY path/to/AIHomeControlHub/data>
 
 # Mobile Review Bridge（局域网手机审核桥，Phase 0.13）——仅本机需要手机审核时放开。
-# 安全红线：8000 始终只听 127.0.0.1；本 Bridge 独立 8767，只暴露审核相关 API。
+# 安全红线：8000 始终只听 127.0.0.1；本 Bridge 独立 8877，只暴露审核相关 API。
 # 真机才把 enabled 置为 true；host 通常绑定 0.0.0.0 以便同网段手机访问，
 # 但务必只在可信局域网开启，不要暴露到公网。
 mobile_review:
   enabled: <LOCAL_ONLY true|false>
   host: <LOCAL_ONLY 0.0.0.0>
-  port: 8767
+  port: 8877
 
 # Agent / AI 提交端点（Phase 0.34）：默认关闭；配置 token 后才启用 POST /api/v1/agent/jobs。
 # token 只写本机 config.local.yaml（gitignore），不要提交、不要写进日志/截图。

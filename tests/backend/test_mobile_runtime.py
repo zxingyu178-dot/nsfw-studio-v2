@@ -14,7 +14,7 @@ from app.services.mobile_review_runtime_service import (
 def _make_service(tmp_path: Path, **overrides) -> MobileReviewRuntimeService:
     settings = SimpleNamespace(
         storage=SimpleNamespace(data_root=tmp_path / "data"),
-        mobile_review={"enabled": True, "host": "127.0.0.1", "port": 8767, **overrides},
+        mobile_review={"enabled": True, "host": "127.0.0.1", "port": 8877, **overrides},
     )
     return MobileReviewRuntimeService(settings)
 
