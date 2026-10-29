@@ -1,0 +1,43 @@
+# pose_generate v1 — ComfyUI Provider Binding
+#
+# 来源：Qwen-Image 2.1 作者配方（Arekejoker/qwen21-nsfw-pose-skill）的路线③姿势迁移：
+#   角色参考图 + VNCCS 姿势人偶预览图 → TextEncodeQwenImage21 两张参考图
+#   → KSampler(er_sde + beta) → VAEDecode → SaveImage
+#
+# 与 basic_generate/v1 的差异：
+# - 不叠加 turbo8 / f23gg；本模块按 25 步 CFG2.5 的 er_sde/beta 配方走；
+# - 两条 LoRA：femaledVaginus（NSFW 质感）+ VNCCS PoseStudio（姿势跟随）；
+# - 不使用 VNCCS_PoseStudio 节点（该节点非 headless），姿势图由 Studio 上传预览 PNG。
+#
+# 新 binding 首次投入真实 Job 后即 immutable；后续变更必须新建 v2 目录。
+
+binding_version: v1
+module: pose_generate
+provider: comfyui
+workflow_file: workflow.json
+
+save_image_node: "12"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（图片均为已上传的引擎侧引用名）
+inputs:
+  pose_image:      {node: "4", field: "image"}
+  input_image:     {node: "5", field: "image"}
+  positive_prompt: {node: "8", field: "prompt"}
+  negative_prompt: {node: "8", field: "negative_prompt"}
+  resolution:      {node: "8", field: "resolution"}
+  width:           {node: "9", field: "width"}
+  height:          {node: "9", field: "height"}
+  seed:            {node: "10", field: "seed"}
+
+# 6GB 实用默认（作者原配方为 1152×1728 / 50 步，可在工作台手动改大）
+defaults:
+  "8": {resolution: 1024}
+  "10": {steps: 25, cfg: 2.5, sampler_name: er_sde, scheduler: beta, denoise: 1.0}
+
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  pose_mode: vnccs_preview_reference
+  output_size: explicit

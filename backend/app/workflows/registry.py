@@ -13,6 +13,7 @@ from app.workflows.base import WorkflowModule
 from app.workflows.anime_generate import AnimeGenerateModule
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
+from app.workflows.pose_generate import PoseGenerateModule
 from app.workflows.reference_generate import ReferenceGenerateModule
 from app.workflows.upscale import UpscaleModule
 
@@ -59,5 +60,5 @@ def default_registry() -> ModuleRegistry:
     """
     return ModuleRegistry([
         BasicGenerateModule(), AnimeGenerateModule(), Img2ImgModule(),
-        ReferenceGenerateModule(), UpscaleModule(),
+        ReferenceGenerateModule(), PoseGenerateModule(), UpscaleModule(),
     ])
