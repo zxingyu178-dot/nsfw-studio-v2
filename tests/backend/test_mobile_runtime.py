@@ -23,6 +23,22 @@ def _healthy_probe():
     return {"product": "nsfw-studio", "status": "ok", "version": "0.13.0"}
 
 
+def test_cold_readiness_does_not_kill_owned_bridge_after_thirty_seconds(tmp_path, monkeypatch):
+    from app.services import mobile_review_runtime_service as module
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(module.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    svc = _make_service(tmp_path)
+    monkeypatch.setattr(svc, "_spawn", lambda: 4242)
+    monkeypatch.setattr(svc, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(svc, "_probe", lambda: _healthy_probe() if svc._pid and clock[0] >= 40 else None)
+    terminated = []
+    monkeypatch.setattr(svc, "_terminate_tree", lambda pid: terminated.append(pid))
+    assert svc.start().state == "RUNNING"
+    assert terminated == []
+    assert 40 <= clock[0] <= 120
+
+
 def test_start_success(tmp_path, monkeypatch):
     svc = _make_service(tmp_path)
     spawned: list[int] = []
