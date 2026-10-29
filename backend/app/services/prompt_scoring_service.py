@@ -11,7 +11,7 @@ from app.services import prompt_service
 
 
 def create_evaluation(
-    session: Session, prompt_id: str, request: PromptEvaluationCreateRequest,
+    session: Session, prompt_id: str, request: PromptEvaluationCreateRequest, *, commit: bool = True,
 ) -> PromptEvaluation:
     prompt_service.get_prompt(session, prompt_id)
     if request.prompt_version_id is not None:
@@ -24,7 +24,10 @@ def create_evaluation(
     )
     try:
         session.add(evaluation)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except Exception:
         session.rollback()
         raise

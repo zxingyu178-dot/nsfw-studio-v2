@@ -15,8 +15,8 @@ def test_health_open_and_contract(mobile_client):
     assert body["success"] is True
     data = body["data"]
     assert data["product"] == "nsfw-studio"
-    assert data["version"] == "0.13.0"
-    assert data["api_contract"] == 1
+    assert data["version"] == "0.38.0"
+    assert data["api_contract"] == 2
     for cap in ("image_review", "review_session", "favorite", "thumbnail", "preview", "original"):
         assert cap in data["capabilities"]
     # 绝不包含高危能力

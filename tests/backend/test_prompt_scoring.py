@@ -172,13 +172,13 @@ def test_migration_existing_rows_and_constraints(monkeypatch):
     all_migrations = migrations.MIGRATIONS
     try:
         with monkeypatch.context() as patch:
-            patch.setattr(migrations, "MIGRATIONS", all_migrations[:-2])
+            patch.setattr(migrations, "MIGRATIONS", tuple(item for item in all_migrations if item.migration_id < "0019"))
             init_database(engine)
         with engine.begin() as conn:
             conn.execute(text("INSERT INTO prompts (id, name, created_at, updated_at) "
                               "VALUES ('prm_legacy', '历史提示词', '2026-01-01', '2026-01-01')"))
         assert [item.migration_id for item in init_database(engine)] == [
-            "0019_prompt_scoring", "0020_review_session_end_reason",
+            "0019_prompt_scoring", "0020_review_session_end_reason", "0021_mobile_v2_events",
         ]
         assert init_database(engine) == []
         with engine.connect() as conn:
