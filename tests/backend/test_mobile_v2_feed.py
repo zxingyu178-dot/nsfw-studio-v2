@@ -82,3 +82,27 @@ def test_image_decision_favorite_only_and_nonce_replay(mobile_client, session_fa
     altered = mobile_client.post(url, json={**request, "favorite": False}, headers=headers)
     assert altered.status_code == 409
     assert altered.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+
+def test_feed_select_count_is_bounded_by_batches(session_factory, make_mobile_image):
+    from sqlalchemy import event
+    from app.services import mobile_v2_service
+    make_mobile_image(20)
+    counts = []
+    for limit in (5, 20):
+        statements = []
+        with session_factory() as session:
+            engine = session.get_bind()
+            def capture(conn, cursor, statement, parameters, context, executemany):
+                if statement.lstrip().upper().startswith('SELECT'):
+                    statements.append(statement)
+            event.listen(engine, 'before_cursor_execute', capture)
+            try:
+                page = mobile_v2_service.feed(session, None, limit)
+            finally:
+                event.remove(engine, 'before_cursor_execute', capture)
+            assert len(page['items']) == limit
+        counts.append(len(statements))
+    print(f'Feed SELECT counts for 5/20 images: {counts}')
+    assert max(counts) <= 8, f'SELECT counts for 5/20 images: {counts}'
+    assert counts[1] <= counts[0] + 1, f'Query count grows with page size: {counts}'

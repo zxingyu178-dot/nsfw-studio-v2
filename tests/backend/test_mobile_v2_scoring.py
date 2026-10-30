@@ -96,6 +96,9 @@ def test_linked_details_and_group_use_generated_version(mobile_client, session_f
     assert details["positive_prompt"] == "historical generation"
     assert details["negative_prompt"] == ""
     assert details["link_state"] == "EXACT" and details["prompt_version_id"] == version
+    feed = mobile_client.get("/mobile/images/feed", headers=headers).json()["data"]
+    linked = [row for row in feed["items"] if row["image_id"] == image.id]
+    assert linked and all(row["prompt"] == {"prompt_id": prompt, "prompt_version_id": version, "link_state": "EXACT"} for row in linked)
     group = mobile_client.get(f"/mobile/prompts/{prompt}/images", params={"version_id": version}, headers=headers).json()["data"]
     assert group["total"] == 1 and group["items"][0]["image_id"] == image.id
     summary = mobile_client.get(f"/mobile/prompts/{prompt}/review-summary", params={"version_id": version}, headers=headers).json()["data"]

@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 
-from sqlalchemy import text
+from sqlalchemy import text, select, bindparam
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -90,15 +90,34 @@ def feed(session: Session, cursor: str | None, limit: int) -> dict:
         "SELECT seq,image_id,event FROM mobile_image_events WHERE seq>:seq ORDER BY seq LIMIT :limit"
     ), {"seq": position, "limit": limit + 1}).mappings().all()
     selected = events[:limit]
+    ids = {event["image_id"] for event in selected}
+    images = {image.id: image for image in session.scalars(select(Image).where(Image.id.in_(ids)))} if ids else {}
+    revisions = dict(session.execute(text(
+        "SELECT image_id,max(seq) FROM mobile_image_events WHERE image_id IN :ids GROUP BY image_id"
+    ).bindparams(bindparam("ids", expanding=True)), {"ids": list(ids)}).all()) if ids else {}
+    job_ids = {image.job_id for image in images.values() if image.job_id}
+    jobs = {job.id: job for job in session.scalars(select(Job).where(Job.id.in_(job_ids)))} if job_ids else {}
+    snapshots = {key: _json(job.workbench_snapshot_json) for key, job in jobs.items()}
+    prompt_ids = {snap["source_prompt_id"] for snap in snapshots.values() if isinstance(snap.get("source_prompt_id"), str)}
+    valid_prompts = set(session.scalars(select(Prompt.id).where(Prompt.id.in_(prompt_ids)))) if prompt_ids else set()
+    version_ids = {snap["source_prompt_version_id"] for snap in snapshots.values() if isinstance(snap.get("source_prompt_version_id"), str)}
+    versions = dict(session.execute(select(PromptVersion.id, PromptVersion.prompt_id).where(PromptVersion.id.in_(version_ids))).all()) if version_ids else {}
     items = []
     for event in selected:
-        image = session.get(Image, event["image_id"])
+        image = images.get(event["image_id"])
         if image is None:
             item = {"image_id": event["image_id"], "event": "REMOVE", "revision": str(event["seq"])}
         else:
-            details = image_details(session, image)
-            item = {**_image_summary(image), "event": "UPSERT", "revision": details["revision"],
-                "prompt": {key: details[key] for key in ("prompt_id", "prompt_version_id", "link_state")}}
+            snapshot = snapshots.get(image.job_id, {})
+            prompt_id = snapshot.get("source_prompt_id")
+            version_id = snapshot.get("source_prompt_version_id")
+            if not isinstance(prompt_id, str) or prompt_id not in valid_prompts:
+                prompt_id, version_id = None, None
+            if not isinstance(version_id, str) or versions.get(version_id) != prompt_id:
+                version_id = None
+            item = {**_image_summary(image), "event": "UPSERT", "revision": str(revisions[image.id]),
+                "prompt": {"prompt_id": prompt_id, "prompt_version_id": version_id,
+                           "link_state": "EXACT" if version_id else "UNRESOLVED" if prompt_id else "UNLINKED"}}
         items.append(item)
     next_position = selected[-1]["seq"] if selected else position
     return {"items": items, "next_cursor": _cursor(session, next_position),
