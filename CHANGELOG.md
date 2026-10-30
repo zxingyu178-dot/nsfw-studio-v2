@@ -814,7 +814,7 @@
 
 - **`anime_generate` 模块（第五个正式 WorkflowModule）**：动漫 / 插画文生图，模型为
   **Anima-2.9B（preview-v1 int8）** + Qwen3-0.6B 文本编码器 + Qwen Image VAE
-  （本机已就位，零下载接入；合计 4.22 GB，加载与显存压力低于 Qwen-Image 2.1 写实链）；
+  （本机已就位，零下载接入；模型文件合计 4.22 GB，**实际显存/耗时未验证**，不得据此宣称轻量/快速）；
 - provider binding `workflows/providers/comfyui/anime_generate/v1/`
   （按 ComfyUI 官方蓝图 `Text to Image (Anima)`：UNETLoader + CLIPTextEncode×2 +
   KSampler 30 步 / cfg 4 / er_sde / simple + VAEDecode；workflow_hash / binding_hash 双指纹固化）；

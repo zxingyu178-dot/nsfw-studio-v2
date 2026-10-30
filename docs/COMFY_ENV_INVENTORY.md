@@ -31,15 +31,18 @@
 
 | 类型 | 路径 | 文件 |
 | --- | --- | --- |
-| diffusion_models | `C:/ComfyUI_models/diffusion_models/` | `qwen-image-2.1-UC-Q4_0.gguf`（Qwen-Image 2.1 UC GGUF Q4_0 量化） |
-| text_encoders | `C:/ComfyUI_models/text_encoders/` | `qwen3vl_8b_w4a8.safetensors`（Qwen3-VL 8B W4A8） |
-| vae | `C:/ComfyUI_models/vae/` | `qwen_image_2.1_vae_bf16.safetensors` |
+| diffusion_models | `C:/ComfyUI_models/diffusion_models/` | `qwen-image-2.1-UC-Q4_0.gguf`（Qwen-Image 2.1 UC GGUF Q4_0 量化，4.15 GB） |
+| text_encoders | `C:/ComfyUI_models/text_encoders/` | `qwen3vl_8b_w4a8.safetensors`（Qwen3-VL 8B W4A8，6.31 GB） |
+| vae | `C:/ComfyUI_models/vae/` | `qwen_image_2.1_vae_bf16.safetensors`（675 MB） |
+| diffusion_models | `app/models/diffusion_models/` | `Anima-2.9B-preview-v1_int8_convrot.safetensors`（2.87 GB，动漫链） |
+| text_encoders | `app/models/text_encoders/` | `qwen_3_06b_base.safetensors`（1.11 GB，Anima 文本编码器） |
+| vae | `app/models/vae/` | `qwen_image_vae.safetensors`（0.24 GB，Anima 链） |
 
 其他（`app/models/` 下）：
 
 | 类型 | 文件 |
 | --- | --- |
-| loras | DetailTweaker（×3 变体）、cunnyfunky_style、ntc_extremely-detailed |
+| loras | `qwen_image_2.1_turbo8_lora.safetensors`（913 MB，basic_generate 现役）、`f23gg_nsfw_qwen21.safetensors`（159 MB，basic_generate 现役）、`VNCCS_QI2_PoseStudioV1.1.safetensors`（159 MB，pose 实验）、`qwen2_1-femaledVaginus-nsfw-v1_3-fine_L22-31.safetensors`（637,587,392 B，pose 实验）；另有 DetailTweaker（×3）、cunnyfunky_style、ntc_*、shijinv_realistic（SD 世代，无配套底模） |
 | vae | seedvr2_ema_vae(.pth/_fp16)（SeedVR2 放大链用） |
 | upscale_models | 4x-UltraSharp.pth |
 | checkpoints | `Counterfeit-V3.0_fix_fp16.safetensors.bad`（**损坏/弃用标记**，无可用 SD checkpoint） |
@@ -52,6 +55,7 @@
 
 - ComfyUI-GGUF（`UnetLoaderGGUF` 依赖，Qwen GGUF 加载必需）
 - ComfyUI-Manager
+- ComfyUI_VNCCS_Utils（VNCCS PoseStudio / 姿势库；pose 实验已下线，正式模块不使用）
 - ComfyUI-OpenPose-Studio
 - ComfyUI-SeedVR2-1.4B（SeedVR2 高清/修复链依赖，Phase 2 不使用）
 - cg-image-picker
@@ -78,5 +82,11 @@ comfyui:
 
 ## 7. 已知工作流（见 WORKFLOW_INVENTORY.md）
 
-8 个用户工作流 + nightbatch 的 API 构造式工作流（已真实批量跑通 20+ 张）。
-`basic_generate` 基础选型：**nightbatch 同款 Qwen-Image 2.1 UC 链**。
+正式模块 5 个：`basic_generate` / `img2img` / `reference_generate` / `anime_generate` / `upscale`。
+`basic_generate` 基础选型：**nightbatch 同款 Qwen-Image 2.1 UC 链**，2026-10-27 起叠加
+Turbo8 + f23gg 双 LoRA、8 步。
+`pose_generate` 双 LoRA 实验已于 2026-10-30 下线（6GB/16GB OOM），代码归档到
+`experiment/pose-generate-20261030`，不属于正式模块。
+
+> 说明：模型文件大小只是磁盘事实，不等于显存/内存峰值或执行耗时。真实 Gate 记录见
+> `docs/WORKFLOW_TECH_DEBT.md` 与各 binding README。

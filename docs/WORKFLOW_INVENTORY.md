@@ -1,64 +1,67 @@
 # WORKFLOW_INVENTORY — 本机 ComfyUI 工作流调查
 
-> 调查时间：2026-10-07（Phase 2B，规范 §二十五、§二十六、§二十八）。只读调查，未修改原工作流。
+> 更新：2026-10-30（W0 工作流治理）。本文只记录真实存在的 binding、模型与性能事实；
+> 提交标准见 `docs/WORKFLOW_SUBMISSION_STANDARD.md`，技术债见 `docs/WORKFLOW_TECH_DEBT.md`。
 
-## 1. 用户工作流（`projects/comfyui/app/user/default/workflows/`）
+## 1. 正式 binding 清单（5 个）
 
-| 文件 | 说明（据名称/内容） | 状态 |
-| --- | --- | --- |
-| `official-sd15` | SD1.5 官方示例链 | 无可用 checkpoint（唯一 ckpt 带 .bad 标记），**当前不可跑** |
-| `qwen21-UC-文生图.json` | Qwen-Image 2.1 UC 文生图 | 与 nightbatch API 链同源，**真实跑通** |
-| `sdxl-写实年轻化.json` | SDXL 写实 | 依赖 SDXL checkpoint，当前不可跑 |
-| `sdxl-图生图.json` | SDXL 图生图 | 同上 + 本阶段禁止图生图 |
-| `zxy_optimized_workflow.json` / `zxy_original_backup_workflow.json` | 用户自调链 | 未验证 |
-| `千问-4x审核放大.json` / `千问-批量审核4x可视化.json` | Qwen + 4x-UltraSharp 审核放大 | 放大链，Phase 2 禁止 |
+| Module | Binding | 模型链 | 采样默认 | 依赖 | 性能状态 |
+| --- | --- | --- | --- | --- | --- |
+| `basic_generate` | `comfyui/basic_generate/v1` | Qwen-Image 2.1 UC Q4 GGUF + Qwen3-VL 8B（CPU）+ VAE + Turbo8 + f23gg | 8 步 / cfg 1.0 / euler-simple / 1024 | ComfyUI-GGUF、TextEncodeQwenImage21、LoraLoader | 日用主力；W0 未重新测 G4 |
+| `img2img` | `comfyui/img2img/v1` | 同三件套；LoadImage → VAEEncode → KSampler | 25 步 / cfg 1.0 / denoise 0.8 | 同上 | 768×768 真实可用；0.8 采样约 496s、0.55 约 310s（不含排队） |
+| `reference_generate` | `comfyui/reference_generate/v1` | 同三件套 + TextEncodeQwenImage21 参考 latents | 25 步 / cfg 1.0 / resolution 1024 | 同上 | 已验证 640/20 步单张 60+ 分钟；1024/25 未验证 |
+| `anime_generate` | `comfyui/anime_generate/v1` | Anima-2.9B INT8 + Qwen3-0.6B + VAE | 30 步 / cfg 4.0 / er_sde-simple | UNETLoader、CLIPTextEncode、KSampler | **待真实验收**；4.22GB 仅是磁盘大小 |
+| `upscale` | `comfyui/upscale/v1` | 4x-UltraSharp | 4x 放大 | UpscaleModelLoader、ImageUpscaleWithModel | 轻量优先；SeedVR2 暂不接入 |
 
-## 2. API 构造式工作流（`projects/nightbatch/night_runner.py`，已验证）
+`basic_generate` 版本特例：单目录 `v1/`，不新建 v2，版本靠 Git 历史（2026-10-27 用户确认）。
+其它已投入使用 binding 修改必须新建 v2。
 
-nightbatch 夜间批量写真（已登记 Registry，真实跑通 20+ 张/晚）使用的文生图链，
-即 `basic_generate` 的选型基础（规范 §二十八：不自行设计，选现有可跑的）：
+## 2. basic_generate 真实链（2026-10-27 起）
 
 ```text
-10 UnetLoaderGGUF        unet_name = qwen-image-2.1-UC-Q4_0.gguf
-11 CLIPLoader            clip_name = qwen3vl_8b_w4a8.safetensors, type=qwen_image, device=cpu
-12 VAELoader             vae_name  = qwen_image_2.1_vae_bf16.safetensors
-13 TextEncodeQwenImage21 clip=[11,0], prompt, negative_prompt, resolution=1024
-22 EmptyLatentImage      width, height, batch_size=1
-23 KSampler              model=[10,0], seed, steps, cfg, euler/simple, positive=[13,0],
-                         negative=[13,1], latent=[22,0], denoise=1.0
-24 VAEDecode             samples=[23,0], vae=[12,0]
-25 SaveImage             images=[24,0], filename_prefix=NSFWStudio/<date>
+1 UnetLoaderGGUF        qwen-image-2.1-UC-Q4_0.gguf
+2 CLIPLoader            qwen3vl_8b_w4a8.safetensors, type=qwen_image, device=cpu
+3 VAELoader             qwen_image_2.1_vae_bf16.safetensors
+4 TextEncodeQwenImage21 clip=[2,0], prompt, negative_prompt, resolution=1024
+5 EmptyLatentImage      width, height, batch_size=1
+9 LoraLoader            model=[1,0], clip=[2,0], turbo8, model/clip 1.0
+10 LoraLoader           model=[9,0], clip=[9,1], f23gg, model 0.8 / clip 1.0
+6 KSampler              model=[10,0], seed, steps=8, cfg=1.0, euler/simple,
+                        positive=[4,0], negative=[4,1], latent=[5,0], denoise=1.0
+7 VAEDecode             samples=[6,0], vae=[3,0]
+8 SaveImage             images=[7,0], filename_prefix=NSFWStudio/<job>/<stage>/<item>
 ```
 
-### 输入参数（= basic_generate 标准输入）
+注入点见 `binding.yaml`：positive/negative → 节点 4，宽高 → 节点 5，seed → 节点 6。
+binding 的 `defaults."6".steps=8` 覆盖 workflow.json 节点值；**不得恢复旧的 25 步说明**。
 
-| 参数 | 注入位置 | 说明 |
+## 3. 用户工作流（`projects/comfyui/app/user/default/workflows/`）
+
+| 文件 | 说明 | 状态 |
 | --- | --- | --- |
-| positive_prompt | 节点 13 `prompt` | |
-| negative_prompt | 节点 13 `negative_prompt` | **本链支持 Negative**（`supports_negative_prompt = true`） |
-| width / height | 节点 22 | 生成时校验（Qwen 支持 1024 档；分辨率由 TextEncodeQwenImage21.resolution 配合） |
-| seed | 节点 23 `seed` | 范围按 KSampler/ComfyUI 惯例 0 ~ 2^31-1（nightbatch 同款取模） |
-| steps / cfg | 节点 23 | 默认 steps=25、cfg=1.0（nightbatch 实测值） |
+| `official-sd15` | SD1.5 官方示例链 | 无可用 checkpoint（唯一 ckpt 带 .bad），不可跑 |
+| `qwen21-UC-文生图.json` | Qwen-Image 2.1 UC 文生图 | 与 nightbatch API 链同源，真实跑通 |
+| `sdxl-写实年轻化.json` | SDXL 写实 | 依赖 SDXL checkpoint，当前不可跑 |
+| `sdxl-图生图.json` | SDXL 图生图 | 同上，不可跑 |
+| `zxy_optimized_workflow.json` / `zxy_original_backup_workflow.json` | 用户自调链 | 引用底模/ControlNet 全部缺失，保留但不可运行 |
+| `千问-4x审核放大.json` / `千问-批量审核4x可视化.json` | Qwen + 4x-UltraSharp | upscale/v1 同源，可运行 |
 
-### 输出节点
-
-- 节点 25 `SaveImage`：`filename_prefix` 可注入（Studio 用 `NSFWStudio/<date>/` 前缀隔离输出），
-  产物落在 `app/output/<prefix>_xxx.png`；history API 可按 prompt_id 取回文件名。
-
-## 3. 依赖核对
+## 4. 依赖与模型事实
 
 | 依赖 | 状态 |
 | --- | --- |
-| ComfyUI-GGUF（UnetLoaderGGUF） | ✅ 已安装 |
-| TextEncodeQwenImage21（ComfyUI 内置，0.37.0） | ✅ |
-| 三件套模型（C:/ComfyUI_models） | ✅ 存在 |
-| 6GB 显存跑 Q4_0 GGUF | ✅ nightbatch 已长期验证 |
+| ComfyUI 0.37.0 + ComfyUI-GGUF | ✅ |
+| `TextEncodeQwenImage21`（内置） | ✅ |
+| Qwen 三件套（4.15GB + 6.31GB + 675MB） | ✅ `C:/ComfyUI_models/` |
+| Turbo8 LoRA（913MB） + f23gg（159MB） | ✅ `app/models/loras/` |
+| Anima 2.9B（2.87GB）+ Qwen3-0.6B（1.11GB）+ VAE（0.24GB） | ✅ 本机已就位；真实 Gate 未执行 |
+| 4x-UltraSharp（67MB） | ✅ |
+| VNCCS Utils 节点 + 姿势库 136 + VNCCS/femaledVaginus LoRA | ✅ 已安装，但**不属于正式工作流**（见 §5） |
 
-**结论：无需安装任何缺失依赖**（规范 §二十七 无需触发"停下汇报"分支）。
+## 5. 实验/下线模块
 
-## 4. basic_generate Binding 决策
-
-- 载体：`workflows/providers/comfyui/basic_generate/v1/`（workflow.json + binding.yaml + README），
-  ComfyUI 节点 ID 只存在于 provider binding 层，不污染引擎无关核心（规范 §二十九）；
-- workflow.json = 上述节点图的参数化模板（SaveImage prefix、13.prompt/negative、22 尺寸、23.seed 为注入点）；
-- steps/cfg 保留 nightbatch 实测默认（25 / 1.0），Module 标准输入不暴露（Phase 2 范围外）。
+- `pose_generate`（2026-10-29 实验）：Qwen 三件套 + femaledVaginus + VNCCS LoRA，
+  两张参考图（姿势 + 角色），er_sde/beta。768×12 双 LoRA 单张 20 分钟可出图；
+  1024×25 在 6GB/16GB 机器上 OOM/停止推进。
+  **2026-10-30 已从运行实例与 `main` 下线**，代码保留在
+  `experiment/pose-generate-20261030` 分支；未通过 G3/G4 前不得注册为正式模块。

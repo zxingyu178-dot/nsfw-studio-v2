@@ -87,6 +87,11 @@
 `defaults."6".steps = 8` 决定（binding defaults 覆盖 workflow 节点值）。版本演进靠 git 历史，
 不再按目录分版本；代价是历史 Job 的 workflow_hash/binding_hash 不再匹配，旧任务不可续跑。
 
+**工作流提交标准（2026-10-30，W0）**：所有新工作流必须遵循
+`docs/WORKFLOW_SUBMISSION_STANDARD.md`（API JSON、binding 依赖/性能声明、G0–G4 验收、
+Git 纪律、只经 Studio 队列提交）。未通过 G0–G4 的工作流不得注册为正式模块，
+`available=true` 不得被解释为“硬件已验证”。
+
 **历史基线 v0.16.0**：Anima 动漫生图模块上线（从 v0.9.0 归档分支移植到 v0.15.1 基线，
 `anime_generate` + `comfyui/anime_generate/v1` binding，核心执行逻辑零改动）。
 基线 v0.15.1 = Workbench Layout 4.0（Canvas First 三栏 + TaskDock）、真实进度
@@ -157,6 +162,7 @@ ParameterSpec + `size_mode`，`available=true` 是前端 Gate 唯一依据；
 - ComfyUI 节点 ID / Workflow JSON 只存在于 `workflows/providers/comfyui/<module>/<binding>/` 层，
   禁止污染引擎无关层；**已投入使用的 binding 目录视为 immutable**（workflow.json / binding.yaml 改动
   必须新建 v2；workflow_hash / binding_hash 双指纹不一致会被拒绝执行）；
+  **唯一例外**是 `basic_generate/v1` 单目录策略（见上文 2026-10-27 用户确认），不得推广；
   处理型模块的输入图片只走 `EngineAdapter.upload_input_image()` 正式契约（禁止 getattr duck typing）；
 - 绑定属于每次请求：QueueWorker / ComfyUIAdapter 不得固化单一模块身份（§0.2/§二十二），
   新增模块（reference 等）只注册 WorkflowModule + 新增 binding 目录，核心执行逻辑零改动；

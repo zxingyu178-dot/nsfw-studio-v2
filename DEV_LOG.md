@@ -571,3 +571,22 @@
   `git ls-remote` 验证通过。`gh` CLI 仍未安装（AIHome tool-registry 登记 not_found）。
 - 同日应用户要求将仓库由私有**转为公开**（https://github.com/zxingyu178-dot/nsfw-studio-v2），用途：三方 AI 审核代码。
   已确认仓库内无凭据/密钥（.gitignore 排除 .env，代码零硬编码秘密）。
+
+
+## 2026-10-30 W0：工作流提交标准化与文档收口
+
+背景：工作流模块可以接入，不代表本机可以执行；现有文档存在多套冲突规则，且 img2img/anime/reference 的默认值与性能说明不一致。本阶段只做文档与配置口径收口，不新增模型、节点、工作流图或数据库迁移。
+
+- 新增 docs/WORKFLOW_SUBMISSION_STANDARD.md：Module / Binding / Hardware Profile 三层、API JSON 导出、目录结构、binding requirements/performance 模板、Module 与 Binding 边界、版本与 Git 纪律、G0–G4 验收、只经 Studio 队列提交、available 不得当作可运行的语义。
+- 新增 docs/WORKFLOW_TECH_DEBT.md：登记 availability 不查依赖/硬件、4096 宽高无像素预算、导入无总像素限制、指纹不覆盖模型/节点、真实 Gate 覆盖不均、reference 1024/25 未验证、anime 性能宣传缺证据、ComfyUI 启动超过载体 420s 超时、pose_generate 已下线。
+- workflows/README.md：废止“目录保持为空”，改为 provider binding 目录规范。
+- docs/COMFY_ADAPTER.md：补充 basic_generate 单目录特例，指向统一标准，消除“所有 binding 必须 v2”的冲突。
+- basic_generate/v1/README.md：改为 Turbo8 + f23gg 双 LoRA、8 步、单目录策略；删除旧 25 步说明。
+- img2img/v1：binding capabilities 与 workflow.json 的 denoise 默认从 0.55 统一为 0.8（与 Python DEFAULT_DENOISE / ParameterSpec 一致）；注意 binding_hash/workflow_hash 会变化，旧 Job 可能不可续跑。
+- reference_generate/v1/README.md：补充 640/20 步单张 60+ 分钟的真实记录，明确 1024/25 默认未通过对应 G4。
+- anime_generate/v1/README.md、docs/AI_IMAGE_GENERATION_GUIDE.md、CHANGELOG：删除“轻量/快速/批量首选”的无证据宣传，改为待真实验收。
+- docs/WORKFLOW_INVENTORY.md、docs/COMFY_ENV_INVENTORY.md：更新 5 个正式模块、Turbo8/f23gg、Anima 模型、VNCCS/femaledVaginus LoRA 与硬件事实；pose_generate 标记为实验下线。
+- AGENTS.md：增加统一标准入口，并在 immutable 规则中明确 basic_generate 单目录特例。
+
+验证：本阶段为文档/配置口径修改；后端 pytest 与前端构建结果见本轮汇报。未启动 GPU、未修改模型/节点/数据库、未执行重型真实工作流。
+验证（2026-10-30）：后端 pytest 598 passed / 3 skipped / 0 failed（29m30s）；前端 npm run build 通过；未启动 GPU，未修改模型/节点/数据库。

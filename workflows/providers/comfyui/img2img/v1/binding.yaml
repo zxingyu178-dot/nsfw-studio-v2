@@ -36,5 +36,5 @@ seed_range: {min: 0, max: 2147483647}
 
 capabilities:
   supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
-  denoise_range: {min: 0.05, max: 1.0, default: 0.55}
+  denoise_range: {min: 0.05, max: 1.0, default: 0.8}   # 与 img2img.DEFAULT_DENOISE 一致
   output_size: input_image          # 输出尺寸 = 输入尺寸（VAEEncode 决定，不接受 width/height 注入）

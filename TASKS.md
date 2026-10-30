@@ -431,3 +431,15 @@
 
 - [ ] Phase 2：EngineAdapter 首个实现（ComfyUIAdapter）与 QueueWorker
 - [ ] 高清 / 图生图 / 参考图 / AI Agent 以 WorkflowModule 扩展
+
+## 2026-10-30 W0：工作流提交标准化与文档收口
+- [x] 新增 docs/WORKFLOW_SUBMISSION_STANDARD.md（API JSON、目录、binding 依赖/性能、版本、G0–G4、队列纪律）。
+- [x] 新增 docs/WORKFLOW_TECH_DEBT.md（availability、像素预算、指纹、真实 Gate、启动超时、pose 下线）。
+- [x] 废止 workflows/README.md 的“目录保持为空”，统一 binding 目录规范。
+- [x] COMFY_ADAPTER / AGENTS 统一 immutable 规则与 basic_generate 单目录特例。
+- [x] basic_generate README 改为 Turbo8 + f23gg 双 LoRA、8 步。
+- [x] img2img denoise 默认统一为 0.8（binding capabilities + workflow 模板）。
+- [x] reference_generate 补充 640/20 步 60+ 分钟性能事实与 1024/25 未验证说明。
+- [x] anime_generate 删除无证据的轻量/快速/批量首选宣传，标记待真实验收。
+- [x] WORKFLOW_INVENTORY / COMFY_ENV_INVENTORY 更新 5 个正式模块与 LoRA/模型事实。
+- [x] 后端 pytest 598 passed / 3 skipped / 0 failed（29m30s）；前端 npm run build 通过。

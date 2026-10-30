@@ -223,11 +223,11 @@ for item in detail["items"]:
 | 模式 | workflow_modules | input_images | 备注 |
 | --- | --- | --- | --- |
 | **写实文生图** | `[{"module_id": "basic_generate"}]` | 不传 / `[]` | Qwen-Image 2.1；写实/通用；用 `width/height` |
-| **动漫文生图**（2026-10-10 接入） | `[{"module_id": "anime_generate"}]` | 不传 / `[]` | **Anima-2.9B**（动漫/插画）；模型小、加载快（本机 3+1.1+0.24 GB），**批量首选**；官方说明写实表现差，写实请用 basic_generate |
+| **动漫文生图**（2026-10-10 接入） | `[{"module_id": "anime_generate"}]` | 不传 / `[]` | **Anima-2.9B**（动漫/插画）；模型文件合计 4.22 GB，**实际显存/耗时未验证（待真机 Gate）**，不得当批量首选；官方说明写实表现差，写实请用 basic_generate |
 | **图生图** | `[{"module_id": "img2img"}, {"module_id": "upscale"}]`（高清可选） | `[{"role": "source", "image_id": "<先 import 拿到的 id>"}]` | `config` 可调 `denoise`（0~1，默认 0.8；越低越像原图） |
 | **参考图生成**（人物/主体一致性） | `[{"module_id": "reference_generate"}]`（高清可选） | `[{"role": "reference", "image_id": "..."}]` | `config` 可调 `resolution`（512~2048，默认 1024）。**很慢**，且目前只能通过 API/脚本使用（UI 尚未接入） |
 
-> **怎么选**：动漫/插画 → `anime_generate`（轻、快）；写实照片感 → `basic_generate`；
+> **怎么选**：动漫/插画 → `anime_generate`（待真实验收，暂不承诺轻量/快速）；写实照片感 → `basic_generate`；
 > 基于已有图改图 → `img2img`；保持人物身份跨场景 → `reference_generate`。
 
 示例：img2img + 高清 + denoise 0.7：
@@ -239,7 +239,7 @@ for item in detail["items"]:
 ]
 ```
 
-示例：动漫文生图（推荐给批量 / 快速试用）：
+示例：动漫文生图（先单张试用；批量前必须通过 G3/G4）：
 
 ```json
 "workflow_modules": [{"module_id": "anime_generate"}]

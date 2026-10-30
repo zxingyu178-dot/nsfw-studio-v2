@@ -1,6 +1,6 @@
 # COMFY_ADAPTER — ComfyUIAdapter 设计与契约（Phase 2B / 2.1 / 2.2 / 3 / 4，v0.5.0）
 
-> 更新：2026-10-08。实现：`backend/app/engine/comfyui.py`。
+> 更新：2026-10-30（W0 文档收口；原 2026-10-08）。实现：`backend/app/engine/comfyui.py`。
 > 环境事实见 docs/COMFY_ENV_INVENTORY.md；工作流选型见 docs/WORKFLOW_INVENTORY.md
 > 与 docs/UPSCALE_WORKFLOW_INVENTORY.md。
 
@@ -20,7 +20,10 @@ provider binding（workflows/providers/comfyui/<module_id>/<binding_version>/）
 动态加载并缓存，无需多套 Adapter。
 
 修改工作流 = 新增 `v2/` 目录 + 更新配置 `binding_version`，核心代码零改动；
-**已投入使用的 binding 目录视为 immutable**（Phase 4 Task1：执行指纹 = 双文件）：
+**已投入使用的 binding 目录视为 immutable**（Phase 4 Task1：执行指纹 = 双文件）。
+唯一例外：`basic_generate/v1/` 采用单目录策略（2026-10-27 用户确认，方案 A），不新建 v2，
+版本演进靠 Git 历史；该例外不得推广到其它模块。完整规则见
+[docs/WORKFLOW_SUBMISSION_STANDARD.md](WORKFLOW_SUBMISSION_STANDARD.md) §6。
 
 ```text
 workflow_hash = sha256(workflow.json)[:16]

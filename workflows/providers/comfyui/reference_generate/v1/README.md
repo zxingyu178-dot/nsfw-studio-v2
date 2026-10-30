@@ -13,6 +13,14 @@ Phase 7 Task3 只读重盘 + Task4 Gate 实测（详见 `docs/REFERENCE_CAPABILI
 
 **不下载新模型、不安装节点、不升级 ComfyUI；不修改用户自己的工作流。**
 
+## 性能与验收（2026-10-30）
+
+- 已验证配置：参考分辨率 **640** / **20 步** / 单张，RTX 3060 Laptop 6GB + 16GB RAM，
+  单次 **60 分钟以上**（模型冷加载约 35 分钟 + 采样）。
+- 当前正式默认是 **1024 / 25 步**，**没有对应的 G4 证据**；不得宣称当前默认已通过硬件验收。
+- 定位：低频高质量能力，不适合批量生成。详见 `docs/REFERENCE_CAPABILITY_INVENTORY.md`
+  与 `docs/WORKFLOW_TECH_DEBT.md`。
+
 ## 与 img2img 的语义差异（命名依据）
 
 参考图**不经 VAEEncode、没有 denoise 编辑语义**：参考图经视觉塔进文本编码器
