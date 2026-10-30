@@ -13,7 +13,6 @@ from app.workflows.base import WorkflowModule
 from app.workflows.anime_generate import AnimeGenerateModule
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
-from app.workflows.pose_generate import PoseGenerateModule
 from app.workflows.reference_generate import ReferenceGenerateModule
 from app.workflows.upscale import UpscaleModule
 
@@ -57,8 +56,11 @@ def default_registry() -> ModuleRegistry:
     """产品默认注册表：基础生图 + 动漫生图 + 图生图 + 参考图生成 + 高清放大。
 
     顺序 = 产品展示顺序（Phase 3 / 5.1 / 7 / Phase 0.16 Anima 上线）。
+
+    pose_generate 实验已在 2026-10-30 下线：双 LoRA + 双参考图在 6GB/16GB 机器上 OOM，
+    代码保留在 experiment/pose-generate-20261030 分支，未通过 G3/G4 前不得重新注册。
     """
     return ModuleRegistry([
         BasicGenerateModule(), AnimeGenerateModule(), Img2ImgModule(),
-        ReferenceGenerateModule(), PoseGenerateModule(), UpscaleModule(),
+        ReferenceGenerateModule(), UpscaleModule(),
     ])
