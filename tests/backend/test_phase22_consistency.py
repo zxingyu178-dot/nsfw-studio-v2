@@ -154,10 +154,9 @@ def test_resume_inherits_parent_workflow_identity(mock_client):
     parent_modules = parent["workflow_snapshot"]["modules"]
     assert parent_modules and parent_modules[0]["module_version"] == "v1"
 
-    # 模拟系统 Workflow 升级到 v2（仅改内存配置）
+    # 模拟系统 Workflow 代码版本升级到 v2（仅改内存配置；binding 仍为已放行的 v1）
     engine_cfg = mock_client.app.state.settings.workflow.raw["engine"]
     engine_cfg["module_version"] = "v2"
-    engine_cfg["binding_version"] = "v2"
     try:
         # Phase 6 Task4/Task5：v2 只有配置、没有注册代码 → 新 Job 创建期即拒绝（fail fast，
         # 禁止先创建再在执行期才炸；修复见 module_availability / PipelineValidator）
@@ -184,4 +183,3 @@ def test_resume_inherits_parent_workflow_identity(mock_client):
         assert child_final["module_version"] == "v1", "执行完成也不得静默升级到 v2"
     finally:
         engine_cfg.pop("module_version", None)
-        engine_cfg.pop("binding_version", None)
