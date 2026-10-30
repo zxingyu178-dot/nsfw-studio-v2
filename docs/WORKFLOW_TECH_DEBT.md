@@ -12,6 +12,24 @@
 - **归档核实**：`experiment/pose-generate-20261030` **仅存在本地，未推送远端**（按 W1 指令
   不擅自推送实验代码）；如需长期保存，后续由用户决定是否推送。
 
+## W1.1 更新（2026-10-30）
+
+- **已实现**：服务端统一新任务放行门禁 `ensure_modules_released`（`app/engine/release.py`），
+  `POST /jobs`、`POST /agent/jobs`、图库放大创建 Job、`resume-remaining`（从 History 新建 Job）
+  全部在数据库创建前校验 `ready_to_run`；未登记 binding 一律拒绝，错误码 `WORKFLOW_NOT_RELEASED`。
+  可信恢复通道 `resume-interrupted` 不经过门禁，保留历史 Job 原始 binding 身份。
+- **已修复**：前端 `availableImageModuleIds` 同时要求 `available=true` 且 `ready_to_run=true`，
+  图片输入槽只做能力识别，不能再绕过放行（source/reference 槽均覆盖）。
+- **证据口径**：`release_manifest.yaml` 拆分为 `comfyui_node_chain` / `studio_production` /
+  `default_profile_performance` 三段；reference 640/20 直连 API 证据与当前 1024/25 默认明确分离。
+- **G0 增强**：精确节点类型、requirements.nodes/models 双向对应、标准输入映射、SaveImage 连接、
+  输出索引、私人 Prompt、Git 跟踪权重、performance 证据字段，并新增 9 类负向测试。
+- **事实修正**：`anime_generate` 在当前 binding hash 下已有 2 个真实 Studio COMPLETED Job
+  （2026-10-20），不是“无 G3 证据”；manifest 按证据标为 `real_gate_passed=true` / `slow`。
+  该结论与 W0/W1 文档及审查前提冲突，见 `docs/W1_1_REPORT.md`。
+- **仍未解决**：`default_profile_verified`（G4）在 basic/reference/anime/upscale 上仍为 false；
+  依赖探测仍是人工登记（W2 改为实际探测）；ComfyUI 冷启动 420s 超时未修。
+
 ## P1 — 运行前保护缺失
 
 1. **`module_availability()` 不检查依赖与硬件**
@@ -43,9 +61,11 @@
    已验证配置为 640 参考分辨率 / 20 步 / 单张 60+ 分钟；正式默认 1024 / 25 步，
    没有对应的 G3/G4 证据，不得当作已验证默认。→ W3 补测或下调默认。
 
-7. **`anime_generate` 性能宣传缺证据**
-   模型文件合计 4.22 GB 只是磁盘大小；CLIPLoader `device=default` 未针对 6GB 显存验证；
-   移植后真实 Gate 未执行。不得继续宣传“轻量/快速/批量首选”。→ W3 优先单张低分辨率实测。
+7. **`anime_generate` 性能宣传缺证据（W1.1 修正事实）**
+   模型文件合计 4.22 GB 只是磁盘大小；W0/W1 文档称“移植后真实 Gate 未执行”，
+   但只读审计发现当前 binding 已有 2 个真实 Studio COMPLETED Job（2026-10-20）。
+   修正为：G3 有证据（slow），G4 默认档性能仍无独立测量，不得宣传“轻量/快速/批量首选”。
+   → W3 补单张默认档实测。
 
 8. **`img2img` 默认值口径不一致（已在 W0 对齐）**
    Python `DEFAULT_DENOISE=0.8` 与 binding capabilities `0.55`、workflow `0.55` 不一致；

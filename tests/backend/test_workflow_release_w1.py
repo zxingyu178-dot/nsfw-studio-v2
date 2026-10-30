@@ -48,10 +48,13 @@ def test_release_status_is_binding_version_aware_and_fail_closed():
     basic = release_status("basic_generate", "v1", binding_valid=True)
     assert basic["ready_to_run"] is True and basic["hardware_status"] == "normal"
 
+    # 只读审计发现当前 anime binding 有 2 个真实 Studio COMPLETED Job；
+    # W1.1-3 按证据纠正 W0/W1 的“未验收”误记。
     anime = release_status("anime_generate", "v1", binding_valid=True)
-    assert anime["real_gate_passed"] is False
-    assert anime["ready_to_run"] is False
-    assert anime["hardware_status"] == "experimental"
+    assert anime["real_gate_passed"] is True
+    assert anime["ready_to_run"] is True
+    assert anime["hardware_status"] == "slow"
+    assert anime["default_profile_verified"] is False
 
     reference = release_status("reference_generate", "v1", binding_valid=True)
     assert reference["ready_to_run"] is True

@@ -3,6 +3,11 @@
 > 调查方式：**只读**重盘（HTTP API `system_stats`/`object_info` + 模型目录扫描 + 自定义节点目录 + 节点源码，
 > 不沿用几天前的历史清单）。未下载模型、未安装节点、未升级 ComfyUI、未修改用户工作流。
 > 调查时间：2026-10-09；目标：为 Phase 7 Reference Gate（Task4）提供事实依据。
+>
+> **W1.1-3 证据口径修正（2026-10-30）**：本文 §4 的 640/20 Gate 是**直连 ComfyUI API**
+> （`comfyui_node_chain`），不是 Studio 完整生产链，也不对应当前 binding 的 1024/25 默认配置。
+> 当前 binding（hash `1022da22e48721e6`）唯一真实 Studio 证据是 `job_25c14f4d…`（resolution=768，
+> 输出 672×896）。三类证据必须分开记录，见 §6。
 
 ## 1. 引擎与节点现状
 
@@ -92,3 +97,15 @@ Qwen-Image 2.1（现役 GGUF 三件套） + 原生 `TextEncodeQwenImage21` refer
   不适合批量；如需提速可后续评估更大的量化/缓存参数（本阶段不动）；
 - 用户既有 SD 世代工作流（ControlNet/FaceDetailer 等）因模型缺失不可运行，
   不作为本阶段候选。
+
+## 6. 证据分层（W1.1-3 复核）
+
+| 证据类型 | 本文 §4 Gate | 当前 `reference_generate/v1` binding |
+| --- | --- | --- |
+| `comfyui_node_chain`（直连 ComfyUI API） | ✅ 640 / 20 步 / cfg 1.0 / euler-simple，`prompt_id=d50ba446…`，单张 60+ 分钟 | ⚠️ 该 640/20 证据**不对应当前 binding**（当前默认 resolution 1024 / 25 步），且未记录 binding_hash |
+| `studio_production`（Studio Job + Queue + Stage） | ❌ 未经过 Studio | ✅ `job_25c14f4d-0e86-486a-a7b9-292516629a53`（resolution=768，输出 672×896），binding_hash `1022da22e48721e6` |
+| `default_profile_performance`（G4，默认 1024/25） | ❌ 是 640/20，不是默认档 | ❌ `unverified`（无当前 hash 的 1024/25 性能记录） |
+
+结论：`reference_generate/v1` 的 `real_gate_passed=true` 依据是“当前 binding 的 768 Studio 证据”；
+`default_profile_verified=false` 是独立语义，**不参与 `ready_to_run`**，只在 UI 显示“慢速/未验证”提示。
+不得把 640/20 直连 API 证据描述为“当前默认配置已验收”。

@@ -615,3 +615,24 @@ W1-3 文档与归档：
 验证（本轮定向）：后端 52 passed；前端 typecheck 通过、96 files/462 tests passed；G0 0 errors。全量后端 pytest 未重复运行，最终以 GitHub CI 为准；未启动 GPU。
 补充：前端 npm run build 通过（tsc + vite，393.53 kB JS）；全量后端 pytest 未在本机重复运行，交由 GitHub CI。
 CI 结果：代码提交 d7b32f7，GitHub Actions run #269（Backend pytest + Frontend typecheck/vitest/build）全部 success。
+
+## 2026-10-30 W1.1：Release Gate Hardening
+
+基线：1cf05e5。不启动 ComfyUI/GPU、不下载模型、不改冻结 v1、不迁移数据库。
+
+- W1.1-1：`app/engine/release.py::ensure_modules_released()` 统一门禁；`/jobs`、`/agent/jobs`、
+  图库放大、`/jobs/{id}/resume-remaining` 全部在 `job_service.create_job()` 前校验
+  `ready_to_run`；未登记 binding 拒绝；错误码 `WORKFLOW_NOT_RELEASED`；不信任客户端字段。
+  `resume-interrupted` 作为可信恢复通道保留原 Job 身份，不受新门禁影响。
+- W1.1-2：`availableImageModuleIds` 同时要求 `available=true` 与 `ready_to_run=true`，
+  source/reference 槽不再绕过放行；Recipe/History/setInputImage 归一化统一收口。
+- W1.1-3：`release_manifest.yaml` 拆分 `comfyui_node_chain` / `studio_production` /
+  `default_profile_performance`；reference 的 640/20 直连 API 证据与当前 1024/25 默认分离；
+  按数据库证据把 anime 标为 `real_gate_passed=true` / `slow`（与审查前提冲突，见 W1.1 报告）。
+- W1.1-4：G0 增加精确节点类型、requirements.nodes/models、标准输入映射、SaveImage 连接、
+  输出索引、私人 Prompt、Git 权重、performance 证据字段；新增 9 类负向测试。
+- W1.1-5：后端定向 46 passed；前端 typecheck + 96 files/468 tests + build 通过；
+  G0 `checked=6 errors=0 warnings=14`；全量后端 pytest 交由 GitHub CI。
+
+新增：`tests/backend/test_workflow_release_gate_w11.py`、`tests/backend/test_validate_workflows_w11.py`、
+`docs/W1_1_REPORT.md`、`docs/W1_1_RELEASE_GATE_AUDIT.md`、`docs/W1_1_G0_REPORT.md`。

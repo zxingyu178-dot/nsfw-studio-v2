@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.core.errors import ValidationError
 from app.engine.base import EngineError
 from app.engine.factory import resolve_workflow_modules
+from app.engine.release import ensure_modules_released
 from app.schemas.job import (
     HistoryEntryResponse,
     HistoryResponse,
@@ -60,6 +61,8 @@ def create_job(
     settings: Settings = request.app.state.settings
     snapshot = body.snapshot.model_dump()
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
+    # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
+    ensure_modules_released(modules)
     job, created = job_service.create_job(
         session,
         source=body.source,
@@ -149,6 +152,11 @@ def cancel_job(job_id: str, session: Session = Depends(get_session)) -> JobRespo
              summary="继续剩余图片（创建子 Job，只含未完成数量）")
 def resume_remaining(job_id: str, session: Session = Depends(get_session)) -> JobResponse:
     # §3（Phase 2.2）：续跑完整继承原 Job 的 Workflow 身份，不读取当前 settings（禁止静默升级）
+    # W1.1-1：这是“从 History 创建新 Job”，必须走放行门禁；
+    # 可信恢复通道 /jobs/resume-interrupted 不经过这里，历史恢复不受影响。
+    original = job_service.get_job(session, job_id)
+    snapshot = json.loads(original.workflow_snapshot_json or "{}")
+    ensure_modules_released(snapshot.get("modules") or [])
     job, _ = job_service.resume_remaining(session, job_id)
     return job_response(job)
 

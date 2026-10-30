@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings, WorkflowConfig
+from app.engine import release
 from app.main import create_app
 
 
@@ -32,7 +33,7 @@ def payload(**overrides):
     body = {
         "prompt": "1girl, silver hair, kimono, shrine, masterpiece",
         "negative_prompt": "low quality",
-        "module_id": "anime_generate",
+        "module_id": "basic_generate",
         "width": 768,
         "height": 1024,
         "count": 1,
@@ -75,12 +76,25 @@ def test_valid_token_creates_queued_job(agent_client, monkeypatch):
     job = response.json()
     assert job["source"] == "agent"
     assert job["status"] in ("QUEUED", "RUNNING")
-    assert job["module_id"] == "anime_generate"
+    assert job["module_id"] == "basic_generate"
     assert job["workbench_snapshot"]["seed_mode"] == "fixed"
     assert job["workbench_snapshot"]["seed"] == 42
 
     detail = agent_client.get(f"/api/v1/jobs/{job['id']}").json()
     assert "silver hair" in (detail.get("positive_prompt_snapshot") or "")
+
+
+def test_agent_cannot_bypass_release_gate(agent_client, monkeypatch):
+    """W1.1-1：Agent 与 Web 共用服务端 manifest，未放行模块直接拒绝。"""
+    # 生产 manifest 当前按真实证据放行 anime；门禁测试用临时清单强制未登记。
+    monkeypatch.setattr(release, "load_release_manifest", lambda: {"modules": {}})
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-gate")
+    headers = {"Authorization": "Bearer test-token-gate"}
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="anime_generate"), headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
 
 
 def test_idempotent_replay_returns_same_job(agent_client, monkeypatch):

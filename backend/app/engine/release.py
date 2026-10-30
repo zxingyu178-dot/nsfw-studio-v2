@@ -14,6 +14,8 @@ from typing import Any
 
 import yaml
 
+from app.core.errors import ValidationError
+
 MANIFEST_PATH = Path(__file__).resolve().parents[3] / "workflows" / "release_manifest.yaml"
 VALID_HARDWARE_STATUS = {"normal", "slow", "experimental", "unsupported"}
 
@@ -81,3 +83,32 @@ def release_status(
         "ready_to_run": ready,
         "notes": str(entry.get("notes") or ""),
     }
+
+
+def ensure_modules_released(modules: list[dict[str, Any]]) -> None:
+    """服务端新任务放行门禁（W1.1-1）。
+
+    以已解析的真实执行身份（module_id + binding_version）为准，不信任客户端字段。
+    未登记 binding、未通过真实 Gate、依赖未就绪或 hardware=unsupported 时一律拒绝，
+    且在数据库写入任何 Job/Stage 之前抛出。
+    """
+    rejected: list[dict[str, str]] = []
+    for module in modules:
+        module_id = str(module.get("module_id") or "")
+        binding_version = str(module.get("binding_version") or "")
+        status = release_status(module_id, binding_version, binding_valid=True)
+        if status["ready_to_run"] is not True:
+            rejected.append({
+                "module_id": module_id,
+                "binding_version": binding_version,
+                "reason": str(status.get("notes") or "not released"),
+            })
+    if rejected:
+        detail = "；".join(
+            f"{item['module_id']}/{item['binding_version']}（{item['reason']}）" for item in rejected
+        )
+        raise ValidationError(
+            f"工作流未通过正式放行，已拒绝新任务：{detail}",
+            code="WORKFLOW_NOT_RELEASED",
+            details={"modules": rejected},
+        )

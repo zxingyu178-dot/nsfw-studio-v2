@@ -1,4 +1,4 @@
-﻿# TASKS — NSFW Studio V2
+# TASKS — NSFW Studio V2
 
 ## Phase 0.36：一键继续全部中断任务（2026-10-22，v0.36.0）
 
@@ -455,3 +455,14 @@
 - [x] 前端 build 通过；GitHub CI #269（代码提交 d7b32f7）Backend/Frontend 全部 success。
 
 
+
+## 2026-10-30 W1.1：Release Gate Hardening
+- [x] W1.1-1 ensure_modules_released 统一门禁；/jobs、/agent/jobs、图库放大、resume-remaining 全部创建前校验。
+- [x] W1.1-1 resume-interrupted 可信恢复通道保留原 binding 身份，不受新门禁破坏。
+- [x] W1.1-1 拒绝任务不产生残留 Job/Stage（测试断言 Job 数不变）。
+- [x] W1.1-2 前端 availableImageModuleIds 同时要求 available 与 ready_to_run；source/reference 槽不再绕过。
+- [x] W1.1-3 manifest 证据三段分离；reference 640/20 直连 API 与 1024/25 默认分离；anime 按真实证据放行（冲突待审查）。
+- [x] W1.1-4 G0 精确节点类型/依赖/输入映射/SaveImage/输出索引/私人 Prompt/Git 权重/performance 字段。
+- [x] W1.1-4 新增 9 类 G0 负向测试。
+- [x] W1.1-5 后端定向 46 passed；前端 typecheck + 468 tests + build；G0 0 errors。
+- [ ] W1.1-5 GitHub CI 结果与远端同步（提交后补记）。

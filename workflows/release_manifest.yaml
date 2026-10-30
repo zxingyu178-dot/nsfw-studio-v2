@@ -1,25 +1,43 @@
 schema_version: 1
-# 工作流正式放行清单（W1-1）
+# 工作流正式放行清单（W1-1 / W1.1-3）
 #
 # 状态语义：
 #   dependencies_ready        节点/模型依赖是否齐全（W1 由人工登记；W2 改为实际探测）
-#   real_gate_passed          是否已有该 binding 的真实 G3 出图证据
+#   real_gate_passed          是否已有该 binding 的真实 G3 Studio 出图证据
 #   hardware_status           normal | slow | experimental | unsupported
-#   default_profile_verified  当前默认分辨率/步数是否已有对应 G4 证据
+#   default_profile_verified  当前默认分辨率/步数是否有对应 G4 证据（独立语义，不参与放行）
 #   ready_to_run              由 registered + binding_valid + dependencies_ready +
 #                             real_gate_passed + hardware_status != unsupported 计算
 #
-# 禁止把模块文件大小或估算值写成实测性能；缺证据必须写 false/unverified。
+# 证据三分法（不得混写）：
+#   comfyui_node_chain         直接 ComfyUI API / 节点链出图
+#   studio_production          经 Studio Job + Queue + Stage 的完整生产链
+#   default_profile_performance 当前默认配置的性能测量（G4）
+#
+# 数据来源：只读审计 D:/NSFW-Studio-Data/database/studio.db（2026-10-30）。
+# 禁止把模型文件大小或估算值写成实测性能；缺证据必须 false/unverified。
 
 modules:
   basic_generate:
     bindings:
       v1:
         dependencies_ready: true
-        real_gate_passed: true          # 长期夜间批量与日用实例真实出图
+        real_gate_passed: true
         hardware_status: normal
-        default_profile_verified: false # Turbo8 双 LoRA 的 G4 峰值尚未补测
-        notes: "Qwen-Image 2.1 UC Q4 + Turbo8 + f23gg，8 步；主力文生图，G4 峰值待补"
+        default_profile_verified: false
+        notes: "Qwen-Image 2.1 UC Q4 + Turbo8 + f23gg，8 步；主力文生图"
+        evidence:
+          comfyui_node_chain:
+            status: passed
+            method: "nightbatch 批量 + 多次真实出图"
+          studio_production:
+            status: passed
+            binding_hash: "6c1a64481fc4802e"
+            completed_stages: 69
+            method: "Studio Job/Queue/Stage 完整链（只读审计 studio.db）"
+          default_profile_performance:
+            status: unverified
+            reason: "Turbo8 双 LoRA 默认档未做独立 G4 峰值/耗时记录"
 
   img2img:
     bindings:
@@ -27,32 +45,84 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
-        default_profile_verified: true  # 768×768 / 25 步 / 0.55 实测
+        default_profile_verified: true
         notes: "冻结版本（denoise 0.55），仅历史 Job 恢复"
+        evidence:
+          comfyui_node_chain: {status: passed, method: "Phase 5.1 / Phase 6 节点链实验"}
+          studio_production:
+            status: passed
+            binding_hash: "2f2d5c06055c623a"
+            completed_stages: 12
+            method: "Studio 完整生产链（2026-10-08 起）"
+          default_profile_performance:
+            status: verified
+            reason: "768×768 / 25 步 / denoise 0.55 有真实记录"
       v2:
         dependencies_ready: true
-        real_gate_passed: true          # 0.8 默认的 768×768 采样实测约 496s
+        real_gate_passed: true
         hardware_status: slow
         default_profile_verified: true
-        notes: "新任务默认；denoise 0.8，采样约 496s，输入像素上限待 W2"
+        notes: "新任务默认；denoise 0.8；节点图与 v1 相同，0.8 已由 Studio 真实执行"
+        evidence:
+          comfyui_node_chain:
+            status: passed
+            method: "与 v1 同一节点图；0.8 由 job_37b4723e…（current v1 hash）在 Studio 执行"
+          studio_production:
+            status: passed_inherited
+            binding_hash: "2f2d5c06055c623a"
+            reference_jobs:
+              - "job_843514fd-2316-4311-adfa-eda217251b54"   # denoise 0.8
+              - "job_37b4723e-d7f6-4716-b1dc-07f01c45ae11"    # denoise 0.8
+            note: "v2 仅默认值不同且运行时被模块 config 覆盖；v2 自身尚无独立 Job"
+          default_profile_performance:
+            status: verified_inherited
+            sampling_seconds: 496
+            source: "docs/PHASE51_REPORT.md + Phase 6 实测"
 
   reference_generate:
     bindings:
       v1:
         dependencies_ready: true
-        real_gate_passed: true          # 640 / 20 步真实出图
+        real_gate_passed: true
         hardware_status: slow
-        default_profile_verified: false # 当前默认 1024 / 25 步未验证
-        notes: "低频高质量；640/20 单张 60+ 分钟，1024/25 默认未验证"
+        default_profile_verified: false
+        notes: "低频高质量；当前 binding 的 Studio 证据为 768 档，1024 默认未验证"
+        evidence:
+          comfyui_node_chain:
+            status: passed
+            config: "640 / 20 步（2026-10-07 直连 ComfyUI API，非 Studio，未记录 binding hash）"
+          studio_production:
+            status: passed
+            binding_hash: "1022da22e48721e6"
+            reference_jobs:
+              - "job_25c14f4d-0e86-486a-a7b9-292516629a53"   # resolution=768，output 672×896
+            note: "当前 binding 仅 768 档；1024/25 默认没有当前 hash 的 Studio 证据"
+          default_profile_performance:
+            status: unverified
+            reason: "640/20 证据不对应当前 binding 的 1024/25 默认"
 
   anime_generate:
     bindings:
       v1:
-        dependencies_ready: true        # 模型文件已在磁盘；真实加载未验证
-        real_gate_passed: false         # 移植后 G3 未执行
-        hardware_status: experimental
+        dependencies_ready: true
+        real_gate_passed: true
+        hardware_status: slow
         default_profile_verified: false
-        notes: "待真实验收；未通过 G3 前不得出现在正常工作流选择列表"
+        notes: "当前 binding 已有 2 个真实 Studio 完成 Job；G4 未测"
+        evidence:
+          comfyui_node_chain:
+            status: passed
+            method: "Anima 2.9B + Qwen3-0.6B 真实节点链"
+          studio_production:
+            status: passed
+            binding_hash: "dfa750836ac536eb"
+            reference_jobs:
+              - "job_9961f5f1-b2a0-4691-b314-35e2d02d4db7"   # 832×1216，2026-10-20，约 4.5 分钟
+              - "job_430e3dd7-94c6-421e-a28b-0b1ee834ab19"   # 1920×1088，2026-10-20
+            note: "W0/W1 文档曾误记为未验收；数据库真实证据与当前 binding hash 一致"
+          default_profile_performance:
+            status: unverified
+            reason: "无独立 G4 峰值与默认档耗时记录"
 
   upscale:
     bindings:
@@ -60,5 +130,15 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: normal
-        default_profile_verified: false # 放大后的内存/输出尺寸 G4 待补
+        default_profile_verified: false
         notes: "4x-UltraSharp；轻量优先，SeedVR2 暂不接入"
+        evidence:
+          comfyui_node_chain: {status: passed, method: "用户放大链 API 化"}
+          studio_production:
+            status: passed
+            binding_hash: "6a7a21944d428ef6"
+            completed_stages: 8
+            method: "Studio 完整生产链"
+          default_profile_performance:
+            status: unverified
+            reason: "放大后内存/输出尺寸 G4 未测"

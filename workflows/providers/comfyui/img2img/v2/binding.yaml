@@ -61,7 +61,7 @@ performance:
   batch_size: 1
   tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
   tested_profiles:
-    - {width: 768, height: 768, steps: 25, cfg: 1.0, denoise: 0.8, sampler: euler, scheduler: simple, sampling_seconds: 496, source: docs/PHASE51_REPORT.md}
+    - {width: 768, height: 768, steps: 25, cfg: 1.0, denoise: 0.8, sampler: euler, scheduler: simple, batch_size: 1, sampling_seconds: 496, source: docs/PHASE51_REPORT.md}
   known_limitations:
     - "0.8 默认采样约 496s，不含排队与冷加载"
     - "输入尺寸未设总像素上限（W2 处理）"

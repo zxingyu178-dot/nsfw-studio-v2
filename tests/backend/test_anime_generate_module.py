@@ -15,6 +15,7 @@ import time
 import pytest
 
 from app.core.config import Settings, WorkflowConfig
+from app.engine import release
 from app.main import create_app
 from app.models import Image, JobStage
 from app.workflows.anime_generate import AnimeGenerateModule
@@ -89,35 +90,33 @@ def test_anime_capabilities_mirror_basic_contract_with_anime_identity():
 
 # ===== 端到端（Mock）：动漫模块任务完成，输出 original =====
 
-def test_anime_job_end_to_end(mock_client, session):
-    job = mock_client.post("/api/v1/jobs", json={
+def force_unreleased(monkeypatch):
+    monkeypatch.setattr(release, "load_release_manifest", lambda: {"modules": {
+        "anime_generate": {"bindings": {"v1": {
+            "dependencies_ready": True, "real_gate_passed": False,
+            "hardware_status": "experimental", "default_profile_verified": False,
+            "notes": "test-only unreleased",
+        }}},
+    }})
+
+
+def test_anime_job_rejected_when_manifest_not_released(mock_client, monkeypatch):
+    """W1.1-1：manifest 未放行时，服务端拒绝创建 Job（不能只靠前端隐藏）。"""
+    force_unreleased(monkeypatch)
+    response = mock_client.post("/api/v1/jobs", json={
         "source": "doubao",
         "client_request_id": "anime-e2e-1",
         "snapshot": make_snapshot(
             count=1, workflow_modules=[{"module_id": "anime_generate"}],
         ),
-    }).json()
-    assert job["workflow_snapshot"]["modules"][0]["module_id"] == "anime_generate"
-
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    stage = final["stages"][0]
-    assert stage["module_id"] == "anime_generate"
-    item = stage["items"][0]
-    assert item["seed"] is not None, "uses_seed=true → 必须记录真实 Seed"
-    output = session.get(Image, item["output_image_id"])
-    assert output.kind == "original" and output.parent_image_id is None
-    assert output.seed == item["seed"]
-
-    request = mock_client.app.state.adapter.submitted_requests[-1]
-    assert request.binding.module_id == "anime_generate"
-    assert request.parameters["positive_prompt"] == make_snapshot()["full_prompt"]
-    assert request.parameters["negative_prompt"] == make_snapshot()["negative_prompt"]
-    assert request.parameters["width"] == 768 and request.parameters["height"] == 1024
-    assert request.parameters["seed"] == item["seed"]
+    })
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
 
 
-def test_anime_rejects_input_image(mock_client, png_bytes):
+def test_anime_rejects_input_image(mock_client, monkeypatch, png_bytes):
     """动漫模块不消费输入图（无输入槽）→ 携带输入图必须被拒绝。"""
+    force_unreleased(monkeypatch)
     imported = mock_client.post(
         "/api/v1/images/import", files=[("files", ("anime_in.png", png_bytes, "image/png"))]
     ).json()["imported"][0]["image"]
@@ -127,23 +126,21 @@ def test_anime_rejects_input_image(mock_client, png_bytes):
             workflow_modules=[{"module_id": "anime_generate"}],
         ),
     })
+    # 放行门禁先于输入槽校验：未放行模块直接 WORKFLOW_NOT_RELEASED。
     assert response.status_code == 400, response.text
-    assert response.json()["error"]["code"] == "UNUSED_INPUT_IMAGE"
+    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
 
 
-def test_anime_then_upscale_chain(mock_client, session):
-    job = mock_client.post("/api/v1/jobs", json={
+def test_anime_then_upscale_chain_rejected(mock_client, monkeypatch):
+    force_unreleased(monkeypatch)
+    response = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(
             count=1,
             workflow_modules=[{"module_id": "anime_generate"}, {"module_id": "upscale"}],
         ),
-    }).json()
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    assert [stage["module_id"] for stage in final["stages"]] == ["anime_generate", "upscale"]
-    stage1_item = final["stages"][1]["items"][0]
-    assert stage1_item["input_image_id"] == final["stages"][0]["items"][0]["output_image_id"]
-    upscaled = session.get(Image, stage1_item["output_image_id"])
-    assert upscaled.kind == "upscaled"
+    })
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
 
 
 # ===== /modules：注册 + 可用（binding 在仓库内） =====
@@ -155,10 +152,12 @@ def test_modules_api_exposes_anime_generate(client):
     assert anime["available"] is True, anime
     assert anime["provider"] == "comfyui"
     assert anime["binding_version"] == "v1"
-    # W1-1：available 仍是 binding 可加载；正式放行必须等待真实 G3
-    assert anime["release_status"]["real_gate_passed"] is False
-    assert anime["release_status"]["ready_to_run"] is False
-    assert anime["release_status"]["hardware_status"] == "experimental"
+    # W1.1-3：当前 binding 已有真实 Studio COMPLETED 证据（2026-10-20），
+    # 不能沿用 W0 的“未验收”推断。
+    assert anime["release_status"]["real_gate_passed"] is True
+    assert anime["release_status"]["ready_to_run"] is True
+    assert anime["release_status"]["hardware_status"] == "slow"
+    assert anime["release_status"]["default_profile_verified"] is False
     assert anime["is_generative"] is True
     assert anime["input_slots"] == []
     assert anime["title"] == "动漫生图（Anima）"

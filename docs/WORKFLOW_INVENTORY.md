@@ -9,15 +9,28 @@
 | --- | --- | --- | --- | --- | --- |
 | `basic_generate` | `comfyui/basic_generate/v1` | Qwen-Image 2.1 UC Q4 GGUF + Qwen3-VL 8B（CPU）+ VAE + Turbo8 + f23gg | 8 步 / cfg 1.0 / euler-simple / 1024 | ComfyUI-GGUF、TextEncodeQwenImage21、LoraLoader | 日用主力；W0 未重新测 G4 |
 | `img2img` | `comfyui/img2img/v1`（冻结）+ `v2`（默认） | 同三件套；LoadImage → VAEEncode → KSampler | 25 步 / cfg 1.0；v1 denoise 0.55、v2 0.8 | 同上 | 768×768 真实可用；0.8 采样约 496s、0.55 约 310s（不含排队）；放行 slow |
-| `reference_generate` | `comfyui/reference_generate/v1` | 同三件套 + TextEncodeQwenImage21 参考 latents | 25 步 / cfg 1.0 / resolution 1024 | 同上 | 已验证 640/20 步单张 60+ 分钟；1024/25 未验证；放行 slow |
-| `anime_generate` | `comfyui/anime_generate/v1` | Anima-2.9B INT8 + Qwen3-0.6B + VAE | 30 步 / cfg 4.0 / er_sde-simple | UNETLoader、CLIPTextEncode、KSampler | **待真实验收，ready_to_run=false**；4.22GB 仅是磁盘大小 |
+| `reference_generate` | `comfyui/reference_generate/v1` | 同三件套 + TextEncodeQwenImage21 参考 latents | 25 步 / cfg 1.0 / resolution 1024 | 同上 | 640/20 为**直连 ComfyUI API**（非 Studio、非当前 binding）；当前 binding 的 Studio 证据只有 768 档；1024/25 默认未验证；放行 slow |
+| `anime_generate` | `comfyui/anime_generate/v1` | Anima-2.9B INT8 + Qwen3-0.6B + VAE | 30 步 / cfg 4.0 / er_sde-simple | UNETLoader、CLIPTextEncode、KSampler | 当前 binding 有 2 个真实 Studio 完成 Job（2026-10-20）；G4 默认档未测；放行 slow |
 | `upscale` | `comfyui/upscale/v1` | 4x-UltraSharp | 4x 放大 | UpscaleModelLoader、ImageUpscaleWithModel | 轻量优先；G4 待补；SeedVR2 暂不接入 |
 
 `basic_generate` 版本特例：单目录 `v1/`，不新建 v2，版本靠 Git 历史（2026-10-27 用户确认）。
 其它已投入使用 binding 修改必须新建 v2。
 
 正式放行状态以 `workflows/release_manifest.yaml` 为准（W1-1）；`available=true` 只表示
-binding 可加载，不等于依赖齐全或已通过真实 G3/G4。`anime_generate` 当前不在正常工作流列表。
+binding 可加载，不等于依赖齐全或已通过真实 G3/G4。
+
+**证据三分法（W1.1-3，不得混写）**：
+
+1. `comfyui_node_chain`：直接 ComfyUI API / 节点链出图，不代表经过 Studio Job/Queue/Stage。
+2. `studio_production`：经 Studio Job + Queue + Stage 的完整生产链，需记录 binding_hash 与 Job ID。
+3. `default_profile_performance`：当前默认分辨率/步数/采样器下的 G4 性能测量（独立语义，
+   不参与 `ready_to_run`）。
+
+`anime_generate` 的 W0/W1 文档曾记为“待真实验收”，但只读审计 `studio.db` 发现当前 binding
+hash `dfa750836ac536eb` 已有 2 个真实 Studio COMPLETED Job（2026-10-20，分别是
+`job_9961f5f1…` 832×1216 与 `job_430e3dd7…` 1920×1088）；W1.1 按真实证据把它标为
+`real_gate_passed=true` / `hardware_status=slow`，这与审查前提“anime 无 G3 证据”相反，
+详见 `docs/W1_1_REPORT.md` §冲突说明。
 
 ## 2. basic_generate 真实链（2026-10-27 起）
 

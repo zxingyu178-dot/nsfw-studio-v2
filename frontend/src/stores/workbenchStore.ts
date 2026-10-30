@@ -204,7 +204,14 @@ export function inputRoleLabel(role: 'source' | 'reference' | 'face_reference'):
  *  使 Recipe / History / 图库恢复出的 reference Primary 不被 normalize 静默替换。 */
 export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
   return catalog
-    .filter((module) => module.available === true && (isImageStartModule(module) || declaresImageInput(module)))
+    .filter(
+      (module) =>
+        module.available === true &&
+        // W1.1-2：图片输入槽只负责能力识别；放行必须同时看 ready_to_run，
+        // 否则未通过 G3 的模块可借 reference/source 槽绕过正式放行。
+        isReleaseReady(module) &&
+        (isImageStartModule(module) || declaresImageInput(module)),
+    )
     .map((module) => module.module_id)
 }
 

@@ -11,6 +11,7 @@ from app.api.deps import get_session, get_storage
 from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.errors import NotFoundError, ValidationError
 from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
+from app.engine.release import ensure_modules_released
 from app.schemas.image import (
     ImageBatchStatusRequest,
     ImageBatchStatusResponse,
@@ -374,6 +375,7 @@ def upscale_images(request: Request, body: ImageUpscaleRequest,
             raise ValidationError(f"图片文件缺失，无法放大: {image.id}", code="IMAGE_FILE_MISSING")
 
     modules = resolve_requested_modules(settings, [{"module_id": "upscale"}])
+    ensure_modules_released(modules)
     first = images[0]
     snapshot = {
         "prompt_mode": "structured",

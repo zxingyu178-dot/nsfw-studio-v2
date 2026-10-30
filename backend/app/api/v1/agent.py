@@ -28,6 +28,7 @@ from app.api.deps import get_session
 from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN
 from app.core.errors import ForbiddenError, TooManyRequestsError, UnauthorizedError
+from app.engine.release import ensure_modules_released
 from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
@@ -127,6 +128,8 @@ def submit_agent_job(
         snapshot["source_prompt_id"] = prompt.id
         snapshot["source_prompt_version_id"] = version.id
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
+    # W1.1-1：Agent 不能绕过正式放行；与 Web 使用同一服务端 manifest。
+    ensure_modules_released(modules)
 
     job, created = job_service.create_job(
         session,
