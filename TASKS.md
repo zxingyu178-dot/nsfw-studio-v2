@@ -452,5 +452,6 @@
 - [x] W1-2 scripts/validate_workflows.py + CI G0；6 binding / 0 errors / 13 legacy warnings。
 - [x] W1-3 Pose 分支仅本地；Anima 双路径记录；Turbo8 性能状态；Inventory/技术债更新。
 - [x] 定向：后端 52 passed；前端 typecheck + 462 tests；G0 0 errors。
-- [x] 前端 build 通过；全量后端 pytest 由 GitHub CI 执行。
+- [x] 前端 build 通过；GitHub CI #269（代码提交 d7b32f7）Backend/Frontend 全部 success。
+
 

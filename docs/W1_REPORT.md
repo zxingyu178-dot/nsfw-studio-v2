@@ -46,7 +46,9 @@
 - 前端：typecheck 通过；96 test files / 462 tests passed。
 - 前端构建：通过（`vite build`）。
 - G0：0 errors。
-- 未运行全量后端 pytest（本阶段按指令只跑定向，最终以 GitHub CI 为准）；未启动 GPU。
+- GitHub CI（代码提交 `d7b32f7`，run #269）：Backend pytest 与 Frontend
+  typecheck/vitest/build 全部 success。
+- 未启动 GPU；未在本机重复运行无关的长 E2E。
 
 ## 5. 文档修正
 
@@ -70,7 +72,8 @@
 ## 7. Git
 
 - 基线：`0c581c8`
-- 本轮提交：见 `git log -1`（W1 工作流治理）
+- W1 代码提交：`d7b32f7`（含 CI 指纹兼容修复）
+- CI：run #269 success（Backend / Frontend）
 - 工作区：提交后 clean（用户既有未跟踪文档除外）
 - 推送：`origin/main`
 

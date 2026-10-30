@@ -614,3 +614,4 @@ W1-3 文档与归档：
 
 验证（本轮定向）：后端 52 passed；前端 typecheck 通过、96 files/462 tests passed；G0 0 errors。全量后端 pytest 未重复运行，最终以 GitHub CI 为准；未启动 GPU。
 补充：前端 npm run build 通过（tsc + vite，393.53 kB JS）；全量后端 pytest 未在本机重复运行，交由 GitHub CI。
+CI 结果：代码提交 d7b32f7，GitHub Actions run #269（Backend pytest + Frontend typecheck/vitest/build）全部 success。
