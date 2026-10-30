@@ -6,8 +6,9 @@
 - 输出 kind=processed / parent_policy=input_image / seed 进入 StageItem（由通用层落库）；
 - **核心执行逻辑零改动**：QueueWorker / PipelineScheduler / ImageService 不因本模块增加而修改。
 
-Provider binding：workflows/providers/comfyui/img2img/v1/（Qwen-Image 2.1 零下载 latent Img2Img，
+Provider binding：workflows/providers/comfyui/img2img/v2/（Qwen-Image 2.1 零下载 latent Img2Img，
 来源见 docs/evidence/phase51-img2img/ 实验与 docs/PHASE51_REPORT.md）。
+v1 为历史冻结版本（默认 denoise 0.55），仅用于历史 Job 恢复；新任务默认 v2（0.8）。
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ def _default_binding(module: "Img2ImgModule") -> EngineBindingRef:
         module_id=module.module_id,
         module_version=module.module_version,
         provider="unbound",
-        binding_version="v1",
+        binding_version="v2",
     )
 
 

@@ -10,12 +10,14 @@ import { IconButton, IconChevronDown, IconClose, IconRandom, IconSeed, NumberSte
 import {
   hasUpscaleModule,
   isImageStartModule,
+  releaseStatusNotice,
   setCount,
   setPrimaryModule,
   setPrimaryModuleConfig,
   setSeed,
   setSize,
   setUpscaleEnabled,
+  textPrimaryCandidates,
   useWorkbench,
 } from '../../../stores/workbenchStore'
 import { MODULE_LABEL } from '../../../types/workbench'
@@ -39,9 +41,11 @@ export function InspectorPanel({
   const primaryCapabilities =
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
   const primaryTitle = primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
-  const primaryCandidates = state.moduleCatalog.filter((module) =>
-    state.mode === 'text' ? module.available && !module.input_required : isImageStartModule(module),
-  )
+  const primaryCandidates =
+    state.mode === 'text'
+      ? textPrimaryCandidates(state.moduleCatalog)
+      : state.moduleCatalog.filter(isImageStartModule)
+  const primaryReleaseNotice = primaryCapabilities ? releaseStatusNotice(primaryCapabilities) : null
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
 
@@ -75,6 +79,11 @@ export function InspectorPanel({
             />
           ) : (
             <p className="wb-static wb4-workflow-title">{primaryTitle}</p>
+          )}
+          {primaryReleaseNotice && (
+            <p className="ds-notice" role="status">
+              {primaryReleaseNotice}
+            </p>
           )}
           {state.mode === 'text' && primaryCandidates.length === 0 && (
             <p className="ds-notice ds-notice--warning" role="alert">

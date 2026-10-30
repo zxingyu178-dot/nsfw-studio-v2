@@ -220,5 +220,8 @@ def test_modules_api_exposes_img2img_available(client):
     assert img2img["registered"] is True
     assert img2img["available"] is True, img2img
     assert img2img["provider"] == "comfyui"
-    assert img2img["binding_version"] == "v1"
+    assert img2img["binding_version"] == "v2"
+    assert img2img["release_status"]["binding_valid"] is True
+    assert img2img["release_status"]["ready_to_run"] is True
+    assert img2img["release_status"]["hardware_status"] == "slow"
     assert img2img["input_required"] is True and img2img["output_kind"] == "processed"

@@ -15,3 +15,7 @@ workflow:
     module_version: "v1"
     binding_version: "v1"
     options: {}   # 机器差异（URL 等）只进 configs/config.local.yaml 的 comfyui 段
+    # W1-0：img2img 新任务默认绑定 v2（denoise 0.8）；v1 冻结给历史 Job
+    modules:
+      img2img:
+        binding_version: "v2"

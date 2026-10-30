@@ -102,5 +102,8 @@ def list_modules(request: Request) -> list[dict]:
             "provider": info.get("provider"),
             "binding_version": info.get("binding_version"),
             "unavailable_reason": info.get("unavailable_reason"),
+            # W1-1：正式放行状态（按 module_id + binding_version）；
+            # available 保留兼容语义，前端正式选择必须使用 release_status.ready_to_run
+            "release_status": info.get("release_status"),
         })
     return result

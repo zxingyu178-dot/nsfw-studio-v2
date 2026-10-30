@@ -199,6 +199,9 @@ def test_modules_api_exposes_reference_generate(client):
     assert reference["available"] is True, reference
     assert reference["provider"] == "comfyui"
     assert reference["binding_version"] == "v1"
+    assert reference["release_status"]["ready_to_run"] is True
+    assert reference["release_status"]["hardware_status"] == "slow"
+    assert reference["release_status"]["default_profile_verified"] is False
     assert reference["input_slots"] == [{
         "role": "reference", "required": True, "max_count": 1,
         "description": "参考图（人物/主体）；可直接使用 Face Asset 的参考图",

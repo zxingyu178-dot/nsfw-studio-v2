@@ -118,8 +118,29 @@ export function hasUpscaleModule(modules: WorkflowModuleRef[]): boolean {
  *   source / reference / face_reference 角色的输入 slot；
  * - 且允许 process：无 allowed_job_kinds 约束，或其包含 'process'。
  */
+export function isReleaseReady(m: ModuleCapabilitiesDTO): boolean {
+  // 旧后端没有 release_status 时保持兼容：回落到 available；
+  // 新后端一律以 ready_to_run 为准，未登记的 binding fail-closed。
+  return m.release_status ? m.release_status.ready_to_run === true : m.available === true
+}
+
+/** 已放行但需要提示的性能/验证状态（不用于隐藏模块）。 */
+export function releaseStatusNotice(m: ModuleCapabilitiesDTO): string | null {
+  const release = m.release_status
+  if (!release || release.ready_to_run !== true) return null
+  const notices: string[] = []
+  if (release.hardware_status === 'slow') notices.push('当前硬件定位：较慢，适合低频使用')
+  if (release.hardware_status === 'experimental') notices.push('实验性工作流')
+  if (!release.default_profile_verified) notices.push('当前默认配置尚未通过 G4 性能验收')
+  return notices.length > 0 ? notices.join('；') : null
+}
+
+export function textPrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): ModuleCapabilitiesDTO[] {
+  return catalog.filter((m) => m.available === true && m.input_required !== true && isReleaseReady(m))
+}
+
 export function isImageStartModule(m: ModuleCapabilitiesDTO): boolean {
-  if (m.available !== true || m.input_required !== true) return false
+  if (m.available !== true || m.input_required !== true || !isReleaseReady(m)) return false
   const hasImageSlot = (m.input_slots ?? []).some(
     (slot) => slot.role === 'source' || slot.role === 'reference' || slot.role === 'face_reference',
   )

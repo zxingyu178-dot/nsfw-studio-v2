@@ -125,6 +125,11 @@ performance:
 - 代价：旧 Job 的 `workflow_hash` / `binding_hash` 可能失效，旧任务不可续跑；
 - 该例外只适用于 `basic_generate`，不得推广到其它模块；必须在本文件与 `AGENTS.md` 中同时可见。
 
+**Legacy 兼容政策（W1）**：已冻结的 v1 binding（`basic_generate` / `img2img` /
+`reference_generate` / `anime_generate` / `upscale`）允许暂时缺少 `requirements` /
+`performance`，G0 只给警告；新 binding（如 `img2img/v2`）必须完整声明。
+禁止为了通过 G0 而批量修改旧 binding；需要变更时新建 v2。
+
 Git 提交建议：
 
 ```text

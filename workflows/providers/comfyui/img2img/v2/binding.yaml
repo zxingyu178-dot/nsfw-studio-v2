@@ -1,0 +1,67 @@
+# img2img v2 — ComfyUI Provider Binding（W1-0 版本修复）
+#
+# 来源：Phase 5.1 零下载实验（temp/experimental/qwen_img2img/，2026-10-08 实测通过）。
+# 复用现有 Qwen-Image 2.1 三件套（nightbatch 已批量跑通），不下载模型 / 不安装节点 / 不升级 ComfyUI：
+#
+#   LoadImage → VAEEncode → KSampler(denoise) → VAEDecode → SaveImage
+#
+# v2 与冻结的 v1 唯一差异：默认 denoise 从 0.55 改为 0.8（与 Python DEFAULT_DENOISE 一致）。
+# v1 保留给历史 Job 续跑，不得修改；新任务默认绑定 v2。
+
+binding_version: v2
+module: img2img
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+# §九：输出命名包含 Studio 身份（job/stage/item），Studio 可据此做文件级恢复核对
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（input_image = 已上传的引擎侧引用名）
+inputs:
+  input_image:     {node: "4", field: "image"}
+  positive_prompt: {node: "6", field: "prompt"}
+  negative_prompt: {node: "6", field: "negative_prompt"}
+  seed:            {node: "7", field: "seed"}
+  denoise:         {node: "7", field: "denoise"}
+
+# 固定默认（实验实测值；denoise 不在 defaults 中——由模块 config 注入，defaults 会覆盖 inputs）
+defaults:
+  "6": {resolution: 1024}
+  "7": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple}
+
+# Seed 范围（KSampler 惯例，与 basic_generate 一致）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
+  denoise_range: {min: 0.05, max: 1.0, default: 0.8}   # 与 img2img.DEFAULT_DENOISE 一致
+  output_size: input_image          # 输出尺寸 = 输入尺寸（VAEEncode 决定，不接受 width/height 注入）
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: UnetLoaderGGUF, source: custom, package: ComfyUI-GGUF, version: unverified}
+    - {class_type: CLIPLoader, source: comfyui_core}
+    - {class_type: VAELoader, source: comfyui_core}
+    - {class_type: LoadImage, source: comfyui_core}
+    - {class_type: VAEEncode, source: comfyui_core}
+    - {class_type: TextEncodeQwenImage21, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: diffusion_models, filename: qwen-image-2.1-UC-Q4_0.gguf, size_bytes: 4456448000, sha256: unverified, precision: q4_0}
+    - {type: text_encoders, filename: qwen3vl_8b_w4a8.safetensors, size_bytes: 6770192384, sha256: unverified, precision: w4a8}
+    - {type: vae, filename: qwen_image_2.1_vae_bf16.safetensors, size_bytes: 707788800, sha256: unverified, precision: bf16}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 768, height: 768, steps: 25, cfg: 1.0, denoise: 0.8, sampler: euler, scheduler: simple, sampling_seconds: 496, source: docs/PHASE51_REPORT.md}
+  known_limitations:
+    - "0.8 默认采样约 496s，不含排队与冷加载"
+    - "输入尺寸未设总像素上限（W2 处理）"

@@ -344,6 +344,17 @@ export interface ModuleCapabilitiesDTO {
   provider: string | null
   binding_version: string | null
   unavailable_reason: string | null
+  /** W1-1：按 module_id + binding_version 的正式放行状态；旧后端可能不返回 */
+  release_status?: {
+    registered: boolean
+    binding_valid: boolean
+    dependencies_ready: boolean
+    real_gate_passed: boolean
+    hardware_status: 'normal' | 'slow' | 'experimental' | 'unsupported' | 'unverified' | string
+    default_profile_verified: boolean
+    ready_to_run: boolean
+    notes?: string
+  } | null
 }
 
 /** 外部图片导入结果（Phase 5 §二十三：成功 / 已存在 / 失败 三类明细） */

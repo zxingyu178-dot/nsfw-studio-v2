@@ -13,6 +13,9 @@ vi.mock('../../../stores/workbenchStore', () => ({
   useWorkbench: (...args: unknown[]) => mockUseWorkbench(...args),
   hasUpscaleModule: vi.fn(() => false),
   isImageStartModule: vi.fn(() => false),
+  releaseStatusNotice: vi.fn(() => null),
+  textPrimaryCandidates: (catalog: { available?: boolean; input_required?: boolean }[]) =>
+    catalog.filter((module) => module.available && !module.input_required),
   setCount: (...args: unknown[]) => mockSetCount(...args),
   setPrimaryModule: vi.fn(),
   setPrimaryModuleConfig: vi.fn(),

@@ -2,6 +2,16 @@
 
 > 日期：2026-10-30。本阶段只登记，不扩大修改范围；后续 W1/W2/W3 按优先级处理。
 
+## W1 更新（2026-10-30）
+
+- **已解决**：W0 直接修改 img2img/v1；W1 已恢复 v1 冻结指纹并新建 v2（0.8），
+  审计确认 0 个 Job 使用 W0 新指纹。详见 `docs/W1_IMG2IMG_VERSION_AUDIT.md`。
+- **已实现**：G0 静态校验器 `scripts/validate_workflows.py` + CI 阻断。
+- **已实现**：`workflows/release_manifest.yaml` 与 `release_status.ready_to_run`；
+  `anime_generate` 不再进入正常工作流选择列表。
+- **归档核实**：`experiment/pose-generate-20261030` **仅存在本地，未推送远端**（按 W1 指令
+  不擅自推送实验代码）；如需长期保存，后续由用户决定是否推送。
+
 ## P1 — 运行前保护缺失
 
 1. **`module_availability()` 不检查依赖与硬件**

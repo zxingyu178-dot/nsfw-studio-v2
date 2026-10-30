@@ -212,6 +212,13 @@ def module_availability(settings: Settings) -> list[dict]:
         }
         if not registry.has(module_id, module_version):
             entry["unavailable_reason"] = "module_version_not_registered"
+            from app.engine.release import release_status
+
+            entry["release_status"] = release_status(
+                module_id,
+                str(entry.get("binding_version") or binding_version),
+                binding_valid=False,
+            )
             result.append(entry)
             continue
         if provider == "comfyui":
@@ -236,5 +243,14 @@ def module_availability(settings: Settings) -> list[dict]:
             entry["available"] = True
         else:
             entry["unavailable_reason"] = "engine_not_configured"
+
+        # W1-1：available 只代表 binding 可加载；正式放行看 manifest（按 binding 版本）。
+        from app.engine.release import release_status
+
+        entry["release_status"] = release_status(
+            module_id,
+            str(entry.get("binding_version") or binding_version),
+            binding_valid=bool(entry.get("available")),
+        )
         result.append(entry)
     return result

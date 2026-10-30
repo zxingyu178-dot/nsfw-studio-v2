@@ -38,6 +38,11 @@
 | text_encoders | `app/models/text_encoders/` | `qwen_3_06b_base.safetensors`（1.11 GB，Anima 文本编码器） |
 | vae | `app/models/vae/` | `qwen_image_vae.safetensors`（0.24 GB，Anima 链） |
 
+> **Anima 路径（W1-3 核实）**：主模型在 `C:/ComfyUI_models/diffusion_models/` 与
+> `app/models/diffusion_models/` **各有一份**（名称与大小相同，约 2.87 GB）；
+> `anime_generate/v1/binding.yaml` 注释写的是历史位置 `C:\ComfyUI_models`，实际加载路径由
+> ComfyUI `folder_paths` 顺序决定。两份均保留，未做删除；环境清单以本节两处记录为准。
+
 其他（`app/models/` 下）：
 
 | 类型 | 文件 |

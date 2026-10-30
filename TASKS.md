@@ -1,4 +1,4 @@
-# TASKS — NSFW Studio V2
+﻿# TASKS — NSFW Studio V2
 
 ## Phase 0.36：一键继续全部中断任务（2026-10-22，v0.36.0）
 
@@ -443,3 +443,14 @@
 - [x] anime_generate 删除无证据的轻量/快速/批量首选宣传，标记待真实验收。
 - [x] WORKFLOW_INVENTORY / COMFY_ENV_INVENTORY 更新 5 个正式模块与 LoRA/模型事实。
 - [x] 后端 pytest 598 passed / 3 skipped / 0 failed（29m30s）；前端 npm run build 通过。
+
+## 2026-10-30 W1：工作流治理与自动验收
+- [x] W1-0 只读审计 13 个 img2img Stage；确认 0 个 Job 使用 W0 新指纹；无在途 img2img。
+- [x] W1-0 恢复 img2img/v1 冻结指纹；新建 v2（0.8）；新任务默认 v2；未改历史 Job 指纹。
+- [x] W1-1 release_manifest + release_status（binding 级）；available 保留兼容。
+- [x] W1-1 前端按 ready_to_run 选择；anime 隐藏；reference 显示慢速/未验证提示。
+- [x] W1-2 scripts/validate_workflows.py + CI G0；6 binding / 0 errors / 13 legacy warnings。
+- [x] W1-3 Pose 分支仅本地；Anima 双路径记录；Turbo8 性能状态；Inventory/技术债更新。
+- [x] 定向：后端 52 passed；前端 typecheck + 462 tests；G0 0 errors。
+- [x] 前端 build 通过；全量后端 pytest 由 GitHub CI 执行。
+

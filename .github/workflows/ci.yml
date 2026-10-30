@@ -25,6 +25,9 @@ jobs:
       - name: Run tests
         run: pytest
 
+      - name: Validate workflows (G0)
+        run: python scripts/validate_workflows.py
+
   frontend:
     name: Frontend (typecheck + vitest + build)
     runs-on: ubuntu-latest

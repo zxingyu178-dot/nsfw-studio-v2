@@ -155,6 +155,10 @@ def test_modules_api_exposes_anime_generate(client):
     assert anime["available"] is True, anime
     assert anime["provider"] == "comfyui"
     assert anime["binding_version"] == "v1"
+    # W1-1：available 仍是 binding 可加载；正式放行必须等待真实 G3
+    assert anime["release_status"]["real_gate_passed"] is False
+    assert anime["release_status"]["ready_to_run"] is False
+    assert anime["release_status"]["hardware_status"] == "experimental"
     assert anime["is_generative"] is True
     assert anime["input_slots"] == []
     assert anime["title"] == "动漫生图（Anima）"

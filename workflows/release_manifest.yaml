@@ -1,0 +1,64 @@
+schema_version: 1
+# 工作流正式放行清单（W1-1）
+#
+# 状态语义：
+#   dependencies_ready        节点/模型依赖是否齐全（W1 由人工登记；W2 改为实际探测）
+#   real_gate_passed          是否已有该 binding 的真实 G3 出图证据
+#   hardware_status           normal | slow | experimental | unsupported
+#   default_profile_verified  当前默认分辨率/步数是否已有对应 G4 证据
+#   ready_to_run              由 registered + binding_valid + dependencies_ready +
+#                             real_gate_passed + hardware_status != unsupported 计算
+#
+# 禁止把模块文件大小或估算值写成实测性能；缺证据必须写 false/unverified。
+
+modules:
+  basic_generate:
+    bindings:
+      v1:
+        dependencies_ready: true
+        real_gate_passed: true          # 长期夜间批量与日用实例真实出图
+        hardware_status: normal
+        default_profile_verified: false # Turbo8 双 LoRA 的 G4 峰值尚未补测
+        notes: "Qwen-Image 2.1 UC Q4 + Turbo8 + f23gg，8 步；主力文生图，G4 峰值待补"
+
+  img2img:
+    bindings:
+      v1:
+        dependencies_ready: true
+        real_gate_passed: true
+        hardware_status: slow
+        default_profile_verified: true  # 768×768 / 25 步 / 0.55 实测
+        notes: "冻结版本（denoise 0.55），仅历史 Job 恢复"
+      v2:
+        dependencies_ready: true
+        real_gate_passed: true          # 0.8 默认的 768×768 采样实测约 496s
+        hardware_status: slow
+        default_profile_verified: true
+        notes: "新任务默认；denoise 0.8，采样约 496s，输入像素上限待 W2"
+
+  reference_generate:
+    bindings:
+      v1:
+        dependencies_ready: true
+        real_gate_passed: true          # 640 / 20 步真实出图
+        hardware_status: slow
+        default_profile_verified: false # 当前默认 1024 / 25 步未验证
+        notes: "低频高质量；640/20 单张 60+ 分钟，1024/25 默认未验证"
+
+  anime_generate:
+    bindings:
+      v1:
+        dependencies_ready: true        # 模型文件已在磁盘；真实加载未验证
+        real_gate_passed: false         # 移植后 G3 未执行
+        hardware_status: experimental
+        default_profile_verified: false
+        notes: "待真实验收；未通过 G3 前不得出现在正常工作流选择列表"
+
+  upscale:
+    bindings:
+      v1:
+        dependencies_ready: true
+        real_gate_passed: true
+        hardware_status: normal
+        default_profile_verified: false # 放大后的内存/输出尺寸 G4 待补
+        notes: "4x-UltraSharp；轻量优先，SeedVR2 暂不接入"

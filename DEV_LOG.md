@@ -590,3 +590,27 @@
 
 验证：本阶段为文档/配置口径修改；后端 pytest 与前端构建结果见本轮汇报。未启动 GPU、未修改模型/节点/数据库、未执行重型真实工作流。
 验证（2026-10-30）：后端 pytest 598 passed / 3 skipped / 0 failed（29m30s）；前端 npm run build 通过；未启动 GPU，未修改模型/节点/数据库。
+
+## 2026-10-30 W1：工作流治理、版本保护与自动验收
+
+基线：0c581c8。本阶段不新增模型、不下载模型、不安装节点、不执行 GPU 工作流。
+
+W1-0 img2img 版本完整性：
+- 只读审计 D:/NSFW-Studio-Data/database/studio.db：13 个 img2img Stage；指纹 92132d/ca978（1 个，LF 变体）与 7c1156/2f2d5（12 个，CRLF）；无在途 img2img。W0 实际指纹 9c7d1a/2d8bae 使用数为 0。
+- 从 94aa003 恢复 img2img/v1（0.55 冻结）；新建 img2img/v2（0.8 + requirements/performance）；Img2ImgModule 默认 binding 与 configs/workflow.yaml 切换到 v2；未写数据库。
+
+W1-1 正式放行：
+- 新增 workflows/release_manifest.yaml（按 module+binding_version）；新增 backend/app/engine/release.py。
+- /api/v1/modules 增加 release_status：registered/binding_valid/dependencies_ready/real_gate_passed/hardware_status/default_profile_verified/ready_to_run/notes；available 保留兼容。
+- 前端 isReleaseReady/textPrimaryCandidates/releaseStatusNotice；InspectorPanel 与图片起点筛选改用 ready_to_run；anime 不在正常列表，reference 显示慢速/未验证提示；未硬编码模块名。
+
+W1-2 G0 静态校验：
+- 新增 scripts/validate_workflows.py：身份、节点引用、inputs/defaults、SaveImage、Seed、绝对路径、禁止文件、requirements/performance；legacy v1 缺声明仅警告。
+- .github/workflows/ci.yml 后端 job 增加 G0 步骤；当前 checked=6 errors=0 warnings=13。
+
+W1-3 文档与归档：
+- 新增 docs/W1_IMG2IMG_VERSION_AUDIT.md、docs/W1_REPORT.md；更新 WORKFLOW_INVENTORY、COMFY_ENV_INVENTORY（Anima 双路径）、TECH_DEBT（W1 已解决项）、SUBMISSION_STANDARD（legacy 政策）。
+- experiment/pose-generate-20261030 仅存在本地，未推送远端。
+
+验证（本轮定向）：后端 52 passed；前端 typecheck 通过、96 files/462 tests passed；G0 0 errors。全量后端 pytest 未重复运行，最终以 GitHub CI 为准；未启动 GPU。
+补充：前端 npm run build 通过（tsc + vite，393.53 kB JS）；全量后端 pytest 未在本机重复运行，交由 GitHub CI。
