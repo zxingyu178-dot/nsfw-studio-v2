@@ -22,10 +22,15 @@ def _sha16(path: Path) -> str:
 
 
 def test_img2img_v1_is_frozen_with_original_hashes():
-    # 恢复后的 v1 必须与本地 12 个历史 img2img Job 的指纹一致（Windows 工作区 CRLF 字节）；
-    # 禁止再改 v1 文件。另 1 个更早 Job 使用 LF 变体，属于 W1 之前已存在的不兼容。
-    assert _sha16(IMG2IMG_V1 / "workflow.json") == "7c11569529d4e653"
-    assert _sha16(IMG2IMG_V1 / "binding.yaml") == "2f2d5c06055c623a"
+    # 原始 94aa003 v1 的字节在 Windows（CRLF）与 Linux（LF）下有两种历史指纹：
+    # LF=92132d/ca978（1 个更早 Job），CRLF=7c1156/2f2d5（12 个本地 Job）。
+    # 两者都属于原始冻结内容；明确禁止 W0 修改后的指纹。
+    workflow_hash = _sha16(IMG2IMG_V1 / "workflow.json")
+    binding_hash = _sha16(IMG2IMG_V1 / "binding.yaml")
+    assert workflow_hash in {"92132d53229d9bea", "7c11569529d4e653"}
+    assert binding_hash in {"ca978ab11e07ca4a", "2f2d5c06055c623a"}
+    assert workflow_hash != "9c7d1a1f1113391d", "v1 不得保留 W0 的 0.8 工作流"
+    assert binding_hash != "2d8bae7af79c8bd3", "v1 不得保留 W0 的 0.8 binding"
 
 
 def test_img2img_v2_is_new_default_and_has_dependencies():
