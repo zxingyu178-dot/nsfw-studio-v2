@@ -465,4 +465,4 @@
 - [x] W1.1-4 G0 精确节点类型/依赖/输入映射/SaveImage/输出索引/私人 Prompt/Git 权重/performance 字段。
 - [x] W1.1-4 新增 9 类 G0 负向测试。
 - [x] W1.1-5 后端定向 46 passed；前端 typecheck + 468 tests + build；G0 0 errors。
-- [ ] W1.1-5 GitHub CI 结果与远端同步（提交后补记）。
+- [x] W1.1-5 GitHub CI 全绿：run 41013291401（后端 620 passed / 3 skipped，前端 468 passed，G0 通过）。

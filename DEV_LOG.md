@@ -631,8 +631,13 @@ CI 结果：代码提交 d7b32f7，GitHub Actions run #269（Backend pytest + Fr
   按数据库证据把 anime 标为 `real_gate_passed=true` / `slow`（与审查前提冲突，见 W1.1 报告）。
 - W1.1-4：G0 增加精确节点类型、requirements.nodes/models、标准输入映射、SaveImage 连接、
   输出索引、私人 Prompt、Git 权重、performance 证据字段；新增 9 类负向测试。
-- W1.1-5：后端定向 46 passed；前端 typecheck + 96 files/468 tests + build 通过；
+- W1.1-5：后端定向 50 passed；前端 typecheck + 96 files/468 tests + build 通过；
   G0 `checked=6 errors=0 warnings=14`；全量后端 pytest 交由 GitHub CI。
+- CI 首轮发现既有 Phase 2.2 用例与门禁顺序冲突：原 v2 升级用例同时改 binding_version，
+  期望“版本不存在”，现在门禁先拒绝；改为只改 module_version，保留 fail-fast 与
+  resume 身份继承断言。
 
 新增：`tests/backend/test_workflow_release_gate_w11.py`、`tests/backend/test_validate_workflows_w11.py`、
 `docs/W1_1_REPORT.md`、`docs/W1_1_RELEASE_GATE_AUDIT.md`、`docs/W1_1_G0_REPORT.md`。
+CI 结果：代码提交 ca80a5b，GitHub Actions run 41013291401 —— 后端 620 passed / 3 skipped（含 G0 通过），
+前端 typecheck + 468 tests + build + store regression 11 passed，两个 job 全部 success。

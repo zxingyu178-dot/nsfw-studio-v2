@@ -13,7 +13,7 @@
 | W1.1-2 前端图片模块放行漏洞 | ✅ 已修复 source/reference 槽绕过，覆盖 Recipe/History/setInputImage 归一化 |
 | W1.1-3 三类验收证据分离 | ✅ manifest 与 inventory/reference 文档已拆分 |
 | W1.1-4 G0 静态检查增强 | ✅ 9 类新增检查 + 9 类负向测试 |
-| W1.1-5 回归与 CI | ✅ 定向 46 passed；前端 468 passed；G0 0 errors；CI 结果见 §6 |
+| W1.1-5 回归与 CI | ✅ 定向 50 passed；前端 468 passed；G0 0 errors；CI 全绿（§6） |
 
 ## 2. W1.1-1 后端正式放行门禁
 
@@ -93,12 +93,18 @@
 ### 5.2 后端定向测试
 
 ```text
-46 passed
+50 passed
 ```
 
 覆盖：门禁拒绝/放行、未登记 binding、拒绝无残留 Job、Agent 不能绕过、
-`resume-remaining` 受门禁、`resume-interrupted` 不受破坏、anime 证据断言、
-img2img v2 指纹兼容、reference 模块、G0 9 类负向测试。
+`resume-remaining` 受门禁、`resume-interrupted` 不受破坏、anime 证据与端到端/输入槽/链式、
+img2img v2 指纹兼容、reference 模块、Phase 2.2 resume 身份继承、G0 9 类负向测试。
+
+CI 首次运行暴露 1 个既有用例与新门禁的顺序冲突：
+`test_phase22_consistency.py::test_resume_inherits_parent_workflow_identity` 原先把
+`binding_version` 也设为 v2，期望报“版本不存在”；现在门禁先以 `WORKFLOW_NOT_RELEASED`
+拒绝。已把该用例改为只改 `module_version=v2`（binding 仍为已放行的 v1），
+继续验证未注册模块版本 fail fast，同时保留 Resume 继承 parent 身份的断言。
 
 ### 5.3 前端
 
@@ -109,6 +115,17 @@ npm run build 通过（393.54 kB JS）
 ```
 
 ## 6. 新增与修改文件
+
+### 6.0 CI 结果
+
+代码提交 `ca80a5b`（GitHub Actions run 41013291401）：
+
+```text
+Backend (pytest)  620 passed, 3 skipped  （含 G0 step 通过）
+Frontend          typecheck + 468 tests + build + store regression 11 passed
+```
+
+随后仅有文档提交（不改变代码），最终 HEAD 的 CI 结果见交付汇报。
 
 新增：
 
