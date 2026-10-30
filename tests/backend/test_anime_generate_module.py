@@ -100,6 +100,34 @@ def force_unreleased(monkeypatch):
     }})
 
 
+def test_anime_job_end_to_end(mock_client, session):
+    """当前 manifest 已按真实证据放行 anime；端到端链路仍必须可用。"""
+    job = mock_client.post("/api/v1/jobs", json={
+        "source": "doubao",
+        "client_request_id": "anime-e2e-2",
+        "snapshot": make_snapshot(
+            count=1, workflow_modules=[{"module_id": "anime_generate"}],
+        ),
+    }).json()
+    assert job["workflow_snapshot"]["modules"][0]["module_id"] == "anime_generate"
+
+    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
+    stage = final["stages"][0]
+    assert stage["module_id"] == "anime_generate"
+    item = stage["items"][0]
+    assert item["seed"] is not None, "uses_seed=true → 必须记录真实 Seed"
+    output = session.get(Image, item["output_image_id"])
+    assert output.kind == "original" and output.parent_image_id is None
+    assert output.seed == item["seed"]
+
+    request = mock_client.app.state.adapter.submitted_requests[-1]
+    assert request.binding.module_id == "anime_generate"
+    assert request.parameters["positive_prompt"] == make_snapshot()["full_prompt"]
+    assert request.parameters["negative_prompt"] == make_snapshot()["negative_prompt"]
+    assert request.parameters["width"] == 768 and request.parameters["height"] == 1024
+    assert request.parameters["seed"] == item["seed"]
+
+
 def test_anime_job_rejected_when_manifest_not_released(mock_client, monkeypatch):
     """W1.1-1：manifest 未放行时，服务端拒绝创建 Job（不能只靠前端隐藏）。"""
     force_unreleased(monkeypatch)
@@ -114,9 +142,8 @@ def test_anime_job_rejected_when_manifest_not_released(mock_client, monkeypatch)
     assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
 
 
-def test_anime_rejects_input_image(mock_client, monkeypatch, png_bytes):
+def test_anime_rejects_input_image(mock_client, png_bytes):
     """动漫模块不消费输入图（无输入槽）→ 携带输入图必须被拒绝。"""
-    force_unreleased(monkeypatch)
     imported = mock_client.post(
         "/api/v1/images/import", files=[("files", ("anime_in.png", png_bytes, "image/png"))]
     ).json()["imported"][0]["image"]
@@ -126,21 +153,23 @@ def test_anime_rejects_input_image(mock_client, monkeypatch, png_bytes):
             workflow_modules=[{"module_id": "anime_generate"}],
         ),
     })
-    # 放行门禁先于输入槽校验：未放行模块直接 WORKFLOW_NOT_RELEASED。
     assert response.status_code == 400, response.text
-    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
+    assert response.json()["error"]["code"] == "UNUSED_INPUT_IMAGE"
 
 
-def test_anime_then_upscale_chain_rejected(mock_client, monkeypatch):
-    force_unreleased(monkeypatch)
-    response = mock_client.post("/api/v1/jobs", json={
+def test_anime_then_upscale_chain(mock_client, session):
+    job = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(
             count=1,
             workflow_modules=[{"module_id": "anime_generate"}, {"module_id": "upscale"}],
         ),
-    })
-    assert response.status_code == 400, response.text
-    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
+    }).json()
+    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
+    assert [stage["module_id"] for stage in final["stages"]] == ["anime_generate", "upscale"]
+    stage1_item = final["stages"][1]["items"][0]
+    assert stage1_item["input_image_id"] == final["stages"][0]["items"][0]["output_image_id"]
+    upscaled = session.get(Image, stage1_item["output_image_id"])
+    assert upscaled.kind == "upscaled"
 
 
 # ===== /modules：注册 + 可用（binding 在仓库内） =====
