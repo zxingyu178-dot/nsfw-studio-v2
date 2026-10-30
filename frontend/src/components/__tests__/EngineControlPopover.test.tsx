@@ -216,3 +216,31 @@ describe('EngineControlPopover 生图引擎控制', () => {
     expect(screen.getByRole('button', { name: '重启' })).toBeDisabled()
   })
 })
+
+
+describe('引擎状态轮询资源预算', () => {
+  it('慢请求期间不叠加新的状态请求', async () => {
+    vi.useFakeTimers()
+    getMock.mockImplementation(() => new Promise(() => {}))
+    const view = render(<EngineControlPopover onClose={vi.fn()} />)
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+      expect(getMock).toHaveBeenCalledTimes(1)
+    } finally { view.unmount(); vi.clearAllTimers(); vi.useRealTimers() }
+  })
+  it('隐藏页面不轮询，返回可见时立即检查', async () => {
+    vi.useFakeTimers()
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    getMock.mockResolvedValue(rt('RUNNING_MANAGED'))
+    const view = render(<EngineControlPopover onClose={vi.fn()} />)
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(20000) })
+      expect(getMock).not.toHaveBeenCalled()
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')) })
+      expect(getMock).toHaveBeenCalledTimes(1)
+    } finally {
+      view.unmount(); Reflect.deleteProperty(document, 'visibilityState'); vi.clearAllTimers(); vi.useRealTimers()
+    }
+  })
+})

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { subscribeJobEvents } from '../api/client'
 import type { JobEventDTO } from '../types/workbench'
 
 // ===== 模拟 api client（不建立真实 EventSource / HTTP） =====
@@ -19,6 +20,8 @@ import {
   handleJobEvent,
   liveProgressForStageItem,
   refreshJobs,
+  startJobStore,
+  stopJobStore,
 } from './jobStore'
 
 const EMPTY_QUEUE = { worker: { running: false }, running: null, queued: [], paused: [] }
@@ -146,5 +149,43 @@ describe('jobStore liveProgress（v0.15 Task 8 / v0.15.1 stage_item_id）', () =
     expect(map['stage_item_1']).toBeUndefined()
     expect(map['stage_item_2']).toBeDefined()
     expect(map['stage_item_2'].engineStage).toBe('upscale')
+  })
+})
+
+
+describe('SSE健康时降频校准', () => {
+  it('SSE连接时每分钟校准，断线恢复十秒兜底', async () => {
+    vi.mocked(subscribeJobEvents).mockClear()
+    startJobStore()
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      const notify = vi.mocked(subscribeJobEvents).mock.calls[0][1]!
+      notify('open')
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(mocks.queue).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(mocks.queue).toHaveBeenCalledTimes(2)
+      notify('error')
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(mocks.queue).toHaveBeenCalledTimes(3)
+    } finally { stopJobStore() }
+  })
+  it('隐藏时停止兜底轮询，回到前台立即刷新，停止后移除监听', async () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    startJobStore()
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(mocks.queue).toHaveBeenCalledTimes(1)
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.queue).toHaveBeenCalledTimes(2)
+      stopJobStore()
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.queue).toHaveBeenCalledTimes(2)
+    } finally { stopJobStore(); Reflect.deleteProperty(document, 'visibilityState') }
   })
 })

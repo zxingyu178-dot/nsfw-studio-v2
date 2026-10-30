@@ -183,3 +183,60 @@ def test_restart_succeeded(tmp_path, monkeypatch):
     snap = svc.restart()
     assert snap.state == "RUNNING_MANAGED"
     assert calls[0][3] == "restart"
+
+
+def test_status_snapshot_has_short_ttl(tmp_path, monkeypatch):
+    from app.services import engine_runtime_service as module
+    now = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: now[0])
+    svc = _make(tmp_path)
+    calls = []
+    monkeypatch.setattr(svc._client, '_run', _fake_run({'status': (0, _json(state='online'))}, calls))
+    svc.status()
+    now[0] = 2.9
+    svc.status()
+    assert len(calls) == 1
+    now[0] = 3.1
+    svc.status()
+    assert len(calls) == 2
+
+
+def test_concurrent_status_queries_share_one_cli_process(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    svc = _make(tmp_path)
+    entered, release = Event(), Event()
+    calls = []
+    def run(argv):
+        calls.append(argv)
+        entered.set()
+        assert release.wait(3)
+        return 0, _json(state='online')
+    monkeypatch.setattr(svc._client, '_run', run)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(svc.status) for _ in range(4)]
+        assert entered.wait(3)
+        release.set()
+        assert all(f.result(timeout=5).state == 'RUNNING_MANAGED' for f in futures)
+    assert len(calls) == 1
+
+
+def test_actions_invalidate_status_but_are_never_cached(tmp_path, monkeypatch):
+    svc = _make(tmp_path)
+    calls = []
+    online = [False]
+    def run(argv):
+        action = argv[3]
+        calls.append(action)
+        if action == 'status':
+            return 0, _json(state='online' if online[0] else 'offline')
+        online[0] = action == 'start'
+        return 0, _json(state='succeeded')
+    monkeypatch.setattr(svc._client, '_run', run)
+    assert svc.status().state == 'STOPPED'
+    assert svc.start().state == 'RUNNING_MANAGED'
+    svc.stop()
+    assert svc.status().state == 'STOPPED'
+    svc.stop()
+    assert calls.count('stop') == 2
+    assert calls.count('start') == 1

@@ -65,23 +65,34 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
   const [runtime, setRuntime] = useState<EngineRuntimeDTO | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
+  const actingRef = useRef(false)
+  const pollGeneration = useRef(0)
   const [confirmAction, setConfirmAction] = useState<'stop' | 'restart' | null>(null)
 
   // 焦点管理：打开时进入面板，关闭后回到触发元素
   useFocusGuard(true, panelRef)
 
-  // 打开即拉取 + 每 3s 轮询
+  // 只在可见时观察；慢请求不叠加，动作期间由动作回执负责刷新。
   useEffect(() => {
     let cancelled = false
+    let inFlight = false
     const load = async () => {
-      const rt = await refreshRuntime()
-      if (!cancelled && rt) setRuntime(rt)
+      if (cancelled || inFlight || actingRef.current || document.visibilityState === 'hidden') return
+      inFlight = true
+      const generation = pollGeneration.current
+      try {
+        const rt = await refreshRuntime()
+        if (!cancelled && !actingRef.current && generation === pollGeneration.current && rt) setRuntime(rt)
+      } finally { inFlight = false }
     }
+    const onVisibility = () => { void load() }
     void load()
-    const timer = window.setInterval(load, 3000)
+    const timer = window.setInterval(load, 10000)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
@@ -112,6 +123,8 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
   }, [])
 
   const handleStart = useCallback(async () => {
+    actingRef.current = true
+    pollGeneration.current += 1
     setActing(true)
     setError(null)
     try {
@@ -120,12 +133,16 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
     } catch (e) {
       setError(failMessage(e))
     } finally {
+      actingRef.current = false
+      pollGeneration.current += 1
       setActing(false)
     }
   }, [failMessage])
 
   const runStop = useCallback(
     async (withPause: boolean) => {
+      actingRef.current = true
+      pollGeneration.current += 1
       setActing(true)
       setError(null)
       try {
@@ -136,6 +153,8 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
       } catch (e) {
         setError(failMessage(e))
       } finally {
+        actingRef.current = false
+        pollGeneration.current += 1
         setActing(false)
         setConfirmAction(null)
       }
@@ -145,6 +164,8 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
 
   const runRestart = useCallback(
     async (withPause: boolean) => {
+      actingRef.current = true
+      pollGeneration.current += 1
       setActing(true)
       setError(null)
       try {
@@ -164,6 +185,8 @@ export function EngineRuntimeBody({ panelRef, triggerSelector, onClose }: Engine
       } catch (e) {
         setError(failMessage(e))
       } finally {
+        actingRef.current = false
+        pollGeneration.current += 1
         setActing(false)
         setConfirmAction(null)
       }

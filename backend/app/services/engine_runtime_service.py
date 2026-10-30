@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -531,6 +532,8 @@ class ControlHubEngineRuntime:
         python_exe = str(ch_cfg.get("python_exe") or DEFAULT_CONTROLHUB_PYTHON)
         data_root = str(ch_cfg.get("data_root") or DEFAULT_CONTROLHUB_DATA_ROOT)
         self._client = ControlHubLifecycleClient(python_exe, data_root)
+        self._status_lock = threading.Lock()
+        self._status_cached: tuple[float, RuntimeSnapshot] | None = None
 
         logs_dir = settings.storage.data_root / "logs" / "engine"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -540,7 +543,16 @@ class ControlHubEngineRuntime:
 
     def _invoke(self, action: str):
         """调用 ControlHub CLI（seam）。返回 LifecycleResult。"""
-        return self._client.invoke(action, self.integration_id)
+        if action == "status":
+            return self._client.invoke(action, self.integration_id)
+        # 只复用观察快照；生命周期动作仍每次进入官方CLI，前后均失效缓存。
+        with self._status_lock:
+            self._status_cached = None
+        try:
+            return self._client.invoke(action, self.integration_id)
+        finally:
+            with self._status_lock:
+                self._status_cached = None
 
     # ===== 状态映射 =====
 
@@ -565,6 +577,15 @@ class ControlHubEngineRuntime:
         return f"ComfyUI integration({self.integration_id}) 未注册/未批准（待第二阶段 ControlHub 接入）"
 
     def status(self) -> RuntimeSnapshot:
+        # 同一实例并发读取合并；三秒后重新核查，不建立第二套运行事实。
+        with self._status_lock:
+            if self._status_cached is not None and time.monotonic() < self._status_cached[0]:
+                return self._status_cached[1]
+            snapshot = self._read_status()
+            self._status_cached = (time.monotonic() + 3.0, snapshot)
+            return snapshot
+
+    def _read_status(self) -> RuntimeSnapshot:
         res = self._invoke("status")
         st = res.state
         if st == "online":

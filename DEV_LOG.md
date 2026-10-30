@@ -582,3 +582,9 @@
 ## 2026-10-30 审核桥加载专项第一步
 
 feed按页批量读取图片、生成任务、提示词/版本与事件revision，避免逐图片读取完整详情；未改游标、墓碑、幂等写入、数据库结构或生产运行态。新增SQL计数回归先观察RED：5/20张分别12/42次SELECT；实现后同样本4/4次。feed与scoring两个目标文件回归终态exit0，可靠提示词版本关联补入feed断言。测试仅临时DataRoot，日志loading-feed-red.log与loading-feed-green.log；不宣称手机延迟改善。后续手机预取/同步退避及桌面轮询资源专项按MediaReview计划串行推进。
+
+## 2026-10-30 桌面观察轮询资源优化
+
+ControlHubEngineRuntime仅status查询合并并发CLI调用，并缓存观察快照最多3秒；start/stop/restart不合并、不缓存，动作前后失效。新增TTL/并发RED两项后实现，ControlHub适配与engine runtime API目标回归19项通过。UI慢请求不叠加，状态面板10秒观察、隐藏暂停、回焦立即读；操作前后代际保护防止旧观察覆盖动作结果。jobStore SSE健康每60秒校准、断线10秒兜底、隐藏不轮询，退出移除监听；相关前端19项通过（先4项RED），tsc与vite构建通过。首次Vitest因系统Temp权限未执行用例，改用既有项目临时目录后正常；不改系统环境。使用登记Node24.18.1，package engines仍标22，本轮未安装重复环境。
+
+未部署、未更改ControlHub契约/Registry或生产队列/工作流，未触碰他人工作树修改。证据resource-status-red/green、resource-ui-red-correct-temp/green、resource-ui-build.log。

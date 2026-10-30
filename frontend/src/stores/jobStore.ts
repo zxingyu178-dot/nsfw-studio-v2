@@ -200,6 +200,7 @@ function pruneLiveProgress(jobs: JobDTO[]): void {
 
 let refreshTimer: number | null = null
 let refreshing = false
+let lastSnapshotAt = 0
 
 export function scheduleJobRefresh(delayMs = 300): void {
   if (refreshTimer !== null) window.clearTimeout(refreshTimer)
@@ -225,6 +226,7 @@ export async function refreshJobs(): Promise<void> {
       tracked = inQueue ?? (await jobApi.get(trackedId))
     }
     setState({ queue, engine, engineLoaded: true, trackedJob: tracked })
+    lastSnapshotAt = Date.now()
     // 瞬态进度收敛：持久 DTO 已终态的 item 不再保留 live
     pruneLiveProgress([queue.running, ...queue.queued, ...queue.paused, tracked].filter(
       (j): j is JobDTO => j !== null && j !== undefined,
@@ -383,21 +385,31 @@ let started = false
 let pollTimer: number | null = null
 let unsubscribeSse: (() => void) | null = null
 
+function onJobVisibilityChange(): void {
+  if (document.visibilityState === 'visible') void refreshJobs()
+}
+
 /** 由 MainLayout 调用一次；SSE 断线时兜底轮询仍保证状态最终一致。 */
 export function startJobStore(): void {
   if (started) return
   started = true
+  setState({ sseConnected: false })
   void refreshJobs()
   unsubscribeSse = subscribeJobEvents(
     (event) => handleJobEvent(event),
     (connection) => setState({ sseConnected: connection === 'open' }),
   )
+  document.addEventListener('visibilitychange', onJobVisibilityChange)
   pollTimer = window.setInterval(() => {
+    if (document.visibilityState === 'hidden') return
+    const age = Date.now() - lastSnapshotAt
+    if (state.sseConnected && age >= 0 && age < 60000) return
     void refreshJobs()
   }, 10000)
 }
 
 export function stopJobStore(): void {
+  document.removeEventListener('visibilitychange', onJobVisibilityChange)
   if (pollTimer !== null) window.clearInterval(pollTimer)
   pollTimer = null
   unsubscribeSse?.()
@@ -418,6 +430,8 @@ export function liveProgressForStageItem(
 
 /** 测试隔离：重置仓库内存态与定时器（仅测试使用）。 */
 export function __resetJobStoreForTest(): void {
+  document.removeEventListener('visibilitychange', onJobVisibilityChange)
+  lastSnapshotAt = 0
   if (refreshTimer !== null) window.clearTimeout(refreshTimer)
   refreshTimer = null
   if (pollTimer !== null) window.clearInterval(pollTimer)
