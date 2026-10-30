@@ -588,3 +588,7 @@ feed按页批量读取图片、生成任务、提示词/版本与事件revision�
 ControlHubEngineRuntime仅status查询合并并发CLI调用，并缓存观察快照最多3秒；start/stop/restart不合并、不缓存，动作前后失效。新增TTL/并发RED两项后实现，ControlHub适配与engine runtime API目标回归19项通过。UI慢请求不叠加，状态面板10秒观察、隐藏暂停、回焦立即读；操作前后代际保护防止旧观察覆盖动作结果。jobStore SSE健康每60秒校准、断线10秒兜底、隐藏不轮询，退出移除监听；相关前端19项通过（先4项RED），tsc与vite构建通过。首次Vitest因系统Temp权限未执行用例，改用既有项目临时目录后正常；不改系统环境。使用登记Node24.18.1，package engines仍标22，本轮未安装重复环境。
 
 未部署、未更改ControlHub契约/Registry或生产队列/工作流，未触碰他人工作树修改。证据resource-status-red/green、resource-ui-red-correct-temp/green、resource-ui-build.log。
+
+## 2026-10-30 增量快照正确性与历史查询预算
+
+追加隔离并发回归，观察到旧favorite状态被标为并发新revision（2而非1）的RED；改为同一SELECT读取Image与revision，下一轮游标仍正确返回新状态。历史10000事件测试发现GROUP BY聚合扫描约110000采样VM指令，随后改为基于现有(image_id,seq)索引的相关MAX查询，避免全历史聚合，不新增索引/迁移。最终5/20图SELECT为3/3；100指令采样回调未触发，不解释为SQL零成本。feed与scoring最终14项通过（loading-feed-final2.xml/log）。不改审核写入/路径/游标合同；未部署。

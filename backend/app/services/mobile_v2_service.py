@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import json
 
-from sqlalchemy import text, select, bindparam
+from sqlalchemy import text, select, func, table, column
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
@@ -91,10 +91,16 @@ def feed(session: Session, cursor: str | None, limit: int) -> dict:
     ), {"seq": position, "limit": limit + 1}).mappings().all()
     selected = events[:limit]
     ids = {event["image_id"] for event in selected}
-    images = {image.id: image for image in session.scalars(select(Image).where(Image.id.in_(ids)))} if ids else {}
-    revisions = dict(session.execute(text(
-        "SELECT image_id,max(seq) FROM mobile_image_events WHERE image_id IN :ids GROUP BY image_id"
-    ).bindparams(bindparam("ids", expanding=True)), {"ids": list(ids)}).all()) if ids else {}
+    images, revisions = {}, {}
+    if ids:
+        events_table = table("mobile_image_events", column("image_id"), column("seq"))
+        # 复用(image_id,seq)索引取每图末条；不聚合扫描该图全部历史事件。
+        latest = (select(func.max(events_table.c.seq))
+            .where(events_table.c.image_id == Image.id).correlate(Image).scalar_subquery())
+        # 状态与revision来自同一SELECT快照，防止旧状态被标成新revision。
+        rows = session.execute(select(Image, func.coalesce(latest, 0)).where(Image.id.in_(ids))).all()
+        images = {image.id: image for image, _ in rows}
+        revisions = {image.id: revision for image, revision in rows}
     job_ids = {image.job_id for image in images.values() if image.job_id}
     jobs = {job.id: job for job in session.scalars(select(Job).where(Job.id.in_(job_ids)))} if job_ids else {}
     snapshots = {key: _json(job.workbench_snapshot_json) for key, job in jobs.items()}

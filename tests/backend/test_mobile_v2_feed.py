@@ -106,3 +106,52 @@ def test_feed_select_count_is_bounded_by_batches(session_factory, make_mobile_im
     print(f'Feed SELECT counts for 5/20 images: {counts}')
     assert max(counts) <= 8, f'SELECT counts for 5/20 images: {counts}'
     assert counts[1] <= counts[0] + 1, f'Query count grows with page size: {counts}'
+
+
+def test_feed_state_and_revision_share_one_read_snapshot(session_factory, make_mobile_image):
+    from sqlalchemy import event
+    from app.services import mobile_v2_service
+    image = make_mobile_image(1)[0]
+    with session_factory() as session:
+        before = session.execute(text('SELECT max(seq) FROM mobile_image_events WHERE image_id=:id'), {'id': image.id}).scalar_one()
+        engine = session.get_bind()
+        changed = []
+        def update_after_image_read(conn, cursor, statement, parameters, context, executemany):
+            sql = ' '.join(statement.lower().split())
+            if not changed and sql.startswith('select') and 'from images' in sql:
+                changed.append(True)
+                with engine.begin() as writer:
+                    writer.execute(text('UPDATE images SET favorite=1 WHERE id=:id'), {'id': image.id})
+        event.listen(engine, 'after_cursor_execute', update_after_image_read)
+        try:
+            page = mobile_v2_service.feed(session, None, 100)
+        finally:
+            event.remove(engine, 'after_cursor_execute', update_after_image_read)
+        assert changed
+        row = next(row for row in page['items'] if row['image_id'] == image.id)
+        assert row['is_favorite'] is False
+        assert int(row['revision']) == before, 'old state must not be labelled with a concurrent newer revision'
+    with session_factory() as session:
+        next_page = mobile_v2_service.feed(session, page['next_cursor'], 100)
+        assert next_page['items'][0]['is_favorite'] is True
+        assert int(next_page['items'][0]['revision']) > before
+
+
+def test_feed_revision_lookup_does_not_scan_entire_image_history(session_factory, make_mobile_image):
+    from app.services import mobile_v2_service
+    image = make_mobile_image(1)[0]
+    with session_factory() as writer:
+        writer.execute(text("INSERT INTO mobile_image_events(image_id,event) VALUES (:id,'UPSERT')"), [{'id': image.id}] * 10_000)
+        writer.commit()
+    ticks = []
+    with session_factory() as session:
+        raw = session.connection().connection.driver_connection
+        raw.set_progress_handler(lambda: ticks.append(1) or 0, 100)
+        try:
+            page = mobile_v2_service.feed(session, None, 1)
+        finally:
+            raw.set_progress_handler(None, 0)
+    assert page['has_more'] and len(page['items']) == 1
+    steps = len(ticks) * 100
+    print(f'SQLite VM steps with 10000 historical events: {steps}')
+    assert steps <= 2_000, f'Revision lookup scans historical events: {steps} VM steps'
