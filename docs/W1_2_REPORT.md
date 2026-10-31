@@ -186,7 +186,17 @@ build 通过（393.55 kB JS）
 
 ## 9. Git / CI
 
-（提交后补记；最终以交付汇报为准）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `01e5597aaf5bc46e0e935235e4cd724d281e7413` |
+| W1.2 代码提交 | `842faf1ed7d99cf13b156a302d8bddc8574dc960` |
+| store 回归适配 | `105a99c06e8680c0fc99cb1f695be7c71e276bfa` |
+| CI run | `41165232488` |
+| 后端 | 626 passed / 3 skipped（含 G0 step 通过） |
+| 前端 | typecheck + 97 files / 476 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
 
 ## 10. 未验证 / 限制
 

@@ -476,4 +476,4 @@
 - [x] W1.2-D CLI 不再默认 anime；--list-workflows；输出实际模块。
 - [x] W1.2-E 提交标准 / Agent / AI 生图文档统一。
 - [x] 验证：后端定向 47 passed；前端 typecheck + 97 files/476 tests + build；G0 0 errors。
-- [ ] W1.2 GitHub CI 结果（提交后补记）。
+- [x] W1.2 GitHub CI 全绿：run 41165232488（后端 626 passed / 3 skipped，前端 476 tests，G0 通过）。

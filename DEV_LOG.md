@@ -659,3 +659,7 @@ CI 结果：代码提交 ca80a5b，GitHub Actions run 41013291401 —— 后端 
 
 验证：后端定向 47 passed（含 agent 14）；前端 typecheck + 97 files/476 tests + build；
 G0 checked=6 errors=0 warnings=14。新增 docs/W1_2_REPORT.md。
+- CI 首轮 store regression 失败（Phase 6 CATALOG 缺 is_generative/input_slots），
+  已补齐 fixtures 并改用 imagePrimaryCandidates；`npm run test:store` 11 passed。
+CI 结果：代码提交 105a99c，GitHub Actions run 41165232488 —— 后端 626 passed / 3 skipped，
+前端 typecheck + 476 tests + build + store regression 11 passed，两个 job 全部 success。
