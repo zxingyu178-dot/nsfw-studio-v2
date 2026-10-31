@@ -139,11 +139,16 @@ def main() -> int:
     if not args.prompt.strip():
         parser.error("--prompt 必填（--list-workflows 除外）")
 
+    # W1.2.2：严格区分 None 与显式空字符串；空白模块 ID 必须在任何 HTTP 请求前失败。
+    if args.module is not None and not args.module.strip():
+        print("[FAIL] --module 不能为空字符串或纯空白；使用服务端默认请完全省略 --module")
+        return 2
+
     # 旧 /jobs 路径无法由服务端自动追加 upscale，因此需要先解析实际 Primary；
     # Agent 加固路径则把 module_id 省略交给服务端解析（不在 CLI 里写默认）。
     use_agent_endpoint = bool(load_token(args.token)) and not args.legacy
-    if args.module:
-        primary_id: str | None = args.module
+    if args.module is not None:
+        primary_id: str | None = args.module.strip()
     elif use_agent_endpoint:
         primary_id = None
     else:
@@ -165,7 +170,7 @@ def main() -> int:
             "prompt": args.prompt,
             "negative_prompt": args.negative,
             # 不传 module_id = 服务端默认；显式传入由服务端做能力/放行校验
-            **({"module_id": args.module} if args.module else {}),
+            **({"module_id": args.module.strip()} if args.module is not None else {}),
             "upscale": args.upscale,
             "width": args.width,
             "height": args.height,

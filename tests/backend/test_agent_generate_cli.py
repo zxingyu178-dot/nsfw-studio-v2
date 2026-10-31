@@ -74,3 +74,15 @@ def test_list_workflows_only_shows_agent_allowed(cli, monkeypatch, capsys):
     assert "anime_generate" not in output
     assert "img2img" not in output
     assert "服务端默认" in output
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_cli_blank_module_fails_before_http(cli, monkeypatch, capsys, value):
+    """W1.2.2：显式空/纯空白 --module 必须在任何 HTTP 请求之前失败。"""
+    calls: list[object] = []
+    monkeypatch.setattr(cli, "post", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(cli, "get", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--prompt", "x", "--module", value])
+    assert cli.main() == 2
+    assert calls == [], "空白 module_id 不得发起任何 HTTP 请求"
+    assert "不能为空" in capsys.readouterr().out

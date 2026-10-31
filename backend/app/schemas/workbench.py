@@ -5,7 +5,7 @@
 """
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.prompt_composer import loads_structured
 
@@ -81,6 +81,15 @@ class WorkflowModuleRefModel(BaseModel):
     workflow_hash: str | None = None
     binding_hash: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("module_id")
+    @classmethod
+    def _validate_module_id(cls, value: str) -> str:
+        """W1.2.2：显式空字符串 / 纯空白一律拒绝；有效值去首尾空格。"""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("module_id 不能为空字符串或纯空白")
+        return normalized
 
 
 class WorkflowSnapshotModel(BaseModel):

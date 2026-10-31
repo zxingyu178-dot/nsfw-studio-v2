@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import uuid
 
 import pytest
@@ -11,6 +12,7 @@ from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings, Wor
 from app.engine import release
 from app.main import create_app
 from app.models import Job, JobStage, Prompt
+from app.services import job_service
 
 
 def mock_settings(settings: Settings) -> Settings:
@@ -350,3 +352,62 @@ def test_legacy_doubao_invalid_job_rolls_back_prompt(agent_client, session, monk
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "FIXED_SEED_SINGLE_ONLY"
     assert db_counts(session) == before
+
+
+# ===== W1.2.2：Prompt 归档与幂等指纹解耦 =====
+
+def test_replay_after_prompt_archived_returns_original_job(agent_client, session, monkeypatch):
+    """B：原 Prompt 归档后，相同请求键 + 相同内容必须返回原 Job，且不新建 Prompt。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-archive")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-archive"}
+    body = payload(prompt="archive replay prompt", client_request_id=f"arch_{uuid.uuid4().hex[:10]}")
+    first = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    job = first.json()
+    prompt_id = job["workbench_snapshot"]["source_prompt_id"]
+    prompt = session.get(Prompt, prompt_id)
+    assert prompt is not None
+    prompt.archived = True
+    session.commit()
+    prompt_count = session.query(Prompt).count()
+
+    replay = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == job["id"]
+    assert replay.json()["idempotent_replay"] is True
+    assert session.query(Prompt).count() == prompt_count, "归档不应因重放产生新 Prompt"
+    detail = agent_client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert detail["workbench_snapshot"]["source_prompt_id"] == prompt_id
+
+
+def test_legacy_fingerprint_job_replays_after_prompt_archive(agent_client, session, monkeypatch):
+    """兼容 W1.2.2 之前（指纹含 Prompt 溯源）的历史 Job：重建旧指纹后仍可重放。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-legacy-fp")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-legacy-fp"}
+    body = payload(prompt="legacy fingerprint prompt", client_request_id=f"lfp_{uuid.uuid4().hex[:10]}")
+    first = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
+    assert first.status_code == 201, first.text
+    job_id = first.json()["id"]
+
+    db_job = session.get(Job, job_id)
+    stored_snapshot = json.loads(db_job.workbench_snapshot_json or "{}")
+    db_job.client_request_fingerprint = job_service._request_fingerprint(
+        job_kind="generate",
+        snapshot=stored_snapshot,
+        input_image_ids=[],
+        stage_configs=[],
+        include_prompt_provenance=True,
+    )
+    prompt_id = stored_snapshot["source_prompt_id"]
+    prompt = session.get(Prompt, prompt_id)
+    prompt.archived = True
+    session.commit()
+    prompt_count = session.query(Prompt).count()
+
+    replay = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
+    assert replay.status_code == 201, replay.text
+    assert replay.json()["id"] == job_id
+    assert replay.json()["idempotent_replay"] is True
+    assert session.query(Prompt).count() == prompt_count

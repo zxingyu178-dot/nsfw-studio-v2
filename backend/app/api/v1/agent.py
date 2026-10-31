@@ -103,7 +103,7 @@ def submit_agent_job(
     settings = request.app.state.settings
 
     # W1.2-B/C：先解析实际工作流（不传 module_id = 服务器默认）→ 正式放行 → 能力校验。
-    # 任一检查失败都在 assign_ai_prompt（内部 commit）与 Job 创建之前返回，不产生副作用。
+    # 任一检查失败都在 Prompt 关联（commit=False）与 Job 创建之前返回，不产生副作用。
     workflow_modules = agent_service.resolve_agent_workflow_modules(
         settings, body.module_id, upscale=body.upscale
     )

@@ -489,3 +489,14 @@
 - [x] 验证：后端定向 61 passed；前端 typecheck + 97 files/486 tests + build；store regression 11；G0 0 errors。
 - [x] W1.2.1 GitHub CI 全绿：run 41173347732（后端 636 passed / 3 skipped，前端 486 tests，G0 通过）。
 - [x] W1.2.1 验收 ZIP：handoff/NSFW_Studio_W1.2.1_Handoff.zip。
+
+## 2026-10-31 W1.2.2：Integrity Closure
+- [x] A WorkflowModuleRefModel / factory / CLI 全部拒绝空或纯空白 module_id；空列表仍用默认。
+- [x] A 拒绝请求不产生 Prompt / Job / JobStage（含 CLI HTTP 前失败）。
+- [x] B 幂等指纹排除 source_prompt_id/version；Prompt 归档后重放仍返回原 Job。
+- [x] B 历史指纹按旧算法 + 历史快照重建兼容；无数据库迁移。
+- [x] B 并发重复提交不产生孤立 Prompt / 重复 Job。
+- [x] C Agent API 注释与 AGENTS / AGENT_SUBMISSION 文档同步。
+- [x] 验证：后端定向 49 passed；新增测试 9 项。
+- [ ] W1.2.2 GitHub CI 结果（提交后补记）。
+- [ ] W1.2.2 验收 ZIP（提交后生成）。

@@ -682,3 +682,16 @@ CI 结果：代码提交 105a99c，GitHub Actions run 41165232488 —— 后端 
 CI 结果：代码提交 a2001c0，GitHub Actions run 41173347732 —— 后端 636 passed / 3 skipped，
 前端 typecheck + 486 tests + build + store regression 11 passed，两个 job 全部 success。
 验收 ZIP：handoff/NSFW_Studio_W1.2.1_Handoff.zip（716 files）。
+
+## 2026-10-31 W1.2.2：Integrity Closure
+
+基线：1b9a15b。只修复两个边界问题，不新增功能/迁移/UI/GPU。
+
+- A 空工作流 ID：`WorkflowModuleRefModel.module_id` 严格去空格并拒绝纯空白；
+  `resolve_workflow_modules` 对显式空/纯空白抛 `MODULE_ID_INVALID`，不再跳过后回落默认；
+  真正空列表 [] 仍使用服务器默认；CLI 区分 None 与显式空值，空白值在 HTTP 前失败。
+- B 幂等指纹：`source_prompt_id/source_prompt_version_id` 从语义指纹中排除；
+  历史 Job 用旧算法 + 历史快照重建指纹做双路径校验；无 Migration。
+  Prompt 归档后同键同内容重放返回原 Job，不产生新 Prompt。
+- C 文档：修正 Agent API 旧 commit 注释；同步 AGENTS / AGENT_SUBMISSION / DEV_LOG / TASKS。
+- 验证：后端定向 49 passed；新增测试见 docs/W1_2_2_REPORT.md。

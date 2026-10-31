@@ -266,23 +266,34 @@ def _materialize_stages(
                 stage.finished_at = now
 
 
+_PROMPT_PROVENANCE_FIELDS = ("source_prompt_id", "source_prompt_version_id")
+
+
 def _request_fingerprint(
     *,
     job_kind: str,
     snapshot: dict[str, Any],
     input_image_ids: list[str],
     stage_configs: list[dict[str, Any]],
+    include_prompt_provenance: bool = False,
 ) -> str:
-    """请求指纹（Phase 7 Task7）：判定同 (source, client_request_id) 下 payload 是否一致。
+    """请求指纹（Phase 7 Task7；W1.2.2 语义指纹）。
 
     只覆盖**请求语义**（job_kind + 工作台快照 + 显式输入/配置）：
-    - queue_mode 不进入指纹（只影响排队位置，不影响任务内容；重放以原 Job 为准）；
-    - 解析后的绑定身份（workflow_hash / binding_version 等）属于服务端派生，也不进入指纹。
+    - queue_mode 不进入指纹；
+    - 解析后的绑定身份属于服务端派生，不进入指纹；
+    - W1.2.2：服务端生成的 source_prompt_id / source_prompt_version_id 属于溯源字段，
+      默认不进入语义指纹，避免 Prompt 归档后重放被误判为不同请求；
+      ``include_prompt_provenance=True`` 仅用于重建 W1.2.2 之前的历史指纹（兼容旧 Job）。
     """
+    fp_snapshot = dict(snapshot)
+    if not include_prompt_provenance:
+        for key in _PROMPT_PROVENANCE_FIELDS:
+            fp_snapshot.pop(key, None)
     canonical = json.dumps(
         {
             "job_kind": job_kind,
-            "snapshot": snapshot,
+            "snapshot": fp_snapshot,
             "input_image_ids": list(input_image_ids),
             "stage_configs": list(stage_configs),
         },
@@ -291,18 +302,61 @@ def _request_fingerprint(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _assert_idempotent_payload(existing: Job, fingerprint: str) -> None:
-    """幂等命中时的 payload 一致性校验（Phase 7 Task7）。
+def _existing_snapshot(existing: Job) -> dict[str, Any]:
+    try:
+        data = json.loads(existing.workbench_snapshot_json or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
-    相同 key + 相同 payload → 返回原 Job（正常幂等重放）；
-    相同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT（绝不静默返回旧 Job）。
-    历史 Job（fingerprint 为 NULL，本阶段之前创建）无法比对 → 保持旧兼容行为。
+
+def _existing_input_image_ids(existing: Job, snapshot: dict[str, Any]) -> list[str]:
+    """历史 Job 的显式处理型输入（API 创建路径 = 快照 input_images 的 image_id 列表）。"""
+    if existing.job_kind != "process":
+        return []
+    refs = snapshot.get("input_images") or []
+    return [
+        str(ref.get("image_id"))
+        for ref in refs
+        if isinstance(ref, dict) and ref.get("image_id")
+    ]
+
+
+def _assert_idempotent_payload(existing: Job, fingerprint: str) -> None:
+    """幂等命中时的 payload 一致性校验（Phase 7 Task7；W1.2.2 历史兼容）。
+
+    相同 key + 相同语义 payload → 返回原 Job；
+    相同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT。
+    历史 Job（fingerprint 为 NULL）保持旧兼容；
+    W1.2.2 之前的指纹包含 Prompt 溯源 ID，先按“旧算法 + 历史快照”重建校验，
+    通过后再确认当前请求与历史快照的语义指纹一致，避免误拒绝旧 Job。
     """
-    if existing.client_request_fingerprint and existing.client_request_fingerprint != fingerprint:
-        raise ConflictError(
-            "client_request_id 已用于不同的请求内容（幂等键冲突）",
-            code="IDEMPOTENCY_KEY_CONFLICT",
-        )
+    stored = existing.client_request_fingerprint
+    if not stored:
+        return
+    if stored == fingerprint:
+        return
+    old_snapshot = _existing_snapshot(existing)
+    old_inputs = _existing_input_image_ids(existing, old_snapshot)
+    legacy = _request_fingerprint(
+        job_kind=existing.job_kind,
+        snapshot=old_snapshot,
+        input_image_ids=old_inputs,
+        stage_configs=[],
+        include_prompt_provenance=True,
+    )
+    semantic = _request_fingerprint(
+        job_kind=existing.job_kind,
+        snapshot=old_snapshot,
+        input_image_ids=old_inputs,
+        stage_configs=[],
+    )
+    if stored == legacy and semantic == fingerprint:
+        return
+    raise ConflictError(
+        "client_request_id 已用于不同的请求内容（幂等键冲突）",
+        code="IDEMPOTENCY_KEY_CONFLICT",
+    )
 
 
 def record_event(session: Session, job_id: str, event_type: str, *, item_id: str | None = None, payload: dict | None = None) -> None:

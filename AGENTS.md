@@ -47,8 +47,9 @@
      **不要反复重试**，改用 `POST /api/v1/queue/clear-stale` 归档后再按新工作流重新生成。
 6. **生图**：`.venv\Scripts\python scripts\agent_generate.py --module basic_generate --prompt "…" --out D:\ai_out`
    （`anime_generate` 用于动漫；`agent/jobs` 端点默认关闭，优先用本机 CLI）
-   - 提交前脚本不再单独调用 `/prompts/ensure`：Prompt 由服务端在 Job 创建事务内统一关联，
-     Job 快照带 `source_prompt_id`，生成图在提示词库按提示词可查。
+   - 提交前脚本不再单独调用 `/prompts/ensure`：Prompt 由服务端在 Job 创建事务内统一关联
+     （Agent API 与旧 `/jobs` 的 agent/doubao 路径相同），Job 快照带 `source_prompt_id`，
+     生成图在提示词库按提示词可查。
    - 图片由服务统一落到 DataRoot 图库（`D:\NSFW-Studio-Data\images\originals\…`）并登记 `images` 表；
      `--out` 只是另存一份副本，不是唯一存储位置。
 7. **停止**：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop_studio.ps1`

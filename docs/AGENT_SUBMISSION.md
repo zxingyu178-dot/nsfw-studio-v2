@@ -80,6 +80,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 | 不传 `module_id` 或传 `null` | 使用**服务端当前配置的默认工作流**（来自 settings `engine.module_id`，没有第二套默认逻辑） |
 | 显式传 `module_id` | 使用指定工作流；服务端校验能力与放行状态 |
 | `module_id=""` / `"   "` | `422` 拒绝（空字符串不能绕过显式选择；只有 None 才走默认） |
+| `workflow_modules=[]`（旧 `/jobs`） | 允许，按服务器默认工作流 |
 | `upscale=true` | 在**实际选定的 Primary** 之后追加 `upscale`（不能把它当 Primary） |
 | 未指定的默认工作流未放行 | **拒绝**（`WORKFLOW_NOT_RELEASED`），不会自动降级到其他模块 |
 | 未知模块 | `400 AGENT_MODULE_UNKNOWN` |
@@ -93,9 +94,12 @@ Agent 第一版只开放**单个无输入图片的生成型模块 + 可选 upsca
 检查顺序：解析实际工作流 → 正式放行门禁 → 模块能力校验 → 写提示词库 → 创建 Job。
 任一检查失败都不会产生 Prompt / Job / Stage 数据。
 
-**事务（W1.2.1）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
-`assign_ai_prompt(commit=False)` 只 flush；JobService 创建成功时统一提交，
-失败（校验错误 / 幂等冲突 / 数据库错误）统一 rollback。CLI 不再提前调用 `/prompts/ensure`。
+**事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
+`assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；
+JobService 创建成功时统一提交，失败（校验错误 / 幂等冲突 / 数据库错误）统一 rollback。
+CLI 不再提前调用 `/prompts/ensure`。
+幂等指纹只覆盖用户请求语义，服务端生成的 `source_prompt_id/version_id` 不参与指纹，
+因此 Prompt 归档后同键同内容重放仍返回原 Job；W1.2.2 之前的历史指纹会按旧算法重建兼容。
 
 ## 5. CLI（更推荐给豆包用）
 

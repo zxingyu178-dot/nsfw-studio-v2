@@ -86,9 +86,15 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
     entries: dict[str, dict] = {}
     ids: list[str] = []
     for entry in requested or []:
-        module_id = str((entry or {}).get("module_id") or "").strip()
+        raw_module_id = (entry or {}).get("module_id")
+        module_id = str(raw_module_id).strip() if raw_module_id is not None else ""
         if not module_id:
-            continue
+            # W1.2.2：显式空/纯空白模块 ID 必须拒绝，绝不能跳过后再回落默认工作流。
+            # 只有真正空列表 [] 才允许使用服务器默认。
+            raise EngineError(
+                "MODULE_ID_INVALID",
+                "module_id 不能为空字符串或纯空白；确实使用默认工作流请传空列表 []",
+            )
         if module_id in entries:
             raise EngineError(
                 "PIPELINE_DUPLICATE_MODULE",
