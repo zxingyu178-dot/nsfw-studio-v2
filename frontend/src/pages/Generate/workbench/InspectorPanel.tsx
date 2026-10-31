@@ -9,7 +9,7 @@ import { Field, Switch } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import {
   hasUpscaleModule,
-  isImageStartModule,
+  imagePrimaryCandidates,
   releaseStatusNotice,
   setCount,
   setPrimaryModule,
@@ -37,14 +37,16 @@ export function InspectorPanel({
   const state = useWorkbench()
 
   const upscaleEnabled = hasUpscaleModule(state.workflowModules)
-  const primaryModule = state.workflowModules[0]?.module_id ?? 'basic_generate'
+  const primaryModule = state.workflowModules[0]?.module_id ?? ''
   const primaryCapabilities =
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
-  const primaryTitle = primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule
+  const primaryTitle =
+    (primaryCapabilities?.title ?? MODULE_LABEL[primaryModule] ?? primaryModule) || '工作流'
+  // W1.2：文生图与图片生成使用各自的能力候选（process 与 generate 不混用）
   const primaryCandidates =
     state.mode === 'text'
       ? textPrimaryCandidates(state.moduleCatalog)
-      : state.moduleCatalog.filter(isImageStartModule)
+      : imagePrimaryCandidates(state.moduleCatalog)
   const primaryReleaseNotice = primaryCapabilities ? releaseStatusNotice(primaryCapabilities) : null
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'

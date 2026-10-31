@@ -204,6 +204,8 @@ def module_availability(settings: Settings) -> list[dict]:
         entry: dict = {
             "module_id": module_id,
             "registered": True,
+            # W1.2：服务端配置的默认工作流（前端不得自行硬编码默认值）
+            "is_default": is_default,
             "module_version": module_version,
             "provider": provider,
             "binding_version": binding_version,

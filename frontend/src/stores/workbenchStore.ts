@@ -63,7 +63,7 @@ function initialState(): WorkbenchState {
     count: params.count,
     seedMode: params.seedMode,
     seed: params.seed,
-    workflowModules: [{ module_id: 'basic_generate' }],
+    workflowModules: [],
     moduleCatalog: [],
     sourcePromptId: null,
     sourcePromptVersionId: null,
@@ -135,8 +135,42 @@ export function releaseStatusNotice(m: ModuleCapabilitiesDTO): string | null {
   return notices.length > 0 ? notices.join('；') : null
 }
 
+/** 模块是否允许指定 Job 类型（未声明视为不限制，兼容旧后端）。 */
+function allowsJobKind(m: ModuleCapabilitiesDTO, kind: 'generate' | 'process'): boolean {
+  const allowed = m.allowed_job_kinds
+  if (!Array.isArray(allowed) || allowed.length === 0) return true
+  return allowed.includes(kind)
+}
+
+/** W1.2：文生图候选（无输入图 + 生成型 + 允许 generate）。 */
 export function textPrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): ModuleCapabilitiesDTO[] {
-  return catalog.filter((m) => m.available === true && m.input_required !== true && isReleaseReady(m))
+  return catalog.filter(
+    (m) =>
+      m.available === true &&
+      m.input_required !== true &&
+      m.is_generative === true &&
+      isReleaseReady(m) &&
+      allowsJobKind(m, 'generate'),
+  )
+}
+
+/** W1.2：图片生成候选（声明图片输入槽 + 生成型 + 允许 generate）。
+ *  process 模块（如 upscale）由 isImageStartModule 单独表达，不能混入生成候选。 */
+export function imagePrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): ModuleCapabilitiesDTO[] {
+  return catalog.filter(
+    (m) =>
+      m.available === true &&
+      m.is_generative === true &&
+      isReleaseReady(m) &&
+      declaresImageInput(m) &&
+      allowsJobKind(m, 'generate'),
+  )
+}
+
+/** W1.2：服务端配置的默认工作流（只按 /modules 的 is_default，不在 UI 硬编码）。 */
+export function defaultTextModuleId(catalog: ModuleCapabilitiesDTO[]): string | null {
+  const candidates = textPrimaryCandidates(catalog)
+  return (candidates.find((m) => m.is_default === true) ?? candidates[0])?.module_id ?? null
 }
 
 export function isImageStartModule(m: ModuleCapabilitiesDTO): boolean {
@@ -200,19 +234,10 @@ export function inputRoleLabel(role: 'source' | 'reference' | 'face_reference'):
 }
 
 /** Task7/§21：可用的图片条件 Primary（能力判断）。
- *  Phase 0.12 任务 11：同时纳入声明了图片输入 slot 的模块（reference_generate 等），
- *  使 Recipe / History / 图库恢复出的 reference Primary 不被 normalize 静默替换。 */
+ *  W1.2：图片生成只接受 is_generative 且允许 generate 的图片输入模块；
+ *  process 模块（upscale 等）不再混入生成候选。 */
 export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
-  return catalog
-    .filter(
-      (module) =>
-        module.available === true &&
-        // W1.1-2：图片输入槽只负责能力识别；放行必须同时看 ready_to_run，
-        // 否则未通过 G3 的模块可借 reference/source 槽绕过正式放行。
-        isReleaseReady(module) &&
-        (isImageStartModule(module) || declaresImageInput(module)),
-    )
-    .map((module) => module.module_id)
+  return imagePrimaryCandidates(catalog).map((module) => module.module_id)
 }
 
 /** Task6：primary module 是否消费输入图（图片生成模式提交前置条件） */
@@ -224,9 +249,10 @@ export function isImageCapablePrimary(state: WorkbenchState): boolean {
 /**
  * Task6/Task2：按模式保证 Primary Module 一致性（禁止自相矛盾状态）。
  *
- * - 文生图：primary 必须是 basic_generate（保留完整身份；换模块时丢弃旧身份）；
- * - 图片生成：primary 必须是**可用**的图片条件模块；恢复出的完整身份在可用时原样保留，
- *   不可用 / 是 basic_generate（历史矛盾数据）时切换到目录中的可用模块（丢弃旧身份）；
+ * - 文生图：primary 必须是**当前可用**的文生图候选（默认值来自服务端 is_default，
+ *   UI 不硬编码 basic_generate）；换模块时丢弃旧身份；
+ * - 图片生成：primary 必须是**可用**的图片生成候选；恢复出的完整身份在可用时原样保留，
+ *   不可用 / 是文生图模块（历史矛盾数据）时切换到目录中的候选（丢弃旧身份）；
  * - 非 Primary 模块（高清 / 未来 Reference 后处理…）**保持原有顺序与完整身份**：
  *   禁止重建裸 {module_id:'upscale'}，从 History / Recipe / Image 恢复出的
  *   module_version / provider / binding_version / 双 hash / config 必须原样保留；
@@ -239,18 +265,26 @@ function normalizeModules(
 ): WorkflowModuleRef[] {
   const [primary = null, ...rest] = modules
   const imageModules = availableImageModuleIds(catalog)
-  let nextPrimary: WorkflowModuleRef
+  const textModules = textPrimaryCandidates(catalog)
+  let nextPrimary: WorkflowModuleRef | null
   if (mode === 'text') {
-    nextPrimary = primary?.module_id === 'basic_generate' ? primary : { module_id: 'basic_generate' }
+    const primaryUsable = primary && textModules.some((m) => m.module_id === primary.module_id)
+    if (primaryUsable) {
+      nextPrimary = primary // 用户已选择/恢复出的文生图身份原样保留
+    } else {
+      const fallback = defaultTextModuleId(catalog)
+      nextPrimary = fallback ? { module_id: fallback } : primary
+    }
   } else if (primary && imageModules.includes(primary.module_id)) {
     nextPrimary = primary // 完整身份（含双指纹）在模块可用时原样保留
   } else if (imageModules.length > 0) {
     nextPrimary = { module_id: imageModules[0] }
   } else {
     // 目录尚未加载或没有可用图片模块：保留现状（由 Gate 阻止提交，绝不静默降级）
-    nextPrimary = primary ?? { module_id: 'basic_generate' }
+    nextPrimary = primary
   }
-  return [nextPrimary, ...rest].map((module) => ({
+  const normalized = nextPrimary ? [nextPrimary, ...rest] : rest
+  return normalized.map((module) => ({
     ...module,
     config: { ...(module.config ?? {}) },
   }))
@@ -337,8 +371,9 @@ export function emptyWorkbenchSnapshot(): WorkbenchSnapshot {
     count: initial.count,
     seed_mode: initial.seedMode,
     seed: null,
-    // 由 hydrate → normalize 按图片生成模式校正为可用图片模块（Task6）
-    workflow_modules: [{ module_id: 'basic_generate' }],
+    // 由 hydrate → normalize 按图片生成模式校正为可用图片模块（Task6）；
+    // 文生图空快照不硬编码默认模块，提交后由服务端按配置解析。
+    workflow_modules: [],
     source_prompt_id: null,
     source_prompt_version_id: null,
   }
@@ -392,7 +427,16 @@ export function setSeed(seed: number | null): void {
 /** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
 export function setUpscaleEnabled(enabled: boolean): void {
   const base = state.workflowModules.filter((module) => module.module_id !== 'upscale')
-  const kept = base.length > 0 ? base : [{ module_id: 'basic_generate' } as WorkflowModuleRef]
+  let kept = base
+  if (kept.length === 0) {
+    // 目录未加载时不能凭 UI 猜测默认模块；加载后由服务端 is_default 校正
+    const defaultId =
+      state.mode === 'image'
+        ? availableImageModuleIds(state.moduleCatalog)[0]
+        : defaultTextModuleId(state.moduleCatalog)
+    kept = defaultId ? [{ module_id: defaultId }] : []
+  }
+  if (enabled && kept.length === 0) return
   setState({
     workflowModules: (enabled ? [...kept, { module_id: 'upscale' }] : kept).map((module) => ({ ...module })),
   })

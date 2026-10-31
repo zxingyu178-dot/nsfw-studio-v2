@@ -339,6 +339,8 @@ export interface ModuleCapabilitiesDTO {
   input_slots?: { role: string; required: boolean; max_count: number; description?: string }[]
   /** Phase 6 Task8：参数元数据（configurable=true 的按 type 渲染控件） */
   parameters?: ModuleParameterDTO[]
+  /** W1.2：服务端当前配置的默认工作流（来自 /modules；UI 不得自行硬编码默认值） */
+  is_default?: boolean
   registered: boolean
   available: boolean
   provider: string | null

@@ -1,8 +1,10 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import {
   availableImageModuleIds,
+  defaultTextModuleId,
   getWorkbenchState,
   hydrateWorkbench,
+  imagePrimaryCandidates,
   isImageCapablePrimary,
   isImageStartModule,
   isReleaseReady,
@@ -31,6 +33,8 @@ function makeModule(overrides: Partial<ModuleCapabilitiesDTO> = {}): ModuleCapab
     provider: 'comfyui',
     binding_version: 'v1',
     unavailable_reason: null,
+    is_generative: true,
+    allowed_job_kinds: ['generate'],
     ...overrides,
   }
 }
@@ -71,7 +75,9 @@ describe('W1 工作流放行状态', () => {
       release_status: release(true, 'slow', false),
     })
     expect(isReleaseReady(reference)).toBe(true)
-    expect(isImageStartModule(reference)).toBe(true)
+    // reference_generate 只允许 generate：它是图片生成候选，不是 process 起点
+    expect(isImageStartModule(reference)).toBe(false)
+    expect(imagePrimaryCandidates([reference]).map((m) => m.module_id)).toEqual(['reference_generate'])
     const notice = releaseStatusNotice(reference)
     expect(notice).toContain('较慢')
     expect(notice).toContain('G4')
@@ -174,5 +180,89 @@ describe('W1.1 图片模块放行（availableImageModuleIds）', () => {
     })
     expect(getWorkbenchState().mode).toBe('image')
     expect(isImageCapablePrimary(getWorkbenchState())).toBe(false)
+  })
+})
+
+describe('W1.2 工作流选择候选（text / image / 默认）', () => {
+  const basic = makeModule({
+    module_id: 'basic_generate',
+    title: '基础生成',
+    input_required: false,
+    input_slots: [],
+    is_default: true,
+  })
+  const anime = makeModule({
+    module_id: 'anime_generate',
+    title: '动漫生成',
+    input_required: false,
+    input_slots: [],
+  })
+  const img2img = makeModule({
+    module_id: 'img2img',
+    title: '图生图',
+    input_required: true,
+    input_slots: [{ role: 'source', required: true, max_count: 1 }],
+  })
+  const reference = makeModule({
+    module_id: 'reference_generate',
+    title: '参考图生成',
+    input_required: true,
+    input_slots: [{ role: 'reference', required: true, max_count: 1 }],
+  })
+  const upscale = makeModule({
+    module_id: 'upscale',
+    title: '高清放大',
+    input_required: true,
+    input_slots: [{ role: 'source', required: true, max_count: 1 }],
+    allowed_job_kinds: ['generate', 'process'],
+    is_generative: false,
+  })
+  const processOnly = makeModule({
+    module_id: 'process_only',
+    input_required: true,
+    input_slots: [{ role: 'source', required: true, max_count: 1 }],
+    allowed_job_kinds: ['process'],
+  })
+  const unreleasedText = makeModule({
+    module_id: 'unreleased_text',
+    input_required: false,
+    input_slots: [],
+    release_status: release(false, 'experimental', false),
+  })
+
+  it('文生图候选：基础生成 + 动漫生成；排除图片模块 / 处理模块 / 未放行', () => {
+    const ids = textPrimaryCandidates([basic, anime, img2img, upscale, processOnly, unreleasedText])
+      .map((m) => m.module_id)
+    expect(ids).toEqual(['basic_generate', 'anime_generate'])
+  })
+
+  it('图片生成候选：img2img + reference_generate；排除文生图 / upscale / 未放行', () => {
+    const ids = imagePrimaryCandidates([
+      basic, anime, img2img, reference, upscale, unreleasedText,
+    ]).map((m) => m.module_id)
+    expect(ids).toEqual(['img2img', 'reference_generate'])
+  })
+
+  it('默认工作流只来自服务端 is_default', () => {
+    expect(defaultTextModuleId([basic, anime])).toBe('basic_generate')
+    const animeDefault = { ...anime, is_default: true }
+    expect(defaultTextModuleId([{ ...basic, is_default: false }, animeDefault])).toBe('anime_generate')
+    expect(defaultTextModuleId([unreleasedText])).toBeNull()
+  })
+
+  it('目录到达后 Primary 切换为服务端默认，而不是 UI 硬编码', () => {
+    resetWorkbench()
+    setModuleCatalog([
+      { ...basic, is_default: false },
+      { ...anime, is_default: true },
+    ])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('anime_generate')
+  })
+
+  it('未放行模块不进入任何选择列表', () => {
+    resetWorkbench()
+    setModuleCatalog([unreleasedText, upscale])
+    expect(textPrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
+    expect(imagePrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
   })
 })

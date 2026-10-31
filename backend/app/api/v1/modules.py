@@ -96,6 +96,8 @@ def list_modules(request: Request) -> list[dict]:
                 }
                 for spec in capabilities.parameters
             ],
+            # W1.2：服务端当前配置的默认工作流（UI 默认选择唯一来源）
+            "is_default": bool(info.get("is_default")),
             # Task7/Task5（Phase 6）：真实可用性（前端 Gate 的唯一依据）
             "registered": bool(info.get("registered", True)),
             "available": bool(info.get("available")),

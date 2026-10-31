@@ -56,12 +56,13 @@
 `scripts/agent_generate.py`（UTF-8 / 幂等键 / 轮询 / 取图全部处理好）——豆包只需要给一行命令：
 
 ```text
-.venv/Scripts/python scripts/agent_generate.py --module anime_generate \
+.venv/Scripts/python scripts/agent_generate.py \
     --prompt "1girl, red dress, night city, neon lights, anime style, masterpiece" --out D:\ai_out
 ```
 
-（可加 `--upscale` 高清、`--next` 插队、`--width/--height/--count/--seed` 等；`--module`
-可选 `anime_generate`（动漫）或 `basic_generate`（写实）。）
+（可加 `--upscale` 高清、`--next` 插队、`--width/--height/--count/--seed` 等；
+不传 `--module` 使用服务端默认工作流；`--module basic_generate` 写实、`--module anime_generate` 动漫，
+可用性由服务端校验；`--list-workflows` 只列出 Agent 允许使用的文生图模块。）
 
 > **安全加固（v0.34.0 起）**：Studio 8000 固定只绑 `127.0.0.1`（云端 AI 无法直连）；
 > 新增 `POST /api/v1/agent/jobs` **默认关闭**，需在 `configs/config.local.yaml` 配置 `agent.token`
@@ -191,7 +192,7 @@ for item in detail["items"]:
 | `width` / `height` | 64~4096（文生图有效；img2img/reference 的输出尺寸跟随输入图，写什么都不影响结果） |
 | `count` | 1~64（建议先 1） |
 | `seed_mode` / `seed` | `random` 或 `fixed`（`fixed` 时 `seed` 0~2147483647，且 `count` 建议为 1） |
-| `workflow_modules` | 见 §4；`config` 只放模块声明为可配置的参数 |
+| `workflow_modules` | 见 §4；空数组 = 服务端默认工作流；显式选择必须满足 `ready_to_run=true`；`config` 只放模块声明为可配置的参数 |
 
 ### 3.2 查询 / 取图
 
@@ -212,6 +213,8 @@ for item in detail["items"]:
 | `409 IDEMPOTENCY_KEY_CONFLICT` | `client_request_id` 复用了，但内容变了；换新 key |
 | `400 UNUSED_INPUT_IMAGE` | 给了输入图但模块不消费（如文生图 + 输入图；img2img 请用 `role:"source"`，reference 请用 `role:"reference"`） |
 | `400 INPUT_IMAGE_REQUIRED` | 模块需要输入图但没给（img2img/reference/upscale） |
+| `400 WORKFLOW_NOT_RELEASED` | 工作流未在 `release_manifest` 放行（`ready_to_run=false`）或未登记 binding；不会自动降级 |
+| `400 AGENT_MODULE_UNKNOWN` / `AGENT_MODULE_UNAVAILABLE` / `AGENT_MODULE_NOT_TEXT_GENERATE` | Agent 指定的模块未知 / binding 不可用 / 不是“无输入图片的文生图” |
 | `422` | 字段类型/范围不符（如 `count=0`、`height=5000`） |
 | 任务长时间 `QUEUED`/`RUNNING` | 6GB 显存机器首次加载模型 10~35 分钟属正常；看 `GET /api/v1/engine/status` |
 | 任务 `INTERRUPTED` | 后端在任务执行中被重启；用 `POST /api/v1/jobs/{id}/resume-remaining` 续跑（已完成的上游 Stage 不会重跑） |
@@ -222,13 +225,14 @@ for item in detail["items"]:
 
 | 模式 | workflow_modules | input_images | 备注 |
 | --- | --- | --- | --- |
-| **写实文生图** | `[{"module_id": "basic_generate"}]` | 不传 / `[]` | Qwen-Image 2.1；写实/通用；用 `width/height` |
-| **动漫文生图**（2026-10-10 接入） | `[{"module_id": "anime_generate"}]` | 不传 / `[]` | **Anima-2.9B**（动漫/插画）；模型文件合计 4.22 GB，**实际显存/耗时未验证（待真机 Gate）**，不得当批量首选；官方说明写实表现差，写实请用 basic_generate |
+| **写实文生图** | `[{"module_id": "basic_generate"}]` 或 `[]`（服务端默认） | 不传 / `[]` | Qwen-Image 2.1；写实/通用；用 `width/height` |
+| **动漫文生图**（2026-10-10 接入） | `[{"module_id": "anime_generate"}]` | 不传 / `[]` | **Anima-2.9B**（动漫/插画）；当前 binding 已有真实 Studio G3 证据（slow），G4 默认档未测；不得当批量首选；官方说明写实表现差，写实请用 basic_generate |
 | **图生图** | `[{"module_id": "img2img"}, {"module_id": "upscale"}]`（高清可选） | `[{"role": "source", "image_id": "<先 import 拿到的 id>"}]` | `config` 可调 `denoise`（0~1，默认 0.8；越低越像原图） |
-| **参考图生成**（人物/主体一致性） | `[{"module_id": "reference_generate"}]`（高清可选） | `[{"role": "reference", "image_id": "..."}]` | `config` 可调 `resolution`（512~2048，默认 1024）。**很慢**，且目前只能通过 API/脚本使用（UI 尚未接入） |
+| **参考图生成**（人物/主体一致性） | `[{"module_id": "reference_generate"}]`（高清可选） | `[{"role": "reference", "image_id": "..."}]` | `config` 可调 `resolution`（512~2048，默认 1024）。**很慢**；当前 Studio 证据为 768 档，1024/25 默认未验证；UI 图片模式可用（需已放行） |
 
-> **怎么选**：动漫/插画 → `anime_generate`（待真实验收，暂不承诺轻量/快速）；写实照片感 → `basic_generate`；
+> **怎么选**：动漫/插画 → `anime_generate`（G3 已有证据、G4 未测）；写实照片感 → `basic_generate`；
 > 基于已有图改图 → `img2img`；保持人物身份跨场景 → `reference_generate`。
+> AI 未得到用户明确选择时，先询问“用默认还是指定工作流”；不得选择 `ready_to_run=false` 的模块。
 
 示例：img2img + 高清 + denoise 0.7：
 
@@ -261,9 +265,11 @@ for item in detail["items"]:
 5) 取图用 GET /api/v1/images/{image_id}/content，按二进制保存为 .png 文件，
    绝不把图片字节当文本打印；
 6) 单次任务超时按 2 小时设置（本机 6GB 显存加载模型很慢）；
-7) 生图模式用 workflow_modules 选择：动漫/插画用 [{"module_id":"anime_generate"}]（轻量快速）；
-   写实照片感用 [{"module_id":"basic_generate"}]；改图用 img2img；人物一致性用 reference_generate；
-8) 只输出可直接运行的完整脚本，参数（提示词/尺寸/张数/模式）放在脚本最上方。
+7) 生图模式用 workflow_modules 选择：不传/空数组 = 服务端默认工作流；
+   动漫/插画用 anime_generate，写实照片感用 basic_generate；改图用 img2img；人物一致性用 reference_generate；
+   只能选择 GET /api/v1/modules 中 available=true 且 release_status.ready_to_run=true 的模块；
+8) 用户没有明确指定工作流时，必须先询问“用默认还是指定工作流”，不得自行猜测或选择未放行模块；
+9) 只输出可直接运行的完整脚本，参数（提示词/尺寸/张数/模式）放在脚本最上方。
 ```
 
 ---

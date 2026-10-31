@@ -466,3 +466,14 @@
 - [x] W1.1-4 新增 9 类 G0 负向测试。
 - [x] W1.1-5 后端定向 46 passed；前端 typecheck + 468 tests + build；G0 0 errors。
 - [x] W1.1-5 GitHub CI 全绿：run 41013291401（后端 620 passed / 3 skipped，前端 468 passed，G0 通过）。
+
+## 2026-10-31 W1.2：工作流选择与 AI 默认工作流接入
+- [x] W1.2-A textPrimaryCandidates / imagePrimaryCandidates 按 generate 能力区分；InspectorPanel 图片模式修复。
+- [x] W1.2-A /modules 增加 is_default；UI 默认工作流只来自服务端配置。
+- [x] W1.2-B Agent module_id 可选；不传使用服务器默认；服务端能力校验（注册/可用/放行/生成型/无输入/generate）。
+- [x] W1.2-B upscale 追加在选定 Primary 后；Job 快照记录实际模块身份。
+- [x] W1.2-C 检查通过后才写 Prompt / 创建 Job；拒绝场景无 Prompt/Job/Stage 残留。
+- [x] W1.2-D CLI 不再默认 anime；--list-workflows；输出实际模块。
+- [x] W1.2-E 提交标准 / Agent / AI 生图文档统一。
+- [x] 验证：后端定向 47 passed；前端 typecheck + 97 files/476 tests + build；G0 0 errors。
+- [ ] W1.2 GitHub CI 结果（提交后补记）。

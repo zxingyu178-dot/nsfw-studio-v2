@@ -109,6 +109,28 @@ performance:
 示例：换 LoRA、换采样器不需要新模块；图生图改为参考条件生成则需要独立模块。
 禁止为同一功能创建多个名称不同、语义重复的模块。
 
+### 5.1 新工作流提交清单（W1.2 统一口径）
+
+任何 AI / 开发者提交新工作流，必须同时包含以下全部内容，缺一不得合并：
+
+1. **WorkflowModule Python 实现**：`backend/app/workflows/<module>.py`（能力声明、输入输出、
+   config 契约；禁止写节点 ID / 模型文件名）；
+2. **registry 注册**：模块必须在 `backend/app/workflows/registry.py` 注册；
+3. **provider binding**：`workflows/providers/comfyui/<module>/<version>/`
+   含 `workflow.json` + `binding.yaml` + `README.md`；
+4. **README**：来源、节点图结构、注入契约、已知限制；
+5. **requirements / performance**：绑定依赖（ComfyUI 版本、节点、模型文件名）与性能证据
+   三段（`comfyui_node_chain` / `studio_production` / `default_profile_performance`）；
+6. **单元测试**：至少覆盖能力声明、Job 创建/拒绝、Mock 执行路径；
+7. **`workflows/release_manifest.yaml` 初始未放行状态**：
+   新 binding 必须显式登记为 `dependencies_ready: false` / `real_gate_passed: false` /
+   `hardware_status: unverified`（或 `experimental`），即 `ready_to_run=false`；
+   只有真实 G3/G4 证据补齐后才允许修改为放行。
+
+**AI 不得自行声明 G3/G4 已通过**。G3（真实出图）与 G4（性能）只能由本机真实运行产生证据，
+并记录 `module_id / binding_version / workflow_hash / binding_hash / 分辨率 / 步数 / 采样器 /
+batch_size / 硬件 / 耗时 / 测试方式 / 结果`；没有证据必须写“未验证”，不得推测。
+
 ## 6. 版本与 Git 纪律
 
 - `module_version`：Python 模块接口版本；
@@ -170,21 +192,30 @@ docs(workflow): update hardware inventory
 正式任务只能通过 Studio 队列提交；**禁止开发 Agent 绕过队列直接调用 ComfyUI `/prompt`**
 来制作正式图片（一次性诊断/烟测必须在 `temp` 中执行并明确标注，不进入正式资产）。
 
-## 9. 状态语义（建议在下一阶段实现）
+## 9. 放行状态语义（W1 / W1.1 已实现）
 
-`GET /api/v1/modules` 的 `available` 不得继续被理解为“可运行”。建议增加：
+`GET /api/v1/modules` 的 `available` 只表示 binding 可加载，**不得继续被理解为“可运行”**。
+正式放行状态由 `workflows/release_manifest.yaml`（服务端唯一事实源）计算：
 
 | 状态 | 含义 |
 | --- | --- |
 | `registered` | Python 模块已注册 |
 | `binding_valid` | 工作流文件、映射、指纹合法 |
 | `dependencies_ready` | 节点、模型依赖齐全 |
-| `hardware_status` | 当前硬件适配：ok / slow / experimental / unsupported |
-| `real_gate_passed` | 已通过 G3 真实运行 |
+| `hardware_status` | 当前硬件适配：normal / slow / experimental / unsupported |
+| `real_gate_passed` | 已通过 G3 真实运行（当前 binding hash 有 Studio 证据） |
+| `default_profile_verified` | 当前默认配置已通过 G4（独立语义，不参与放行） |
 | `ready_to_run` | 综合以上检查后可执行 |
 
+W1.1 起，`POST /jobs`、`POST /agent/jobs`、图库放大、`resume-remaining` 在数据库创建 Job 之前
+统一校验 `ready_to_run`；未登记 binding 一律拒绝（`WORKFLOW_NOT_RELEASED`）。
+`resume-interrupted` 是可信历史恢复通道，保留原 Job 身份，不受新门禁影响。
+前端选择器只显示 `available=true` 且 `ready_to_run=true` 的候选；
+Agent 只允许无输入图片的生成型模块（`is_generative=true`、`input_required=false`、
+`allowed_job_kinds` 含 `generate`）。
+
 工作流管理必须在执行前拒绝明显超出资源限制的任务（分辨率/像素数/步数），
-而不是等 ComfyUI OOM 后再报错。
+而不是等 ComfyUI OOM 后再报错（像素预算仍属 W2 技术债）。
 
 ## 10. 现有正式模块与实验模块
 
@@ -192,11 +223,11 @@ docs(workflow): update hardware inventory
 
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
-| `basic_generate` | 日用主力 | Turbo8 + f23gg 双 LoRA，8 步，单目录特例 |
-| `img2img` | 慢速可用 | 输入尺寸需限制在已验证范围；默认 denoise 以 Python 模块 0.8 为准 |
-| `reference_generate` | 低频使用 | 已验证 640/20 步单张 60+ 分钟；当前 1024/25 默认未通过对应 G4 |
-| `anime_generate` | 待真实验收 | 模型文件 4.22 GB，实际显存/耗时未验证；不得宣传轻量/快速/批量首选 |
-| `upscale` | 轻量优先 | 4x-UltraSharp 现役，暂不接入 SeedVR2 |
+| `basic_generate` | 日用主力 | Turbo8 + f23gg 双 LoRA，8 步，单目录特例；G4 默认档未测 |
+| `img2img` | 慢速可用 | v1 冻结（denoise 0.55，仅历史恢复）；v2 新任务默认（0.8）；G4 默认档已验证 |
+| `reference_generate` | 低频使用 | 当前 binding 的 Studio 证据为 768 档（`job_25c14f4d…`）；640/20 是**直连 ComfyUI API** 证据，不对应当前 1024/25 默认；G4 未通过 |
+| `anime_generate` | 慢速可用（G3 已有证据） | 当前 binding hash 有 2 个真实 Studio COMPLETED Job（2026-10-20）；G4 默认档未测，不得宣传轻量/快速/批量首选 |
+| `upscale` | 轻量优先 | 4x-UltraSharp 现役，暂不接入 SeedVR2；G4 未测 |
 
 实验/下线模块：
 

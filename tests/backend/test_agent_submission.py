@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings, WorkflowConfig
 from app.engine import release
 from app.main import create_app
+from app.models import Job, JobStage, Prompt
 
 
 def mock_settings(settings: Settings) -> Settings:
@@ -41,6 +42,15 @@ def payload(**overrides):
     }
     body.update(overrides)
     return body
+
+
+def db_counts(session) -> tuple[int, int, int]:
+    """(Prompt, Job, JobStage) 行数；用于断言拒绝请求不产生副作用。"""
+    return (
+        session.query(Prompt).count(),
+        session.query(Job).count(),
+        session.query(JobStage).count(),
+    )
 
 
 def test_agent_api_disabled_without_token(agent_client, monkeypatch):
@@ -130,4 +140,97 @@ def test_prompt_too_long_and_invalid_module_rejected(agent_client, monkeypatch):
     bad_module = agent_client.post(
         "/api/v1/agent/jobs", json=payload(module_id="upscale"), headers=headers,
     )
-    assert bad_module.status_code == 422
+    # W1.2：upscale 是处理型模块（input_required=true / allowed_job_kinds 含 process），
+    # 能力校验必须明确拒绝，不能静默降级到 basic_generate。
+    assert bad_module.status_code == 400
+    assert bad_module.json()["error"]["code"] == "AGENT_MODULE_NOT_TEXT_GENERATE"
+
+
+# ===== W1.2-B/C：默认工作流、显式选择、能力门禁与副作用 =====
+
+def test_module_id_omitted_uses_server_default(agent_client, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-default")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-default"}
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id=None), headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    job = response.json()
+    assert job["module_id"] == "basic_generate"
+    assert job["workflow_snapshot"]["modules"][0]["module_id"] == "basic_generate"
+    # 快照必须记录实际使用的模块，不能只记录空的默认选择
+    assert job["workbench_snapshot"]["workflow_modules"][0]["module_id"] == "basic_generate"
+
+
+def test_explicit_basic_and_anime_accepted(agent_client, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-explicit")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-explicit"}
+    basic = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="basic_generate"), headers=headers,
+    )
+    anime = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="anime_generate"), headers=headers,
+    )
+    assert basic.status_code == 201, basic.text
+    assert anime.status_code == 201, anime.text
+    assert basic.json()["module_id"] == "basic_generate"
+    assert anime.json()["module_id"] == "anime_generate"
+
+
+def test_unknown_module_rejected_without_side_effects(agent_client, session, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-unknown")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-unknown"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="nope"), headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "AGENT_MODULE_UNKNOWN"
+    assert db_counts(session) == before, "拒绝请求不得产生 Prompt/Job/Stage 残留"
+
+
+def test_default_unreleased_rejected_without_fallback(agent_client, session, monkeypatch):
+    monkeypatch.setattr(release, "load_release_manifest", lambda: {"modules": {}})
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-default-gate")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-default-gate"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id=None), headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "WORKFLOW_NOT_RELEASED"
+    assert db_counts(session) == before, "默认工作流未放行时不得自动切换或写库"
+
+
+def test_non_text_module_rejected_without_side_effects(agent_client, session, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-process")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-process"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="upscale"), headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "AGENT_MODULE_NOT_TEXT_GENERATE"
+    assert db_counts(session) == before
+
+
+def test_upscale_appended_after_selected_primary(agent_client, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-upscale")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-upscale"}
+    response = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(module_id="anime_generate", upscale=True),
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    modules = response.json()["workflow_snapshot"]["modules"]
+    assert [item["module_id"] for item in modules] == ["anime_generate", "upscale"]
+    assert [
+        item["module_id"] for item in response.json()["workbench_snapshot"]["workflow_modules"]
+    ] == ["anime_generate", "upscale"]

@@ -7,13 +7,18 @@
 
 用法（项目根目录）：
     .venv/Scripts/python scripts/agent_generate.py --prompt "1girl, silver hair, kimono, shrine" \
-        [--module anime_generate|basic_generate] \
+        [--module <workflow_id>] [--list-workflows] \
         [--negative "..."] [--width 768] [--height 1024] [--count 1] [--seed 42] \
         [--upscale] [--next] [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
 
+W1.2 工作流规则：
+- 不传 --module → 使用服务端当前默认工作流（不在 CLI 硬编码）；
+- 显式 --module → 使用指定模块，但必须由服务端校验已注册 / 可用 / 已放行 / 文生图；
+- --list-workflows → 读取 /modules，只列出 Agent 允许使用的文生图工作流；
+- 输出打印**实际执行**的 module_id（不是 CLI 输入参数）。
+
 示例（豆包只需改提示词）：
-    .venv/Scripts/python scripts/agent_generate.py --module anime_generate \
-        --prompt "1girl, red dress, night city, neon lights, anime style, masterpiece" --out D:\\ai_out
+    .venv/Scripts/python scripts/agent_generate.py --prompt "1girl, red dress, night city, neon lights" --out D:\\ai_out
 
 安全（推荐）：在 configs/config.local.yaml 配置 agent.token 后，
 脚本会自动读取该文件（也可用环境变量 NSFW_STUDIO_AGENT_TOKEN 覆盖），并走受保护的
@@ -75,12 +80,38 @@ def load_token(cli_value: str = "", config_path: Path | None = None) -> str:
         return ""
 
 
+def allows_agent_module(module: dict) -> bool:
+    """与服务端 Agent 能力校验保持一致：可用 + 已放行 + 生成型 + 无输入图 + 允许 generate。"""
+    allowed = module.get("allowed_job_kinds") or []
+    return (
+        module.get("available") is True
+        and module.get("is_generative") is True
+        and module.get("input_required") is not True
+        and (module.get("release_status") or {}).get("ready_to_run") is True
+        and "generate" in allowed
+    )
+
+
+def list_agent_workflows(api: str) -> list[dict]:
+    return [module for module in get(api, "/modules") if allows_agent_module(module)]
+
+
+def default_module_id(api: str) -> str | None:
+    """服务端当前默认工作流（只读 /modules 的 is_default，不在 CLI 硬编码）。"""
+    candidates = list_agent_workflows(api)
+    preferred = next((m for m in candidates if m.get("is_default") is True), None)
+    if preferred is None and candidates:
+        preferred = candidates[0]
+    return str(preferred.get("module_id")) if preferred else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="本机生图 CLI（AI 助手调用入口）")
-    parser.add_argument("--prompt", required=True, help="正向提示词（中文/英文标签均可）")
-    parser.add_argument("--module", default="anime_generate",
-                        choices=["anime_generate", "basic_generate"],
-                        help="anime_generate=动漫（轻快）；basic_generate=写实")
+    parser.add_argument("--prompt", default="", help="正向提示词（中文/英文标签均可）")
+    parser.add_argument("--module", default=None,
+                        help="工作流模块 id；不传使用服务端默认。可用性由服务端校验")
+    parser.add_argument("--list-workflows", action="store_true",
+                        help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
     parser.add_argument("--width", type=int, default=768)
     parser.add_argument("--height", type=int, default=1024)
@@ -100,8 +131,30 @@ def main() -> int:
                         help="不把这段提示词写入提示词库（默认写入并按提示词关联生成图）")
     args = parser.parse_args()
 
-    modules = [{"module_id": args.module}]
-    if args.upscale:
+    if args.list_workflows:
+        modules = list_agent_workflows(args.api)
+        if not modules:
+            print("[!] 当前没有 Agent 可用的文生图工作流（检查 /modules 的 available / ready_to_run）")
+            return 1
+        print("[OK] Agent 可用工作流：")
+        for module in modules:
+            mark = "（服务端默认）" if module.get("is_default") is True else ""
+            print(f"  - {module['module_id']}{mark}  {module.get('title') or ''}")
+        return 0
+
+    if not args.prompt.strip():
+        parser.error("--prompt 必填（--list-workflows 除外）")
+
+    # 旧 /jobs 路径无法由服务端自动追加 upscale，因此需要先解析实际 Primary；
+    # Agent 加固路径则把 module_id 省略交给服务端解析（不在 CLI 里写默认）。
+    if args.module:
+        primary_id = args.module
+    elif args.legacy or not load_token(args.token):
+        primary_id = default_module_id(args.api)
+    else:
+        primary_id = None
+    modules = [{"module_id": primary_id}] if primary_id else []
+    if args.upscale and primary_id:
         modules.append({"module_id": "upscale"})
 
     # 基础可追溯：提交前先保证提示词入库（同文自动复用），Job 快照带 id，
@@ -125,7 +178,8 @@ def main() -> int:
         job = post(args.api, "/agent/jobs", {
             "prompt": args.prompt,
             "negative_prompt": args.negative,
-            "module_id": args.module,
+            # 不传 module_id = 服务端默认；显式传入由服务端做能力/放行校验
+            **({"module_id": args.module} if args.module else {}),
             "upscale": args.upscale,
             "width": args.width,
             "height": args.height,
@@ -156,7 +210,11 @@ def main() -> int:
             },
         })
     job_id = job["id"]
-    print(f"[..] job={job_id}  状态={job['status']}  模块={[m['module_id'] for m in modules]}")
+    actual_modules = [
+        item.get("module_id") for item in (job.get("workflow_snapshot") or {}).get("modules") or []
+    ] or [job.get("module_id")]
+    actual_primary = str(job.get("module_id") or (actual_modules[0] if actual_modules else "") or "job")
+    print(f"[..] job={job_id}  状态={job['status']}  实际工作流={actual_modules}")
 
     deadline = time.time() + args.timeout_min * 60
     detail = job
@@ -179,7 +237,7 @@ def main() -> int:
             continue
         with urllib.request.urlopen(f"{args.api}/images/{image_id}/content", timeout=300) as response:
             data = response.read()  # 图片是二进制：只写文件，不当文本打印
-        file_path = out_dir / f"{args.module}_{job_id[-8:]}_{index}.png"
+        file_path = out_dir / f"{actual_primary}_{job_id[-8:]}_{index}.png"
         file_path.write_bytes(data)
         saved.append(str(file_path))
         print(f"[OK] {file_path}  ({len(data)} bytes)")

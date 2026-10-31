@@ -10,6 +10,7 @@ vi.mock('../../stores/workbenchStore', () => ({
   hasUpscaleModule: vi.fn(() => false),
   isImageCapablePrimary: vi.fn(() => true),
   isImageStartModule: vi.fn(() => false),
+  imagePrimaryCandidates: vi.fn(() => []),
   releaseStatusNotice: vi.fn(() => null),
   textPrimaryCandidates: (catalog: { available?: boolean; input_required?: boolean }[]) =>
     catalog.filter((module) => module.available && !module.input_required),

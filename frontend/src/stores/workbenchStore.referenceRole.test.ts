@@ -29,6 +29,8 @@ function makeModule(overrides: Partial<ModuleCapabilitiesDTO> = {}): ModuleCapab
     provider: null,
     binding_version: null,
     unavailable_reason: null,
+    is_generative: true,
+    allowed_job_kinds: ['generate'],
     ...overrides,
   }
 }
@@ -53,7 +55,6 @@ const basicGenerate = makeModule({
   can_start_from_image: false,
   input_slots: [],
 })
-
 describe('requiredInputSlot（Phase 0.12 任务 11：role 从 input_slots 读取）', () => {
   it('img2img → source；reference_generate → reference；文生图无 slot → null', () => {
     expect(requiredInputSlot(img2img)).toMatchObject({ role: 'source', required: true, max_count: 1 })

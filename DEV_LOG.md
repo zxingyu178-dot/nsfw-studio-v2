@@ -641,3 +641,21 @@ CI 结果：代码提交 d7b32f7，GitHub Actions run #269（Backend pytest + Fr
 `docs/W1_1_REPORT.md`、`docs/W1_1_RELEASE_GATE_AUDIT.md`、`docs/W1_1_G0_REPORT.md`。
 CI 结果：代码提交 ca80a5b，GitHub Actions run 41013291401 —— 后端 620 passed / 3 skipped（含 G0 通过），
 前端 typecheck + 468 tests + build + store regression 11 passed，两个 job 全部 success。
+
+## 2026-10-31 W1.2：工作流选择与 AI 默认工作流接入
+
+基线：01e5597。不新增模块、不建管理页、不改单队列/引擎/冻结 binding、不迁移数据库、不跑 GPU。
+
+- W1.2-A：前端新增 textPrimaryCandidates / imagePrimaryCandidates（is_generative + 图片输入槽 +
+  allowed generate）；InspectorPanel 图片模式不再用 isImageStartModule（process 语义）；
+  /modules 增加 is_default，默认工作流只来自服务端；初始工作台不再硬编码 basic_generate。
+- W1.2-B：AgentJobRequest.module_id 改为可选字符串；不传走 resolve_workflow_modules 的服务端默认；
+  新增 services/agent_service.py 做注册/可用/放行/生成型/无输入图/允许 generate 校验；
+  upscale 追加在实际 Primary 之后；快照记录实际模块身份。
+- W1.2-C：解析 → 放行 → 能力检查全部通过后才 assign_ai_prompt 与创建 Job；
+  拒绝场景断言 Prompt/Job/JobStage 行数不变。
+- W1.2-D：CLI 不再默认 anime；--list-workflows；输出实际执行模块；旧 /jobs 路径按 is_default 解析。
+- W1.2-E：WORKFLOW_SUBMISSION_STANDARD / AGENT_SUBMISSION / AI_IMAGE_GENERATION_GUIDE 口径统一。
+
+验证：后端定向 47 passed（含 agent 14）；前端 typecheck + 97 files/476 tests + build；
+G0 checked=6 errors=0 warnings=14。新增 docs/W1_2_REPORT.md。

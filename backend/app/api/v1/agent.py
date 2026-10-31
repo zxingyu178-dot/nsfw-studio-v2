@@ -25,14 +25,14 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
-from app.api.v1.jobs import check_disk_space, resolve_requested_modules
+from app.api.v1.jobs import check_disk_space
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN
 from app.core.errors import ForbiddenError, TooManyRequestsError, UnauthorizedError
 from app.engine.release import ensure_modules_released
 from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
-from app.services import job_service, prompt_service
+from app.services import agent_service, job_service, prompt_service
 
 router = APIRouter(tags=["agent"])
 
@@ -102,10 +102,26 @@ def submit_agent_job(
     disk = check_disk_space(request)
     settings = request.app.state.settings
 
-    workflow_modules: list[dict] = [{"module_id": body.module_id}]
-    if body.upscale:
-        workflow_modules.append({"module_id": "upscale"})
+    # W1.2-B/C：先解析实际工作流（不传 module_id = 服务器默认）→ 正式放行 → 能力校验。
+    # 任一检查失败都在 assign_ai_prompt（内部 commit）与 Job 创建之前返回，不产生副作用。
+    workflow_modules = agent_service.resolve_agent_workflow_modules(
+        settings, body.module_id, upscale=body.upscale
+    )
+    ensure_modules_released(workflow_modules)
+    agent_service.validate_agent_primary(settings, workflow_modules)
 
+    # 快照必须记录最终实际使用的模块身份（不能记录空的默认选择）。
+    snapshot_modules = [
+        {
+            "module_id": module.get("module_id"),
+            "module_version": module.get("module_version"),
+            "provider": module.get("provider"),
+            "binding_version": module.get("binding_version"),
+            "workflow_hash": module.get("workflow_hash"),
+            "binding_hash": module.get("binding_hash"),
+        }
+        for module in workflow_modules
+    ]
     snapshot_model = WorkbenchSnapshotModel(
         prompt_mode="full",
         full_prompt=body.prompt,
@@ -116,20 +132,17 @@ def submit_agent_job(
         count=body.count,
         seed_mode="fixed" if body.seed is not None else "random",
         seed=body.seed,
-        workflow_modules=workflow_modules,
+        workflow_modules=snapshot_modules,
     )
     snapshot = snapshot_model.model_dump()
-    # 基础可追溯：AI 提交的每段提示词先入提示词库（同文复用），Job 快照带 source_prompt_id，
-    # 生成图因此在提示词库按提示词可见（与 Web 工作台路径一致）。显式传了 id 则尊重调用方。
+    # 基础可追溯：检查通过后才写提示词库（同文复用），Job 快照带 source_prompt_id，
+    # 生成图因此在提示词库按提示词可见（与 Web 工作台路径一致）。
     if not snapshot.get("source_prompt_id"):
         prompt, version, _ = prompt_service.assign_ai_prompt(
             session, positive_prompt=body.prompt, negative_prompt=body.negative_prompt
         )
         snapshot["source_prompt_id"] = prompt.id
         snapshot["source_prompt_version_id"] = version.id
-    modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
-    # W1.1-1：Agent 不能绕过正式放行；与 Web 使用同一服务端 manifest。
-    ensure_modules_released(modules)
 
     job, created = job_service.create_job(
         session,
@@ -137,7 +150,7 @@ def submit_agent_job(
         client_request_id=body.client_request_id or f"agent_{uuid.uuid4().hex[:16]}",
         snapshot=snapshot,
         queue_mode=body.queue_mode,
-        workflow_modules=modules,
+        workflow_modules=workflow_modules,
         job_kind="generate",
     )
     response = job_response(job)
