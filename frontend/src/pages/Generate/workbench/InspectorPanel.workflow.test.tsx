@@ -28,8 +28,13 @@ vi.mock('../components/ModuleParameterField', () => ({
 vi.mock('./SplitGenerateAction', () => ({
   SplitGenerateAction: () => <div data-testid="split-action" />,
 }))
+vi.mock('../../../api/client', () => ({
+  engineRuntimeApi: { preflight: vi.fn() },
+}))
 
 import { InspectorPanel } from './InspectorPanel'
+import { engineRuntimeApi } from '../../../api/client'
+import type { RuntimePreflightDTO } from '../../../types/workbench'
 
 const release = {
   registered: true,
@@ -166,5 +171,69 @@ describe('W1.2-A InspectorPanel 工作流候选', () => {
     // 用户仍可显式选择已放行的 anime（但系统不会自动替选）
     fireEvent.click(screen.getByRole('button', { name: '工作流' }))
     expect(optionLabels()).toContain('动漫生成')
+  })
+})
+
+function preflightResult(
+  status: RuntimePreflightDTO['status'],
+  overrides: Partial<RuntimePreflightDTO['modules'][number]> = {},
+): RuntimePreflightDTO {
+  return {
+    status,
+    engine: { online: status !== 'UNKNOWN', version: '0.37.0' },
+    modules: [{
+      module_id: 'basic_generate',
+      binding_version: 'v1',
+      workflow_hash: 'wf',
+      binding_hash: 'bh',
+      status,
+      missing_nodes: [],
+      missing_models: [],
+      missing_requirements: [],
+      unknown_reasons: [],
+      notes: [],
+      cache_hit: false,
+      ...overrides,
+    }],
+    checked_at: '2026-10-31T00:00:00Z',
+    cache_hit: false,
+  }
+}
+
+describe('W2.0 Runtime Preflight UI', () => {
+  it('READY：点击检测后显示可运行状态', async () => {
+    vi.mocked(engineRuntimeApi.preflight).mockResolvedValue(preflightResult('READY'))
+    renderPanel('text', 'basic_generate', [basic, anime])
+    fireEvent.click(screen.getByRole('button', { name: '检查运行环境' }))
+    const status = await screen.findByTestId('runtime-preflight-status')
+    expect(status.textContent).toContain('READY')
+    expect(engineRuntimeApi.preflight).toHaveBeenCalledWith(['basic_generate'])
+  })
+
+  it('BLOCKED：显示缺失节点/模型明细', async () => {
+    vi.mocked(engineRuntimeApi.preflight).mockResolvedValue(preflightResult('BLOCKED', {
+      missing_nodes: ['KSampler'],
+      missing_models: [{ folder: 'loras', filename: 'missing.safetensors' }],
+    }))
+    renderPanel('text', 'basic_generate', [basic, anime])
+    fireEvent.click(screen.getByRole('button', { name: '检查运行环境' }))
+    const status = await screen.findByTestId('runtime-preflight-status')
+    expect(status.textContent).toContain('BLOCKED')
+    const details = screen.getByTestId('runtime-preflight-details')
+    expect(details.textContent).toContain('KSampler')
+    expect(details.textContent).toContain('loras/missing.safetensors')
+  })
+
+  it('UNKNOWN：显示离线/无法验证原因', async () => {
+    vi.mocked(engineRuntimeApi.preflight).mockResolvedValue({
+      ...preflightResult('UNKNOWN', { unknown_reasons: ['engine_offline'] }),
+      engine: { online: false, version: '', detail: 'ComfyUI 不可达' },
+    })
+    renderPanel('text', 'basic_generate', [basic, anime])
+    fireEvent.click(screen.getByRole('button', { name: '检查运行环境' }))
+    const status = await screen.findByTestId('runtime-preflight-status')
+    expect(status.textContent).toContain('UNKNOWN')
+    const details = screen.getByTestId('runtime-preflight-details')
+    expect(details.textContent).toContain('engine_offline')
   })
 })

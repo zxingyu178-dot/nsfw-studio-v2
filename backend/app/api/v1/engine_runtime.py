@@ -22,10 +22,20 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Request
+from pydantic import BaseModel, Field
+
+from app.api.v1.jobs import resolve_requested_modules
+from app.services.runtime_preflight_service import RuntimePreflightService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class PreflightRequest(BaseModel):
+    """W2.0：工作台当前选择的模块（只传 ID，服务端重新解析真实身份）。"""
+
+    module_ids: list[str] = Field(min_length=1, max_length=8)
 
 
 @router.get("/engine/runtime", summary="受管 ComfyUI 运行时状态")
@@ -56,3 +66,17 @@ async def restart_runtime(request: Request) -> dict:
     svc = request.app.state.engine_runtime
     snapshot = await asyncio.to_thread(svc.restart)
     return snapshot.to_dict()
+
+
+@router.post("/engine/preflight", summary="W2.0 运行环境前置检测（READY/BLOCKED/UNKNOWN）")
+def preflight(request: Request, body: PreflightRequest) -> dict:
+    """重新解析真实工作流身份后检测引擎、Binding、节点、模型与版本。
+
+    该接口只提供诊断结果；实际提交仍由 /jobs 与 /agent/jobs 的服务端 Gate 再次检测。
+    """
+    settings = request.app.state.settings
+    modules = resolve_requested_modules(
+        settings, [{"module_id": module_id} for module_id in body.module_ids]
+    )
+    service = RuntimePreflightService(settings, request.app.state.adapter)
+    return service.check_modules(modules)

@@ -214,6 +214,7 @@ for item in detail["items"]:
 | `400 UNUSED_INPUT_IMAGE` | 给了输入图但模块不消费（如文生图 + 输入图；img2img 请用 `role:"source"`，reference 请用 `role:"reference"`） |
 | `400 INPUT_IMAGE_REQUIRED` | 模块需要输入图但没给（img2img/reference/upscale） |
 | `400 WORKFLOW_NOT_RELEASED` | 工作流未在 `release_manifest` 放行（`ready_to_run=false`）或未登记 binding；不会自动降级 |
+| `400 RUNTIME_PREFLIGHT_BLOCKED` / `RUNTIME_PREFLIGHT_UNKNOWN` | W2.0 运行环境检测未通过：缺节点/模型/版本，或引擎离线无法验证；先启动 ComfyUI / 补齐依赖 |
 | `400 AGENT_MODULE_UNKNOWN` / `AGENT_MODULE_UNAVAILABLE` / `AGENT_MODULE_NOT_TEXT_GENERATE` | Agent 指定的模块未知 / binding 不可用 / 不是“无输入图片的文生图” |
 | `422` | 字段类型/范围不符（如 `count=0`、`height=5000`） |
 | 任务长时间 `QUEUED`/`RUNNING` | 6GB 显存机器首次加载模型 10~35 分钟属正常；看 `GET /api/v1/engine/status` |

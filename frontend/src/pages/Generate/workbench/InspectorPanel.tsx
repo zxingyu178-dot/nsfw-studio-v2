@@ -5,8 +5,11 @@
  * Count（NumberStepper）→ Seed（Random/Fixed）→ Upscale（Switch 行 + 副标）→ Advanced 折叠。
  * 底部固定 SplitGenerateAction（左 生成 N 张 / 右 ⚡ 插队）。
  */
+import { useEffect, useState } from 'react'
 import { Field, Switch } from '../../../components/ui'
-import { IconButton, IconChevronDown, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
+import { IconButton, IconChevronDown, IconClose, IconRandom, IconRestart, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
+import { engineRuntimeApi } from '../../../api/client'
+import type { RuntimePreflightDTO } from '../../../types/workbench'
 import {
   defaultWorkflowNotice,
   hasUpscaleModule,
@@ -56,6 +59,34 @@ export function InspectorPanel({
       : null
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
+
+  // W2.0：最小运行环境检测入口（不轮询；工作流/高清变化即清除旧结果）
+  const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
+  const preflightKey = preflightModuleIds.join('|')
+  const [preflight, setPreflight] = useState<RuntimePreflightDTO | null>(null)
+  const [preflightBusy, setPreflightBusy] = useState(false)
+
+  useEffect(() => {
+    setPreflight(null)
+  }, [preflightKey])
+
+  const runPreflight = async () => {
+    if (preflightModuleIds.length === 0) return
+    setPreflightBusy(true)
+    try {
+      setPreflight(await engineRuntimeApi.preflight(preflightModuleIds))
+    } catch (error) {
+      setPreflight({
+        status: 'UNKNOWN',
+        engine: { online: false, version: '', detail: error instanceof Error ? error.message : String(error) },
+        modules: [],
+        checked_at: new Date().toISOString(),
+        cache_hit: false,
+      })
+    } finally {
+      setPreflightBusy(false)
+    }
+  }
 
   return (
     <Pane
@@ -116,6 +147,62 @@ export function InspectorPanel({
             aria-label="高清放大"
           />
         </div>
+
+        <div className="wb4-switch-row">
+          <div className="wb4-switch-row__text">
+            <span className="wb4-switch-row__label">运行环境</span>
+            <span className="wb4-switch-row__sub">检测引擎 / 节点 / 模型</span>
+          </div>
+          <IconButton
+            icon={<IconRestart size={14} />}
+            label="检查运行环境"
+            loading={preflightBusy}
+            disabled={preflightModuleIds.length === 0}
+            onClick={() => { void runPreflight() }}
+          />
+        </div>
+        {preflight && (
+          <div>
+            <p
+              data-testid="runtime-preflight-status"
+              className={
+                preflight.status === 'READY'
+                  ? 'ds-notice'
+                  : 'ds-notice ds-notice--warning'
+              }
+              role="status"
+            >
+              运行环境：{preflight.status}
+              {preflight.engine.version ? `（ComfyUI ${preflight.engine.version}）` : ''}
+            </p>
+            <ul data-testid="runtime-preflight-details" className="wb-static">
+              {preflight.modules.flatMap((module) => [
+                ...module.missing_nodes.map((node) => (
+                  <li key={`${module.module_id}-node-${node}`}>
+                    {module.module_id} 缺少节点：{node}
+                  </li>
+                )),
+                ...module.missing_models.map((model) => (
+                  <li key={`${module.module_id}-model-${model.folder}-${model.filename}`}>
+                    {module.module_id} 缺少模型：{model.folder}/{model.filename}
+                  </li>
+                )),
+                ...module.missing_requirements.map((reason) => (
+                  <li key={`${module.module_id}-req-${reason}`}>{module.module_id}：{reason}</li>
+                )),
+                ...module.unknown_reasons.map((reason) => (
+                  <li key={`${module.module_id}-unknown-${reason}`}>{module.module_id}：{reason}</li>
+                )),
+                ...module.notes.map((note) => (
+                  <li key={`${module.module_id}-note-${note}`}>{module.module_id}：{note}</li>
+                )),
+              ])}
+            </ul>
+            {preflight.status !== 'READY' && !preflight.engine.online && preflight.engine.detail && (
+              <p className="ds-notice ds-notice--warning">{preflight.engine.detail}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ===== 画面（画幅 / 分辨率 / 自定义） ===== */}

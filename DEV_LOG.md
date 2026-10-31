@@ -697,3 +697,18 @@ CI 结果：代码提交 a2001c0，GitHub Actions run 41173347732 —— 后端 
 - 验证：后端定向 49 passed；新增测试见 docs/W1_2_2_REPORT.md。
 CI 结果：代码提交 3061392，GitHub Actions run 41176466877 —— 后端 645 passed / 3 skipped，
 前端 typecheck + 486 tests + build + store regression 11 passed，两个 job 全部 success。
+
+## 2026-10-31 W2.0：Runtime Guard MVP
+
+基线：74ed8a9。一次完整交付；不新增 Migration、不改冻结 Binding、不启动真实 GPU。
+
+- 新增 `services/runtime_preflight_service.py`：复用 ComfyUIAdapter.health()/load_binding()，
+  自动从 workflow.json 解析节点与模型依赖，动态调用 `/object_info` 与 `/models`；
+  READY / BLOCKED / UNKNOWN 三态；未知 Loader 一律 UNKNOWN。
+- 进程内缓存：system 30s、node 60s、model 30s、依赖解析按 (module, workflow_hash, binding_hash)。
+- 新增 `POST /api/v1/engine/preflight`：服务端重新解析真实身份，返回诊断结果。
+- Job/Agent Gate：/jobs、/agent/jobs、resume-remaining 在 Prompt 关联和 Job 创建前检测；
+  BLOCKED/UNKNOWN 拒绝且无 Prompt/Job/Stage 残留；Mock provider 直接 READY。
+- 前端 InspectorPanel 增加最小检测入口与状态/缺失明细展示；工作流变化清除旧结果。
+- 测试：新增 tests/backend/test_runtime_preflight.py（15 tests）与前端 3 个状态用例。
+- 新增 docs/W2_0_REPORT.md。

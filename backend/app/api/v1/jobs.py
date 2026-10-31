@@ -26,6 +26,7 @@ from app.schemas.job import (
     job_response,
 )
 from app.services import job_service, prompt_service
+from app.services.runtime_preflight_service import run_preflight
 
 router = APIRouter(tags=["jobs"])
 
@@ -63,6 +64,8 @@ def create_job(
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
     # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
     ensure_modules_released(modules)
+    # W2.0：运行环境前置检测（READY 才继续；BLOCKED/UNKNOWN 在 Prompt 关联前拒绝）
+    run_preflight(settings, request.app.state.adapter, modules)
     # W1.2.1：Agent / CLI 旧路径由服务端统一关联提示词；Prompt 与 Job 同事务，
     # commit=False 只 flush，成功时由 JobService 统一提交，失败时统一 rollback。
     if body.source in ("agent", "doubao"):
@@ -158,13 +161,16 @@ def cancel_job(job_id: str, session: Session = Depends(get_session)) -> JobRespo
 
 @router.post("/jobs/{job_id}/resume-remaining", response_model=JobResponse, status_code=201,
              summary="继续剩余图片（创建子 Job，只含未完成数量）")
-def resume_remaining(job_id: str, session: Session = Depends(get_session)) -> JobResponse:
+def resume_remaining(job_id: str, request: Request, session: Session = Depends(get_session)) -> JobResponse:
     # §3（Phase 2.2）：续跑完整继承原 Job 的 Workflow 身份，不读取当前 settings（禁止静默升级）
     # W1.1-1：这是“从 History 创建新 Job”，必须走放行门禁；
     # 可信恢复通道 /jobs/resume-interrupted 不经过这里，历史恢复不受影响。
     original = job_service.get_job(session, job_id)
     snapshot = json.loads(original.workflow_snapshot_json or "{}")
-    ensure_modules_released(snapshot.get("modules") or [])
+    modules = snapshot.get("modules") or []
+    ensure_modules_released(modules)
+    # W2.0：用原 Job 的固定工作流身份执行运行环境检测
+    run_preflight(request.app.state.settings, request.app.state.adapter, modules)
     job, _ = job_service.resume_remaining(session, job_id)
     return job_response(job)
 

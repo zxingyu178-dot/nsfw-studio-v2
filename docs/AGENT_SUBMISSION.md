@@ -87,6 +87,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 | 模块存在但 binding 不可用 | `400 AGENT_MODULE_UNAVAILABLE` |
 | 模块不是“无输入图片的文生图” | `400 AGENT_MODULE_NOT_TEXT_GENERATE`（如 img2img / reference_generate / upscale） |
 | 未通过正式放行 | `400 WORKFLOW_NOT_RELEASED` |
+| 运行环境未就绪（W2.0） | `400 RUNTIME_PREFLIGHT_BLOCKED`（确认缺节点/模型/版本）或 `RUNTIME_PREFLIGHT_UNKNOWN`（引擎离线/无法验证）；不会降级 |
 
 Agent 第一版只开放**单个无输入图片的生成型模块 + 可选 upscale**，不开放任意 Pipeline，
 也不提供 img2img / reference_generate 的输入图片上传链路。

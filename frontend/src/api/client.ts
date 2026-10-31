@@ -56,6 +56,7 @@ import type {
   ComposeResult,
   EngineRuntimeDTO,
   EngineStatusDTO,
+  RuntimePreflightDTO,
   HistoryBucket,
   HistoryResponseDTO,
   ImageDTO,
@@ -324,6 +325,10 @@ export const engineRuntimeApi = {
   },
   restart(): Promise<EngineRuntimeDTO> {
     return request('/api/v1/engine/runtime/restart', jsonInit('POST', {}))
+  },
+  /** W2.0：按当前选择的工作流检测引擎 / 节点 / 模型（实际提交仍由后端再次检测）。 */
+  preflight(moduleIds: string[]): Promise<RuntimePreflightDTO> {
+    return request('/api/v1/engine/preflight', jsonInit('POST', { module_ids: moduleIds }))
   },
 }
 

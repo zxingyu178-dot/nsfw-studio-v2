@@ -33,6 +33,7 @@ from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
 from app.services import agent_service, job_service, prompt_service
+from app.services.runtime_preflight_service import run_preflight
 
 router = APIRouter(tags=["agent"])
 
@@ -109,6 +110,8 @@ def submit_agent_job(
     )
     ensure_modules_released(workflow_modules)
     agent_service.validate_agent_primary(settings, workflow_modules)
+    # W2.0：运行环境前置检测（在 Prompt 关联与 Job 创建之前）
+    run_preflight(settings, request.app.state.adapter, workflow_modules)
 
     # 快照必须记录最终实际使用的模块身份（不能记录空的默认选择）。
     snapshot_modules = [

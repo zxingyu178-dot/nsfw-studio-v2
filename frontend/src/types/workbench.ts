@@ -359,6 +359,29 @@ export interface ModuleCapabilitiesDTO {
   } | null
 }
 
+/** W2.0 Runtime Guard：任务提交前的运行环境检测结果。 */
+export type RuntimePreflightStatus = 'READY' | 'BLOCKED' | 'UNKNOWN'
+
+export interface RuntimePreflightDTO {
+  status: RuntimePreflightStatus
+  engine: { online: boolean; version: string; detail?: string }
+  modules: {
+    module_id: string
+    binding_version: string | null
+    workflow_hash: string | null
+    binding_hash: string | null
+    status: RuntimePreflightStatus
+    missing_nodes: string[]
+    missing_models: { folder: string; filename: string }[]
+    missing_requirements: string[]
+    unknown_reasons: string[]
+    notes: string[]
+    cache_hit: boolean
+  }[]
+  checked_at: string
+  cache_hit: boolean
+}
+
 /** 外部图片导入结果（Phase 5 §二十三：成功 / 已存在 / 失败 三类明细） */
 export interface ImageImportResponseDTO {
   imported: { filename: string; image: ImageDTO }[]

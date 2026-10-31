@@ -500,3 +500,13 @@
 - [x] 验证：后端定向 49 passed；新增测试 9 项。
 - [x] W1.2.2 GitHub CI 全绿：run 41176466877（后端 645 passed / 3 skipped，前端 486 tests，G0 通过）。
 - [x] W1.2.2 验收 ZIP：handoff/NSFW_Studio_W1.2.2_Review.zip。
+
+## 2026-10-31 W2.0：Runtime Guard MVP
+- [x] RuntimePreflightService：引擎 / Binding / 节点 / 模型 / 版本动态检测（READY/BLOCKED/UNKNOWN）。
+- [x] 进程内缓存：system 30s / node 60s / model 30s / 依赖按双 Hash 缓存。
+- [x] POST /api/v1/engine/preflight：重新解析真实身份并返回诊断。
+- [x] /jobs、/agent/jobs、resume-remaining Gate：非 READY 拒绝，无 Prompt/Job/Stage 残留。
+- [x] 前端 InspectorPanel 最小检测入口与 READY/BLOCKED/UNKNOWN 明细展示。
+- [x] 测试：后端 15 项（含 Gate 无残留、缓存、静态 Loader 覆盖）；前端 3 状态用例。
+- [x] Mock / unbound 兼容（mock 直接 READY）。
+- [ ] W2.0 最终 CI / 验收 ZIP（提交后补记）。
