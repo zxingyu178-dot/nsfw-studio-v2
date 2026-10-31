@@ -129,15 +129,38 @@ missing_nodes / missing_models / missing_requirements / unknown_reasons / notes 
 
 ## 8. 测试结果
 
-（提交后由 CI 补记；开发期定向测试结果见交付汇报）
+| 项 | 结果 |
+| --- | --- |
+| 后端定向（W2.0 + 相关既有套件） | 89 passed |
+| 后端全量（CI） | 660 passed / 3 skipped（含 G0 step 通过） |
+| 前端 typecheck | 通过 |
+| 前端 vitest | 97 files / 489 tests passed |
+| 前端 build | 通过（396.29 kB JS） |
+| Store regression | 11 passed |
+| G0 | checked=6 errors=0 warnings=14 |
+
+CI 首轮暴露 3 个既有用例与 Preflight Gate 的顺序冲突（Phase5 输入校验、resume-interrupted
+父 Job 创建使用真实 comfyui provider）；这些用例改为使用 mock provider 后恢复原有断言，
+不修改被测业务逻辑。
 
 ## 9. Git / CI
 
-（提交后补记）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `74ed8a96b126f382d5b7392730953aee0e026de4` |
+| W2.0 提交 | `5424a53d3ba431954b38397978a1bd30c80d82ea` |
+| 测试适配提交 | `129c65ca59b10521cc2f6041c0971a29f3db5b66` |
+| CI run | `41182054367` |
+| 后端 | 660 passed / 3 skipped |
+| 前端 | typecheck + 97 files / 489 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
 
 ## 10. 验收 ZIP
 
-（提交后生成轻量包：核心源码变更 + 报告 + 测试记录 + Git 信息）
+`handoff/NSFW_Studio_W2.0_Review.zip`（轻量包：W2.0 报告 + 核心变更源码 diff +
+测试记录 + Git 信息）。
 
 ## 11. 未验证 / 限制
 

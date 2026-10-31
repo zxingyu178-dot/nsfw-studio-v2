@@ -712,3 +712,7 @@ CI 结果：代码提交 3061392，GitHub Actions run 41176466877 —— 后端 
 - 前端 InspectorPanel 增加最小检测入口与状态/缺失明细展示；工作流变化清除旧结果。
 - 测试：新增 tests/backend/test_runtime_preflight.py（15 tests）与前端 3 个状态用例。
 - 新增 docs/W2_0_REPORT.md。
+CI 结果：代码提交 129c65c，GitHub Actions run 41182054367 —— 后端 660 passed / 3 skipped，
+前端 typecheck + 489 tests + build + store regression 11 passed，两个 job 全部 success。
+CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job）因 Preflight Gate
+改变错误码顺序失败，已改为 mock provider 适配，不改变业务逻辑。

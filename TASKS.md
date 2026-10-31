@@ -509,4 +509,5 @@
 - [x] 前端 InspectorPanel 最小检测入口与 READY/BLOCKED/UNKNOWN 明细展示。
 - [x] 测试：后端 15 项（含 Gate 无残留、缓存、静态 Loader 覆盖）；前端 3 状态用例。
 - [x] Mock / unbound 兼容（mock 直接 READY）。
-- [ ] W2.0 最终 CI / 验收 ZIP（提交后补记）。
+- [x] W2.0 GitHub CI 全绿：run 41182054367（后端 660 passed / 3 skipped，前端 489 tests，G0 通过）。
+- [x] W2.0 验收 ZIP：handoff/NSFW_Studio_W2.0_Review.zip。
