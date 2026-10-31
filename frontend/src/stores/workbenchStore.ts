@@ -167,10 +167,27 @@ export function imagePrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): Module
   )
 }
 
-/** W1.2：服务端配置的默认工作流（只按 /modules 的 is_default，不在 UI 硬编码）。 */
+/** W1.2.1：服务端明确标记的默认工作流（唯一默认来源，缺失 = 不可猜测）。 */
+export function declaredDefaultModule(catalog: ModuleCapabilitiesDTO[]): ModuleCapabilitiesDTO | null {
+  return catalog.find((m) => m.is_default === true) ?? null
+}
+
+/** W1.2：默认工作流必须是“已放行的文生图候选”；否则返回 null（fail-closed）。 */
 export function defaultTextModuleId(catalog: ModuleCapabilitiesDTO[]): string | null {
-  const candidates = textPrimaryCandidates(catalog)
-  return (candidates.find((m) => m.is_default === true) ?? candidates[0])?.module_id ?? null
+  const declared = declaredDefaultModule(catalog)
+  if (!declared) return null
+  const ready = textPrimaryCandidates(catalog).some((m) => m.module_id === declared.module_id)
+  return ready ? declared.module_id : null
+}
+
+/** W1.2.1：默认工作流不可用时给 UI 的明确提示（目录未加载时不提示）。 */
+export function defaultWorkflowNotice(catalog: ModuleCapabilitiesDTO[]): string | null {
+  if (catalog.length === 0) return null
+  const declared = declaredDefaultModule(catalog)
+  if (!declared) return '服务端未标记默认工作流，请手动选择'
+  const ready = textPrimaryCandidates(catalog).some((m) => m.module_id === declared.module_id)
+  if (ready) return null
+  return `默认工作流 ${declared.title || declared.module_id} 当前不可用（未放行或不可加载），请手动选择其他工作流`
 }
 
 export function isImageStartModule(m: ModuleCapabilitiesDTO): boolean {
@@ -271,9 +288,13 @@ function normalizeModules(
     const primaryUsable = primary && textModules.some((m) => m.module_id === primary.module_id)
     if (primaryUsable) {
       nextPrimary = primary // 用户已选择/恢复出的文生图身份原样保留
+    } else if (catalog.length === 0) {
+      // 目录尚未加载：无法判断默认，保留现状（不猜测、不清空）
+      nextPrimary = primary
     } else {
       const fallback = defaultTextModuleId(catalog)
-      nextPrimary = fallback ? { module_id: fallback } : primary
+      // W1.2.1：默认不可用时不得自动选择 candidates[0]，保持未选定（服务端会拒绝默认提交）
+      nextPrimary = fallback ? { module_id: fallback } : null
     }
   } else if (primary && imageModules.includes(primary.module_id)) {
     nextPrimary = primary // 完整身份（含双指纹）在模块可用时原样保留
@@ -288,6 +309,25 @@ function normalizeModules(
     ...module,
     config: { ...(module.config ?? {}) },
   }))
+}
+
+/**
+ * W1.2.1：自动归一化改变 Primary Module 时，按新模块 input_slots 调整输入图 role。
+ * - 保留原 image_id，不静默删除图片；
+ * - Primary 未变化 / 新模块不消费输入图 → 原样返回（完整图片数据保留）。
+ */
+function remapInputRolesForAutoPrimary(
+  inputImages: InputImageRef[],
+  previousPrimaryId: string | undefined,
+  nextModules: WorkflowModuleRef[],
+  catalog: ModuleCapabilitiesDTO[],
+): InputImageRef[] {
+  const nextId = nextModules[0]?.module_id
+  if (!inputImages.length || !nextId) return inputImages
+  if (previousPrimaryId && previousPrimaryId === nextId) return inputImages
+  const slot = requiredInputSlot(catalog.find((module) => module.module_id === nextId))
+  if (!slot) return inputImages
+  return inputImages.map((image) => ({ ...image, role: slot.role }))
 }
 
 /** 当前状态 → 统一快照（保存 Prompt / 保存配方 / 提交 Job 时使用；模块身份与 config 原样保留，Task9/Task3/Task7） */
@@ -326,6 +366,11 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
   // Task7：显式 generation_mode 优先；旧快照（无该字段）才按输入图推断（向后兼容）
   const mode: WorkbenchMode =
     snapshot.generation_mode ?? (inputImages.length > 0 ? 'image' : 'text')
+  const normalized = normalizeModules(modules, mode, state.moduleCatalog)
+  // W1.2.1：恢复时若自动归一化切换了 Primary，图片 role 跟随新模块（保留 image_id）
+  const remappedImages = remapInputRolesForAutoPrimary(
+    inputImages, modules[0]?.module_id, normalized, state.moduleCatalog,
+  )
   setState({
     promptMode: snapshot.prompt_mode,
     structured: { ...emptyStructured(), ...snapshot.structured_prompt },
@@ -334,14 +379,14 @@ export function hydrateWorkbench(snapshot: WorkbenchSnapshot, sourceRecipeId: st
     selectedAssets: { ...snapshot.selected_assets },
     // 带输入图恢复（配方 / 图库"用作输入图片"）→ 自动进入图片生成模式
     mode,
-    inputImages,
+    inputImages: remappedImages,
     width: snapshot.width,
     height: snapshot.height,
     count: snapshot.count,
     // Seed 默认 random；仅"使用此图 Seed"等显式固定时才恢复固定值（规范 §四十七）
     seedMode: typeof snapshot.seed === 'number' ? 'fixed' : 'random',
     seed: typeof snapshot.seed === 'number' ? snapshot.seed : null,
-    workflowModules: normalizeModules(modules, mode, state.moduleCatalog),
+    workflowModules: normalized,
     sourcePromptId: snapshot.source_prompt_id ?? null,
     sourcePromptVersionId: snapshot.source_prompt_version_id ?? null,
     sourceRecipeId,
@@ -444,9 +489,14 @@ export function setUpscaleEnabled(enabled: boolean): void {
 
 /** 生成模式切换（§二十 + Phase 5.1 Task6）：Primary Module 同步切换，禁止模式与模块自相矛盾 */
 export function setWorkbenchMode(mode: WorkbenchMode): void {
+  const normalized = normalizeModules(state.workflowModules, mode, state.moduleCatalog)
   setState({
     mode,
-    workflowModules: normalizeModules(state.workflowModules, mode, state.moduleCatalog),
+    workflowModules: normalized,
+    // W1.2.1：自动切换 Primary 时图片 role 跟随新模块（保留 image_id）
+    inputImages: remapInputRolesForAutoPrimary(
+      state.inputImages, state.workflowModules[0]?.module_id, normalized, state.moduleCatalog,
+    ),
   })
 }
 
@@ -460,10 +510,15 @@ export function setSourcePrompt(promptId: string | null, versionId: string | nul
 
 /** /modules 能力目录注入（Task7：Gate 判定唯一依据 available=true；同时校正 Primary Module） */
 export function setModuleCatalog(catalog: ModuleCapabilitiesDTO[]): void {
+  const normalized = normalizeModules(state.workflowModules, state.mode, catalog)
   setState({
     moduleCatalog: catalog,
     // Task6：目录到达后重新校正（历史矛盾数据 → 可用图片模块）
-    workflowModules: normalizeModules(state.workflowModules, state.mode, catalog),
+    workflowModules: normalized,
+    // W1.2.1：异步目录到达导致 Primary 自动切换时，输入图 role 跟随新模块（图片不丢）
+    inputImages: remapInputRolesForAutoPrimary(
+      state.inputImages, state.workflowModules[0]?.module_id, normalized, catalog,
+    ),
   })
 }
 

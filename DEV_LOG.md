@@ -663,3 +663,19 @@ G0 checked=6 errors=0 warnings=14。新增 docs/W1_2_REPORT.md。
   已补齐 fixtures 并改用 imagePrimaryCandidates；`npm run test:store` 11 passed。
 CI 结果：代码提交 105a99c，GitHub Actions run 41165232488 —— 后端 626 passed / 3 skipped，
 前端 typecheck + 476 tests + build + store regression 11 passed，两个 job 全部 success。
+
+## 2026-10-31 W1.2.1：Workflow Integrity
+
+基线：9830384。只修复 W1.2 审查缺陷，不新增模块/迁移/GPU 功能。
+
+- A 默认工作流 fail-closed：`defaultTextModuleId` 只认服务端 `is_default=true` 且满足
+  available/ready/生成型/无输入/允许 generate；无候选兜底；目录已加载但默认不可用时保持未选定；
+  InspectorPanel 新增默认不可用 warning；CLI `default_module_id` 同步 fail-closed。
+- B Prompt 与 Job 同事务：`create_prompt`/`assign_ai_prompt` 增加 `commit=False`（只 flush），
+  新增 `attach_ai_prompt`；Agent 与旧 `/jobs`（agent/doubao）统一由服务端关联；
+  失败/幂等冲突/数据库错误统一 rollback；CLI 删除提前 `/prompts/ensure` 与无效 `--no-prompt-library`。
+- C 严格 None vs 空 module_id：`""`/纯空白 422，只有 None 使用服务器默认；服务层二次防护。
+- D 自动归一化角色恢复：Primary 自动切换时按新模块 `input_slots` 调整 role，保留 image_id；
+  目录异步加载/历史恢复角色错误修复。
+- E 测试：后端定向 61 passed；前端 typecheck + 97 files/486 tests + build；store regression 11；
+  G0 checked=6 errors=0 warnings=14。新增 docs/W1_2_1_REPORT.md。

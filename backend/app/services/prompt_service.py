@@ -53,8 +53,13 @@ def create_prompt(
     negative_prompt: str = "",
     structured: dict | None = None,
     favorite: bool = False,
+    commit: bool = True,
 ) -> Prompt:
-    """创建 Prompt + v1（单事务）。"""
+    """创建 Prompt + v1。
+
+    ``commit=False`` 时只 flush，不提交：供 Job 创建在同一事务内统一提交
+    （W1.2.1 事务修复）；对外部独立创建接口保持默认 commit=True。
+    """
     if not name or not name.strip():
         raise ValidationError("Prompt 名称不能为空")
     if mode not in PROMPT_MODES:
@@ -80,7 +85,10 @@ def create_prompt(
     try:
         session.add(now_prompt)
         session.add(version)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except IntegrityError:
         session.rollback()
         raise ConflictError("版本号冲突，请重试", code="VERSION_CONFLICT")
@@ -140,13 +148,16 @@ def _content_fields(
 
 
 def assign_ai_prompt(
-    session: Session, *, positive_prompt: str, negative_prompt: str = "", name: str | None = None
+    session: Session, *, positive_prompt: str, negative_prompt: str = "", name: str | None = None,
+    commit: bool = True,
 ) -> tuple[Prompt, PromptVersion, bool]:
     """AI/Agent 提交前的提示词入库保证：同一段提示词已有则复用，否则建 Prompt + v1。
 
     判定同一段提示词 = 「mode=full + 正向 + 反向」完全一致（且未归档）；
     避免 AI 每次提交都在库里堆重复条目，同时保证生成图始终能在提示词库追溯。
     返回 (prompt, version, created)。
+
+    ``commit=False``：只 flush，由调用方（JobService 创建事务）最终统一提交。
     """
     positive = (positive_prompt or "").strip()
     negative = (negative_prompt or "").strip()
@@ -168,12 +179,34 @@ def assign_ai_prompt(
         return existing[0], existing[1], False
     prompt = create_prompt(
         session, name=(name or positive[:24]), mode="full",
-        positive_prompt=positive, negative_prompt=negative,
+        positive_prompt=positive, negative_prompt=negative, commit=commit,
     )
     version = get_current_version(session, prompt)
     if version is None:  # create_prompt 必然建 v1；这里只是类型收敛，不做兜底逻辑
         raise ValidationError("提示词版本创建失败", code="PROMPT_VERSION_MISSING")
     return prompt, version, True
+
+
+def attach_ai_prompt(session: Session, snapshot: dict, *, commit: bool = False) -> None:
+    """为 AI / CLI 提交的工作台快照补充 source_prompt_id / source_prompt_version_id。
+
+    默认 ``commit=False``：Prompt 与 Job 在同一事务内创建，由 JobService 统一提交；
+    任一后续校验失败时调用方 rollback，不留下孤立 Prompt（W1.2.1）。
+    """
+    if snapshot.get("source_prompt_id"):
+        return
+    if (snapshot.get("prompt_mode") or "full") == "structured":
+        positive = compose_structured(snapshot.get("structured_prompt") or {})
+    else:
+        positive = snapshot.get("full_prompt") or ""
+    prompt, version, _created = assign_ai_prompt(
+        session,
+        positive_prompt=positive,
+        negative_prompt=snapshot.get("negative_prompt") or "",
+        commit=commit,
+    )
+    snapshot["source_prompt_id"] = prompt.id
+    snapshot["source_prompt_version_id"] = version.id
 
 
 def add_prompt_version(

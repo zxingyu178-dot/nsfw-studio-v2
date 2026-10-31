@@ -37,8 +37,8 @@ import uuid
 from pathlib import Path
 
 
-def post(api: str, path: str, payload: dict, token: str | None = None, *, optional: bool = False):
-    """POST JSON。``optional=True`` 时失败不中断（返回 None），用于可降级的辅助步骤。"""
+def post(api: str, path: str, payload: dict, token: str | None = None):
+    """POST JSON（失败直接退出；不存在可降级提交路径）。"""
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # 中文安全：UTF-8 字节
     headers = {"Content-Type": "application/json; charset=utf-8"}
     if token:
@@ -51,8 +51,6 @@ def post(api: str, path: str, payload: dict, token: str | None = None, *, option
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
-        if optional:
-            return None
         raise SystemExit(f"[FAIL] HTTP {error.code}: {body[:600]}") from error
 
 
@@ -97,11 +95,9 @@ def list_agent_workflows(api: str) -> list[dict]:
 
 
 def default_module_id(api: str) -> str | None:
-    """服务端当前默认工作流（只读 /modules 的 is_default，不在 CLI 硬编码）。"""
+    """服务端当前默认工作流（只认 /modules 的 is_default，绝不猜测第一个候选）。"""
     candidates = list_agent_workflows(api)
     preferred = next((m for m in candidates if m.get("is_default") is True), None)
-    if preferred is None and candidates:
-        preferred = candidates[0]
     return str(preferred.get("module_id")) if preferred else None
 
 
@@ -127,8 +123,6 @@ def main() -> int:
                         help="Agent token（默认读 NSFW_STUDIO_AGENT_TOKEN；配置后走受保护的 /agent/jobs）")
     parser.add_argument("--legacy", action="store_true",
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
-    parser.add_argument("--no-prompt-library", action="store_true",
-                        help="不把这段提示词写入提示词库（默认写入并按提示词关联生成图）")
     args = parser.parse_args()
 
     if args.list_workflows:
@@ -147,31 +141,23 @@ def main() -> int:
 
     # 旧 /jobs 路径无法由服务端自动追加 upscale，因此需要先解析实际 Primary；
     # Agent 加固路径则把 module_id 省略交给服务端解析（不在 CLI 里写默认）。
+    use_agent_endpoint = bool(load_token(args.token)) and not args.legacy
     if args.module:
-        primary_id = args.module
-    elif args.legacy or not load_token(args.token):
-        primary_id = default_module_id(args.api)
-    else:
+        primary_id: str | None = args.module
+    elif use_agent_endpoint:
         primary_id = None
+    else:
+        primary_id = default_module_id(args.api)
+        if not primary_id:
+            print("[FAIL] 服务端未标记可用的默认工作流；请显式 --module <workflow> "
+                  "（CLI 不猜测默认，也不自动切换）")
+            return 2
     modules = [{"module_id": primary_id}] if primary_id else []
     if args.upscale and primary_id:
         modules.append({"module_id": "upscale"})
 
-    # 基础可追溯：提交前先保证提示词入库（同文自动复用），Job 快照带 id，
-    # 生成图在提示词库按提示词可见；图片本身仍落在 DataRoot 下由服务统一管理。
-    prompt_link: dict | None = None
-    if not args.no_prompt_library:
-        prompt_link = post(args.api, "/prompts/ensure", {
-            "positive_prompt": args.prompt,
-            "negative_prompt": args.negative,
-        }, optional=True)
-        if prompt_link:
-            print(f"[..] 提示词库 {prompt_link['prompt_id']} v={prompt_link['version_id']}"
-                  f" {'新建' if prompt_link.get('created') else '复用'}")
-        else:
-            print("[!] 服务端尚不支持提示词入库（旧版本）：本次任务不关联提示词库；"
-                  "服务重启后自动生效")
-
+    # W1.2.1：Prompt 由服务端在 Job 创建事务内统一关联（不再提前调 /prompts/ensure）；
+    # 未放行/非法请求不会提前产生 Prompt。
     token = load_token(args.token)
     if token and not args.legacy:
         # 加固路径：专用 Agent 端点，Bearer token + 服务端限速 + 幂等键。
@@ -205,8 +191,6 @@ def main() -> int:
                 "seed": args.seed,
                 "workflow_modules": modules,
                 "input_images": [],
-                **({"source_prompt_id": prompt_link["prompt_id"],
-                    "source_prompt_version_id": prompt_link["version_id"]} if prompt_link else {}),
             },
         })
     job_id = job["id"]

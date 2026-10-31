@@ -25,7 +25,7 @@ from app.schemas.job import (
     QueueResponse,
     job_response,
 )
-from app.services import job_service
+from app.services import job_service, prompt_service
 
 router = APIRouter(tags=["jobs"])
 
@@ -63,15 +63,23 @@ def create_job(
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
     # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
     ensure_modules_released(modules)
-    job, created = job_service.create_job(
-        session,
-        source=body.source,
-        client_request_id=body.client_request_id,
-        snapshot=snapshot,
-        queue_mode=body.queue_mode,
-        workflow_modules=modules,
-        job_kind="generate",
-    )
+    # W1.2.1：Agent / CLI 旧路径由服务端统一关联提示词；Prompt 与 Job 同事务，
+    # commit=False 只 flush，成功时由 JobService 统一提交，失败时统一 rollback。
+    if body.source in ("agent", "doubao"):
+        prompt_service.attach_ai_prompt(session, snapshot, commit=False)
+    try:
+        job, created = job_service.create_job(
+            session,
+            source=body.source,
+            client_request_id=body.client_request_id,
+            snapshot=snapshot,
+            queue_mode=body.queue_mode,
+            workflow_modules=modules,
+            job_kind="generate",
+        )
+    except Exception:
+        session.rollback()
+        raise
     response = job_response(job)
     response.idempotent_replay = not created
     response.disk_space = disk

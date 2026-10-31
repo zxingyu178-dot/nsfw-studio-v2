@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentJobRequest(BaseModel):
@@ -32,3 +32,13 @@ class AgentJobRequest(BaseModel):
         default=None, max_length=128,
         description="幂等键：同一键重复提交返回原 Job（不重复生成）",
     )
+
+    @field_validator("module_id")
+    @classmethod
+    def _validate_module_id(cls, value: str | None) -> str | None:
+        """W1.2.1：严格区分 None 与空字符串——只有真正未传入才允许走默认。"""
+        if value is None:
+            return None
+        if not value.strip():
+            raise ValueError("module_id 不能为空字符串或纯空白")
+        return value.strip()

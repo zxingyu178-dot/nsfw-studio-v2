@@ -135,24 +135,23 @@ def submit_agent_job(
         workflow_modules=snapshot_modules,
     )
     snapshot = snapshot_model.model_dump()
-    # 基础可追溯：检查通过后才写提示词库（同文复用），Job 快照带 source_prompt_id，
-    # 生成图因此在提示词库按提示词可见（与 Web 工作台路径一致）。
-    if not snapshot.get("source_prompt_id"):
-        prompt, version, _ = prompt_service.assign_ai_prompt(
-            session, positive_prompt=body.prompt, negative_prompt=body.negative_prompt
-        )
-        snapshot["source_prompt_id"] = prompt.id
-        snapshot["source_prompt_version_id"] = version.id
+    # W1.2.1：Prompt 与 Job 同一事务；此处只 flush（commit=False），
+    # 由 JobService 创建成功后统一提交；任何失败由下方 rollback。
+    prompt_service.attach_ai_prompt(session, snapshot, commit=False)
 
-    job, created = job_service.create_job(
-        session,
-        source="agent",
-        client_request_id=body.client_request_id or f"agent_{uuid.uuid4().hex[:16]}",
-        snapshot=snapshot,
-        queue_mode=body.queue_mode,
-        workflow_modules=workflow_modules,
-        job_kind="generate",
-    )
+    try:
+        job, created = job_service.create_job(
+            session,
+            source="agent",
+            client_request_id=body.client_request_id or f"agent_{uuid.uuid4().hex[:16]}",
+            snapshot=snapshot,
+            queue_mode=body.queue_mode,
+            workflow_modules=workflow_modules,
+            job_kind="generate",
+        )
+    except Exception:
+        session.rollback()
+        raise
     response = job_response(job)
     response.idempotent_replay = not created
     response.disk_space = disk

@@ -153,4 +153,18 @@ describe('W1.2-A InspectorPanel 工作流候选', () => {
     expect(screen.queryByRole('button', { name: '工作流' })).toBeNull()
     expect(screen.getByText('基础生成')).toBeTruthy()
   })
+
+  it('默认工作流未放行：显示明确提示，且不自动选择其他工作流', () => {
+    const unreleasedBasic = {
+      ...basic,
+      release_status: { ...release, real_gate_passed: false, ready_to_run: false },
+    }
+    renderPanel('text', '', [unreleasedBasic, anime])
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('默认工作流')
+    expect(alert.textContent).toContain('不可用')
+    // 用户仍可显式选择已放行的 anime（但系统不会自动替选）
+    fireEvent.click(screen.getByRole('button', { name: '工作流' }))
+    expect(optionLabels()).toContain('动漫生成')
+  })
 })

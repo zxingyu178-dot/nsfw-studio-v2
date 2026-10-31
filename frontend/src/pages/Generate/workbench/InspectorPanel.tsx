@@ -8,6 +8,7 @@
 import { Field, Switch } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import {
+  defaultWorkflowNotice,
   hasUpscaleModule,
   imagePrimaryCandidates,
   releaseStatusNotice,
@@ -48,6 +49,11 @@ export function InspectorPanel({
       ? textPrimaryCandidates(state.moduleCatalog)
       : imagePrimaryCandidates(state.moduleCatalog)
   const primaryReleaseNotice = primaryCapabilities ? releaseStatusNotice(primaryCapabilities) : null
+  // W1.2.1：默认工作流不可用时明确提示（未选定 Primary 才提示；用户显式选择后保留其选择）
+  const defaultNotice =
+    state.mode === 'text' && primaryModule === ''
+      ? defaultWorkflowNotice(state.moduleCatalog)
+      : null
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
 
@@ -69,7 +75,7 @@ export function InspectorPanel({
       <div className="wb4-inspector__group">
         <div className="wb-param">
           <span className="wb-param__label">工作流</span>
-          {primaryCandidates.length > 1 ? (
+          {primaryCandidates.length > 0 && (primaryCandidates.length > 1 || primaryModule === '') ? (
             <PopoverSelect
               value={primaryModule}
               onChange={(v) => setPrimaryModule(v)}
@@ -81,6 +87,11 @@ export function InspectorPanel({
             />
           ) : (
             <p className="wb-static wb4-workflow-title">{primaryTitle}</p>
+          )}
+          {defaultNotice && (
+            <p className="ds-notice ds-notice--warning" role="alert">
+              {defaultNotice}
+            </p>
           )}
           {primaryReleaseNotice && (
             <p className="ds-notice" role="status">

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import {
   availableImageModuleIds,
   defaultTextModuleId,
+  defaultWorkflowNotice,
   getWorkbenchState,
   hydrateWorkbench,
   imagePrimaryCandidates,
@@ -11,6 +12,7 @@ import {
   releaseStatusNotice,
   resetWorkbench,
   setModuleCatalog,
+  setPrimaryModule,
   textPrimaryCandidates,
 } from './workbenchStore'
 import type { ModuleCapabilitiesDTO } from '../types/workbench'
@@ -249,7 +251,6 @@ describe('W1.2 工作流选择候选（text / image / 默认）', () => {
     expect(defaultTextModuleId([{ ...basic, is_default: false }, animeDefault])).toBe('anime_generate')
     expect(defaultTextModuleId([unreleasedText])).toBeNull()
   })
-
   it('目录到达后 Primary 切换为服务端默认，而不是 UI 硬编码', () => {
     resetWorkbench()
     setModuleCatalog([
@@ -264,5 +265,72 @@ describe('W1.2 工作流选择候选（text / image / 默认）', () => {
     setModuleCatalog([unreleasedText, upscale])
     expect(textPrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
     expect(imagePrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
+  })
+})
+
+describe('W1.2.1 默认工作流 fail-closed', () => {
+  const basic = makeModule({
+    module_id: 'basic_generate',
+    title: '基础生成',
+    input_required: false,
+    input_slots: [],
+    is_default: true,
+  })
+  const anime = makeModule({
+    module_id: 'anime_generate',
+    title: '动漫生成',
+    input_required: false,
+    input_slots: [],
+  })
+  const unreleasedBasic = {
+    ...basic,
+    release_status: release(false, 'experimental', false),
+  }
+
+  it('默认 basic 放行：正常选择 basic_generate', () => {
+    expect(defaultTextModuleId([basic, anime])).toBe('basic_generate')
+    resetWorkbench()
+    setModuleCatalog([basic, anime])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('basic_generate')
+  })
+
+  it('默认 basic 未放行、anime 放行：不得自动选择 anime', () => {
+    expect(defaultTextModuleId([unreleasedBasic, anime])).toBeNull()
+    resetWorkbench()
+    setModuleCatalog([unreleasedBasic, anime])
+    expect(getWorkbenchState().workflowModules).toEqual([])
+    expect(defaultWorkflowNotice([unreleasedBasic, anime])).toContain('默认工作流')
+    expect(defaultWorkflowNotice([unreleasedBasic, anime])).toContain('不可用')
+  })
+
+  it('默认模块未注册（available=false）：不得自动选择其他模块', () => {
+    const unregisteredDefault = {
+      ...basic,
+      available: false,
+      release_status: release(false, 'unverified', false),
+    }
+    expect(defaultTextModuleId([unregisteredDefault, anime])).toBeNull()
+    resetWorkbench()
+    setModuleCatalog([unregisteredDefault, anime])
+    expect(getWorkbenchState().workflowModules).toEqual([])
+  })
+
+  it('没有 is_default：不得猜测默认', () => {
+    expect(defaultTextModuleId([{ ...basic, is_default: false }, anime])).toBeNull()
+    expect(defaultWorkflowNotice([{ ...basic, is_default: false }, anime]))
+      .toContain('未标记默认工作流')
+    resetWorkbench()
+    setModuleCatalog([{ ...basic, is_default: false }, anime])
+    expect(getWorkbenchState().workflowModules).toEqual([])
+  })
+
+  it('用户显式选择其他已放行工作流时保留，不强制切回默认', () => {
+    resetWorkbench()
+    setModuleCatalog([basic, anime])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('basic_generate')
+    setPrimaryModule('anime_generate')
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('anime_generate')
+    setModuleCatalog([basic, anime])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('anime_generate')
   })
 })

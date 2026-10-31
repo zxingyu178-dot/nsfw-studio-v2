@@ -477,3 +477,14 @@
 - [x] W1.2-E 提交标准 / Agent / AI 生图文档统一。
 - [x] 验证：后端定向 47 passed；前端 typecheck + 97 files/476 tests + build；G0 0 errors。
 - [x] W1.2 GitHub CI 全绿：run 41165232488（后端 626 passed / 3 skipped，前端 476 tests，G0 通过）。
+
+## 2026-10-31 W1.2.1：Workflow Integrity
+- [x] A 默认工作流 fail-closed（前端 / CLI 只认 is_default，无 candidates[0] 兜底）。
+- [x] A 默认不可用时 UI 明确提示，且不自动切换其他工作流。
+- [x] B Prompt 与 Job 同事务（commit=False + JobService 统一提交 + 失败 rollback）。
+- [x] B Agent 与旧 /jobs（agent/doubao）统一由服务端关联 Prompt；CLI 删除提前 /prompts/ensure。
+- [x] B 删除无效 --no-prompt-library 并修正 AGENTS / AGENT_SUBMISSION。
+- [x] C 空字符串 / 纯空白 module_id 拒绝（422），只有 None 使用服务器默认。
+- [x] D 自动归一化切换 Primary 时同步恢复输入图片 role，保留 image_id。
+- [x] 验证：后端定向 61 passed；前端 typecheck + 97 files/486 tests + build；store regression 11；G0 0 errors。
+- [ ] W1.2.1 GitHub CI 结果（提交后补记）。

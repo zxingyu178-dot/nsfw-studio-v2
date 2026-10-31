@@ -55,6 +55,7 @@ const basicGenerate = makeModule({
   can_start_from_image: false,
   input_slots: [],
 })
+
 describe('requiredInputSlot（Phase 0.12 任务 11：role 从 input_slots 读取）', () => {
   it('img2img → source；reference_generate → reference；文生图无 slot → null', () => {
     expect(requiredInputSlot(img2img)).toMatchObject({ role: 'source', required: true, max_count: 1 })
@@ -99,6 +100,77 @@ describe('切 Primary Module 时单图自动重映射 role', () => {
     setPrimaryModule('reference_generate')
     setInputImage('img-B')
     expect(getWorkbenchState().inputImages[0].role).toBe('reference')
+  })
+})
+
+describe('W1.2.1 自动归一化时同步恢复输入角色', () => {
+  beforeEach(() => {
+    resetWorkbench()
+    setModuleCatalog([])
+  })
+
+  it('reference_generate 不可用 → 自动切 img2img，reference 改为 source 且图片不丢', () => {
+    setModuleCatalog([img2img, referenceGenerate])
+    hydrateWorkbench({
+      prompt_mode: 'structured',
+      structured_prompt: {},
+      generation_mode: 'image',
+      input_images: [{ role: 'reference', image_id: 'img-R' }],
+      workflow_modules: [{ module_id: 'reference_generate' }],
+    } as unknown as WorkbenchSnapshot)
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('reference_generate')
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'reference', image_id: 'img-R' })
+
+    setModuleCatalog([img2img, { ...referenceGenerate, available: false }])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('img2img')
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'source', image_id: 'img-R' })
+  })
+
+  it('img2img 不可用 → 自动切 reference_generate，source 改为 reference', () => {
+    setModuleCatalog([img2img, referenceGenerate])
+    hydrateWorkbench({
+      prompt_mode: 'structured',
+      structured_prompt: {},
+      generation_mode: 'image',
+      input_images: [{ role: 'source', image_id: 'img-S' }],
+      workflow_modules: [{ module_id: 'img2img' }],
+    } as unknown as WorkbenchSnapshot)
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'source', image_id: 'img-S' })
+
+    setModuleCatalog([{ ...img2img, available: false }, referenceGenerate])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('reference_generate')
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'reference', image_id: 'img-S' })
+  })
+
+  it('目录异步加载：已有 reference 图片不丢失，Primary 未变则 role 不变', () => {
+    hydrateWorkbench({
+      prompt_mode: 'structured',
+      structured_prompt: {},
+      generation_mode: 'image',
+      input_images: [{ role: 'reference', image_id: 'img-A' }],
+      workflow_modules: [{ module_id: 'reference_generate' }],
+    } as unknown as WorkbenchSnapshot)
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'reference', image_id: 'img-A' })
+
+    setModuleCatalog([img2img, referenceGenerate])
+    expect(getWorkbenchState().workflowModules[0].module_id).toBe('reference_generate')
+    expect(getWorkbenchState().inputImages[0]).toMatchObject({ role: 'reference', image_id: 'img-A' })
+  })
+
+  it('历史恢复的模块不可用：自动切换后 role 与新 Primary 匹配（避免 Pipeline 角色错误）', () => {
+    setModuleCatalog([img2img, referenceGenerate])
+    hydrateWorkbench({
+      prompt_mode: 'structured',
+      structured_prompt: {},
+      generation_mode: 'image',
+      input_images: [{ role: 'reference', image_id: 'img-H' }],
+      workflow_modules: [{ module_id: 'reference_generate' }],
+    } as unknown as WorkbenchSnapshot)
+    setModuleCatalog([img2img, { ...referenceGenerate, available: false }])
+    const state = getWorkbenchState()
+    expect(state.workflowModules[0].module_id).toBe('img2img')
+    expect(state.inputImages[0].role).toBe('source')
+    expect(state.inputImages[0].image_id).toBe('img-H')
   })
 })
 

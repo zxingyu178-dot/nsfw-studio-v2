@@ -234,3 +234,119 @@ def test_upscale_appended_after_selected_primary(agent_client, monkeypatch):
     assert [
         item["module_id"] for item in response.json()["workbench_snapshot"]["workflow_modules"]
     ] == ["anime_generate", "upscale"]
+
+
+# ===== W1.2.1：事务 / 严格 module_id / CLI 服务端行为 =====
+
+def test_fixed_seed_with_count_two_rolls_back_prompt_and_job(agent_client, session, monkeypatch):
+    """A：count=2 + 固定 Seed 校验失败 → Prompt / Job / JobStage 均不增加。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-rollback")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-rollback"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(count=2, seed=1234),
+        headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "FIXED_SEED_SINGLE_ONLY"
+    assert db_counts(session) == before, "校验失败必须回滚尚未提交的 Prompt"
+
+
+def test_idempotency_conflict_does_not_create_prompt(agent_client, session, monkeypatch):
+    """B：相同 client_request_id + 不同 Prompt → 409，且不新增 Prompt、原 Job 不变。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-idem-conflict")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-idem-conflict"}
+    request_id = f"conflict_{uuid.uuid4().hex[:10]}"
+    first = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(client_request_id=request_id, prompt="first prompt"),
+        headers=headers,
+    )
+    assert first.status_code == 201, first.text
+    first_job = first.json()
+    prompt_after_first = session.query(Prompt).count()
+
+    second = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(client_request_id=request_id, prompt="different prompt"),
+        headers=headers,
+    )
+    assert second.status_code == 409, second.text
+    assert second.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    assert session.query(Prompt).count() == prompt_after_first, "冲突请求不得留下新 Prompt"
+    detail = agent_client.get(f"/api/v1/jobs/{first_job['id']}").json()
+    assert detail["positive_prompt_snapshot"] == "first prompt"
+
+
+def test_blank_and_whitespace_module_id_rejected(agent_client, monkeypatch):
+    """C：只有 None 才走默认；"" / "   " 必须拒绝，不能绕过显式选择。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-blank")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-blank"}
+    for value in ("", "   "):
+        response = agent_client.post(
+            "/api/v1/agent/jobs", json=payload(module_id=value), headers=headers,
+        )
+        assert response.status_code == 422, response.text
+    unknown = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="unknown"), headers=headers,
+    )
+    assert unknown.status_code == 400
+    assert unknown.json()["error"]["code"] == "AGENT_MODULE_UNKNOWN"
+
+
+def test_legacy_doubao_path_attaches_prompt_server_side(agent_client, session, monkeypatch):
+    """CLI 旧 /jobs 路径：服务端负责 Prompt 关联，Job 快照带 source_prompt_id。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-legacy")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-legacy"}
+    before_jobs = session.query(Job).count()
+    response = agent_client.post("/api/v1/jobs", json={
+        "source": "doubao",
+        "client_request_id": f"legacy_{uuid.uuid4().hex[:10]}",
+        "snapshot": {
+            "prompt_mode": "full",
+            "full_prompt": "legacy cli prompt, silver hair",
+            "negative_prompt": "low quality",
+            "width": 768,
+            "height": 1024,
+            "count": 1,
+            "seed_mode": "random",
+            "workflow_modules": [],
+        },
+    })
+    assert response.status_code == 201, response.text
+    job = response.json()
+    snapshot = job["workbench_snapshot"]
+    assert snapshot["source_prompt_id"], "服务端必须关联提示词"
+    assert snapshot["source_prompt_version_id"]
+    assert session.query(Job).count() == before_jobs + 1
+    assert session.query(Prompt).count() == 1
+
+
+def test_legacy_doubao_invalid_job_rolls_back_prompt(agent_client, session, monkeypatch):
+    """CLI 旧 /jobs 路径校验失败时，服务端不得提前留下 Prompt。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-legacy-fail")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    before = db_counts(session)
+    response = agent_client.post("/api/v1/jobs", json={
+        "source": "doubao",
+        "client_request_id": f"legacy_fail_{uuid.uuid4().hex[:10]}",
+        "snapshot": {
+            "prompt_mode": "full",
+            "full_prompt": "should not persist prompt",
+            "negative_prompt": "",
+            "width": 768,
+            "height": 1024,
+            "count": 2,
+            "seed_mode": "fixed",
+            "seed": 42,
+            "workflow_modules": [],
+        },
+    })
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "FIXED_SEED_SINGLE_ONLY"
+    assert db_counts(session) == before

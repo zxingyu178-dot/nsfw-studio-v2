@@ -79,6 +79,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 | --- | --- |
 | 不传 `module_id` 或传 `null` | 使用**服务端当前配置的默认工作流**（来自 settings `engine.module_id`，没有第二套默认逻辑） |
 | 显式传 `module_id` | 使用指定工作流；服务端校验能力与放行状态 |
+| `module_id=""` / `"   "` | `422` 拒绝（空字符串不能绕过显式选择；只有 None 才走默认） |
 | `upscale=true` | 在**实际选定的 Primary** 之后追加 `upscale`（不能把它当 Primary） |
 | 未指定的默认工作流未放行 | **拒绝**（`WORKFLOW_NOT_RELEASED`），不会自动降级到其他模块 |
 | 未知模块 | `400 AGENT_MODULE_UNKNOWN` |
@@ -92,6 +93,10 @@ Agent 第一版只开放**单个无输入图片的生成型模块 + 可选 upsca
 检查顺序：解析实际工作流 → 正式放行门禁 → 模块能力校验 → 写提示词库 → 创建 Job。
 任一检查失败都不会产生 Prompt / Job / Stage 数据。
 
+**事务（W1.2.1）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
+`assign_ai_prompt(commit=False)` 只 flush；JobService 创建成功时统一提交，
+失败（校验错误 / 幂等冲突 / 数据库错误）统一 rollback。CLI 不再提前调用 `/prompts/ensure`。
+
 ## 5. CLI（更推荐给豆包用）
 
 豆包只需给你一行命令，你在本机跑（脚本自动读取 `configs/config.local.yaml` 的 `agent.token`，环境变量 `NSFW_STUDIO_AGENT_TOKEN` 可覆盖）：
@@ -101,10 +106,11 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 .venv\Scripts\python scripts\agent_generate.py --prompt "1girl, red dress, night city, neon lights" --out D:\ai_out
 ```
 
-- 不传 `--module` → 使用服务端默认工作流（CLI 不再默认 anime_generate）；
+- 不传 `--module` → 使用服务端默认工作流（CLI 不再默认 anime_generate，也不猜测第一个可用模块）；
 - 显式 `--module basic_generate` / `--module anime_generate` → 使用指定模块；
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
-- 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数。
+- 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
+- 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
 
 未设置 token 时脚本走本机 `/jobs`（向后兼容，仍只在本机 loopback 生效）；
 加 `--legacy` 可显式强制旧路径（仅调试）。

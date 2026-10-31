@@ -45,11 +45,18 @@ def resolve_agent_workflow_modules(
     返回的是服务端解析出的真实身份列表（含 provider / binding_version / 双指纹），
     Agent 不传入、也不能伪造这些字段。
     """
-    requested = [{"module_id": module_id}] if module_id else []
+    if module_id is not None and not str(module_id).strip():
+        raise ValidationError(
+            "module_id 不能为空字符串或纯空白；只有不传/null 才使用服务器默认",
+            code="AGENT_MODULE_UNKNOWN",
+            details={"module_id": module_id},
+        )
+    normalized_id = str(module_id).strip() if module_id is not None else None
+    requested = [{"module_id": normalized_id}] if normalized_id else []
     try:
         primary = resolve_workflow_modules(settings, requested)[0]
     except EngineError as error:
-        raise _translate(error, module_id) from error
+        raise _translate(error, normalized_id) from error
     primary_id = str(primary.get("module_id") or "")
     if not primary_id or not default_registry().has(primary_id, primary.get("module_version")):
         raise ValidationError(
