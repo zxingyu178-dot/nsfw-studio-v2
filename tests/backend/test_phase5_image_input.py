@@ -176,22 +176,22 @@ def test_job_rejects_input_image_ignored_by_module(mock_client, png_bytes):
     assert response.json()["error"]["code"] == "UNUSED_INPUT_IMAGE"
 
 
-def test_job_creation_validates_input_image_exists(client):
-    response = client.post("/api/v1/jobs", json={
+def test_job_creation_validates_input_image_exists(mock_client):
+    response = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(input_images=[{"role": "source", "image_id": "img_missing"}]),
     })
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "IMAGE_NOT_FOUND"
 
 
-def test_job_rejects_multiple_input_images(client, png_bytes):
+def test_job_rejects_multiple_input_images(mock_client, png_bytes):
     """Phase 7 Task5：schema 不再硬编码 max=1；数量上限由模块声明的输入槽校验。
 
     img2img 声明 source max_count=1 → 两张 source 必须被 PipelineValidator 拒绝
     （进入业务层给出明确 400，而不是 schema 级 422）。
     """
-    image = import_one(client, "one.png", png_bytes)
-    response = client.post("/api/v1/jobs", json={
+    image = import_one(mock_client, "one.png", png_bytes)
+    response = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(
             input_images=[
                 {"role": "source", "image_id": image["id"]},

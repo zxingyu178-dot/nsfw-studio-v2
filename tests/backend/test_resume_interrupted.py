@@ -128,56 +128,75 @@ def test_stale_workflow_job_skipped_not_requeued(session_factory, settings, monk
         assert session.get(Job, "job_stale_workflow").status == "INTERRUPTED"
 
 
-def test_partial_job_creates_child_and_is_idempotent(client, session_factory):
-    client.post("/api/v1/queue/pause")
-    try:
-        response = client.post("/api/v1/jobs", json={
-            "source": "web",
-            "snapshot": {
-                "prompt_mode": "full",
-                "full_prompt": "partial resume prompt",
-                "negative_prompt": "",
-                "count": 2,
-                "width": 768,
-                "height": 1024,
-                "seed_mode": "random",
-                "workflow_modules": [{"module_id": "anime_generate"}],
-                "input_images": [],
-            },
-        })
-        assert response.status_code == 201, response.text
-        parent_id = response.json()["id"]
+def test_partial_job_creates_child_and_is_idempotent(settings, session_factory):
+    """W2.0：用 mock provider 创建父 Job，避免真实 ComfyUI Preflight 影响恢复语义测试。"""
+    import dataclasses
 
-        # 模拟启动恢复后的现场：父 Job 中断，第 0 张已完成，第 1 张未完成
-        with session_factory() as session:
-            job = session.get(Job, parent_id)
-            job.status = "INTERRUPTED"
-            job.completed_count = 1
-            items = list(session.query(JobItem).filter(JobItem.job_id == parent_id).all())
-            for index, item in enumerate(items):
-                item.status = "COMPLETED" if index == 0 else "INTERRUPTED"
-            session.commit()
+    from fastapi.testclient import TestClient
 
-        first = client.post("/api/v1/jobs/resume-interrupted")
-        assert first.status_code == 200, first.text
-        data = first.json()
-        parent = next((entry for entry in data["resumed"] if entry["parent_job_id"] == parent_id), None)
-        assert parent is not None
-        assert data["resumed_count"] >= 1
+    from app.core.config import WorkflowConfig
+    from app.main import create_app
 
-        with session_factory() as session:
-            child = session.get(Job, parent["child_job_id"])
-            assert child is not None
-            assert child.resume_of_job_id == parent_id
-            assert child.requested_count == 1  # 只续剩余 1 张
-            assert "partial resume prompt" in child.positive_prompt_snapshot
-            assert session.get(Job, parent_id).status == "INTERRUPTED"
+    app = create_app(dataclasses.replace(
+        settings,
+        workflow=WorkflowConfig(raw={"engine": {"provider": "mock", "options": {
+            "worker_poll_interval_ms": 20, "engine_poll_ms": 20,
+        }}}),
+    ))
+    with TestClient(app) as client:
+        client.post("/api/v1/queue/pause")
+        try:
+            response = client.post("/api/v1/jobs", json={
+                "source": "web",
+                "snapshot": {
+                    "prompt_mode": "full",
+                    "full_prompt": "partial resume prompt",
+                    "negative_prompt": "",
+                    "count": 2,
+                    "width": 768,
+                    "height": 1024,
+                    "seed_mode": "random",
+                    "workflow_modules": [{"module_id": "anime_generate"}],
+                    "input_images": [],
+                },
+            })
+            assert response.status_code == 201, response.text
+            parent_id = response.json()["id"]
 
-        second = client.post("/api/v1/jobs/resume-interrupted")
-        assert second.status_code == 200
-        second_data = second.json()
-        assert not any(entry["parent_job_id"] == parent_id for entry in second_data["resumed"])
-        assert any(entry["job_id"] == parent_id and entry["reason"] == "ALREADY_RESUMED"
-                   for entry in second_data["skipped"])
-    finally:
-        client.post("/api/v1/queue/resume")
+            # 模拟启动恢复后的现场：父 Job 中断，第 0 张已完成，第 1 张未完成
+            with session_factory() as session:
+                job = session.get(Job, parent_id)
+                job.status = "INTERRUPTED"
+                job.completed_count = 1
+                items = list(session.query(JobItem).filter(JobItem.job_id == parent_id).all())
+                for index, item in enumerate(items):
+                    item.status = "COMPLETED" if index == 0 else "INTERRUPTED"
+                session.commit()
+
+            first = client.post("/api/v1/jobs/resume-interrupted")
+            assert first.status_code == 200, first.text
+            data = first.json()
+            parent = next(
+                (entry for entry in data["resumed"] if entry["parent_job_id"] == parent_id), None
+            )
+            assert parent is not None
+            assert data["resumed_count"] >= 1
+
+            with session_factory() as session:
+                child = session.get(Job, parent["child_job_id"])
+                assert child is not None
+                assert child.resume_of_job_id == parent_id
+                assert child.requested_count == 1  # 只续剩余 1 张
+                assert "partial resume prompt" in child.positive_prompt_snapshot
+                assert session.get(Job, parent_id).status == "INTERRUPTED"
+
+            second = client.post("/api/v1/jobs/resume-interrupted")
+            assert second.status_code == 200
+            second_data = second.json()
+            assert not any(entry["parent_job_id"] == parent_id for entry in second_data["resumed"])
+            assert any(
+                entry["job_id"] == parent_id and entry["reason"] == "ALREADY_RESUMED"
+                for entry in second_data["skipped"]
+            )
+        finally:
+            client.post("/api/v1/queue/resume")
