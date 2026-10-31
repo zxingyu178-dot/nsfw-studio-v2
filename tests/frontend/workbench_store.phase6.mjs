@@ -49,6 +49,9 @@ const CATALOG = [
     input_required: false,
     output_kind: 'original',
     size_mode: 'explicit',
+    is_generative: true,
+    allowed_job_kinds: ['generate'],
+    is_default: true,
     parameters: [{ name: 'width', type: 'int', configurable: false, default: 1024, min: 64, max: 4096 }],
   },
   {
@@ -58,6 +61,9 @@ const CATALOG = [
     can_start_from_image: true,
     output_kind: 'processed',
     size_mode: 'input',
+    is_generative: true,
+    allowed_job_kinds: ['generate'],
+    input_slots: [{ role: 'source', required: true, max_count: 1 }],
     parameters: [
       { name: 'input_image', type: 'image', configurable: false },
       { name: 'denoise', type: 'float', configurable: true, default: 0.8, min: 0.05, max: 1, step: 0.05, title: '变化强度' },
@@ -69,6 +75,8 @@ const CATALOG = [
     input_required: false,
     output_kind: 'upscaled',
     size_mode: 'input',
+    is_generative: false,
+    allowed_job_kinds: ['generate', 'process'],
     parameters: [],
   },
   // 未来模块演示：Reference 只需新增声明，前端无需重写 SettingsPane（Task8）
@@ -79,6 +87,9 @@ const CATALOG = [
     can_start_from_image: true,
     output_kind: 'processed',
     size_mode: 'input',
+    is_generative: true,
+    allowed_job_kinds: ['generate'],
+    input_slots: [{ role: 'reference', required: true, max_count: 1 }],
     parameters: [{ name: 'strength', type: 'float', configurable: true, default: 0.7, min: 0, max: 1, step: 0.05 }],
   },
 ]
@@ -284,8 +295,8 @@ try {
       workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
     }))
     // 未来 Reference 模块：仅凭 catalog 声明即可出现在选择器候选（前端零改动）。
-    // 能力判断与产品一致，使用 store.isImageStartModule（§21，取代旧 output_kind==='processed'）。
-    const imageCandidates = CATALOG.filter(store.isImageStartModule)
+    // W1.2 起使用 imagePrimaryCandidates（generate 语义）；process 的 isImageStartModule 不再混用。
+    const imageCandidates = store.imagePrimaryCandidates(CATALOG)
     assert.deepEqual(imageCandidates.map((module) => module.module_id), ['img2img', 'reference_generate'])
 
     store.setPrimaryModule('reference_generate')
