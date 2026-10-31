@@ -118,11 +118,23 @@ Primary 未变时完整模块身份与图片数据原样保留；不静默删除
 
 ## 6. Git / CI
 
-（提交后补记）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `9830384fd5e0303d004f100776219d3d81d0f244` |
+| W1.2.1 提交 | `a2001c0f241c5d1a01bcd596fae17e6305e9db20` |
+| CI run | `41173347732` |
+| 后端 | 636 passed / 3 skipped（含 G0 step 通过） |
+| 前端 | typecheck + 97 files / 486 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
 
 ## 7. 验收 ZIP
 
-（提交后生成 `handoff/NSFW_Studio_W1.2.1_Handoff.zip`，路径见交付汇报）
+`handoff/NSFW_Studio_W1.2.1_Handoff.zip`（716 个文件，约 27.6 MB）。
+包含 backend / frontend / configs / database / workflows / scripts / tests / docs 与
+DEV_LOG / TASKS / CHANGELOG 等；排除 `.venv`、`node_modules`、`dist`、DataRoot 数据、
+日志与 `*.local.yaml` 私有配置。
 
 ## 8. 未验证 / 限制
 

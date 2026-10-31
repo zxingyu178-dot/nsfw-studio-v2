@@ -487,4 +487,5 @@
 - [x] C 空字符串 / 纯空白 module_id 拒绝（422），只有 None 使用服务器默认。
 - [x] D 自动归一化切换 Primary 时同步恢复输入图片 role，保留 image_id。
 - [x] 验证：后端定向 61 passed；前端 typecheck + 97 files/486 tests + build；store regression 11；G0 0 errors。
-- [ ] W1.2.1 GitHub CI 结果（提交后补记）。
+- [x] W1.2.1 GitHub CI 全绿：run 41173347732（后端 636 passed / 3 skipped，前端 486 tests，G0 通过）。
+- [x] W1.2.1 验收 ZIP：handoff/NSFW_Studio_W1.2.1_Handoff.zip。

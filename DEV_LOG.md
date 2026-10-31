@@ -679,3 +679,6 @@ CI 结果：代码提交 105a99c，GitHub Actions run 41165232488 —— 后端 
   目录异步加载/历史恢复角色错误修复。
 - E 测试：后端定向 61 passed；前端 typecheck + 97 files/486 tests + build；store regression 11；
   G0 checked=6 errors=0 warnings=14。新增 docs/W1_2_1_REPORT.md。
+CI 结果：代码提交 a2001c0，GitHub Actions run 41173347732 —— 后端 636 passed / 3 skipped，
+前端 typecheck + 486 tests + build + store regression 11 passed，两个 job 全部 success。
+验收 ZIP：handoff/NSFW_Studio_W1.2.1_Handoff.zip（716 files）。
