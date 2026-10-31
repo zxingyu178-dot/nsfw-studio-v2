@@ -498,5 +498,5 @@
 - [x] B 并发重复提交不产生孤立 Prompt / 重复 Job。
 - [x] C Agent API 注释与 AGENTS / AGENT_SUBMISSION 文档同步。
 - [x] 验证：后端定向 49 passed；新增测试 9 项。
-- [ ] W1.2.2 GitHub CI 结果（提交后补记）。
-- [ ] W1.2.2 验收 ZIP（提交后生成）。
+- [x] W1.2.2 GitHub CI 全绿：run 41176466877（后端 645 passed / 3 skipped，前端 486 tests，G0 通过）。
+- [x] W1.2.2 验收 ZIP：handoff/NSFW_Studio_W1.2.2_Review.zip。

@@ -61,10 +61,10 @@
 | 项 | 结果 |
 | --- | --- |
 | 后端定向（module_id / agent / CLI / phase7 guards / reference） | 49 passed |
-| 后端全量（CI） | 见交付汇报 |
-| 前端 typecheck / vitest / build | 见交付汇报 |
-| Store regression | 见交付汇报 |
-| G0 | 见交付汇报 |
+| 后端全量（CI） | 645 passed / 3 skipped（含 G0 step 通过） |
+| 前端 typecheck / vitest / build | 通过；97 files / 486 tests；build 394.43 kB |
+| Store regression | 11 passed |
+| G0 | checked=6 errors=0 warnings=14 |
 
 ## 4. 文档同步
 
@@ -75,11 +75,20 @@
 
 ## 5. Git / CI
 
-（提交后补记）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `1b9a15b9db76f33acaaabce6db385cd93b19b045` |
+| W1.2.2 提交 | `306139289ba112dca07e2ca6984aaf35ee6defdf` |
+| CI run | `41176466877` |
+| 后端 | 645 passed / 3 skipped（含 G0 step 通过） |
+| 前端 | typecheck + 97 files / 486 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
 
 ## 6. 验收 ZIP
 
-（提交后生成 `handoff/NSFW_Studio_W1.2.2_Handoff.zip`）
+`handoff/NSFW_Studio_W1.2.2_Review.zip`（轻量包：阶段报告 + Git 信息 + 变更文件清单 + 源码 diff）。
 
 ## 7. 未验证 / 限制
 

@@ -695,3 +695,5 @@ CI 结果：代码提交 a2001c0，GitHub Actions run 41173347732 —— 后端 
   Prompt 归档后同键同内容重放返回原 Job，不产生新 Prompt。
 - C 文档：修正 Agent API 旧 commit 注释；同步 AGENTS / AGENT_SUBMISSION / DEV_LOG / TASKS。
 - 验证：后端定向 49 passed；新增测试见 docs/W1_2_2_REPORT.md。
+CI 结果：代码提交 3061392，GitHub Actions run 41176466877 —— 后端 645 passed / 3 skipped，
+前端 typecheck + 486 tests + build + store regression 11 passed，两个 job 全部 success。
