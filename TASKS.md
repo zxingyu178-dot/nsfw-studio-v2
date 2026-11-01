@@ -533,5 +533,5 @@
   稳定 operation；REMOVE-only；历史图首同步；单一事件机制；评分 source=mobile。
 - [x] D 端口 8877 + 冷启动 120s；配置/停止脚本/验收客户端/文档同步。
 - [x] 测试：后端新增 16 例；前端 489 tests；G0；真实 HTTP Probe PASS。
-- [x] W3.1 GitHub CI 全绿：run 41276157845（后端 690 passed / 3 skipped、G0 通过，前端 489 tests）。
+- [x] W3.1 GitHub CI 全绿：run 41276800550（后端 691 passed / 3 skipped、G0 通过，前端 489 tests）。
 - [x] W3.1 验收 ZIP：handoff/NSFW_Studio_W3.1_Review.zip。

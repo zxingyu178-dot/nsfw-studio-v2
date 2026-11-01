@@ -89,7 +89,7 @@ V1 配对/二进制/冻结会话接口保持兼容。
 | 项 | 结果 |
 | --- | --- |
 | 后端全量（本地） | 691 passed / 3 skipped（694 collected） |
-| 后端全量（CI） | 691 passed / 3 skipped |
+| 后端全量（CI） | 691 passed / 3 skipped（170.68s） |
 | 前端 Settings 定向 | 3 files / 13 tests passed |
 | 前端全量（CI） | 97 files / 489 tests passed |
 | 前端 build | 通过（396.29 kB JS） |
@@ -117,9 +117,9 @@ V1 配对/二进制/冻结会话接口保持兼容。
 | 项 | 值 |
 | --- | --- |
 | 基线 | `e5ec120a28fb9de559efe246c3e3451eab354f9a` |
-| W3.1 提交 | `c066c15d63abd405e77e2c60c28b7d009c70859a` |
-| CI run | `41276157845` |
-| 后端 | 690 passed / 3 skipped，G0 checked=6 errors=0 warnings=14 |
+| W3.1 提交 | `052050d5bf37676242e6dc2fa06722ac3c9dcf9a` |
+| CI run | `41276800550` |
+| 后端 | 691 passed / 3 skipped，G0 checked=6 errors=0 warnings=14 |
 | 前端 | typecheck + 97 files / 489 tests + build + store regression 11 passed |
 | 远端同步 | 本地 HEAD == `origin/main` |
 

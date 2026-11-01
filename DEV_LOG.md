@@ -759,8 +759,8 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   生产 8877 当前由已部署参考分支 Bridge（PID 39184）占用，未停止；
   8767 无监听。证据 docs/W3_1_BRIDGE_PROBE.json。
 - 新增 docs/W3_1_REPORT.md、W3_1_DB_MIGRATION.md、W3_1_CONTRACT_CONSISTENCY.md。
-- GitHub CI run 41276157845（提交 c066c15）：后端 690 passed / 3 skipped、
+- GitHub CI run 41276800550（提交 052050d）：后端 691 passed / 3 skipped、
   G0 checked=6 errors=0 warnings=14；前端 typecheck + 97 files / 489 tests + build +
-  store regression 11 passed；两个 job 全绿。补并发评分测试后以最终 HEAD 为准。
+  store regression 11 passed；两个 job 全绿。
 - W3.1 验收 ZIP：handoff/NSFW_Studio_W3.1_Review.zip。
 
