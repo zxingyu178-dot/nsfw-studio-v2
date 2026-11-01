@@ -17,6 +17,7 @@ import type {
 
 export type TabKey = 'ALL' | 'NEW' | 'FAVORITE' | 'ARCHIVED'
 export type GallerySource = '' | 'comfyui' | 'import'
+export type GalleryCategory = '' | 'anime' | 'imported'
 
 export const PAGE_SIZE = 40
 
@@ -28,11 +29,13 @@ export interface GalleryListQuery {
   status?: ImageReviewStatus | null
   favorite?: boolean
   source?: Exclude<GallerySource, ''>
+  category?: Exclude<GalleryCategory, ''>
 }
 
 export function useGalleryQuery(
   jobFilter: string | null | undefined,
   sourceFilter: GallerySource = '',
+  categoryFilter: GalleryCategory = '',
 ) {
   const [tab, setTab] = useState<TabKey>('ALL')
   const [subStatus, setSubStatus] = useState<'' | ImageReviewStatus>('')
@@ -72,6 +75,7 @@ export function useGalleryQuery(
     else if (tab === 'ARCHIVED') query.status = 'ARCHIVED'
     else if (tab === 'FAVORITE') query.favorite = true
     if (sourceFilter) query.source = sourceFilter
+    if (categoryFilter) query.category = categoryFilter
     return query
   }
 
@@ -94,7 +98,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
 
   useEffect(() => {
     loadFirst()
@@ -135,7 +139,7 @@ export function useGalleryQuery(
       .then((s) => setServerStats(s))
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
 
   /** 用户显式点击「有新图」提示：拉取第一页并只并入新增项，保留已加载多页。 */
   const applyNewImages = useCallback(() => {
@@ -156,7 +160,7 @@ export function useGalleryQuery(
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '刷新新图失败'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -193,7 +197,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoadingMore(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter])
+  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
 
   // 哨兵进入视口 → 加载下一页
   useEffect(() => {
@@ -232,6 +236,7 @@ export function useGalleryQuery(
     else if (tab === 'ARCHIVED') params.status = 'ARCHIVED'
     else if (tab === 'FAVORITE') params.favorite = true
     if (sourceFilter) params.source = sourceFilter
+    if (categoryFilter) params.category = categoryFilter
     return params
   }
 

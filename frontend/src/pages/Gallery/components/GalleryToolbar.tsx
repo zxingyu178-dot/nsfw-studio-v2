@@ -1,7 +1,7 @@
 import { useState, type MutableRefObject } from 'react'
 import { Button, Select, Tabs } from '../../../components/ui'
 import type { ImageReviewStatus, ImageSort } from '../../../types/workbench'
-import type { GallerySource, TabKey } from '../hooks/useGalleryQuery'
+import type { GalleryCategory, GallerySource, TabKey } from '../hooks/useGalleryQuery'
 import {
   DENSITY_OPTIONS,
   FIT_OPTIONS,
@@ -44,6 +44,13 @@ const SOURCE_OPTIONS: { value: GallerySource; label: string }[] = [
   { value: 'import', label: 'V1 导入' },
 ]
 
+/** 分类：动漫 = anime_generate 产物 + V1 导入的 Anima 输出；导入 = 全部外部导入。 */
+const CATEGORY_OPTIONS: { value: GalleryCategory; label: string }[] = [
+  { value: '', label: '分类：全部' },
+  { value: 'anime', label: '动漫' },
+  { value: 'imported', label: '导入' },
+]
+
 interface GalleryToolbarProps {
   tab: TabKey
   onTabChange: (tab: TabKey) => void
@@ -53,6 +60,8 @@ interface GalleryToolbarProps {
   onSubStatusChange: (value: '' | ImageReviewStatus) => void
   source: GallerySource
   onSourceChange: (value: GallerySource) => void
+  category: GalleryCategory
+  onCategoryChange: (value: GalleryCategory) => void
   sort: ImageSort
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
@@ -74,6 +83,7 @@ interface GalleryToolbarProps {
 export function GalleryToolbar({
   tab, onTabChange, view, onToggleView,
   subStatus, onSubStatusChange, source, onSourceChange, sort, onSortChange,
+  category, onCategoryChange,
   density, onDensityChange, layout, onLayoutChange, fit, onFitChange,
   selectMode, onToggleSelect, onStartReview,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
@@ -114,6 +124,12 @@ export function GalleryToolbar({
           value={subStatus}
           onChange={(event) => onSubStatusChange(event.target.value as '' | ImageReviewStatus)}
           options={SUB_STATUS_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        <Select
+          aria-label="分类"
+          value={category}
+          onChange={(event) => onCategoryChange(event.target.value as GalleryCategory)}
+          options={CATEGORY_OPTIONS.map(({ value, label }) => ({ value, label }))}
         />
         <Select
           aria-label="来源"

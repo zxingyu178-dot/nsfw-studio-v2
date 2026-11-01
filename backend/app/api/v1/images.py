@@ -61,6 +61,7 @@ def list_images(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    category: str | None = Query(default=None, description="图库分类：anime/imported"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=40, ge=1, le=100),
@@ -85,6 +86,7 @@ def list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=eff_limit, offset=eff_offset,
+        category=category,
     )
     has_next = (eff_offset + len(items)) < total
     return ImageListResponse(
@@ -104,6 +106,7 @@ def list_image_ids(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    category: str | None = Query(default=None, description="图库分类：anime/imported"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
@@ -112,6 +115,7 @@ def list_image_ids(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=limit,
+        category=category,
     )
     return {"ids": ids, "total": total, "truncated": total > limit, "limit": limit}
 
@@ -207,6 +211,7 @@ def image_stats(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
+    category: str | None = Query(default=None, description="图库分类：anime/imported"),
     session: Session = Depends(get_session),
 ) -> ImageStatsResponse:
     """返回命中过滤条件后的**全局**计数 {total, new, keep, reject, archived, favorites}。
@@ -218,7 +223,7 @@ def image_stats(
     return ImageStatsResponse(**image_service.image_stats(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
-        status=status,
+        status=status, category=category,
     ))
 
 

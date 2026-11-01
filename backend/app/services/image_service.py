@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -600,6 +600,7 @@ def _apply_image_filters(
     date_from: str | None = None,
     date_to: str | None = None,
     status: str | None = None,
+    category: str | None = None,
 ):
     """把图库过滤条件统一叠加到 select(Image) 查询上（list_images 与 image_stats 共用，
     保证列表与统计的过滤口径完全一致——禁止为统计另写一套不一致的过滤）。"""
@@ -622,6 +623,25 @@ def _apply_image_filters(
         query = query.where(Image.created_at >= date_from)
     if date_to is not None:
         query = query.where(Image.created_at <= date_to)
+    if category == "anime":
+        # 动漫分类：Studio anime_generate 产物 + V1 导入的 Anima 输出（文件名/来源路径含 anima）。
+        # 旧 V1 导入图没有 Job.module_id，只能按导入元数据识别，不按 Prompt 正文猜测。
+        query = query.outerjoin(Job, Job.id == Image.job_id).where(
+            or_(
+                Job.module_id == "anime_generate",
+                and_(
+                    Image.source == "import",
+                    or_(
+                        func.lower(Image.imported_filename).like("%anima%"),
+                        func.lower(Image.metadata_json).like("%anima%"),
+                    ),
+                ),
+            )
+        )
+    elif category == "imported":
+        query = query.where(Image.source == "import")
+    elif category is not None and category != "":
+        raise ValidationError(f"非法图库分类: {category}", code="IMAGE_CATEGORY_INVALID")
     return query
 
 
@@ -650,6 +670,7 @@ def list_images(
     date_from: str | None = None,
     date_to: str | None = None,
     status: str | None = None,
+    category: str | None = None,
     sort: str = "created_desc",
     limit: int = 100,
     offset: int = 0,
@@ -665,6 +686,7 @@ def list_images(
         select(Image),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+        category=category,
     )
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
@@ -694,6 +716,7 @@ def list_image_ids(
     date_from: str | None = None,
     date_to: str | None = None,
     status: str | None = None,
+    category: str | None = None,
     sort: str = "created_desc",
     limit: int = IMAGE_IDS_LIMIT,
 ) -> tuple[list[str], int]:
@@ -706,6 +729,7 @@ def list_image_ids(
         select(Image.id),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+        category=category,
     )
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     ids = list(session.execute(query.order_by(*order_by).limit(limit)).scalars())
@@ -724,6 +748,7 @@ def image_stats(
     date_from: str | None = None,
     date_to: str | None = None,
     status: str | None = None,
+    category: str | None = None,
 ) -> dict[str, int]:
     """全局图库统计（Phase 0.12 Task5/ReviewMode）：与 list_images 完全相同的过滤口径。
 
@@ -750,6 +775,7 @@ def image_stats(
         agg,
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
+        category=category,
     )
     row = session.execute(agg).one()
     return {
