@@ -72,9 +72,9 @@ V1 配对/二进制/冻结会话接口保持兼容。
 
 ### 5.1 新增
 
-- `tests/backend/test_mobile_v2_contract.py`（12 tests）：健康能力、feed 首次/分页/更新/删除、
+- `tests/backend/test_mobile_v2_contract.py`（13 tests）：健康能力、feed 首次/分页/更新/删除、
   revision 单调、详情三态、favorite-only、409 权威状态、幂等重放/冲突、并发单事件单回执、
-  版本/整体评分、回执设备隔离、错误版本拒绝、图片分组、401/吊销、410。
+  并发评分单历史、版本/整体评分、回执设备隔离、错误版本拒绝、图片分组、401/吊销、410。
 - `tests/backend/test_mobile_v2_migration.py`（3 tests）：旧分支 0021 升级无丢失、
   主干 0021 历史图回填、旧回执指纹重放/冲突。
 
@@ -88,8 +88,8 @@ V1 配对/二进制/冻结会话接口保持兼容。
 
 | 项 | 结果 |
 | --- | --- |
-| 后端全量（本地） | 690 passed / 3 skipped（693 collected） |
-| 后端全量（CI） | 690 passed / 3 skipped（164.67s） |
+| 后端全量（本地） | 691 passed / 3 skipped（694 collected） |
+| 后端全量（CI） | 691 passed / 3 skipped |
 | 前端 Settings 定向 | 3 files / 13 tests passed |
 | 前端全量（CI） | 97 files / 489 tests passed |
 | 前端 build | 通过（396.29 kB JS） |

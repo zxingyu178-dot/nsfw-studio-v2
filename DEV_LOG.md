@@ -752,8 +752,8 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   幂等；BEGIN IMMEDIATE + 事务内设备复核；operation 使用稳定短标识；删除只写 REMOVE；
   历史图首同步；服务显式事件为唯一机制；Prompt 关联三态；评分 source=mobile 原子回执。
 - Task D：Bridge 固定端口 8877、冷启动等待 120 秒；配置/停止脚本/验收客户端/UI 文案同步。
-- 测试：新增 test_mobile_v2_contract.py（12）与 test_mobile_v2_migration.py（3）；
-  后端全量 690 passed / 3 skipped（693 collected）；前端 97 files / 489 tests、
+- 测试：新增 test_mobile_v2_contract.py（13）与 test_mobile_v2_migration.py（3）；
+  后端全量 691 passed / 3 skipped（694 collected）；前端 97 files / 489 tests、
   build 396.29 kB、store regression 11 passed；G0 checked=6 errors=0 warnings=14。
 - 真实 HTTP Probe（独立 DataRoot、18877 临时端口、唯一合成图片）PASS；
   生产 8877 当前由已部署参考分支 Bridge（PID 39184）占用，未停止；
@@ -761,6 +761,6 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
 - 新增 docs/W3_1_REPORT.md、W3_1_DB_MIGRATION.md、W3_1_CONTRACT_CONSISTENCY.md。
 - GitHub CI run 41276157845（提交 c066c15）：后端 690 passed / 3 skipped、
   G0 checked=6 errors=0 warnings=14；前端 typecheck + 97 files / 489 tests + build +
-  store regression 11 passed；两个 job 全绿。
+  store regression 11 passed；两个 job 全绿。补并发评分测试后以最终 HEAD 为准。
 - W3.1 验收 ZIP：handoff/NSFW_Studio_W3.1_Review.zip。
 

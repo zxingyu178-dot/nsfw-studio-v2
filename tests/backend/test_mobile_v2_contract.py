@@ -5,7 +5,7 @@ import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.timeutil import utc_now_iso
@@ -232,6 +232,39 @@ def test_concurrent_decision_writes_single_event_and_receipt(
         receipts = list(session.scalars(select(MobileMutationReceipt).where(
             MobileMutationReceipt.device_id == device_id,
             MobileMutationReceipt.idempotency_key == "concurrent-decision",
+        )))
+        assert len(events) == 1 and len(receipts) == 1
+
+
+def test_concurrent_evaluation_writes_single_history(
+    mobile_client, session_factory, session,
+):
+    prompt = prompt_service.create_prompt(session, name="concurrent score", mode="full", positive_prompt="c")
+    version = prompt_service.get_current_version(session, prompt)
+    headers, device_id = auth(mobile_client, session_factory)
+    body = {
+        "prompt_version_id": version.id, "overall_score": 5,
+        "client_request_id": "concurrent-score",
+    }
+
+    def submit() -> tuple[int, dict]:
+        response = mobile_client.post(
+            f"/mobile/prompts/{prompt.id}/evaluations", json=body, headers=headers,
+        )
+        return response.status_code, response.json()["data"]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: submit(), range(2)))
+    assert all(status == 200 for status, _ in results)
+    assert results[0][1] == results[1][1]
+    with session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(PromptEvaluation)) == 1
+        events = list(db.scalars(select(MobileImageEvent).where(
+            MobileImageEvent.event_type == "PROMPT_EVALUATED",
+        )))
+        receipts = list(db.scalars(select(MobileMutationReceipt).where(
+            MobileMutationReceipt.device_id == device_id,
+            MobileMutationReceipt.idempotency_key == "concurrent-score",
         )))
         assert len(events) == 1 and len(receipts) == 1
 
