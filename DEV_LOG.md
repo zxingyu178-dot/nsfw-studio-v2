@@ -764,3 +764,24 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   store regression 11 passed；两个 job 全绿。
 - W3.1 验收 ZIP：handoff/NSFW_Studio_W3.1_Review.zip。
 
+## 2026-11-01 日用修复：废片清理性能 + 图库动漫分类
+
+- 废片清理预览从逐张 5 类引用查询改为 `count_references_many` 批量查询 +
+  variant 批量读取：487 张 REJECT 预览由数分钟降到部署机 **1.05 秒**
+  （副本 5.32 秒），返回口径不变（候选 487 / 可删 478 / 保护 9）。
+- `execute` 同样复用批量引用结果；用合成导入图做真实删除验证：
+  预览候选 1、确认删除 1、0.69 秒、随后详情 404（不触碰用户图片）。
+- 图库新增「分类」筛选：`category=anime` = `anime_generate` 产物 +
+  V1 导入元数据/文件名含 Anima 的图片；`category=imported` = 全部导入。
+  当前真实库动漫分类 7 张（2 张 Studio 动漫 Job + 5 张 V1 Anima 导入），
+  浏览器实测选择「动漫」显示「共 7 张」。
+- 注意：ComfyUI `app/output` 仍有 591 张 Anima 输出未导入 Studio，图库分类
+  不会自动包含未入库文件；是否批量导入需用户确认。
+- 新模型识别：`C:\ComfyUI_models\diffusion_models\miaomiaoHarem_v15a-Q6_K.gguf`
+  已出现在 ComfyUI `UnetLoaderGGUF.unet_name` 列表（与 qwen-image-2.1 GGUF 并列）。
+- 部署实例：`deploy/app-instance` 提交 1f14055（cherry-pick 修复），
+  前端 dist `index-C6GgKB2y.js`，ControlHub 重启 Studio 后 Mobile Bridge 已恢复 8877。
+- 新增测试 `test_gallery_category.py`；本机定向：后端 cleanup/category 37 passed，
+  前端 Gallery 4 files / 16 tests + typecheck/build 通过。
+
+

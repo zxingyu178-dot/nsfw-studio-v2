@@ -535,3 +535,11 @@
 - [x] 测试：后端新增 16 例；前端 489 tests；G0；真实 HTTP Probe PASS。
 - [x] W3.1 GitHub CI 全绿：run 41276800550（后端 691 passed / 3 skipped、G0 通过，前端 489 tests）。
 - [x] W3.1 验收 ZIP：handoff/NSFW_Studio_W3.1_Review.zip。
+
+## 2026-11-01 日用修复：图库废片清理与动漫分类
+- [x] 废片清理引用检查批量化（487 张预览 1.05s；真实单张删除验证通过）。
+- [x] 图库「分类」筛选：动漫 / 导入；动漫当前 7 张（Studio 2 + V1 Anima 导入 5）。
+- [x] 新模型 `miaomiaoHarem_v15a-Q6_K.gguf` 已被 ComfyUI UnetLoaderGGUF 识别。
+- [x] 部署实例同步：deploy/app-instance 1f14055 + 前端 dist + Studio/Bridge 重启。
+- [ ] 591 张 ComfyUI Anima 输出尚未导入 Studio（待用户确认是否批量导入）。
+
