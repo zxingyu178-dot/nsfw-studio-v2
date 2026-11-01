@@ -522,4 +522,5 @@
 - [x] G Prompt Version 评分（source=mobile、复用 PromptEvaluation、原子事件+回执）。
 - [x] H 新接口全部 Bearer；吊销设备 401；V1 接口保持兼容。
 - [x] 测试：test_mobile_review_v2 14 tests；相关定向 74 passed。
-- [ ] W3.0 GitHub CI / 验收 ZIP（提交后补记）。
+- [x] W3.0 GitHub CI 全绿：run 41267919495（后端 674 passed / 3 skipped、G0 通过，前端 489 tests）。
+- [x] W3.0 验收 ZIP：handoff/NSFW_Studio_W3.0_Review.zip。

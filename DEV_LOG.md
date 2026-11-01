@@ -732,3 +732,7 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
 - 契约：MEDIAREVIEW_NSFW_CONTRACT_V2.md、openapi-mobile-review-v2.json、fixtures/；
   health api_contract=2 + 6 项能力。
 - 测试：`test_mobile_review_v2.py` 14 tests；相关定向 74 passed。新增 docs/W3_0_REPORT.md。
+- GitHub CI run 41267919495（提交 62eb377）：后端 674 passed / 3 skipped、G0
+  checked=6 errors=0 warnings=14；前端 typecheck + 97 files / 489 tests + build +
+  store regression 11 passed；两个 job 全绿。
+- W3.0 验收 ZIP：handoff/NSFW_Studio_W3.0_Review.zip。

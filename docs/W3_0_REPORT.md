@@ -117,15 +117,35 @@ thumbnail/preview/original URL。
 
 ## 9. 测试结果
 
-（提交后由 CI 补记）
+| 项 | 结果 |
+| --- | --- |
+| 后端定向（本地：mobile v2 + session/cleanup/image/scoring/migration） | 74 passed |
+| 后端全量（CI） | 674 passed / 3 skipped（166.58s） |
+| 前端 typecheck | 通过 |
+| 前端 vitest | 97 files / 489 tests passed |
+| 前端 build | 通过（396.29 kB JS） |
+| Store regression | 11 passed |
+| G0（CI step） | checked=6 errors=0 warnings=14 |
+
+测试全部使用 SQLite 隔离 DataRoot，未依赖真实 GPU / ComfyUI。
 
 ## 10. Git / CI
 
-（提交后补记）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `5a9df4a4d7b92b093ea3dadf6e454406c4baae74` |
+| W3.0 提交 | `62eb37718482406a7931f0879748c1453a95e4ea` |
+| CI run | `41267919495` |
+| 后端 | 674 passed / 3 skipped，G0 通过 |
+| 前端 | typecheck + 97 files / 489 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
 
 ## 11. 验收 ZIP
 
-（提交后生成轻量包）
+`handoff/NSFW_Studio_W3.0_Review.zip`：W3.0 报告、`5a9df4a..HEAD` 变更补丁、
+变更文件清单、git log / status。仅文档与审查用途，不含 DataRoot、依赖或构建产物。
 
 ## 12. 未验证 / 限制
 
