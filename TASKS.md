@@ -538,8 +538,8 @@
 
 ## 2026-11-01 日用修复：图库废片清理与动漫分类
 - [x] 废片清理引用检查批量化（487 张预览 1.05s；真实单张删除验证通过）。
-- [x] 图库「分类」筛选：动漫 / 导入；动漫当前 7 张（Studio 2 + V1 Anima 导入 5）。
+- [x] 图库「分类」筛选：动漫 / 导入；导入 586 张 ComfyUI Anima 输出后动漫分类 593 张。
 - [x] 新模型 `miaomiaoHarem_v15a-Q6_K.gguf` 已被 ComfyUI UnetLoaderGGUF 识别。
 - [x] 部署实例同步：deploy/app-instance 1f14055 + 前端 dist + Studio/Bridge 重启。
-- [ ] 591 张 ComfyUI Anima 输出尚未导入 Studio（待用户确认是否批量导入）。
+- [x] 586 张 ComfyUI Anima 输出已导入 Studio（2 张 sha256 重复跳过，0 失败）。
 

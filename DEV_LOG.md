@@ -773,10 +773,11 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   预览候选 1、确认删除 1、0.69 秒、随后详情 404（不触碰用户图片）。
 - 图库新增「分类」筛选：`category=anime` = `anime_generate` 产物 +
   V1 导入元数据/文件名含 Anima 的图片；`category=imported` = 全部导入。
-  当前真实库动漫分类 7 张（2 张 Studio 动漫 Job + 5 张 V1 Anima 导入），
-  浏览器实测选择「动漫」显示「共 7 张」。
-- 注意：ComfyUI `app/output` 仍有 591 张 Anima 输出未导入 Studio，图库分类
-  不会自动包含未入库文件；是否批量导入需用户确认。
+  导入前真实库动漫分类 7 张；已按用户授权把 ComfyUI output 的 **586 张 Anima 图片**
+  批量导入（588 个文件，2 个 sha256 已存在跳过，失败 0，耗时 108 秒，约 0.64GB），
+  导入后动漫分类 **593 张**（593 张缩略图均已生成，随机抽查 200 image/webp）。
+- 注意：导入图按外部导入记录，metadata 标记 `comfyui_output/Anima` 用于分类；
+  不为无来源的旧图伪造 Prompt/Job 关联。
 - 新模型识别：`C:\ComfyUI_models\diffusion_models\miaomiaoHarem_v15a-Q6_K.gguf`
   已出现在 ComfyUI `UnetLoaderGGUF.unet_name` 列表（与 qwen-image-2.1 GGUF 并列）。
 - 部署实例：`deploy/app-instance` 提交 1f14055（cherry-pick 修复），
