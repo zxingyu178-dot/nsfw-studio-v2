@@ -88,9 +88,12 @@ V1 配对/二进制/冻结会话接口保持兼容。
 
 | 项 | 结果 |
 | --- | --- |
-| 后端全量 | 690 passed / 3 skipped（693 collected） |
+| 后端全量（本地） | 690 passed / 3 skipped（693 collected） |
+| 后端全量（CI） | 690 passed / 3 skipped（164.67s） |
 | 前端 Settings 定向 | 3 files / 13 tests passed |
-| 前端全量 / build | 见最终 CI |
+| 前端全量（CI） | 97 files / 489 tests passed |
+| 前端 build | 通过（396.29 kB JS） |
+| Store regression | 11 passed |
 | G0 | checked=6 errors=0 warnings=14 |
 | 数据库副本迁移 | 通过，见 Task A |
 | 真实 HTTP Probe | PASS，证据 [W3_1_BRIDGE_PROBE.json](file:///d:/AIHome_2.0_L1_L2/projects/nsfw-studio-v2/docs/W3_1_BRIDGE_PROBE.json) |
@@ -111,4 +114,16 @@ V1 配对/二进制/冻结会话接口保持兼容。
 
 ## 8. Git / CI / ZIP
 
-（提交后补记）
+| 项 | 值 |
+| --- | --- |
+| 基线 | `e5ec120a28fb9de559efe246c3e3451eab354f9a` |
+| W3.1 提交 | `c066c15d63abd405e77e2c60c28b7d009c70859a` |
+| CI run | `41276157845` |
+| 后端 | 690 passed / 3 skipped，G0 checked=6 errors=0 warnings=14 |
+| 前端 | typecheck + 97 files / 489 tests + build + store regression 11 passed |
+| 远端同步 | 本地 HEAD == `origin/main` |
+
+随后仅文档提交，不改变代码；最终 HEAD 的 CI 结果见交付汇报。
+
+验收 ZIP：`handoff/NSFW_Studio_W3.1_Review.zip`（报告、`e5ec120..HEAD` 补丁、
+变更清单、git log/status、Probe 证据）。不含 DataRoot、依赖或构建产物。
