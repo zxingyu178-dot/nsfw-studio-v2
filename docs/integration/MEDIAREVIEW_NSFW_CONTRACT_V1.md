@@ -1,12 +1,12 @@
 # NSFW 侧手机审核合同总览（Mobile Review Contract v1）
 
-> 对端：NSFW Studio Mobile Review Bridge（Phase 0.13，独立端口 8767）。
+> 对端：NSFW Studio Mobile Review Bridge（Phase 0.13，独立端口 8877）。
 > 本文件是 MediaReview Android 侧对接 NSFW 桥的**唯一合同事实源**。
 > 所有路径 / 字段 / 状态码以冻结的
 > `docs/integration/openapi-mobile-review.json` 与 `docs/integration/fixtures/*.json`
 > 为准；后端实现见 `backend/app/mobile_main.py` 与 `backend/app/api/mobile/*`。
 >
-> 本文档只描述 **手机 → Bridge(8767)** 这一段。Desktop Studio(8000)
+> 本文档只描述 **手机 → Bridge(8877)** 这一段。Desktop Studio(8000)
 > 始终 loopback，手机不可直达；配对码由 Desktop 在本机 loopback 生成后展示给用户。
 
 ---
@@ -14,9 +14,9 @@
 ## 1. Base URL 与网络边界
 
 - 协议：`http`（同网段局域网，不启用 TLS）。
-- Base URL：`http://<lan-ip>:8767`
+- Base URL：`http://<lan-ip>:8877`
   - `<lan-ip>` 为运行 NSFW Studio 的电脑在手机可达网段上的 IPv4 地址。
-  - 端口固定 **8767**（Bridge 独立进程，host `0.0.0.0`）。
+  - 端口固定 **8877**（Bridge 独立进程，host `0.0.0.0`）。
 - Desktop Studio 主进程端口 **8000 始终 loopback**，不向手机暴露；
   手机**永远不要**向 `:8000` 发任何请求。
 - Bridge 是审核专用最小面：只 include
@@ -302,7 +302,7 @@ HTTP 状态码与 `error.code` **同时存在**，客户端两层都要处理。
 | `preview_url` | string | 相对路径 `/mobile/images/{image_id}/preview` |
 | `original_url` | string | 相对路径 `/mobile/images/{image_id}/original` |
 
-- URL 均为**相对路径**，客户端拼 `http://<ip>:8767` 前缀。
+- URL 均为**相对路径**，客户端拼 `http://<ip>:8877` 前缀。
 - DTO **不下发** DataRoot / 绝对磁盘路径 / DB 路径 / workflow 路径。
 
 ---

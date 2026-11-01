@@ -1,24 +1,26 @@
-# MediaReview × NSFW Studio Mobile Review Bridge — Contract V2
+# MediaReview × NSFW Studio Mobile Review Bridge — Contract V2（W3.1 主线）
 
-> 基线：NSFW Studio V2 `5a9df4a`（W2.0）→ W3.0。
-> 适用端：MediaReview Android（独立仓库）通过局域网访问 **8767 Mobile Review Bridge**。
-> 契约文件：本文 + `openapi-mobile-review-v2.json` + `fixtures/`。
-> V1 契约（`MEDIAREVIEW_NSFW_CONTRACT_V1.md` / `openapi-mobile-review.json`）继续兼容，不删除。
+> NSFW Studio 基线：`e5ec120`（W3.0）→ W3.1 主线整合。
+> 客户端事实源：MediaReview `1212c30` 的
+> `docs/integration/NSFW_MOBILE_API_CONTRACT_V2.md`、`NsfwStudioApi.kt`、`NsfwModels.kt`。
+> 本文件描述服务端已实现行为；契约冲突时以客户端冻结文件为准并记录在
+> `docs/W3_1_CONTRACT_CONSISTENCY.md`。
+> 机器可读：`openapi-mobile-review-v2.json`；样例：`fixtures/`。
 
 ## 1. 架构与安全边界（不变）
 
 - Desktop Studio：`127.0.0.1:8000`，永远 loopback；手机不可达。
 - ComfyUI：`8188`。
-- Mobile Review Bridge：独立进程 `0.0.0.0:8767`，随 Studio 退出。
-- 手机只访问 8767；**不能**启动生成、编辑 Prompt、永久删除图片。
-- 配对码：6 位、一次性、10 分钟有效；Bearer Token 只存 SHA-256；吊销设备立即失效。
-- 所有新接口必须在 `Authorization: Bearer <token>` 下访问（`get_current_device`）；
-  唯一开放端点是 `/mobile/system/health` 与 `/mobile/pairing/*`。
-- 图片二进制仍为 thumbnail / preview / original 三条既有缓存 + ETag 链路。
+- Mobile Review Bridge：独立进程 `0.0.0.0:8877`，随 Studio 退出；**固定端口，禁自动换口**。
+- 手机只访问 8877；不能启动生成、编辑 Prompt、永久删除图片。
+- 配对码 6 位、一次性、10 分钟有效；Bearer Token 只存 SHA-256；吊销设备立即 401。
+- 新接口全部经 `get_current_device`；开放端点只有 `/mobile/system/health` 与 `/mobile/pairing/*`。
+- 图片二进制沿用 thumbnail / preview / original 既有缓存与 ETag。
+- 冷启动健康等待上限 **120 秒**；启动探测只连 `127.0.0.1:8877`，不停止非本程序进程。
 
 ## 2. 统一 envelope
 
-所有 `/mobile/*` JSON 响应：
+成功：
 
 ```json
 {"success": true, "data": {...}, "error": null, "request_id": "..."}
@@ -32,142 +34,189 @@
  "request_id": "..."}
 ```
 
-## 3. 健康与能力
+旧 Bridge 401 码 `UNAUTHORIZED` / `DEVICE_REVOKED` 保留；客户端可规范化为
+`AUTH_REQUIRED` / `AUTH_REVOKED`。
+
+## 3. 健康与能力门禁
 
 `GET /mobile/system/health`（开放）
 
-- `api_contract = 2`（V2 全部能力实现且测试通过后才升级；V1 客户端可继续使用 V1 接口）。
-- `capabilities`：`image_review`、`review_session`、`favorite`、`thumbnail`、`preview`、
-  `original`、`image_event_feed`、`image_detail`、`prompt_version_evaluation`、
-  `idempotent_mutation`、`snapshot_resync`。
-- **绝不**包含 `permanent_delete` / `generation` / `engine_control` / `prompt_edit`。
+```json
+{"status": "ok", "product": "nsfw-studio", "version": "0.13.0", "api_contract": 2,
+ "capabilities": [
+   "image_review", "review_session", "favorite", "thumbnail", "preview", "original",
+   "image_event_feed", "image_detail", "prompt_version_evaluation",
+   "idempotent_mutation", "snapshot_resync",
+   "mobile_feed_v2", "mobile_image_details_v2", "mobile_image_decision_v2",
+   "mobile_prompt_review_v2", "mobile_prompt_evaluation_v2"
+ ]}
+```
+
+客户端要求 `api_contract >= 2` 且包含最后 5 项能力；缺一即禁止配对与进入审核。
+**绝不**包含 `permanent_delete` / `generation` / `engine_control` / `prompt_edit`。
 
 fixture：`fixtures/health_v2.json`。
 
-## 4. 增量事件流
+## 4. 增量图片 feed
 
-### 4.1 `GET /mobile/events?cursor=...&limit=...`
+### 4.1 `GET /mobile/images/feed?cursor=&limit=`
 
-- `cursor`：不透明字符串（base64url，前缀 `mr2_`），不得解析为数据库 seq；首次可省略。
-- `limit`：1–200，默认 50。
-- 响应：`events[]`、`next_cursor`、`has_more`、`server_time`。
-- `events[]` 字段：`event_id`、`event_type`、`image_id`、`revision`、`payload`、`created_at`。
-- 事件按全局 `seq` 升序；翻页使用 `seq > cursor`，**不漏、不重**。
-- 事件类型：
-  `IMAGE_CREATED`、`IMAGE_IMPORTED`、`IMAGE_REVIEW_UPDATED`、`IMAGE_FAVORITE_UPDATED`、
-  `IMAGE_METADATA_UPDATED`、`IMAGE_REMOVED`、`PROMPT_EVALUATED`。
-- 事件日志**不依赖 images 外键**：图片永久删除后 `IMAGE_REMOVED` 仍可读。
-- `payload` 只含手机可见字段（无 `file_path` / DataRoot / 工作流路径 / 私有配置）。
+- `cursor`：服务端签发的不透明字符串；空/缺省 = 首次同步；客户端不解析。
+- `limit`：1–100（客户端固定 50）。
+- 响应 `data`：`items[]`、`next_cursor`、`has_more`、`resumed`。
 
-fixture：`fixtures/events_page.json`。
-
-### 4.2 游标过期
-
-- 非法游标、未来游标、或早于最小可用水位 → HTTP **410**，
-  `error.code = CURSOR_EXPIRED`，`error.details.snapshot_required = true`。
-- 客户端收到 410 必须重新调用 `/mobile/sync/snapshot`，然后用返回的 `cursor` 继续增量。
-
-### 4.3 事件保留策略
-
-- V2 默认**永久保留**事件，不自动清理；因此正常运行时最小可用游标 = 第一条事件 seq - 1。
-- 若运维显式裁剪事件（当前版本不提供自动裁剪），早于最小可用水位的游标按 410 过期处理，
-  不会静默返回缺页数据。
-- 客户端不得假设事件无限增长；应定期用 snapshot 重建本地状态。
-
-## 5. 快照恢复
-
-`GET /mobile/sync/snapshot`
-
-- 返回 `images[]`（全部图片的审核/收藏/尺寸/来源/Seed/URL）、`image_count`、
-  `cursor`（当前事件水位）、`server_time`。
-- `cursor` 与 `images` 在同一 DB 读事务中生成：客户端从该 cursor 拉增量，
-  **不存在快照与增量之间的空隙**。
-- 首次配对或收到 410 时使用。
-
-fixture：`fixtures/snapshot.json`。
-
-## 6. 图片详情
-
-`GET /mobile/images/{image_id}`
-
-返回：`image_id / width / height / created_at / updated_at / revision / status / is_favorite /
-kind / source / job_id / seed / generation_module / generation_metadata /
-prompt_snapshot / negative_prompt / source_prompt_id / source_prompt_version_id /
-prompt_name / prompt_version_no / thumbnail_url / preview_url / original_url`。
-
-- 优先复用 `image_service.get_provenance()` 与 Job 快照。
-- 外部导入图片没有 Job / Prompt → 相关字段明确为 `null`，不伪造关联。
-- 禁止暴露 DataRoot 绝对路径、数据库路径、ComfyUI 工作流文件路径、私有配置。
-
-fixture：`fixtures/image_detail.json`。
-
-## 7. 单图片审核（V2 新增）
-
-`POST /mobile/images/{image_id}/review`
-
-Header：`Idempotency-Key`（必填，1–128 字符，同一设备同一操作内唯一）。
-
-Body：
+`items[]`：
 
 ```json
 {
-  "action": "KEEP | REJECT | RESET | null",
-  "favorite": true,
-  "expected_revision": "<GET 详情返回的 revision>",
-  "note": "可选审核备注"
+  "image_id": "img_...", "revision": "17", "event": "UPSERT",
+  "status": "NEW", "is_favorite": false, "kind": "original", "job_id": "job_...",
+  "seed": 123, "width": 1024, "height": 1024,
+  "created_at": "...", "updated_at": "...",
+  "prompt": {"prompt_id": "prm_...", "prompt_version_id": "prmv_...", "link_state": "EXACT"},
+  "thumbnail_url": "/mobile/images/img_.../thumbnail",
+  "preview_url": "/mobile/images/img_.../preview",
+  "original_url": "/mobile/images/img_.../original"
 }
 ```
 
-- `action` 与 `favorite` 至少提供一个；两者相互独立。
-- 乐观锁：`expected_revision` 与服务端当前 `revision` 不一致 → HTTP **409**
-  `error.code = REVIEW_CONFLICT`，`error.details.image` 为服务端权威 Image DTO，
-  `error.details.revision` 为最新 revision。
-- 成功响应：`image`（权威 DTO）、`revision`、`idempotent_replay`。
-- **不允许永久删除**；REJECT 只是审核状态，清理仍只能由 Desktop 执行。
-- 原有 `/mobile/review/sessions/{id}/decision` 保持兼容，内部复用同一审核服务与同一事件写入。
+- `revision` 是数据库事件 `seq` 的十进制字符串（单调递增），**不是时间戳**。
+- `event`：`UPSERT` 或 `REMOVE`；`REMOVE` 只表示从手机队列移除，不删除文件/审核记录。
+- 同一 image_id 多条事件按 seq 依次下发；旧 revision 不得覆盖新状态。
+- 空增量 `items=[]` 不代表删除；删除只由 `REMOVE` 表达。
+- `has_more=true` 时用 `next_cursor` 继续；`has_more=false` 仍返回 `next_cursor`。
+- 游标非法/未来/早于最早可用水位 → **HTTP 410 `CURSOR_EXPIRED`**，
+  `details.snapshot_required=true`。
+- 首次空游标同步包含全部历史图片（0022 为历史图片补首事件）。
 
-幂等规则：
+## 5. 图片详情
 
-- 相同 `Idempotency-Key` + 相同 Payload → 返回原成功响应，`idempotent_replay=true`，
-  不重复写事件；
-- 相同 Key + 不同 Payload → HTTP **409** `IDEMPOTENCY_CONFLICT`。
-
-fixture：`fixtures/image_review_response.json`。
-
-## 8. Prompt Version 评分（V2 新增）
-
-`POST /mobile/prompts/{prompt_id}/versions/{version_id}/evaluation`
-
-Header：`Idempotency-Key`（必填）。
-
-Body：
+`GET /mobile/images/{image_id}/details`
 
 ```json
-{"overall_score": 4, "dimension_scores": {"style": 4, "composition": 3}, "notes": "..."}
+{
+  "image_id": "img_...", "created_at": "...", "generated_at": null,
+  "width": 1024, "height": 1024,
+  "positive_prompt": "生成时快照", "negative_prompt": "",
+  "prompt_id": "prm_...", "prompt_version_id": "prmv_...", "link_state": "EXACT",
+  "job_id": "job_...", "module_id": "basic_generate", "seed": 123,
+  "model": null, "size_bytes": null, "mime": null,
+  "updated_at": "...", "revision": "17"
+}
 ```
 
-- 必须验证 `version_id` 属于 `prompt_id`（否则 404）。
-- 复用 `PromptEvaluation`；`source = "mobile"`。
-- 评分**不会**自动修改 Prompt 的 KEEP / CANDIDATE / ELIMINATED 状态。
-- 评分、`PROMPT_EVALUATED` 事件、幂等回执在同一事务提交；重放不重复。
-- 查询：`GET /mobile/prompts/{prompt_id}/versions/{version_id}/evaluations`。
+- `positive_prompt / negative_prompt` 是生成时 Job 快照；外部导入或缺 Job → `null`。
+- `link_state`：
+  - `EXACT`：prompt + version 都经显式 ID 校验可靠；
+  - `UNRESOLVED`：prompt 可靠、生成版本未知；
+  - `UNLINKED`：无可靠 prompt（导入图不得伪造）。
+- 关联仅来自 Job 快照 `source_prompt_id/version_id` 或 V1 导入元数据
+  `v1_output.prompts[]`；**禁止按文本相同匹配**。
+- 禁止返回 DataRoot / DB / workflow 文件路径 / 私有配置。
 
-fixture：`fixtures/prompt_evaluation_response.json`。
+## 6. 单图审核
 
-## 9. 错误码（V2 新增）
+`POST /mobile/review/images/{image_id}/decision`
 
-| HTTP | code | 含义 |
-| --- | --- | --- |
-| 410 | `CURSOR_EXPIRED` | 游标非法/过期；`details.snapshot_required=true`，请走 snapshot |
-| 409 | `REVIEW_CONFLICT` | `expected_revision` 过期；`details.image` 为权威图 |
-| 409 | `IDEMPOTENCY_CONFLICT` | 同一 Idempotency-Key 使用了不同 Payload |
-| 401 | `UNAUTHORIZED` / `MOBILE_DEVICE_REVOKED` | 未配对或设备已吊销 |
+```json
+{"action": "KEEP", "favorite": true,
+ "expected_updated_at": "...", "client_request_id": "uuid"}
+```
 
-既有 V1 错误码（`REVIEW_ITEM_NOT_FOUND`、`IMAGE_NOT_FOUND` 等）不变。
+- `action` ∈ `KEEP / REJECT / RESET` 或 null；favorite-only 时只改收藏，**保留原 status**。
+- `action` 与 `favorite` 不能同时缺失。
+- `expected_updated_at` 与详情/feed 的 `updated_at` 对齐；不一致 → 409 `REVIEW_CONFLICT`，
+  `details.image` 返回权威图片状态与最新 revision。
+- 成功 `data`：`{image_id, status, is_favorite, updated_at, revision}`。
+- `client_request_id` 幂等：同 ID 同载荷返回原结果；同 ID 不同载荷 → 409
+  `IDEMPOTENCY_CONFLICT`。
+- 审核只改状态，不删除文件；手机无永久删除入口。
+- 写入使用 SQLite `BEGIN IMMEDIATE` 串行化；事务内重新校验设备有效性；
+  业务状态 + 事件 + 回执同一事务提交。
 
-## 10. 兼容性
+## 7. 提示词审核汇总 / 图片
 
-- V1 端点（health、pairing、sessions、queue、decision、position、complete、
-  thumbnail/preview/original）全部保留；旧客户端无需迁移。
-- `api_contract` 从 1 → 2 只在新客户端识别后使用；V1 客户端可忽略新增字段。
-- `revision` 新字段向后兼容：V1 客户端不读取即可。
+### 7.1 `GET /mobile/prompts/{prompt_id}/review-summary?version_id=`
+
+```json
+{
+  "prompt_id": "prm_...", "prompt_version_id": "prmv_...",
+  "link_state": "EXACT", "evaluation_count": 3,
+  "version_latest": {"evaluation_id": "prev_...", "prompt_id": "prm_...",
+                     "prompt_version_id": "prmv_...", "overall_score": 4,
+                     "created_at": "...", "notes": ""},
+  "prompt_latest": {"evaluation_id": "prev_...", "prompt_version_id": null, ...},
+  "images_total": 12, "seen_count": 8, "keep_count": 6, "reject_count": 2,
+  "has_new_samples": true
+}
+```
+
+- 指定 `version_id` 时 `link_state=EXACT`，版本评分与整体评分分开：
+  `version_latest` 只取该版本；`prompt_latest` 是跨版本最新。
+- 未指定版本时 `link_state=UNRESOLVED`，`version_latest=null`；整体评分是显式选择。
+- `seen_count` 只统计持久审核证据：`reviewed_at`、冻结会话 `seen`、设备级
+  `mobile_image_seen`；图片进入 feed 不等于已阅。
+- `has_new_samples`：该版本最新评分之后是否新增关联图片。
+
+### 7.2 `GET /mobile/prompts/{prompt_id}/images?version_id=&cursor=&limit=`
+
+```json
+{"items": [{"image_id": "img_...", "thumbnail_url": "/mobile/images/img_.../thumbnail",
+            "status": "KEEP", "is_current": false}],
+ "total": 12, "current_index": 0, "next_cursor": "mpi_...", "has_more": false}
+```
+
+- 关联复用 `prompt_image_service`（Job 快照 + V1 导入元数据 UNION），不按文本匹配。
+- 缩略图必须是 `/mobile/images/...`，不得暴露 Desktop `/api/v1/images`。
+- `cursor` 绑定 `prompt_id + version_id`，跨对象复用 → 422 `VALIDATION_ERROR`。
+
+## 8. 提示词评分
+
+`POST /mobile/prompts/{prompt_id}/evaluations`
+
+```json
+{"prompt_version_id": "prmv_...", "overall_score": 4,
+ "dimensions": {"subject": 4, "lighting": 3}, "notes": "...",
+ "client_request_id": "uuid"}
+```
+
+- `overall_score` 必填整数 1..5；`dimensions` 可选，白名单
+  `subject / clothing / scene / composition / lighting / style / quality`，每维 1..5；
+  **缺失不补默认分**。
+- `prompt_version_id` 可 null（用户明确选择“提示词整体评分”）；指定时校验版本属于该 Prompt，
+  否则 404（客户端映射 `PROMPT_NOT_FOUND`，禁止评分）。
+- `source` 固定 `mobile`；追加历史，不覆盖旧评分，不改 Prompt keep/candidate/eliminated。
+- 评分 + `PROMPT_EVALUATED` 事件 + 幂等回执同一事务。
+- 成功 `data`：`{evaluation_id, prompt_id, prompt_version_id, overall_score, created_at, client_request_id}`。
+- 重放同 ID 同载荷返回原结果；不同载荷 → 409 `IDEMPOTENCY_CONFLICT`。
+
+### 8.1 `GET /mobile/prompts/evaluations/{client_request_id}`
+
+```json
+{"found": true, "evaluation": {"evaluation_id": "prev_...", "prompt_id": "prm_...",
+ "prompt_version_id": "prmv_...", "overall_score": 4, "created_at": "...",
+ "client_request_id": "..."}}
+```
+
+- 按 `device_id` 隔离；其他设备查询同 request_id 返回 `{"found": false, "evaluation": null}`。
+- 提交超时后客户端用同一 ID 查询；found=false 才允许重发。
+
+## 9. 服务端扩展端点（非客户端冻结合同，保留兼容）
+
+- `GET /mobile/events`：原始事件流（W3.0），同一 seq 游标；客户端 V2 使用 feed。
+- `GET /mobile/sync/snapshot`：全量图片 + 水位 cursor，供首次/410 恢复。
+- `GET /mobile/images/{image_id}`：W3.0 详情（含 prompt 名称/版本号/生成指纹）。
+- `POST /mobile/images/{image_id}/review`：W3.0 单图审核（Header Idempotency-Key +
+  expected_revision；revision 已统一为 seq）。
+- `POST /mobile/prompts/{prompt_id}/versions/{version_id}/evaluation`：W3.0 版本评分。
+- 冻结审核会话 `/mobile/review/sessions/*`、配对、图片二进制全部保持 V1 行为。
+
+## 10. 数据与迁移
+
+- `0021_mobile_event_log_mutations`：主干事件表 `mobile_image_events(seq,event_id,...)` +
+  `mobile_mutation_receipts`；0021 改为 callable 守卫，识别参考分支旧结构。
+- `0022_mobile_v2_compat`：旧分支 `(seq,image_id,event)` 原位扩展并保留原 `event` 审计列；
+  历史图片补首事件；`mobile_write_receipts` 合并到主干回执；移除 images 触发器；
+  建立 `mobile_image_seen`。幂等可重试，不删除设备/图片/Job/Prompt/评分。
+- 唯一事件机制 = 业务服务显式写入；不允许服务写入与数据库触发器重复记录。
+- 事件默认永久保留；若运维裁剪，早于最小水位的游标返回 410。

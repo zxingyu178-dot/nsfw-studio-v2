@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "found": true,
+    "evaluation": {
+      "evaluation_id": "prev_0004",
+      "prompt_id": "prm_0001",
+      "prompt_version_id": "prmv_0001",
+      "overall_score": 4,
+      "created_at": "2026-10-31T08:05:00.000Z",
+      "client_request_id": "score-1"
+    }
+  },
+  "error": null,
+  "request_id": "req_fixture_evaluation_receipt"
+}

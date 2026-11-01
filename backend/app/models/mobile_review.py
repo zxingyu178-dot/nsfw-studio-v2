@@ -99,3 +99,17 @@ class MobileMutationReceipt(Base):
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
+
+
+class MobileImageSeen(Base):
+    """W3.1 设备级已读标记（审核汇总 seen_count 的持久证据，图片删除级联清理）。"""
+
+    __tablename__ = "mobile_image_seen"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("mobile_review_devices.id"), primary_key=True,
+    )
+    image_id: Mapped[str] = mapped_column(
+        ForeignKey("images.id", ondelete="CASCADE"), primary_key=True,
+    )
+    seen: Mapped[bool] = mapped_column(nullable=False, default=True)

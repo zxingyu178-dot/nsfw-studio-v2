@@ -8,7 +8,6 @@ GET /mobile/images/{image_id}/thumbnail | preview | original
 """
 from __future__ import annotations
 
-import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header
@@ -22,7 +21,14 @@ from app.core.errors import ConflictError, NotFoundError
 from app.core.filetypes import mime_for_suffix
 from app.models import Job
 from app.models.mobile_review import MobileReviewDevice
-from app.services import image_event_service, image_service, mobile_mutation_service, prompt_service, thumbnail_service
+from app.services import (
+    image_event_service,
+    image_service,
+    mobile_mutation_service,
+    mobile_v2_service,
+    prompt_service,
+    thumbnail_service,
+)
 from app.storage.manager import StorageManager
 
 router = APIRouter(prefix="/mobile/images", tags=["mobile-images"])
@@ -45,7 +51,7 @@ class MobileImageReviewRequest(BaseModel):
 
 def _mobile_image_detail(session: Session, image) -> dict:
     provenance = image_service.get_provenance(session, image.id)
-    revision = image_event_service.image_revision(image)
+    revision = image_event_service.image_revision(session, image)
     prompt_snapshot = None
     negative_prompt = None
     source_prompt_id = None
@@ -56,13 +62,9 @@ def _mobile_image_detail(session: Session, image) -> dict:
     if job is not None:
         prompt_snapshot = job.positive_prompt_snapshot or ""
         negative_prompt = job.negative_prompt_snapshot or ""
-        try:
-            snapshot = json.loads(job.workbench_snapshot_json or "{}")
-        except ValueError:
-            snapshot = {}
-        if isinstance(snapshot, dict):
-            source_prompt_id = snapshot.get("source_prompt_id")
-            source_prompt_version_id = snapshot.get("source_prompt_version_id")
+    source_prompt_id, source_prompt_version_id, _link_state = mobile_v2_service._prompt_link(
+        session, image, job,
+    )
     if source_prompt_id:
         try:
             prompt = prompt_service.get_prompt(session, str(source_prompt_id))
@@ -121,6 +123,26 @@ def _file_response(absolute, *, etag: str, media_type: str) -> FileResponse:
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+@router.get("/feed", summary="V2 图片增量 feed（opaque 游标 / UPSERT / REMOVE tombstone）")
+def images_feed(
+    cursor: str | None = None,
+    limit: int = 50,
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.feed(session, cursor=cursor, limit=limit)
+
+
+@router.get("/{image_id}/details", summary="V2 图片详情（生成快照 / 可靠 Prompt 关联）")
+def get_image_details_v2(
+    image_id: str,
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    image = image_service.get_image(session, image_id)
+    return mobile_v2_service.details(session, image)
 
 
 @router.get("/{image_id}/thumbnail", summary="缩略图 512 WebP（Bearer）")
@@ -187,7 +209,7 @@ def review_image(
         from app.core.errors import ValidationError
         raise ValidationError("action 与 favorite 至少提供一个", code="REVIEW_MUTATION_EMPTY")
 
-    operation = f"image_review:{image_id}"
+    operation = mobile_mutation_service.OP_IMAGE_REVIEW
     payload = {
         "image_id": image_id,
         "action": body.action,
@@ -203,7 +225,7 @@ def review_image(
         return {**replay, "idempotent_replay": True}
 
     image = image_service.get_image(session, image_id)
-    current_revision = image_event_service.image_revision(image)
+    current_revision = image_event_service.image_revision(session, image)
     if current_revision != body.expected_revision:
         session.rollback()
         raise MobileReviewConflict(details={

@@ -17,12 +17,18 @@ CAPABILITIES = [
     "thumbnail",
     "preview",
     "original",
-    # W3.0 V2
+    # W3.0 事件/快照能力
     "image_event_feed",
     "image_detail",
     "prompt_version_evaluation",
     "idempotent_mutation",
     "snapshot_resync",
+    # W3.1 MediaReview V2 客户端冻结能力
+    "mobile_feed_v2",
+    "mobile_image_details_v2",
+    "mobile_image_decision_v2",
+    "mobile_prompt_review_v2",
+    "mobile_prompt_evaluation_v2",
 ]
 
 

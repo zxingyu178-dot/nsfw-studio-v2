@@ -22,6 +22,10 @@ def test_health_open_and_contract(mobile_client):
     for cap in ("image_event_feed", "image_detail", "prompt_version_evaluation",
                 "idempotent_mutation", "snapshot_resync"):
         assert cap in data["capabilities"]
+    # W3.1 MediaReview 客户端冻结能力：缺一即不得声明可审核
+    for cap in ("mobile_feed_v2", "mobile_image_details_v2", "mobile_image_decision_v2",
+                "mobile_prompt_review_v2", "mobile_prompt_evaluation_v2"):
+        assert cap in data["capabilities"]
     # 绝不包含高危能力
     for forbidden in ("permanent_delete", "engine_control", "generation", "prompt_edit"):
         assert forbidden not in data["capabilities"]

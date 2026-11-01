@@ -1,5 +1,8 @@
 # W3.0 完成报告 — Mobile Review Bridge V2
 
+> 历史说明：W3.1 已将 Bridge 固定端口从 8767 调整为 8877，并对齐 MediaReview
+> 客户端冻结合同；本报告保留 W3.0 当时的端口与端点事实。
+
 > 基线：`5a9df4a4d7b92b093ea3dadf6e454406c4baae74`（W2.0 Runtime Guard 完成）。
 > 前置：MediaReview V2A.2 已通过独立验收。
 > 一次完整交付：Migration + Event Log + 增量/快照 API + 图片详情 + 单图审核 + Prompt 版本评分 +

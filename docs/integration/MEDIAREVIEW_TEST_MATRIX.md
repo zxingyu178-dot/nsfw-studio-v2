@@ -7,7 +7,7 @@
 > 约定：
 > - 单测（Unit）：纯本地，用 mock/fixture JSON，不碰网络。
 > - 集成（Integration）：起一个本地 stub/内存对端回放 fixtures，走 Retrofit+OkHttp。
-> - 真机（Device）：手机连真实 Desktop 同网段，打 `http://<ip>:8767`。
+> - 真机（Device）：手机连真实 Desktop 同网段，打 `http://<ip>:8877`。
 > - 所有断言的路径 / 字段 / 状态码必须与
 >   `openapi-mobile-review.json`、`fixtures/*.json` 逐字一致。
 
@@ -17,7 +17,7 @@
 
 | # | 用例 | 层级 | 步骤 | 预期 |
 | --- | --- | --- | --- | --- |
-| P1 | health gate 通过 | Unit/Integ | 对端返回 `mobile_health.json`（`api_contract=1, product=nsfw-studio`） | 判定 Online，继续 pairing 流程 |
+| P1 | health gate 通过 | Unit/Integ | 对端返回 `health_v2.json`（`api_contract=2, product=nsfw-studio` + 5 项 V2 能力） | 判定 Online，继续 pairing 流程 |
 | P2 | health 不兼容（api_contract=0） | Unit | 改 fixture `api_contract=0` | 直接 `Incompatible`，**不**发 pairing/verify |
 | P3 | health product 不符 | Unit | `product="other"` | `Incompatible` |
 | P4 | pairing/status 开放可达 | Integ | `GET /mobile/pairing/status` | 200 envelope，`data.pairing_available` bool（fixture `pairing_status.json`） |
@@ -28,7 +28,7 @@
 | P9 | 未授权 401 | Integ | 无 token / 错误 token 打受保护端点 | 401 envelope，`error.code=UNAUTHORIZED`（fixture `error_unauthorized.json`）；状态回 AuthRejected |
 | P10 | 设备被吊销 | Integ | 用 revoked 设备 token | 401 `error.code=DEVICE_REVOKED`；引导重新配对 |
 | P11 | 同 installation 重配轮换 token | Integ | 同 `installation_id` 再 verify 一次 | 新 token 生效，旧 token 立即 401 |
-| P12 | 手动 IP 归一化 | Unit | 输入 `192.168.1.5` / `http://x:8767/` / 带 path 的非法串 | 合法补成 `http://192.168.1.5:8767/`；拒绝 userinfo/query/fragment/path |
+| P12 | 手动 IP 归一化 | Unit | 输入 `192.168.1.5` / `http://x:8877/` / 带 path 的非法串 | 合法补成 `http://192.168.1.5:8877/`；拒绝 userinfo/query/fragment/path |
 
 ---
 
@@ -89,8 +89,8 @@
 
 | # | 用例 | 层级 | 步骤 | 预期 |
 | --- | --- | --- | --- | --- |
-| N1 | 仅 LAN 审核 API | Integ/审计 | 枚举 8767 路由 | 只有 `system/pairing/images/review`；不存在 jobs/engine/prompts/recipes/assets/cleanup/modules/desktop SPA |
-| N2 | 不直连 8000 | Device | 手机侧发起任何请求 | 目标 host 必须是 `:8767`；配对码由 Desktop loopback `:8000 /api/v1/mobile-review/pairing/code` 生成，手机不调用 |
+| N1 | 仅 LAN 审核 API | Integ/审计 | 枚举 8877 路由 | 只有 `system/pairing/images/review`；不存在 jobs/engine/prompts/recipes/assets/cleanup/modules/desktop SPA |
+| N2 | 不直连 8000 | Device | 手机侧发起任何请求 | 目标 host 必须是 `:8877`；配对码由 Desktop loopback `:8000 /api/v1/mobile-review/pairing/code` 生成，手机不调用 |
 | N3 | 开放端点清单 | Integ | 不带 token 逐个试 | 仅 health / pairing/status / pairing/verify 通；其余一律 401 |
 | N4 | request_id 透传 | Unit | 解析 envelope | 每个响应有 `request_id`；响应头 `X-Request-ID` 一致 |
 | N5 | 切换服务器重建 client | Unit | baseUrl 改变 | Retrofit baseUrl 不可变，切换后重建 NsfwStudioApi |
@@ -105,4 +105,4 @@
   review_conflict / error_unauthorized），以保证 Android 侧 DTO 与错误映射
   和冻结合同逐字对齐。
 - **真机联调**：Desktop 与手机同 Wi-Fi，Desktop 生成 6 位配对码，
-  手机输入 `http://<desktop-lan-ip>:8767` + 配对码，走 P5→S1/S3→D1→C1~C3 全链路。
+  手机输入 `http://<desktop-lan-ip>:8877` + 配对码，走 P5→S1/S3→D1→C1~C3 全链路。

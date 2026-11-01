@@ -13,7 +13,7 @@
         全成功            -> 0
         Studio 失败       -> 10
         ComfyUI 失败      -> 11
-        Mobile(8767) 占用 -> 12
+        Mobile(8877) 占用 -> 12
         托管端口占用      -> 13
         resolver/CLI 致命 -> 14
         外部 ComfyUI      -> 15
@@ -52,7 +52,7 @@ Assert-Code 0 @{} "全成功"
 # 各目标失败
 Assert-Code 10 @{ StudioFailed = $true } "Studio 失败 -> 10"
 Assert-Code 11 @{ ComfyFailed = $true } "ComfyUI 失败 -> 11"
-Assert-Code 12 @{ Port8767Occupied = $true } "Mobile(8767) 占用 -> 12"
+Assert-Code 12 @{ Port8877Occupied = $true } "Mobile(8877) 占用 -> 12"
 
 # 端口仍占用（托管端口）
 Assert-Code 13 @{ Port8000Occupied = $true } "8000 仍占用 -> 13"
@@ -69,9 +69,9 @@ Assert-Code 15 @{ ComfyExternal = $true } "外部 ComfyUI -> 15"
 Assert-Code 14 @{ FatalCli = $true; ComfyExternal = $true; Port8000Occupied = $true; StudioFailed = $true } "14 优先于一切"
 # 15 > 13：外部 ComfyUI 且 8000 也被占用，仍报 15
 Assert-Code 15 @{ ComfyExternal = $true; Port8000Occupied = $true } "15 优先于 13"
-# 13 > 12 > 10：托管端口占用优先于 8767，优先于 Studio 失败
-Assert-Code 13 @{ Port8000Occupied = $true; Port8767Occupied = $true; StudioFailed = $true } "13 优先于 12/10"
-Assert-Code 12 @{ Port8767Occupied = $true; StudioFailed = $true } "12 优先于 10"
+# 13 > 12 > 10：托管端口占用优先于 8877，优先于 Studio 失败
+Assert-Code 13 @{ Port8000Occupied = $true; Port8877Occupied = $true; StudioFailed = $true } "13 优先于 12/10"
+Assert-Code 12 @{ Port8877Occupied = $true; StudioFailed = $true } "12 优先于 10"
 # 10 > 11：同时 Studio 与 Comfy 失败，报 10
 Assert-Code 10 @{ StudioFailed = $true; ComfyFailed = $true } "10 优先于 11"
 # 外部 ComfyUI 时 8188 占用属预期，不计为 13（因 ComfyExternal 先命中返回 15）

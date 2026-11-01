@@ -11,13 +11,13 @@
       [3/4] 调 ControlHub lifecycle CLI stop nsfw-studio-v2   （Studio 后端 8000）
       [4/4] 调 ControlHub lifecycle CLI stop comfyui          （ComfyUI     8188）
 
-    随后逐目标打印 STOPPED / EXTERNAL / FAILED，并核验 8000 / 8188 / 8767 端口 FREE/OCCUPIED。
+    随后逐目标打印 STOPPED / EXTERNAL / FAILED，并核验 8000 / 8188 / 8877 端口 FREE/OCCUPIED。
 
     退出码（务必逐字一致；任何失败绝不返回 0）：
         0  全部目标成功停止、端口符合预期
        10  Studio Backend(nsfw-studio-v2 / 8000) 停止失败
        11  ComfyUI(comfyui / 8188) 停止失败
-       12  Mobile Review(8767) 子运行时未随后端退出
+       12  Mobile Review(8877) 子运行时未随后端退出
        13  停止后核验：托管端口(8000/8188 owned)仍被占用
        14  ControlHub 调用失败（resolver 解析失败 / lifecycle CLI 无法调用）
        15  外部非 owned ComfyUI（EXTERNAL_NOT_OWNED，partial success，非 0，绝不强杀）
@@ -57,7 +57,7 @@ $DecisionScript = Join-Path $RuntimeDir "stop_decision.ps1"
 
 # ---- 固定端口（红线，禁止换口） ----
 $StudioPort       = 8000
-$MobileBridgePort = 8767
+$MobileBridgePort = 8877
 $ComfyPort        = 8188
 
 $BaseUrl = "http://127.0.0.1:$StudioPort"
@@ -216,9 +216,9 @@ if ($port8000Free) { Write-Ok "8000 : FREE" }
 else { Write-Err "8000 : OCCUPIED（STOP_TIMEOUT）" }
 
 Start-Sleep -Milliseconds 500
-$port8767Free = Wait-PortFree $MobileBridgePort $PortWaitTimeoutSec
-if ($port8767Free) { Write-Ok "8767 : FREE" }
-else { Write-Err "8767 : OCCUPIED（STOP_TIMEOUT）" }
+$port8877Free = Wait-PortFree $MobileBridgePort $PortWaitTimeoutSec
+if ($port8877Free) { Write-Ok "8877 : FREE" }
+else { Write-Err "8877 : OCCUPIED（STOP_TIMEOUT）" }
 
 $port8188Free = Wait-PortFree $ComfyPort $PortWaitTimeoutSec
 if ($port8188Free) { Write-Ok "8188 : FREE" }
@@ -230,8 +230,8 @@ else {
     }
 }
 
-# Mobile 状态由 8767 端口核验决定（子运行时随 Studio 退出）
-if ($port8767Free) { $MobileState = "STOPPED" } else { $MobileState = "FAILED" }
+# Mobile 状态由 8877 端口核验决定（子运行时随 Studio 退出）
+if ($port8877Free) { $MobileState = "STOPPED" } else { $MobileState = "FAILED" }
 
 # Studio / Comfy 状态以"端口核验为最终事实"调和 CLI 回报：
 # CLI stop 偶发 adapter_failed（内部确认窗口早于进程真正退出），若端口已 FREE 则确已停止，
@@ -270,7 +270,7 @@ $exitCode = Get-StudioStopExitCode `
     -ComfyExternal     $comfyExternal `
     -Port8000Occupied  (-not $port8000Free) `
     -Port8188Occupied  (-not $port8188Free) `
-    -Port8767Occupied (-not $port8767Free)
+    -Port8877Occupied (-not $port8877Free)
 
 # =====================================================================================
 # 最终摘要（仅全成才输出"已释放"；失败时给明确失败摘要）
@@ -284,7 +284,7 @@ if ($exitCode -eq 0) {
     if ($comfyExternal) { $reasons.Add("外部 ComfyUI 非本 ControlHub owned（EXTERNAL_NOT_OWNED），已保留不强杀") }
     if (-not $port8000Free) { $reasons.Add("8000 仍被占用（STOP_TIMEOUT）") }
     if ((-not $port8188Free) -and -not $comfyExternal) { $reasons.Add("8188 仍被占用（STOP_TIMEOUT）") }
-    if (-not $port8767Free) { $reasons.Add("8767(Mobile Review) 仍被占用") }
+    if (-not $port8877Free) { $reasons.Add("8877(Mobile Review) 仍被占用") }
     if ($studioFailed)  { $reasons.Add("Studio Backend 停止失败") }
     if ($comfyFailed)   { $reasons.Add("ComfyUI 停止失败") }
     if ($reasons.Count -eq 0) { $reasons.Add("未完全释放（见上方逐目标/端口结果）") }

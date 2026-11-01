@@ -11,7 +11,7 @@
         0  全部目标成功停止、端口符合预期
         10 Studio Backend(nsfw-studio-v2 / 8000) 停止失败
         11 ComfyUI(comfyui / 8188) 停止失败
-        12 Mobile Review(8767) 子运行时未随后端退出（端口仍占用）
+        12 Mobile Review(8877) 子运行时未随后端退出（端口仍占用）
         13 停止后核验：托管端口(8000/8188)仍被占用
         14 ControlHub 调用失败（resolver 解析失败 / lifecycle CLI 无法调用）
         15 外部非 owned ComfyUI（EXTERNAL_NOT_OWNED，partial success，非 0，绝不强杀）
@@ -20,7 +20,7 @@
         14  resolver / CLI 致命
       > 15  外部非 owned ComfyUI 未停
       > 13  托管端口(8000 / 8188 owned)仍被占用
-      > 12  Mobile Review(8767) 仍被占用
+      > 12  Mobile Review(8877) 仍被占用
       > 10  Studio Backend CLI 明确失败
       > 11  ComfyUI CLI 明确失败
       >  0  全成功
@@ -37,13 +37,13 @@ function Get-StudioStopExitCode {
         [bool]$ComfyExternal,     # comfyui 未注册/未批准(exit 2)，外部非 owned -> 15
         [bool]$Port8000Occupied,  # 停止核验后 8000 仍监听 -> 13
         [bool]$Port8188Occupied,  # 停止核验后 8188 仍监听（owned 场景）-> 13
-        [bool]$Port8767Occupied   # 停止核验后 8767(Mobile) 仍监听 -> 12
+        [bool]$Port8877Occupied   # 停止核验后 8877(Mobile) 仍监听 -> 12
     )
 
     if ($FatalCli)         { return 14 }
     if ($ComfyExternal)     { return 15 }
     if ($Port8000Occupied -or $Port8188Occupied) { return 13 }
-    if ($Port8767Occupied) { return 12 }
+    if ($Port8877Occupied) { return 12 }
     if ($StudioFailed)     { return 10 }
     if ($ComfyFailed)      { return 11 }
     return 0

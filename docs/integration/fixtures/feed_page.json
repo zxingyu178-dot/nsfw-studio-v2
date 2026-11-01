@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "image_id": "img_0001",
+        "revision": "17",
+        "event": "UPSERT",
+        "status": "KEEP",
+        "is_favorite": true,
+        "kind": "original",
+        "job_id": "job_0001",
+        "seed": 42,
+        "width": 768,
+        "height": 1024,
+        "created_at": "2026-10-31T08:00:00.123Z",
+        "updated_at": "2026-10-31T08:01:00.456Z",
+        "prompt": {
+          "prompt_id": "prm_0001",
+          "prompt_version_id": "prmv_0001",
+          "link_state": "EXACT"
+        },
+        "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+        "preview_url": "/mobile/images/img_0001/preview",
+        "original_url": "/mobile/images/img_0001/original"
+      }
+    ],
+    "next_cursor": "mr2_eyJ2IjoxLCJzZXEiOjE3fQ",
+    "has_more": false,
+    "resumed": false
+  },
+  "error": null,
+  "request_id": "req_fixture_feed"
+}

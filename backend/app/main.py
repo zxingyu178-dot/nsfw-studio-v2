@@ -108,7 +108,7 @@ async def lifespan(application: FastAPI):
 
     application.state.engine_runtime = create_engine_runtime(settings)
 
-    # Phase 0.13：Mobile Review Bridge 受管运行时（独立 8767；enabled=false 时只探测不自启）
+    # Phase 0.13：Mobile Review Bridge 受管运行时（独立 8877；enabled=false 时只探测不自启）
     from app.services.mobile_review_runtime_service import MobileReviewRuntimeService
 
     application.state.mobile_review_runtime = MobileReviewRuntimeService(settings)

@@ -11,7 +11,7 @@ vi.mock('../../api/client', () => ({
   imageApi: { startBackfill: vi.fn(), backfillStatus: vi.fn(), stopBackfill: vi.fn() },
   mobileReviewApi: {
     runtime: vi.fn().mockResolvedValue({
-      state: 'STOPPED', host: '0.0.0.0', port: 8767, owned: true, pid: null,
+      state: 'STOPPED', host: '0.0.0.0', port: 8877, owned: true, pid: null,
       parent_pid: null, started_at: null, detail: '', log_location: null, health: {},
     }),
     start: vi.fn(),

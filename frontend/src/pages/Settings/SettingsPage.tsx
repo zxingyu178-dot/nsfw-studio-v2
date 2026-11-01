@@ -166,7 +166,7 @@ export default function SettingsPage() {
         {actionError && <p className="ds-notice ds-notice--error">{actionError}</p>}
       </section>
 
-      {/* Phase 0.13：局域网手机审核桥（独立 8767） */}
+      {/* Phase 0.13：局域网手机审核桥（独立 8877） */}
       <MobileReviewSection />
 
       <section className="st-panel">

@@ -7,7 +7,7 @@
       "height": 1024,
       "created_at": "2026-10-31T08:00:00.123Z",
       "updated_at": "2026-10-31T08:01:00.456Z",
-      "revision": "2026-10-31T08:01:00.456Z",
+      "revision": "18",
       "status": "KEEP",
       "is_favorite": true,
       "kind": "original",
@@ -15,7 +15,7 @@
       "job_id": "job_0001",
       "seed": 42
     },
-    "revision": "2026-10-31T08:01:00.456Z",
+    "revision": "18",
     "idempotent_replay": false
   },
   "error": null,

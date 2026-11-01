@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "image_id": "img_0001",
+        "revision": "19",
+        "event": "REMOVE"
+      }
+    ],
+    "next_cursor": "mr2_eyJ2IjoxLCJzZXEiOjE5fQ",
+    "has_more": false,
+    "resumed": true
+  },
+  "error": null,
+  "request_id": "req_fixture_feed_remove"
+}

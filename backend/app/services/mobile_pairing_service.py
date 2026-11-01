@@ -4,7 +4,7 @@
 - **device 只存 token SHA-256**（``token_hash``），绝不存 Bearer 明文；
 - 配对码 6 位数字、一次性、10 分钟过期、成功即失效，**只存 hash**；
 - 配对码只能由 Desktop loopback（8000）``POST /api/v1/mobile-review/pairing/code`` 生成；
-- Bridge（8767）开放端点只有 health / pairing status / pairing verify，其余全部 Bearer。
+- Bridge（8877）开放端点只有 health / pairing status / pairing verify，其余全部 Bearer。
 """
 from __future__ import annotations
 

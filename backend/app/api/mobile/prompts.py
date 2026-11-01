@@ -1,9 +1,14 @@
-"""W3.0 Mobile Prompt Version 评分（Bearer + 幂等）。"""
+"""Mobile Prompt 审核：版本/整体评分、汇总、图片分页与回执（Bearer）。
+
+- V2 客户端合同：``/{prompt_id}/evaluations`` + ``/evaluations/{client_request_id}``；
+- 旧 W3 版本评分端点保留兼容，但 operation 使用稳定短标识；
+- 评分复用 PromptEvaluation，source=mobile，不改 Prompt 状态。
+"""
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,15 +18,27 @@ from app.api.mobile.deps import get_current_device, get_session
 from app.models import PromptEvaluation
 from app.models.mobile_review import MobileReviewDevice
 from app.schemas.prompt import EvaluationDimension, EvaluationScore, PromptEvaluationCreateRequest
-from app.services import mobile_mutation_service, prompt_scoring_service, prompt_service
+from app.services import mobile_mutation_service, mobile_v2_service, prompt_scoring_service, prompt_service
 
 router = APIRouter(prefix="/mobile/prompts", tags=["mobile-prompts"])
+
+OP_PROMPT_EVALUATION_W3 = "prompt_evaluation_w3"
 
 
 class MobilePromptEvaluationRequest(BaseModel):
     overall_score: EvaluationScore
     dimension_scores: dict[EvaluationDimension, EvaluationScore] = Field(default_factory=dict)
     notes: str = Field(default="", max_length=2000)
+
+
+class MobilePromptEvaluationV2Request(BaseModel):
+    """V2 客户端冻结契约：version 可空表示“对提示词整体评分”。"""
+
+    prompt_version_id: str | None = Field(default=None, max_length=64)
+    overall_score: EvaluationScore
+    dimensions: dict[EvaluationDimension, EvaluationScore] | None = None
+    notes: str = Field(default="", max_length=10000)
+    client_request_id: str = Field(min_length=1, max_length=128)
 
 
 def _evaluation_dto(evaluation: PromptEvaluation) -> dict:
@@ -41,7 +58,7 @@ def _evaluation_dto(evaluation: PromptEvaluation) -> dict:
 
 @router.post(
     "/{prompt_id}/versions/{version_id}/evaluation",
-    summary="Prompt 版本评分（幂等，source=mobile；不改 Prompt 状态）",
+    summary="W3 Prompt 版本评分（幂等，source=mobile；不改 Prompt 状态）",
     status_code=201,
 )
 def create_evaluation(
@@ -53,7 +70,7 @@ def create_evaluation(
     device: MobileReviewDevice = Depends(get_current_device),
 ) -> dict:
     prompt_service.get_version(session, prompt_id, version_id)  # 校验版本确实属于该 Prompt
-    operation = f"prompt_evaluation:{prompt_id}:{version_id}"
+    operation = OP_PROMPT_EVALUATION_W3
     payload = {
         "prompt_id": prompt_id,
         "version_id": version_id,
@@ -98,7 +115,7 @@ def create_evaluation(
 
 @router.get(
     "/{prompt_id}/versions/{version_id}/evaluations",
-    summary="查询指定 Prompt Version 的评分记录",
+    summary="查询指定 Prompt Version 的评分记录（W3 兼容）",
 )
 def list_evaluations(
     prompt_id: str,
@@ -116,3 +133,60 @@ def list_evaluations(
         .order_by(PromptEvaluation.created_at.desc(), PromptEvaluation.id.desc())
     ))
     return {"evaluations": [_evaluation_dto(row) for row in rows]}
+
+
+# ===== V2 客户端冻结契约 =====
+
+
+@router.post("/{prompt_id}/evaluations", summary="V2 追加评分（版本或整体，原子幂等）")
+def create_evaluation_v2(
+    prompt_id: str,
+    body: MobilePromptEvaluationV2Request,
+    session: Session = Depends(get_session),
+    device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.evaluate_prompt(
+        session,
+        device_id=device.id,
+        prompt_id=prompt_id,
+        prompt_version_id=body.prompt_version_id,
+        overall_score=body.overall_score,
+        dimensions=dict(body.dimensions or {}),
+        notes=body.notes,
+        client_request_id=body.client_request_id,
+    )
+
+
+@router.get("/evaluations/{client_request_id}", summary="V2 本设备评分回执查询")
+def evaluation_receipt(
+    client_request_id: str,
+    session: Session = Depends(get_session),
+    device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.evaluation_receipt(
+        session, device_id=device.id, client_request_id=client_request_id,
+    )
+
+
+@router.get("/{prompt_id}/review-summary", summary="V2 提示词审核汇总（按版本隔离）")
+def review_summary(
+    prompt_id: str,
+    version_id: str | None = Query(default=None, max_length=64),
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.prompt_summary(session, prompt_id, version_id)
+
+
+@router.get("/{prompt_id}/images", summary="V2 提示词关联图片分页（/mobile 缩略图）")
+def review_images(
+    prompt_id: str,
+    version_id: str | None = Query(default=None, max_length=64),
+    cursor: str | None = Query(default=None, max_length=256),
+    limit: int = Query(default=50, ge=1, le=100),
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.prompt_images(
+        session, prompt_id, version_id, cursor=cursor, limit=limit,
+    )

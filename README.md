@@ -26,7 +26,7 @@ TaskDock（Layout 4.0），Glass 设计体系与可视化 Prompt 库；后端把
 与执行总超时分离；Canvas 逻辑尺寸 / Fit / 100%、多阶段进度按 `stage_item_id` 分键、
 完整 resume family（`resume_of_job_id` 链）、SSE 签名去重 + 心跳节流、review 动作
 per-image 串行化。运行时侧生产生命周期统一交 ControlHub 官方 lifecycle CLI
-（`nsfw-studio-v2`=8000、`comfyui`=8188 为独立已批准对象；8767 Mobile Review Bridge 为
+（`nsfw-studio-v2`=8000、`comfyui`=8188 为独立已批准对象；8877 Mobile Review Bridge 为
 随 Studio 退出的子运行时），日用/部署实例为 `projects/nsfw-studio-v2-app`。
 发布到部署实例不能只执行 `git pull`：合入发布提交后，必须在开发工作树运行
 `powershell -NoProfile -File scripts/deploy_app_dist.ps1`，构建并同步 gitignored 的 `frontend/dist`。

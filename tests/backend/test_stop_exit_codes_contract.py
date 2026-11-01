@@ -67,7 +67,7 @@ def test_per_target_result_lines():
 
 def test_port_lines_free_occupied():
     text = _text(STOP_PS1)
-    for port in (8000, 8188, 8767):
+    for port in (8000, 8188, 8877):
         assert f"{port} :" in text, f"缺少端口行 {port}"
     assert "FREE" in text
     assert "OCCUPIED" in text

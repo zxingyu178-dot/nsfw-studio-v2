@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 # ===== Hermetic 护栏（v0.13.2 事故教训） =====
-# 测试全程强制 hermetic：绝不允许任何测试进程向真实 127.0.0.1:8188 / 8000 / 8767 发起连接或 POST。
+# 测试全程强制 hermetic：绝不允许任何测试进程向真实 127.0.0.1:8188 / 8000 / 8877 发起连接或 POST。
 # - 置位 NSFW_STUDIO_HERMETIC=1，供真实集成测试自检并 skip；
 # - 清空代理 env，避免 httpx 因 socks 代理在构造期报错（干扰护栏验证）；
 # - 包一层 httpx Client/AsyncClient.send，凡目标是这些端口的请求直接抛错（fail fast）。
@@ -19,11 +19,11 @@ for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"
     os.environ.pop(_k, None)
 os.environ["NO_PROXY"] = "*"
 
-_BLOCKED_HOSTS_PORTS = {(("127.0.0.1"), p) for p in (8188, 8000, 8767)}
+_BLOCKED_HOSTS_PORTS = {(("127.0.0.1"), p) for p in (8188, 8000, 8877)}
 
 
 def _install_httpx_guard() -> None:
-    """在 Client/AsyncClient.send 层拦截到真实 8188/8000/8767 的请求（最可靠）。"""
+    """在 Client/AsyncClient.send 层拦截到真实 8188/8000/8877 的请求（最可靠）。"""
     try:
         import httpx
     except Exception:

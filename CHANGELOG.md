@@ -2,6 +2,34 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [Unreleased] — W3.1 Mainline Consolidation（2026-11-01）
+
+> 将已验证的 Mobile Review Bridge V2 整合到 main；保留 W3.0 Event Log / 幂等回执，
+> 对齐 MediaReview `1212c30` 客户端冻结合同；Bridge 固定端口改为 8877。
+
+### Added
+
+- **MediaReview V2 客户端端点**：`/mobile/images/feed`（UPSERT/REMOVE、opaque 游标）、
+  `/mobile/images/{id}/details`（EXACT/UNRESOLVED/UNLINKED）、
+  `/mobile/review/images/{id}/decision`（favorite-only + expected_updated_at 乐观锁）、
+  `/mobile/prompts/{id}/review-summary`、`/mobile/prompts/{id}/images`、
+  `/mobile/prompts/{id}/evaluations`（版本或整体评分）、
+  `/mobile/prompts/evaluations/{client_request_id}`（设备级回执）。
+- **数据库兼容迁移 0022**：旧分支 `0021_mobile_v2_events` 原位扩展并保留事件 seq；
+  历史图片补首同步事件；`mobile_write_receipts` 合并到主干回执；移除 images 触发器；
+  建立 `mobile_image_seen`。0021 改 callable 守卫，两套历史库均可升级。
+- `docs/W3_1_REPORT.md`、`W3_1_DB_MIGRATION.md`、`W3_1_CONTRACT_CONSISTENCY.md`
+  与真实 HTTP Probe 证据 `W3_1_BRIDGE_PROBE.json`。
+
+### Changed
+
+- **revision 语义**：图片 revision 统一为事件 seq（十进制字符串），不再使用毫秒时间戳；
+  W3.0 详情/事件/snapshot/单图审核同步。
+- 移动端写事务使用 `BEGIN IMMEDIATE` 串行化，并在事务内重新校验设备有效性；
+  `operation` 使用稳定短标识（image_decision / prompt_evaluation / image_review）。
+- Mobile Review Bridge 固定端口 **8877**（原 8767，Windows 端口保留冲突），
+  冷启动健康等待上限 120 秒；配置、停止脚本、验收客户端、Settings 文案与测试同步。
+
 ## [0.37.0] — 2026-10-28
 
 > Minor：按 v0.37 日用开发指导书收口四个日常痛点（审核换批、Prompt 列表体感、关联图片、

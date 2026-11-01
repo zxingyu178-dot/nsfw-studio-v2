@@ -8,9 +8,9 @@
 用法（先由 Desktop loopback 起 Bridge 并生成配对码）：
     # 终端 A（Desktop 8000 loopback 生成配对码）：
     curl -X POST http://127.0.0.1:8000/api/v1/mobile-review/pairing/code
-    # 终端 B（本客户端，指向 Bridge 8767）：
+    # 终端 B（本客户端，指向 Bridge 8877）：
     python scripts/acceptance/mobile_review_client.py \
-        --base-url http://127.0.0.1:8767 --code 123456 --installation-id accept-phone-1
+        --base-url http://127.0.0.1:8877 --code 123456 --installation-id accept-phone-1
 
 已配对后可直接带 token 复跑：
     python scripts/acceptance/mobile_review_client.py --base-url ... --token <TOKEN>
@@ -53,7 +53,7 @@ def _unwrap(resp: dict) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base-url", default="http://127.0.0.1:8767")
+    ap.add_argument("--base-url", default="http://127.0.0.1:8877")
     ap.add_argument("--code", default=None, help="6 位配对码（与 --token 二选一）")
     ap.add_argument("--token", default=None, help="已配对 Bearer token")
     ap.add_argument("--installation-id", default="accept-phone-1")

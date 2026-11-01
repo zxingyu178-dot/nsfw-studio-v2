@@ -736,3 +736,27 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   checked=6 errors=0 warnings=14；前端 typecheck + 97 files / 489 tests + build +
   store regression 11 passed；两个 job 全绿。
 - W3.0 验收 ZIP：handoff/NSFW_Studio_W3.0_Review.zip。
+
+## 2026-11-01 W3.1：Mainline Consolidation
+
+基线 e5ec120；参考分支 codex/mobile-review-v2 只读参考，未 cherry-pick/hard reset。
+
+- Task A：部署库实为旧分支 `0021_mobile_v2_events`；main 0021 改 callable 守卫，
+  新增 `0022_mobile_v2_compat`（原位扩展事件表、历史图补首事件、旧回执合并、
+  移除 images 触发器、建立 mobile_image_seen）。数据库副本验证通过，正式库未迁移。
+- Task B：新增客户端冻结端点 `/mobile/images/feed`、`/details`、
+  `/mobile/review/images/{id}/decision`、`/mobile/prompts/{id}/review-summary`、
+  `/images`、`/evaluations`、`/evaluations/{client_request_id}`；health 增加 5 项
+  mobile_*_v2 能力。
+- Task C：revision 统一为事件 seq；expected_updated_at 语义保留；client_request_id
+  幂等；BEGIN IMMEDIATE + 事务内设备复核；operation 使用稳定短标识；删除只写 REMOVE；
+  历史图首同步；服务显式事件为唯一机制；Prompt 关联三态；评分 source=mobile 原子回执。
+- Task D：Bridge 固定端口 8877、冷启动等待 120 秒；配置/停止脚本/验收客户端/UI 文案同步。
+- 测试：新增 test_mobile_v2_contract.py（12）与 test_mobile_v2_migration.py（3）；
+  后端全量 690 passed / 3 skipped（693 collected）；前端 97 files / 489 tests、
+  build 396.29 kB、store regression 11 passed；G0 checked=6 errors=0 warnings=14。
+- 真实 HTTP Probe（独立 DataRoot、18877 临时端口、唯一合成图片）PASS；
+  生产 8877 当前由已部署参考分支 Bridge（PID 39184）占用，未停止；
+  8767 无监听。证据 docs/W3_1_BRIDGE_PROBE.json。
+- 新增 docs/W3_1_REPORT.md、W3_1_DB_MIGRATION.md、W3_1_CONTRACT_CONSISTENCY.md。
+

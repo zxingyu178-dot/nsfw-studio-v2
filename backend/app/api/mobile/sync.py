@@ -14,15 +14,14 @@ from app.services import image_event_service
 router = APIRouter(prefix="/mobile", tags=["mobile-sync"])
 
 
-def _image_sync_item(image: Image) -> dict:
-    revision = image_event_service.image_revision(image)
+def _image_sync_item(image: Image, revision: int) -> dict:
     return {
         "image_id": image.id,
         "width": image.width,
         "height": image.height,
         "created_at": image.created_at,
         "updated_at": image.updated_at,
-        "revision": revision,
+        "revision": str(revision),
         "status": image.status,
         "is_favorite": bool(image.favorite),
         "kind": image.kind,
@@ -56,8 +55,9 @@ def snapshot(
     images = list(session.scalars(
         select(Image).order_by(Image.created_at.asc(), Image.id.asc())
     ))
+    revisions = image_event_service.latest_event_seqs(session, [image.id for image in images])
     return {
-        "images": [_image_sync_item(image) for image in images],
+        "images": [_image_sync_item(image, revisions.get(image.id, 0)) for image in images],
         "image_count": len(images),
         # 恢复游标水位：客户端从该 cursor 之后拉取事件，不会漏掉快照期间的变更
         "cursor": image_event_service.encode_cursor(watermark),

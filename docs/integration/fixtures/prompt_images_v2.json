@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "image_id": "img_0001",
+        "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+        "status": "KEEP",
+        "is_current": false
+      }
+    ],
+    "total": 12,
+    "current_index": 0,
+    "next_cursor": "mpi_eyJ0YXJnZXQiOiJwcm1fMDAwMTp...",
+    "has_more": true
+  },
+  "error": null,
+  "request_id": "req_fixture_prompt_images"
+}

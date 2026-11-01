@@ -25,7 +25,7 @@ function runtimeState(state: string) {
   return {
     state,
     host: '0.0.0.0',
-    port: 8767,
+    port: 8877,
     owned: true,
     pid: 123,
     parent_pid: 1,

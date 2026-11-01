@@ -37,7 +37,7 @@ def test_four_step_order_and_contents():
 
 def test_three_port_verification():
     text = _text()
-    for port in (8000, 8767, 8188):
+    for port in (8000, 8877, 8188):
         assert str(port) in text
 
 

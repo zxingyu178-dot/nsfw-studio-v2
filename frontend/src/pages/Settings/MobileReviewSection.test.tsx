@@ -20,7 +20,7 @@ function runtimeState(state: string) {
   return {
     state,
     host: '0.0.0.0',
-    port: 8767,
+    port: 8877,
     owned: true,
     pid: 123,
     parent_pid: 1,
@@ -37,7 +37,7 @@ beforeEach(() => {
 })
 
 describe('MobileReviewSettings：运行状态与启停', () => {
-  it('停止时显示「已停止」+ 端口 8767 + 启动按钮', async () => {
+  it('停止时显示「已停止」+ 端口 8877 + 启动按钮', async () => {
     vi.mocked(mobileReviewApi.runtime).mockResolvedValue(runtimeState('STOPPED'))
     render(<MobileReviewSection />)
     expect(await screen.findByText('已停止')).toBeInTheDocument()

@@ -1,7 +1,7 @@
 # MediaReview Android 对接 NSFW 图片审核桥 — 落地指南
 
 > 目标：在 MediaReview Android 现有 `feature/v2` 体系里，新增一条
-> **NSFW Studio 图片审核**数据通路，对端为冻结的 Mobile Review Bridge(8767)。
+> **NSFW Studio 图片审核**数据通路，对端为冻结的 Mobile Review Bridge(8877)。
 >
 > 合同事实源：`MEDIAREVIEW_NSFW_CONTRACT_V1.md`、
 > `openapi-mobile-review.json`、`fixtures/*.json`。
@@ -20,8 +20,8 @@
 | --- | --- |
 | `V2DataMode.NSFW_STUDIO` | 在现有枚举里加一个值，与 DEMO/SERVER 并列 |
 | `NsfwStudioProfileStore` | DataStore（独立 name，如 `nsfw_studio_profile`）：存 `baseUrl`、`installationId`、`deviceId`、token；token 用 Keystore AES-GCM 加密 |
-| `NsfwUrlNormalize` | 输入 host/IP → 补 `http://` 与默认端口 `:8767`，拒绝 userinfo/query/fragment/path |
-| `NsfwPairingRepository` | health gate（`product=nsfw-studio` 且 `api_contract>=1`）→ pairing/status → 用户输码 → pairing/verify 换 token → 落 ProfileStore |
+| `NsfwUrlNormalize` | 输入 host/IP → 补 `http://` 与默认端口 `:8877`，拒绝 userinfo/query/fragment/path |
+| `NsfwPairingRepository` | health gate（`product=nsfw-studio`、`api_contract>=2` 且含 5 项 `mobile_*_v2` 能力）→ pairing/status → 用户输码 → pairing/verify 换 token → 落 ProfileStore |
 | `NsfwAuthInterceptor`（或复用现有 AuthInterceptor） | 给 authenticated OkHttp 加 `Authorization: Bearer <token>` |
 | `NsfwStudioApi` | Retrofit 接口，声明全部 `/mobile/*` 端点（见 §3） |
 | `NsfwImage` | `@Serializable` DTO，对应 MobileImageSummary（见合同 §6） |
@@ -39,9 +39,9 @@
 
 ```
 用户在设置里选 DataMode = NSFW_STUDIO
-  → 手动输入电脑 LAN IP（NsfwUrlNormalize 补 http://ip:8767）
+  → 手动输入电脑 LAN IP（NsfwUrlNormalize 补 http://ip:8877）
   → GET /mobile/system/health（publicHttp，无 token）
-      ├─ 不通 / product 错 / api_contract<1 → NsfwStatus.Incompatible，停下
+      ├─ 不通 / product 错 / api_contract<2 / 缺 V2 能力 → NsfwStatus.Incompatible，停下
       └─ 通过 → GET /mobile/pairing/status
             ├─ pairing_available=false → 提示"请在 Desktop 上生成配对码"
             └─ pairing_available=true → 弹出 6 位码输入框
@@ -72,7 +72,7 @@ NsfwReviewSessionRepository.open():
   - 列表/邻页 → `preview_url`（1536 WebP）；
   - 当前页用户放大 → `original_url`；
   - 缩略图 → `thumbnail_url`（512 WebP）。
-  - 全部走 `http://<ip>:8767 + <相对路径>`，Coil 带 ETag 缓存。
+  - 全部走 `http://<ip>:8877 + <相对路径>`，Coil 带 ETag 缓存。
 
 ### 2.4 提交 decision
 
@@ -91,7 +91,7 @@ NsfwReviewSessionRepository.open():
 
 ## 3. NsfwStudioApi（Retrofit）接口声明要点
 
-baseUrl = `http://<ip>:8767/`；所有方法返回 `Envelope<T>`（图片二进制除外）。
+baseUrl = `http://<ip>:8877/`；所有方法返回 `Envelope<T>`（图片二进制除外）。
 
 ```kotlin
 interface NsfwStudioApi {
@@ -166,7 +166,7 @@ DecisionBody 字段与合同一致：`item_index`、`image_id?`、`action`
 
 **复用（思路或代码）：**
 - `Envelope<T>` 泛型、`AuthInterceptor` / `TokenProvider` 模式；
-- `UrlNormalize` 思路（仅默认端口改成 8767）；
+- `UrlNormalize` 思路（仅默认端口改成 8877）；
 - health → contract gate → verify 的配对 UX；
 - `ReviewSessionModels` 的分页 / 绝对 index / resume 纯逻辑（字段名 `index`）；
 - `ZoomableImage` / `ZoomMath` / 顶底栏 / 信息面板 / Snackbar 模式。

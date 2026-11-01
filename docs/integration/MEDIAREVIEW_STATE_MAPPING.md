@@ -29,7 +29,7 @@ NSFW 目标（新增并列分支，不动 SERVER 分支）：
 V2 UI → V2MediaRepositoryRouter → DEMO | SERVER | NSFW_STUDIO
                                                   └─ NSFW_STUDIO: NsfwImageRepositoryRouter
                                                        → NsfwImageReviewScreen（独立）
-                                                       → NsfwStudioApi → NSFW Bridge(8767) → NSFW Studio 图库
+                                                       → NsfwStudioApi → NSFW Bridge(8877) → NSFW Studio 图库
 ```
 
 - `DEMO` / `SERVER` 两个现有分支**一行不改**。
@@ -46,11 +46,11 @@ V2 UI → V2MediaRepositoryRouter → DEMO | SERVER | NSFW_STUDIO
 | **V2DataModeStore**（DataStore name `mediareview_v2_data_source`） | 复用同一个 DataStore 读 `data_mode` | 复用 | 不新建第二个 data-mode DataStore；启动只读持久化值、不阻塞首页、不发网络请求。 |
 | **ServerProfileStore**（DataStore name `media_review_server`；token Keystore AES-GCM 加密；稳定 UUID deviceId） | **新建 `NsfwStudioProfileStore`** | 独立新建，思路复用 | DataStore name 用独立的（如 `nsfw_studio_profile`），**不要覆盖** `media_review_server`。token 加密仍走 Android Keystore-backed AES-GCM；`installationId` 首次生成后稳定 UUID，跨重新配对保留。baseUrl 明文、token 加密落盘。 |
 | **MediaReviewApi**（Retrofit 接口，`/api/v1/{system,pairing,media,review,favorites,delete-queue,duplicates,...}`） | **新建 `NsfwStudioApi`** | 独立新建，形状照搬 | endpoint 全部是 NSFW Bridge 的 `/mobile/*`（见合同速查表）。Envelope 泛型 `Envelope<T>` 可直接复用 `core/model/ApiModels.kt`。 |
-| **ApiFactory**（`authenticatedHttp` / `publicHttp` 两个 OkHttp 实例；baseUrl 不可变，切服务器重建） | **新建 Nsfw 侧 factory**（或复用双实例思路） | 思路复用 | 一个 public OkHttp（health / pairing），一个 authenticated OkHttp（挂 `AuthInterceptor`）。baseUrl = `http://<ip>:8767`，切换服务器时重建 `NsfwStudioApi`。 |
+| **ApiFactory**（`authenticatedHttp` / `publicHttp` 两个 OkHttp 实例；baseUrl 不可变，切服务器重建） | **新建 Nsfw 侧 factory**（或复用双实例思路） | 思路复用 | 一个 public OkHttp（health / pairing），一个 authenticated OkHttp（挂 `AuthInterceptor`）。baseUrl = `http://<ip>:8877`，切换服务器时重建 `NsfwStudioApi`。 |
 | **AuthInterceptor**（OkHttp Interceptor，每次请求从 TokenProvider 取当前 origin 的 token，附 `Authorization: Bearer <token>`；无 token 不附） | 直接复用 / 复制到 NSFW 模块 | 复用 | 开放端点（health / pairing）走 publicHttp，不带 token；其余走 authenticatedHttp。 |
 | **TokenProvider**（按 origin 取 token） | NSFW 侧 TokenProvider（读 NsfwStudioProfileStore） | 思路复用 | 401 → 状态机 AuthRejected，清 token 回配对页。 |
 | **PairingRepository**（health → contract gate → verify；`REQUIRED_SERVER_API_CONTRACT=2`） | **新建 `NsfwPairingRepository`** | 思路复用，阈值不同 | gate 改为 `api_contract >= 1` 且 `product == "nsfw-studio"`。流程：`GET /mobile/system/health` → `GET /mobile/pairing/status` → 用户输入 6 位码 → `POST /mobile/pairing/verify`。手机侧**不调用**生成配对码的端点（那是 Desktop loopback 8000 的事）。 |
-| **UrlNormalize**（`DEFAULT_PORT=8766`；自动补 `http://` 与端口；拒绝 userinfo/query/fragment/path） | **新建 NSFW 版 UrlNormalize**（默认端口 8767） | 思路复用 | 输入框只问 host/IP，自动补 `http://` 与 `:8767`，拒绝多余组件。 |
+| **UrlNormalize**（`DEFAULT_PORT=8766`；自动补 `http://` 与端口；拒绝 userinfo/query/fragment/path） | **新建 NSFW 版 UrlNormalize**（默认端口 8877） | 思路复用 | 输入框只问 host/IP，自动补 `http://` 与 `:8877`，拒绝多余组件。 |
 | **Envelope<T>**（`core/model/ApiModels.kt:11-15`，`success/data/error{code,message,details}/request_id`） | 直接复用 | 复用 | NSFW Bridge 与 MediaReview Server envelope 同形。 |
 | **MediaSummary**（`media_id,name,media_type,library_id,duration_ms,size_bytes,width,height,container,created_at,modified_at,cover_url,original_url,folder_id,folder_name,is_favorite`） | **新建 `NsfwImage`（MobileImageSummary）** | 独立新建 | 字段以 NSFW 合同为准：`image_id,width,height,created_at,updated_at,status,is_favorite,kind,job_id,seed,thumbnail_url,preview_url,original_url`。**没有** duration/container/folder/library/video 字段。 |
 | **V2ServerMediaRepository**（Jellyfin playback + sprite + libraries + folders 耦合体） | **不要塞进去**；新建 `NsfwImageRepository` | 独立新建 | NSFW 仓库只做：拉队列页、decision、position、complete、解析三档图片 URL。 |

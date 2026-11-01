@@ -189,7 +189,7 @@ npm run build
 | 生图引擎 | 状态展示（STOPPED/STARTING/RUNNING_MANAGED/RUNNING_EXTERNAL/STOPPING/PORT_CONFLICT/ERROR）、启动/停止/重启（`engineRuntimeApi`） |
 | 图片缓存 | 缩略图/预览回填 启动/停止/进度（`imageApi.startBackfill/backfillStatus/stopBackfill`） |
 | 存储 | DataRoot 磁盘剩余空间、阈值 Warning 10GB / Severe 5GB、路径/容量只读展示 |
-| 手机审核 | `MobileReviewSection`：8767 Bridge 状态/启停、生成 6 位一次性配对码（10 分钟倒计时）、已配对设备列表/撤销；红线：不改防火墙 |
+| 手机审核 | `MobileReviewSection`：8877 Bridge 状态/启停、生成 6 位一次性配对码（10 分钟倒计时）、已配对设备列表/撤销；红线：不改防火墙 |
 | 关于 | 版本/说明 |
 
 ---

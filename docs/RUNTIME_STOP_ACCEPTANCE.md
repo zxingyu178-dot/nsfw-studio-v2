@@ -3,7 +3,7 @@
 - 验收日期：2026-10-14（UTC+8）
 - 验收对象：日用实例 `projects/nsfw-studio-v2-app`，代码 `6459163`（分支 `feature/v0.14.1-fix-hardening`）
 - 运行环境：Windows 本机，PowerShell 5.1；NVIDIA GeForce RTX 3060 Laptop GPU（6GB VRAM），系统内存 16GB
-- 运行对象：`nsfw-studio-v2`=Studio Backend（8000）；`comfyui`=ComfyUI（8188，owned）；8767=Mobile Review Bridge（随 Studio 退出，按需启动）
+- 运行对象：`nsfw-studio-v2`=Studio Backend（8000）；`comfyui`=ComfyUI（8188，owned）；8877=Mobile Review Bridge（随 Studio 退出，按需启动）
 - 生命周期唯一 owner：ControlHub 官方 lifecycle CLI（`D:\control-hub\.venv\Scripts\python.exe -m control_hub.lifecycle_cli <verb> <id> --data-root C:\Users\30566\AppData\Local\AIHomeControlHub\data`）
 
 ## 总体结论
@@ -20,14 +20,14 @@
 
 - 经生产计划任务 `\AIHome\NSFWStudioV2` 启动 Studio Backend；暖启动约 **48–65s** 就绪。
 - `/api/v1/health`：`{"status":"ok","version":"0.14.1"}`。
-- 端口核验：8000 LISTEN（pid=186196 / 后一次启动 pid=182424），8188 owned Comfy LISTEN（pid=163660 / 后一次 pid=182856），8767 平时 FREE（移动审核桥按需起）。
+- 端口核验：8000 LISTEN（pid=186196 / 后一次启动 pid=182424），8188 owned Comfy LISTEN（pid=163660 / 后一次 pid=182856），8877 平时 FREE（移动审核桥按需起）。
 - ControlHub status：`nsfw-studio-v2 state=online`、`comfyui state=online`。
 - 备注：首次冷启动在内存压力（系统可用内存一度 ~2.3GB，load 85%）下，Studio 后端在 ~97s 才进入启动引导，被 carrier 内置 90s 启动超时杀过一次；缓存转暖后重试约 50–65s 稳定就绪。属环境性冷启动时序，未改 carrier.py。
 
 ## R2：健康停止
 
 - 运行 `scripts/stop_studio.ps1`（v0.14.1）：best-effort 队列暂停 / 手机桥停止 → lifecycle `stop nsfw-studio-v2` → lifecycle `stop comfyui`。
-- 端口核验：**8000 FREE / 8767 FREE / 8188 FREE**。
+- 端口核验：**8000 FREE / 8877 FREE / 8188 FREE**。
 - 逐目标：Studio Backend STOPPED、ComfyUI STOPPED、Mobile Review STOPPED。
 - 最终输出：`后台资源已释放。（退出码 0）`，**exit 0**。
 - 复跑多次均稳定 exit 0。
@@ -36,7 +36,7 @@
 
 - 以 `CONTROLHUB_PYTHON` 指向项目 venv python（其中无 `control_hub` 模块，实测 `ModuleNotFoundError`，exit 1）运行 `stop_studio.ps1`。
 - 逐目标：Studio Backend FAILED、ComfyUI FAILED。
-- 端口：`8000 OCCUPIED（STOP_TIMEOUT）`、`8188 OCCUPIED（STOP_TIMEOUT）`、`8767 FREE`。
+- 端口：`8000 OCCUPIED（STOP_TIMEOUT）`、`8188 OCCUPIED（STOP_TIMEOUT）`、`8877 FREE`。
 - 最终输出：`后台资源释放未完成（退出码 13）`，并逐条列出 8000/8188 仍占用、Studio/Comfy 停止失败；**全文无"已释放"**。
 - 注入后核验：8000/8188 仍 LISTEN，且 PID 与注入前完全一致（186196 / 163660）→ 服务真实存活，失败 CLI 未造成任何误停。
 - 另有隔离测试（脚本拷到无 AIHOME 引导、无环境变量的 scratch 目录）：resolver 找不到解释器 → 干净返回 **exit 14**。

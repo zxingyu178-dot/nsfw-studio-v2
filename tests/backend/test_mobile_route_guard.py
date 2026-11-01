@@ -48,6 +48,13 @@ def test_mobile_route_table_only_audit():
         "/mobile/prompts/{prompt_id}/versions/{version_id}/evaluations",
         "/mobile/images/{image_id}/review",
         "/mobile/images/{image_id}",
+        "/mobile/images/feed",
+        "/mobile/images/{image_id}/details",
+        "/mobile/review/images/{image_id}/decision",
+        "/mobile/prompts/{prompt_id}/review-summary",
+        "/mobile/prompts/{prompt_id}/images",
+        "/mobile/prompts/{prompt_id}/evaluations",
+        "/mobile/prompts/evaluations/{client_request_id}",
     }
     for p in expected_present:
         assert p in paths, f"缺少审核端点 {p}"
@@ -75,7 +82,7 @@ def test_mobile_route_table_only_audit():
 
 
 def test_mobile_docs_disabled():
-    """安全硬化 O2：8767 在 LAN，关闭 /docs /redoc /openapi.json。"""
+    """安全硬化 O2：8877 在 LAN，关闭 /docs /redoc /openapi.json。"""
     from app.core.config import load_settings
     import os, tempfile
     os.environ["NSFW_STUDIO_DATA_ROOT"] = tempfile.mkdtemp()

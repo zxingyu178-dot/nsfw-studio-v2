@@ -18,6 +18,8 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from app.database.mobile_v2_compat import ensure_mobile_event_log_tables, migrate_mobile_v2_compat
+
 
 @dataclass(frozen=True)
 class Migration:
@@ -730,36 +732,20 @@ MIGRATIONS: tuple[Migration, ...] = (
         version="1.3.0",
         description=(
             "W3.0：mobile_image_events（全局单调 seq 的图片事件日志，不依赖 images 外键，"
-            "删除图片后事件仍可读）+ mobile_mutation_receipts（设备级幂等回执唯一约束）"
+            "删除图片后事件仍可读）+ mobile_mutation_receipts（设备级幂等回执唯一约束）。"
+            "W3.1：callable 守卫，识别参考分支的同名旧结构，不在 0022 归一前重复建表。"
         ),
-        statements=(
-            """
-            CREATE TABLE mobile_image_events (
-                seq          INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id     TEXT    NOT NULL UNIQUE,
-                event_type   TEXT    NOT NULL,
-                image_id     TEXT,
-                revision     TEXT,
-                payload_json TEXT    NOT NULL DEFAULT '{}',
-                created_at   TEXT    NOT NULL
-            )
-            """,
-            "CREATE INDEX idx_mobile_image_events_type ON mobile_image_events(event_type)",
-            "CREATE INDEX idx_mobile_image_events_image ON mobile_image_events(image_id)",
-            """
-            CREATE TABLE mobile_mutation_receipts (
-                id              TEXT PRIMARY KEY,
-                device_id       TEXT NOT NULL,
-                operation       TEXT NOT NULL,
-                idempotency_key TEXT NOT NULL,
-                payload_hash    TEXT NOT NULL,
-                response_json   TEXT NOT NULL,
-                created_at      TEXT NOT NULL,
-                UNIQUE (device_id, operation, idempotency_key)
-            )
-            """,
-            "CREATE INDEX idx_mobile_mutation_device ON mobile_mutation_receipts(device_id)",
+        statements=(ensure_mobile_event_log_tables,),
+    ),
+    Migration(
+        migration_id="0022_mobile_v2_compat",
+        version="1.3.1",
+        description=(
+            "W3.1：两套 0021 结构归一——旧分支事件保 seq 转换、历史图片补首同步事件、"
+            "旧 mobile_write_receipts 合并到主干回执、移除 images 触发器（唯一事件机制 = 服务显式写入）、"
+            "建立 mobile_image_seen。幂等可重试，不删除图片/Job/Prompt/评分/设备。"
         ),
+        statements=(migrate_mobile_v2_compat,),
     ),
 )
 
@@ -799,6 +785,9 @@ def apply_pending_migrations(engine: Engine) -> list[Migration]:
             continue
         try:
             with engine.begin() as conn:
+                # SQLite 在写事务中做 DDL / 复杂排序时可能申请临时文件；统一走内存，
+                # 避免受限环境（无可用 temp 目录）出现 "unable to open database file"。
+                conn.execute(text("PRAGMA temp_store=MEMORY"))
                 # 清除该迁移的历史 failed 记录，避免重试成功时主键冲突
                 conn.execute(
                     text("DELETE FROM migration WHERE migration_id = :mid"),

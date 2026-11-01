@@ -2,7 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NSFW Studio Mobile Review Bridge",
-    "version": "0.13.0"
+    "version": "0.13.0",
+    "description": "MediaReview Mobile API V2（W3.1 主线，固定端口 8877）。所有 /mobile/* JSON 响应统一 envelope：{success,data,error:{code,message,details},request_id}。客户合同事实源为 MediaReview 1212c30 的 NSFW_MOBILE_API_CONTRACT_V2.md。"
   },
   "paths": {
     "/mobile/system/health": {
@@ -77,6 +78,111 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Pairing Verify Mobile Pairing Verify Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/images/feed": {
+      "get": {
+        "tags": [
+          "mobile-images"
+        ],
+        "summary": "V2 图片增量 feed（opaque 游标 / UPSERT / REMOVE tombstone）",
+        "operationId": "images_feed_mobile_images_feed_get",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Images Feed Mobile Images Feed Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/images/{image_id}/details": {
+      "get": {
+        "tags": [
+          "mobile-images"
+        ],
+        "summary": "V2 图片详情（生成快照 / 可靠 Prompt 关联）",
+        "operationId": "get_image_details_v2_mobile_images__image_id__details_get",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Image Details V2 Mobile Images  Image Id  Details Get"
                 }
               }
             }
@@ -306,6 +412,60 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Review Image Mobile Images  Image Id  Review Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/review/images/{image_id}/decision": {
+      "post": {
+        "tags": [
+          "mobile-review"
+        ],
+        "summary": "V2 按图片身份审核（幂等 + 乐观锁）",
+        "operationId": "image_decision_mobile_review_images__image_id__decision_post",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Image Decision Mobile Review Images  Image Id  Decision Post"
                 }
               }
             }
@@ -702,7 +862,7 @@
         "tags": [
           "mobile-prompts"
         ],
-        "summary": "Prompt 版本评分（幂等，source=mobile；不改 Prompt 状态）",
+        "summary": "W3 Prompt 版本评分（幂等，source=mobile；不改 Prompt 状态）",
         "operationId": "create_evaluation_mobile_prompts__prompt_id__versions__version_id__evaluation_post",
         "parameters": [
           {
@@ -776,7 +936,7 @@
         "tags": [
           "mobile-prompts"
         ],
-        "summary": "查询指定 Prompt Version 的评分记录",
+        "summary": "查询指定 Prompt Version 的评分记录（W3 兼容）",
         "operationId": "list_evaluations_mobile_prompts__prompt_id__versions__version_id__evaluations_get",
         "parameters": [
           {
@@ -807,6 +967,255 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response List Evaluations Mobile Prompts  Prompt Id  Versions  Version Id  Evaluations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/prompts/{prompt_id}/evaluations": {
+      "post": {
+        "tags": [
+          "mobile-prompts"
+        ],
+        "summary": "V2 追加评分（版本或整体，原子幂等）",
+        "operationId": "create_evaluation_v2_mobile_prompts__prompt_id__evaluations_post",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobilePromptEvaluationV2Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Evaluation V2 Mobile Prompts  Prompt Id  Evaluations Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/prompts/evaluations/{client_request_id}": {
+      "get": {
+        "tags": [
+          "mobile-prompts"
+        ],
+        "summary": "V2 本设备评分回执查询",
+        "operationId": "evaluation_receipt_mobile_prompts_evaluations__client_request_id__get",
+        "parameters": [
+          {
+            "name": "client_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Evaluation Receipt Mobile Prompts Evaluations  Client Request Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/prompts/{prompt_id}/review-summary": {
+      "get": {
+        "tags": [
+          "mobile-prompts"
+        ],
+        "summary": "V2 提示词审核汇总（按版本隔离）",
+        "operationId": "review_summary_mobile_prompts__prompt_id__review_summary_get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Review Summary Mobile Prompts  Prompt Id  Review Summary Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mobile/prompts/{prompt_id}/images": {
+      "get": {
+        "tags": [
+          "mobile-prompts"
+        ],
+        "summary": "V2 提示词关联图片分页（/mobile 缩略图）",
+        "operationId": "review_images_mobile_prompts__prompt_id__images_get",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Review Images Mobile Prompts  Prompt Id  Images Get"
                 }
               }
             }
@@ -930,6 +1339,56 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "ImageDecisionRequest": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KEEP",
+                  "REJECT",
+                  "RESET"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "favorite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favorite"
+          },
+          "expected_updated_at": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Expected Updated At"
+          },
+          "client_request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_updated_at",
+          "client_request_id"
+        ],
+        "title": "ImageDecisionRequest",
+        "description": "V2 客户端冻结契约：favorite-only 允许 action=null；client_request_id 幂等。"
+      },
       "MobileImageReviewRequest": {
         "properties": {
           "action": {
@@ -1025,6 +1484,74 @@
         ],
         "title": "MobilePromptEvaluationRequest"
       },
+      "MobilePromptEvaluationV2Request": {
+        "properties": {
+          "prompt_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version Id"
+          },
+          "overall_score": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Overall Score"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer",
+                  "maximum": 5.0,
+                  "minimum": 1.0
+                },
+                "propertyNames": {
+                  "enum": [
+                    "subject",
+                    "clothing",
+                    "scene",
+                    "composition",
+                    "lighting",
+                    "style",
+                    "quality"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Notes",
+            "default": ""
+          },
+          "client_request_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Client Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall_score",
+          "client_request_id"
+        ],
+        "title": "MobilePromptEvaluationV2Request",
+        "description": "V2 客户端冻结契约：version 可空表示“对提示词整体评分”。"
+      },
       "PairingVerifyRequest": {
         "properties": {
           "installation_id": {
@@ -1108,5 +1635,11 @@
         "title": "ValidationError"
       }
     }
-  }
+  },
+  "servers": [
+    {
+      "url": "http://{host}:8877",
+      "description": "Bridge（同网段局域网）"
+    }
+  ]
 }

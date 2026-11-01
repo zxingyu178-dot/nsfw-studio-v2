@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "image_id": "img_0001",
+    "status": "KEEP",
+    "is_favorite": true,
+    "updated_at": "2026-10-31T08:01:00.456Z",
+    "revision": "18"
+  },
+  "error": null,
+  "request_id": "req_fixture_decision_v2"
+}

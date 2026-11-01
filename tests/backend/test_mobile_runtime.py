@@ -14,9 +14,19 @@ from app.services.mobile_review_runtime_service import (
 def _make_service(tmp_path: Path, **overrides) -> MobileReviewRuntimeService:
     settings = SimpleNamespace(
         storage=SimpleNamespace(data_root=tmp_path / "data"),
-        mobile_review={"enabled": True, "host": "127.0.0.1", "port": 8767, **overrides},
+        mobile_review={"enabled": True, "host": "127.0.0.1", "port": 8877, **overrides},
     )
     return MobileReviewRuntimeService(settings)
+
+
+def test_fixed_port_and_cold_start_budget():
+    from app.services.mobile_review_runtime_service import (
+        DEFAULT_HEALTH_TIMEOUT_S,
+        FIXED_PORT,
+    )
+
+    assert FIXED_PORT == 8877
+    assert DEFAULT_HEALTH_TIMEOUT_S == 120.0
 
 
 def _healthy_probe():

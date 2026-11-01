@@ -3,10 +3,10 @@
   "info": {
     "title": "NSFW Studio Mobile Review Bridge",
     "version": "0.13.0",
-    "description": "局域网手机审核桥（独立端口 8767）。仅暴露审核相关 API；8000 始终 loopback。所有 JSON 响应统一 envelope：{success,data,error:{code,message,details},request_id}。"
+    "description": "局域网手机审核桥（独立端口 8877）。仅暴露审核相关 API；8000 始终 loopback。所有 JSON 响应统一 envelope：{success,data,error:{code,message,details},request_id}。"
   },
   "servers": [
-    { "url": "http://{host}:8767", "description": "Bridge（同网段局域网）" }
+    { "url": "http://{host}:8877", "description": "Bridge（同网段局域网）" }
   ],
   "security": [{ "BearerAuth": [] }],
   "paths": {

@@ -16,6 +16,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -766,6 +767,20 @@ def image_stats(
     }
 
 
+def _monotonic_updated_at(previous: str | None) -> str:
+    """审核写回时间必须前进：同一毫秒连续决策时 +1ms，保证 expected_updated_at 可区分。"""
+    now = utc_now_iso()
+    if not previous or now > previous:
+        return now
+    try:
+        current = datetime.fromisoformat(str(previous).replace("Z", "+00:00"))
+    except ValueError:
+        return now
+    return (current + timedelta(milliseconds=1)).isoformat(
+        timespec="milliseconds"
+    ).replace("+00:00", "Z")
+
+
 def apply_review_fields(
     image: Image,
     *,
@@ -777,7 +792,7 @@ def apply_review_fields(
 
     status 与 favorite 相互独立；review_note 属于元数据；返回哪些字段发生变化。
     """
-    now = utc_now_iso()
+    now = _monotonic_updated_at(image.updated_at)
     if status is not None:
         image.status = status
         image.review_status = _STATUS_TO_LEGACY_REVIEW[status]

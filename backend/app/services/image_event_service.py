@@ -52,8 +52,29 @@ class CursorExpired(AppError):
         super().__init__(message, details={"snapshot_required": True})
 
 
-def image_revision(image) -> str:
-    return str(getattr(image, "updated_at", None) or getattr(image, "created_at", "") or "")
+def latest_event_seq(session: Session, image_id: str) -> int:
+    """图片当前 revision：该图最新事件 seq（十进制字符串，单调递增）。"""
+    value = session.execute(
+        select(func.max(MobileImageEvent.seq)).where(MobileImageEvent.image_id == image_id)
+    ).scalar_one_or_none()
+    return int(value or 0)
+
+
+def latest_event_seqs(session: Session, image_ids: list[str]) -> dict[str, int]:
+    """批量读取图片最新 seq，避免详情/快照 N+1 查询。"""
+    if not image_ids:
+        return {}
+    rows = session.execute(
+        select(MobileImageEvent.image_id, func.max(MobileImageEvent.seq))
+        .where(MobileImageEvent.image_id.in_(image_ids))
+        .group_by(MobileImageEvent.image_id)
+    ).all()
+    return {str(image_id): int(seq) for image_id, seq in rows if image_id}
+
+
+def image_revision(session: Session, image) -> str:
+    """兼容旧调用名：revision 必须是事件 seq，不能再用毫秒时间戳。"""
+    return str(latest_event_seq(session, image.id))
 
 
 def image_payload(image) -> dict[str, Any]:
@@ -95,6 +116,9 @@ def record_event(
     )
     session.add(event)
     session.flush()
+    if event.image_id is not None and event.revision is None:
+        # 事件自身的 seq 就是图片 revision；flush 后才有单调序号。
+        event.revision = str(event.seq)
     if commit:
         session.commit()
     return event
@@ -105,7 +129,7 @@ def record_images_created(session: Session, images: list, *, source: str) -> Non
     for image in images:
         record_event(
             session, event_type,
-            image_id=image.id, revision=image_revision(image), payload=image_payload(image),
+            image_id=image.id, payload=image_payload(image),
         )
 
 
@@ -124,19 +148,19 @@ def record_review_change(
         payload["review_note"] = note if note is not None else (image.review_note or "")
         record_event(
             session, EVENT_IMAGE_REVIEW_UPDATED,
-            image_id=image.id, revision=image_revision(image), payload=payload,
+            image_id=image.id, payload=payload,
         )
     if favorite_changed:
         record_event(
             session, EVENT_IMAGE_FAVORITE_UPDATED,
-            image_id=image.id, revision=image_revision(image), payload=image_payload(image),
+            image_id=image.id, payload=image_payload(image),
         )
     if metadata_changed:
         payload = image_payload(image)
         payload["review_note"] = note if note is not None else (image.review_note or "")
         record_event(
             session, EVENT_IMAGE_METADATA_UPDATED,
-            image_id=image.id, revision=image_revision(image), payload=payload,
+            image_id=image.id, payload=payload,
         )
 
 
@@ -144,7 +168,7 @@ def record_image_removed(session: Session, image) -> None:
     """必须在 DELETE images 之前、同一事务内调用；事件无 images 外键。"""
     record_event(
         session, EVENT_IMAGE_REMOVED,
-        image_id=image.id, revision=image_revision(image), payload=image_payload(image),
+        image_id=image.id, payload=image_payload(image),
     )
 
 
@@ -199,21 +223,25 @@ def oldest_seq(session: Session) -> int | None:
     return int(value) if value is not None else None
 
 
+def resolve_cursor(session: Session, cursor: str | None) -> int:
+    """解析并校验游标；过期/非法/未来游标统一 410 CURSOR_EXPIRED。"""
+    if cursor is None or cursor == "":
+        return 0
+    cursor_seq = decode_cursor(cursor)
+    oldest = oldest_seq(session)
+    if oldest is not None and cursor_seq < oldest - 1:
+        raise CursorExpired()
+    if cursor_seq > newest_seq(session):
+        raise CursorExpired()
+    return cursor_seq
+
+
 def list_events(
     session: Session, *, cursor: str | None, limit: int = DEFAULT_EVENT_LIMIT,
 ) -> dict[str, Any]:
     """按 seq 升序返回增量事件；不漏、不重、支持断点恢复。"""
     limit = max(1, min(int(limit), MAX_EVENT_LIMIT))
-    if cursor is None:
-        cursor_seq = 0
-    else:
-        cursor_seq = decode_cursor(cursor)
-        oldest = oldest_seq(session)
-        # 事件从未被裁剪时 oldest=1，游标 0 合法；被裁剪后早于 oldest-1 的游标过期。
-        if oldest is not None and cursor_seq < oldest - 1:
-            raise CursorExpired()
-        if cursor_seq > newest_seq(session):
-            raise CursorExpired()
+    cursor_seq = resolve_cursor(session, cursor)
 
     rows = list(session.scalars(
         select(MobileImageEvent)

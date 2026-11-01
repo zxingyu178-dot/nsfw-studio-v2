@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.mobile.deps import get_current_device, get_session
 from app.models.mobile_review import MobileReviewDevice
 from app.services import image_review_session_service as svc
+from app.services import mobile_v2_service
 
 router = APIRouter(prefix="/mobile/review", tags=["mobile-review"])
 
@@ -32,6 +33,33 @@ class DecisionRequest(BaseModel):
 
 class PositionRequest(BaseModel):
     item_index: int = Field(ge=0)
+
+
+class ImageDecisionRequest(BaseModel):
+    """V2 客户端冻结契约：favorite-only 允许 action=null；client_request_id 幂等。"""
+
+    action: Literal["KEEP", "REJECT", "RESET"] | None = None
+    favorite: bool | None = None
+    expected_updated_at: str = Field(min_length=1, max_length=64)
+    client_request_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/images/{image_id}/decision", summary="V2 按图片身份审核（幂等 + 乐观锁）")
+def image_decision(
+    image_id: str,
+    body: ImageDecisionRequest,
+    db: Session = Depends(get_session),
+    device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_v2_service.decide(
+        db,
+        device_id=device.id,
+        image_id=image_id,
+        action=body.action,
+        favorite=body.favorite,
+        expected_updated_at=body.expected_updated_at,
+        client_request_id=body.client_request_id,
+    )
 
 
 @router.post("/sessions", summary="创建冻结审核会话（Bearer）", status_code=201)

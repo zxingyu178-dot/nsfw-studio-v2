@@ -524,3 +524,13 @@
 - [x] 测试：test_mobile_review_v2 14 tests；相关定向 74 passed。
 - [x] W3.0 GitHub CI 全绿：run 41267919495（后端 674 passed / 3 skipped、G0 通过，前端 489 tests）。
 - [x] W3.0 验收 ZIP：handoff/NSFW_Studio_W3.0_Review.zip。
+
+## 2026-11-01 W3.1：Mainline Consolidation
+- [x] A 数据库 Gate 0：两套 0021 对照；0021 守卫 + 0022 兼容迁移（副本验证）。
+- [x] B 客户端 V2 端点：feed / details / decision / prompt summary / prompt images /
+  evaluations / receipt；health api_contract=2 + 5 项 mobile_*_v2 能力。
+- [x] C revision=事件 seq；client_request_id 幂等；BEGIN IMMEDIATE + 设备复核；
+  稳定 operation；REMOVE-only；历史图首同步；单一事件机制；评分 source=mobile。
+- [x] D 端口 8877 + 冷启动 120s；配置/停止脚本/验收客户端/文档同步。
+- [x] 测试：后端新增 15 例；前端 489 tests；G0；真实 HTTP Probe PASS。
+- [ ] W3.1 GitHub CI / 验收 ZIP（提交后补记）。

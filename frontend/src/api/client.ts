@@ -534,7 +534,7 @@ export const systemApi = {
   },
 }
 
-// ===== Mobile Review Bridge（Phase 0.13：局域网手机审核桥，独立 8767） =====
+// ===== Mobile Review Bridge（Phase 0.13：局域网手机审核桥，独立 8877） =====
 /** Bridge 受管运行时状态机（与后端 MobileReviewRuntimeService 对齐） */
 export type MobileReviewRuntimeState =
   | 'STOPPED'
