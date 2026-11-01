@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.ids import PROMPT_EVALUATION, new_id
 from app.models import Prompt, PromptEvaluation
 from app.schemas.prompt import PromptEvaluationCreateRequest, PromptStatusRequest
-from app.services import prompt_service
+from app.services import image_event_service, prompt_service
 
 
 def create_evaluation(
     session: Session, prompt_id: str, request: PromptEvaluationCreateRequest,
+    *, source: str = "user", commit: bool = True,
 ) -> PromptEvaluation:
     prompt_service.get_prompt(session, prompt_id)
     if request.prompt_version_id is not None:
@@ -20,11 +21,15 @@ def create_evaluation(
         id=new_id(PROMPT_EVALUATION), prompt_id=prompt_id,
         prompt_version_id=request.prompt_version_id, overall_score=request.overall_score,
         dimension_scores_json=json.dumps(request.dimension_scores, ensure_ascii=False),
-        source="user", notes=request.notes,
+        source=source, notes=request.notes,
     )
     try:
         session.add(evaluation)
-        session.commit()
+        session.flush()
+        # W3.0：评分与 PROMPT_EVALUATED 事件同一事务；默认 commit 保持 Desktop 旧行为。
+        image_event_service.record_prompt_evaluated(session, evaluation)
+        if commit:
+            session.commit()
     except Exception:
         session.rollback()
         raise

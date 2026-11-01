@@ -716,3 +716,19 @@ CI 结果：代码提交 129c65c，GitHub Actions run 41182054367 —— 后端 
 前端 typecheck + 489 tests + build + store regression 11 passed，两个 job 全部 success。
 CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job）因 Preflight Gate
 改变错误码顺序失败，已改为 mock provider 适配，不改变业务逻辑。
+
+## 2026-11-01 W3.0：Mobile Review Bridge V2
+
+基线：5a9df4a。一次完整交付；不重写 v1、不改 MediaReview/ComfyUI/W2.0/单队列。
+
+- Migration 0021：mobile_image_events（全局 seq、无 images 外键）+ mobile_mutation_receipts。
+- 新增 image_event_service：IMAGE_CREATED/IMPORTED/REVIEW/FAVORITE/METADATA/REMOVED/
+  PROMPT_EVALUATED；创建/导入/审核/收藏/删除/评分均在业务同一事务内写入。
+- 审核统一：image_service.apply_review_fields 供 Desktop、Session decision、手机单图复用。
+- 新增 `/mobile/events`（不透明游标、分页、410 CURSOR_EXPIRED）、`/mobile/sync/snapshot`
+  （快照 + 水位同事务，无空隙）、`/mobile/images/{id}` 详情、`/mobile/images/{id}/review`
+  （幂等 + 乐观锁 + 409 REVIEW_CONFLICT）、Prompt 版本评分与查询。
+- 新增 mobile_mutation_service（device+operation+key 唯一回执）；业务/事件/回执同事务。
+- 契约：MEDIAREVIEW_NSFW_CONTRACT_V2.md、openapi-mobile-review-v2.json、fixtures/；
+  health api_contract=2 + 6 项能力。
+- 测试：`test_mobile_review_v2.py` 14 tests；相关定向 74 passed。新增 docs/W3_0_REPORT.md。

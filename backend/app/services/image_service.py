@@ -35,6 +35,7 @@ from app.core.ids import IMAGE, new_id
 from app.core.timeutil import utc_now_iso
 from app.engine.base import EngineError, EngineOutputFile
 from app.models import IMAGE_STATUSES, Image, Job, JobItem, JobStage, JobStageItem
+from app.services import image_event_service
 from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
 
@@ -396,6 +397,9 @@ def import_outputs_transaction(
         ]
         for image in images:
             session.add(image)
+        # W3.0：图片创建/导入事件必须与 Image 行同一事务提交
+        session.flush()
+        image_event_service.record_images_created(session, images, source=source)
         session.commit()
         _best_effort_thumbnail(session, storage, images, prepared)
         return images
@@ -762,6 +766,34 @@ def image_stats(
     }
 
 
+def apply_review_fields(
+    image: Image,
+    *,
+    status: str | None = None,
+    favorite: bool | None = None,
+    review_note: str | None = None,
+) -> dict[str, bool]:
+    """统一审核字段修改（Desktop / Mobile Session / 单图接口共用，不 commit）。
+
+    status 与 favorite 相互独立；review_note 属于元数据；返回哪些字段发生变化。
+    """
+    now = utc_now_iso()
+    if status is not None:
+        image.status = status
+        image.review_status = _STATUS_TO_LEGACY_REVIEW[status]
+        image.reviewed_at = None if status == "NEW" else now
+    if favorite is not None:
+        image.favorite = bool(favorite)
+    if review_note is not None:
+        image.review_note = review_note
+    image.updated_at = now
+    return {
+        "review": status is not None,
+        "favorite": favorite is not None,
+        "metadata": review_note is not None,
+    }
+
+
 def set_review(session: Session, image_id: str, review_status: str) -> Image:
     """旧审核接口（PATCH /images/{id}/review）——与新 status 同源，绝不第二套逻辑。
 
@@ -773,8 +805,11 @@ def set_review(session: Session, image_id: str, review_status: str) -> Image:
     image = get_image(session, image_id)
     new_status = _LEGACY_REVIEW_TO_STATUS[review_status]
     image.review_status = review_status
-    image.status = new_status
-    image.reviewed_at = None if new_status == "NEW" else utc_now_iso()
+    apply_review_fields(image, status=new_status)
+    image.review_status = review_status
+    image_event_service.record_review_change(
+        session, image, review_changed=True, favorite_changed=False,
+    )
     session.commit()
     return image
 
@@ -785,7 +820,10 @@ def set_favorite(session: Session, image_id: str, favorite: bool) -> Image:
     收藏与审核状态相互独立：KEEP+favorite、ARCHIVED+favorite、NEW+favorite 都合法。
     """
     image = get_image(session, image_id)
-    image.favorite = favorite
+    apply_review_fields(image, favorite=favorite)
+    image_event_service.record_review_change(
+        session, image, review_changed=False, favorite_changed=True,
+    )
     session.commit()
     return image
 
@@ -810,10 +848,11 @@ def set_image_status(session: Session, image_id: str, status: str,
             code="IMAGE_STATUS_DEPRECATED",
         )
     image = get_image(session, image_id)
-    image.status = status
-    image.review_note = note or ""
-    image.reviewed_at = None if status == "NEW" else utc_now_iso()
-    image.review_status = _STATUS_TO_LEGACY_REVIEW[status]
+    apply_review_fields(image, status=status, review_note=note or "")
+    image_event_service.record_review_change(
+        session, image, review_changed=True, favorite_changed=False,
+        metadata_changed=note is not None, note=image.review_note,
+    )
     session.commit()
     return image
 

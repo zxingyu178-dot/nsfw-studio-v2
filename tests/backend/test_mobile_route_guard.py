@@ -42,6 +42,12 @@ def test_mobile_route_table_only_audit():
         "/mobile/system/health",
         "/mobile/pairing/status",
         "/mobile/pairing/verify",
+        "/mobile/events",
+        "/mobile/sync/snapshot",
+        "/mobile/prompts/{prompt_id}/versions/{version_id}/evaluation",
+        "/mobile/prompts/{prompt_id}/versions/{version_id}/evaluations",
+        "/mobile/images/{image_id}/review",
+        "/mobile/images/{image_id}",
     }
     for p in expected_present:
         assert p in paths, f"缺少审核端点 {p}"

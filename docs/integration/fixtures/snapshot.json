@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "data": {
+    "images": [
+      {
+        "image_id": "img_0001",
+        "width": 768,
+        "height": 1024,
+        "created_at": "2026-10-31T08:00:00.123Z",
+        "updated_at": "2026-10-31T08:01:00.456Z",
+        "revision": "2026-10-31T08:01:00.456Z",
+        "status": "KEEP",
+        "is_favorite": true,
+        "kind": "original",
+        "source": "comfyui",
+        "job_id": "job_0001",
+        "seed": 42,
+        "thumbnail_url": "/mobile/images/img_0001/thumbnail",
+        "preview_url": "/mobile/images/img_0001/preview",
+        "original_url": "/mobile/images/img_0001/original"
+      }
+    ],
+    "image_count": 1,
+    "cursor": "mr2_eyJ2IjoxLCJzZXEiOjJ9",
+    "server_time": "2026-10-31T08:02:00.000Z"
+  },
+  "error": null,
+  "request_id": "req_fixture_snapshot"
+}

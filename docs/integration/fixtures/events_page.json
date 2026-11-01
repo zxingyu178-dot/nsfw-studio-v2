@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "data": {
+    "events": [
+      {
+        "event_id": "mevt_0001",
+        "event_type": "IMAGE_CREATED",
+        "image_id": "img_0001",
+        "revision": "2026-10-31T08:00:00.123Z",
+        "payload": {
+          "image_id": "img_0001",
+          "width": 768,
+          "height": 1024,
+          "status": "NEW",
+          "is_favorite": false,
+          "kind": "original",
+          "source": "comfyui",
+          "job_id": "job_0001",
+          "seed": 42,
+          "created_at": "2026-10-31T08:00:00.123Z",
+          "updated_at": "2026-10-31T08:00:00.123Z"
+        },
+        "created_at": "2026-10-31T08:00:00.123Z"
+      },
+      {
+        "event_id": "mevt_0002",
+        "event_type": "IMAGE_REVIEW_UPDATED",
+        "image_id": "img_0001",
+        "revision": "2026-10-31T08:01:00.456Z",
+        "payload": {
+          "image_id": "img_0001",
+          "status": "KEEP",
+          "is_favorite": false,
+          "review_note": ""
+        },
+        "created_at": "2026-10-31T08:01:00.456Z"
+      }
+    ],
+    "next_cursor": "mr2_eyJ2IjoxLCJzZXEiOjJ9",
+    "has_more": false,
+    "server_time": "2026-10-31T08:02:00.000Z"
+  },
+  "error": null,
+  "request_id": "req_fixture_events"
+}

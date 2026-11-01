@@ -31,6 +31,8 @@ MOBILE_DEVICE = "mdev"
 MOBILE_PAIRING_CODE = "mpc"
 MOBILE_REVIEW_SESSION = "mrs"
 MOBILE_REVIEW_SESSION_ITEM = "mrsi"
+MOBILE_IMAGE_EVENT = "mevt"
+MOBILE_MUTATION_RECEIPT = "mmr"
 
 
 def new_id(prefix: str) -> str:

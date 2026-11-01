@@ -17,6 +17,12 @@ CAPABILITIES = [
     "thumbnail",
     "preview",
     "original",
+    # W3.0 V2
+    "image_event_feed",
+    "image_detail",
+    "prompt_version_evaluation",
+    "idempotent_mutation",
+    "snapshot_resync",
 ]
 
 
@@ -27,6 +33,6 @@ def health(request: Request) -> dict:
         "status": "ok",
         "product": "nsfw-studio",
         "version": "0.13.0",
-        "api_contract": 1,
+        "api_contract": 2,
         "capabilities": list(CAPABILITIES),
     }

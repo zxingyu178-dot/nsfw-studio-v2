@@ -511,3 +511,15 @@
 - [x] Mock / unbound 兼容（mock 直接 READY）。
 - [x] W2.0 GitHub CI 全绿：run 41182054367（后端 660 passed / 3 skipped，前端 489 tests，G0 通过）。
 - [x] W2.0 验收 ZIP：handoff/NSFW_Studio_W2.0_Review.zip。
+
+## 2026-11-01 W3.0：Mobile Review Bridge V2
+- [x] A V2 契约（api_contract=2 + 6 能力）、OpenAPI V2、fixtures。
+- [x] B Transactional Event Log + Migration 0021（无 images 外键）。
+- [x] C `/mobile/events` 增量游标 + `/mobile/sync/snapshot` 水位无空隙 + 410 CURSOR_EXPIRED。
+- [x] D `/mobile/images/{id}` 详情（Prompt 关联，无路径泄漏，导入图不伪造）。
+- [x] E `/mobile/images/{id}/review`（KEEP/REJECT/RESET + favorite 独立 + 乐观锁）。
+- [x] F MobileMutationReceipt 幂等（同 Key 重放 / 不同 Payload 409）。
+- [x] G Prompt Version 评分（source=mobile、复用 PromptEvaluation、原子事件+回执）。
+- [x] H 新接口全部 Bearer；吊销设备 401；V1 接口保持兼容。
+- [x] 测试：test_mobile_review_v2 14 tests；相关定向 74 passed。
+- [ ] W3.0 GitHub CI / 验收 ZIP（提交后补记）。

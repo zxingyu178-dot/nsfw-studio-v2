@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.timeutil import utc_now_iso
@@ -62,3 +62,40 @@ class ImageReviewSessionItem(Base):
     item_index: Mapped[int] = mapped_column(nullable=False)
     image_id: Mapped[str] = mapped_column(ForeignKey("images.id"), nullable=False)
     seen: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class MobileImageEvent(Base):
+    """W3.0 图片事件日志（全局单调 seq）。
+
+    **不建立 images 外键**：图片永久删除后事件仍必须可读。
+    """
+
+    __tablename__ = "mobile_image_events"
+
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    image_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)
+
+
+class MobileMutationReceipt(Base):
+    """W3.0 幂等回执：同 device + operation + key 只允许一条。"""
+
+    __tablename__ = "mobile_mutation_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "device_id", "operation", "idempotency_key",
+            name="uq_mobile_mutation_device_op_key",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(32), nullable=False, default=utc_now_iso)

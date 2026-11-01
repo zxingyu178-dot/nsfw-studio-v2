@@ -24,6 +24,7 @@ from app.core.ids import MOBILE_REVIEW_SESSION, MOBILE_REVIEW_SESSION_ITEM, new_
 from app.core.timeutil import utc_now_iso
 from app.models import Image
 from app.models.mobile_review import ImageReviewSession, ImageReviewSessionItem
+from app.services import image_event_service, image_service
 
 # decision action 取值（审核状态动作；favorite 由独立 bool 字段控制）
 DECISION_ACTIONS = ("KEEP", "REJECT", "RESET")
@@ -362,27 +363,22 @@ def apply_decision(
         })
 
     now = utc_now_iso()
-    # 1) 审核状态动作
-    if action == "KEEP":
-        image.status = "KEEP"
-        image.review_status = "KEPT"
-        image.reviewed_at = now
-        item.seen = True
-    elif action == "REJECT":
-        image.status = "REJECT"
-        image.review_status = "REJECTED"
-        image.reviewed_at = now
+    action_status = {"KEEP": "KEEP", "REJECT": "REJECT", "RESET": "NEW"}.get(action or "")
+    # 1) 审核 / 收藏统一走 image_service.apply_review_fields（Desktop 与 Mobile 同源）
+    image_service.apply_review_fields(image, status=action_status, favorite=favorite)
+    # 2) 会话 seen 语义
+    if action in ("KEEP", "REJECT"):
         item.seen = True
     elif action == "RESET":
-        image.status = "NEW"
-        image.review_status = "UNREVIEWED"
-        image.reviewed_at = None
         item.seen = False
-
-    # 2) 收藏（独立于审核状态；收藏即代表已看过该图）
     if favorite is not None:
-        image.favorite = bool(favorite)
         item.seen = True
+    # 3) W3.0 事件与状态在同一事务
+    image_event_service.record_review_change(
+        session, image,
+        review_changed=action_status is not None,
+        favorite_changed=favorite is not None,
+    )
 
     # 3) 重算会话 seen_count（基于 items 的 seen 标志）
     seen_count = int(session.execute(

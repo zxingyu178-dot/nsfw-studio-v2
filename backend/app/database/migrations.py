@@ -725,6 +725,42 @@ MIGRATIONS: tuple[Migration, ...] = (
             "ALTER TABLE mobile_review_sessions ADD COLUMN ended_reason TEXT",
         ),
     ),
+    Migration(
+        migration_id="0021_mobile_event_log_mutations",
+        version="1.3.0",
+        description=(
+            "W3.0：mobile_image_events（全局单调 seq 的图片事件日志，不依赖 images 外键，"
+            "删除图片后事件仍可读）+ mobile_mutation_receipts（设备级幂等回执唯一约束）"
+        ),
+        statements=(
+            """
+            CREATE TABLE mobile_image_events (
+                seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id     TEXT    NOT NULL UNIQUE,
+                event_type   TEXT    NOT NULL,
+                image_id     TEXT,
+                revision     TEXT,
+                payload_json TEXT    NOT NULL DEFAULT '{}',
+                created_at   TEXT    NOT NULL
+            )
+            """,
+            "CREATE INDEX idx_mobile_image_events_type ON mobile_image_events(event_type)",
+            "CREATE INDEX idx_mobile_image_events_image ON mobile_image_events(image_id)",
+            """
+            CREATE TABLE mobile_mutation_receipts (
+                id              TEXT PRIMARY KEY,
+                device_id       TEXT NOT NULL,
+                operation       TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                payload_hash    TEXT NOT NULL,
+                response_json   TEXT NOT NULL,
+                created_at      TEXT NOT NULL,
+                UNIQUE (device_id, operation, idempotency_key)
+            )
+            """,
+            "CREATE INDEX idx_mobile_mutation_device ON mobile_mutation_receipts(device_id)",
+        ),
+    ),
 )
 
 

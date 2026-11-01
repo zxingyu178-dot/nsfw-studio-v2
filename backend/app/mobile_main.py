@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.mobile import images, pairing, review, system
+from app.api.mobile import images, pairing, prompts, review, sync, system
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.database.base import make_engine, make_session_factory
@@ -205,11 +205,13 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
             content=_envelope(False, code="INTERNAL_ERROR", message="服务器内部错误"),
         )
 
-    # 只 include 审核相关四个子域（route table 守卫测试断言无其它模块）
+    # 只 include 审核相关子域（route table 守卫测试断言无其它模块）
     application.include_router(system.router)
     application.include_router(pairing.router)
     application.include_router(images.router)
     application.include_router(review.router)
+    application.include_router(sync.router)
+    application.include_router(prompts.router)
 
     return application
 

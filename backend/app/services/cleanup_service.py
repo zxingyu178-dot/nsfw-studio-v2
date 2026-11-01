@@ -29,6 +29,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Image, ImageVariant, JobItem, JobStageItem
+from app.services import image_event_service
 from app.services import image_reference_service
 from app.storage.manager import StorageManager
 
@@ -140,7 +141,11 @@ def _purge_image_rows(session: Session, image_id: str) -> None:
 
     image_variants→images 无 ORM 关系，不能依赖 unit-of-work 自动排序，
     否则 DELETE images 会撞外键约束。
+    W3.0：IMAGE_REMOVED 事件在 DELETE 之前写入同一事务；事件无 images 外键，删除后仍可读。
     """
+    image = session.get(Image, image_id)
+    if image is not None:
+        image_event_service.record_image_removed(session, image)
     session.execute(update(JobItem).where(JobItem.image_id == image_id).values(image_id=None))
     session.execute(
         update(JobStageItem).where(JobStageItem.output_image_id == image_id)
