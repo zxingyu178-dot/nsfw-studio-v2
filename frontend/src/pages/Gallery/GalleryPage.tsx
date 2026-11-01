@@ -13,7 +13,7 @@ import {
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
-import { useGalleryQuery, type GallerySource } from './hooks/useGalleryQuery'
+import { useGalleryQuery, type GalleryCategory, type GallerySource } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
 import { useGalleryPrefs } from './hooks/useGalleryPrefs'
 import { createReviewSessionAdapter, type ReviewSessionAdapter } from './hooks/useReviewSession'
@@ -58,12 +58,15 @@ export default function GalleryPage() {
   const navigate = useNavigate()
   const jobFilter = searchParams.get('job')
   const sourceParam = searchParams.get('source')
+  const categoryParam = searchParams.get('category')
   const sourceFilter: GallerySource =
     sourceParam === 'comfyui' || sourceParam === 'import' ? sourceParam : ''
+  const categoryFilter: GalleryCategory =
+    categoryParam === 'anime' || categoryParam === 'imported' ? categoryParam : ''
 
   const [view, setView] = useState<'flat' | 'group'>('flat')
 
-  const query = useGalleryQuery(jobFilter, sourceFilter)
+  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter)
   const selection = useGallerySelection()
   const prefs = useGalleryPrefs()
 
@@ -100,6 +103,13 @@ export default function GalleryPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams, sourceFilter, sourceParam])
 
+  useEffect(() => {
+    if (categoryParam === null || categoryFilter !== '') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('category')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, categoryFilter, categoryParam])
+
   // 按任务分组：进入 group 视图且无 jobFilter 时加载第一页
   useEffect(() => {
     if (view !== 'group' || jobFilter) return
@@ -119,6 +129,13 @@ export default function GalleryPage() {
     const next = new URLSearchParams(searchParams)
     if (source) next.set('source', source)
     else next.delete('source')
+    setSearchParams(next)
+  }
+
+  function applyCategoryFilter(category: GalleryCategory): void {
+    const next = new URLSearchParams(searchParams)
+    if (category) next.set('category', category)
+    else next.delete('category')
     setSearchParams(next)
   }
 
@@ -471,6 +488,8 @@ export default function GalleryPage() {
         onSubStatusChange={query.setSubStatus}
         source={sourceFilter}
         onSourceChange={applySourceFilter}
+        category={categoryFilter}
+        onCategoryChange={applyCategoryFilter}
         sort={query.sort}
         onSortChange={query.setSort}
         density={prefs.density}

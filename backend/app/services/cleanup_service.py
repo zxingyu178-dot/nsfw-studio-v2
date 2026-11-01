@@ -56,14 +56,21 @@ def _list_variants(session: Session, image_id: str) -> list[ImageVariant]:
     ).scalars().all())
 
 
-def _image_disk_bytes(session: Session, storage: StorageManager, image: Image) -> int:
-    """original + 全部 variants 文件字节（文件缺失按 0 计）。"""
+def _image_disk_bytes(session: Session, storage: StorageManager, image: Image,
+                      variants: dict[str, list[str]] | None = None) -> int:
+    """original + 全部 variants 文件字节（文件缺失按 0 计）。
+
+    ``variants`` 由批量预览传入（image_id -> 相对路径列表），避免逐张查询。
+    """
     total = 0
     original = storage.absolutize(image.file_path)
     if original.is_file():
         total += original.stat().st_size
-    for variant in _list_variants(session, image.id):
-        path = storage.absolutize(variant.path)
+    paths = variants.get(image.id, []) if variants is not None else [
+        variant.path for variant in _list_variants(session, image.id)
+    ]
+    for relative in paths:
+        path = storage.absolutize(relative)
         if path.is_file():
             total += path.stat().st_size
     return total
@@ -105,15 +112,30 @@ def preview(session: Session, storage: StorageManager,
     - protected_items：[{image_id, reasons:[...]}]，reasons 取自 count_references 的非空分类。
     """
     candidates = _candidates(session, image_ids)
+    if not candidates:
+        return {
+            "candidate_count": 0, "deletable_count": 0, "protected_count": 0,
+            "total_bytes": 0, "protected_items": [],
+        }
+    # v0.37.1：批量引用检查。原实现逐张 5 次查询，487 张 REJECT 预览需数分钟，
+    # 前端「删除淘汰图」长时间停在“准备中…”，实际被误判为删不掉。
+    candidate_ids = [image.id for image in candidates]
+    references = image_reference_service.count_references_many(session, candidate_ids)
+    variants: dict[str, list[str]] = {image_id: [] for image_id in candidate_ids}
+    for image_id, path in session.execute(
+        select(ImageVariant.image_id, ImageVariant.path)
+        .where(ImageVariant.image_id.in_(candidate_ids))
+    ).all():
+        variants.setdefault(image_id, []).append(path)
     total_bytes = 0
     protected_items: list[dict] = []
     for image in candidates:
-        refs = image_reference_service.count_references(session, image.id)
+        refs = references.get(image.id) or {"references": {}, "active_job_ids": []}
         reasons = _protected_reasons(refs)
         if reasons:
             protected_items.append({"image_id": image.id, "reasons": reasons})
             continue
-        total_bytes += _image_disk_bytes(session, storage, image)
+        total_bytes += _image_disk_bytes(session, storage, image, variants=variants)
     return {
         "candidate_count": len(candidates),
         "deletable_count": len(candidates) - len(protected_items),
@@ -226,14 +248,20 @@ def execute(session: Session, storage: StorageManager,
             image_ids: list[str] | None = None) -> dict:
     """两阶段之二：真删未受保护的 REJECT 图。"""
     candidates = _candidates(session, image_ids)
+    if not candidates:
+        return {"deleted_count": 0, "deleted_bytes": 0, "protected_count": 0,
+                "deletable_count": 0, "failed": []}
+    references = image_reference_service.count_references_many(
+        session, [image.id for image in candidates],
+    )
     cleanup_id = uuid.uuid4().hex  # 每次 execute 一个唯一隔离区批次
     deleted_count = 0
     deleted_bytes = 0
     protected_count = 0
     failed: list[dict] = []
     for image in candidates:
-        refs = image_reference_service.count_references(session, image.id)
-        if refs["total"] > 0:
+        refs = references.get(image.id) or {"references": {}, "active_job_ids": []}
+        if refs["total"] > 0 or refs["active_job_ids"]:
             protected_count += 1
             continue
         try:

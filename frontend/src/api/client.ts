@@ -349,6 +349,8 @@ export const historyApi = {
 // ===== Image / Gallery（Phase 2C；Phase 0.11 分页 + 状态 + 缩略图） =====
 export interface ImageListParams {
   job_id?: string | null
+  /** 图库分类：anime（动漫）/ imported（导入） */
+  category?: string | null
   /** Phase 0.11 新审核状态筛选 */
   status?: ImageReviewStatus | null
   /** Phase 0.11 排序 */
@@ -379,6 +381,8 @@ export interface ImageIdsResponse {
 /** Phase 0.12 全局图库统计过滤参数（与 GET /images 同口径；不含 sort/page/limit 分页参数）。 */
 export interface ImageStatsParams {
   job_id?: string | null
+  /** 图库分类：anime（动漫）/ imported（导入） */
+  category?: string | null
   review_status?: ReviewStatus | null
   favorite?: boolean | null
   source?: string | null
