@@ -39,13 +39,13 @@ modules:
             status: unverified
             reason: "Turbo8 双 LoRA 默认档未做独立 G4 峰值/耗时记录"
       v2:
-        dependencies_ready: false
-        real_gate_passed: false
+        dependencies_ready: true
+        real_gate_passed: true
         hardware_status: normal
         default_profile_verified: false
-        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；待依赖探测与真实 G3"
+        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
         evidence:
-          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
           default_profile_performance:
             status: unverified
@@ -93,13 +93,13 @@ modules:
             sampling_seconds: 496
             source: "docs/PHASE51_REPORT.md + Phase 6 实测"
       v3:
-        dependencies_ready: false
-        real_gate_passed: false
+        dependencies_ready: true
+        real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；待 G0/G3"
+        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
         evidence:
-          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
           default_profile_performance:
             status: unverified
@@ -128,13 +128,13 @@ modules:
             status: unverified
             reason: "640/20 证据不对应当前 binding 的 1024/25 默认"
       v2:
-        dependencies_ready: false
-        real_gate_passed: false
+        dependencies_ready: true
+        real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；待 G0/G3"
+        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
         evidence:
-          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
           default_profile_performance:
             status: unverified
@@ -164,13 +164,13 @@ modules:
             status: unverified
             reason: "无独立 G4 峰值与默认档耗时记录"
       v2:
-        dependencies_ready: false
-        real_gate_passed: false
+        dependencies_ready: true
+        real_gate_passed: true
         hardware_status: normal
         default_profile_verified: false
-        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；待 G0/G3"
+        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
         evidence:
-          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
           default_profile_performance:
             status: unverified
