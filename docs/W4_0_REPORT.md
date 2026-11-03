@@ -153,9 +153,9 @@ ALL LIFECYCLE CHECKS PASSED
 | `8bb79a0` | W4.0 四工作流收敛与 upscale 下线（四套新 binding、前后端移除、归档） |
 | `b25565a` | preflight 按实际 `unet_gguf` 目录检测 + 测试 |
 | `5be526c` | 依赖探测 READY、临时放行 G3 |
-| 最终提交 | 本报告 + 模型清单 + manifest G3 证据（见交付说明） |
+| `2f0fb06` | 本报告 + 模型清单 + manifest G3 证据 |
 
-CI：`https://github.com/zxingyu178-dot/nsfw-studio-v2/actions`（main 全绿）
+CI：`41573977381`（8bb79a0）、`41578585410`（b25565a）、`41579171678`（5be526c）、`41585020866`（2f0fb06）均为 success；main 全绿。
 
 ## 11. Gate 0 记录（按数据库实际）
 
@@ -179,3 +179,11 @@ CI：`https://github.com/zxingyu178-dot/nsfw-studio-v2/actions`（main 全绿）
 2. **换行差异导致双指纹不稳定**：dev 树与部署树的同一提交在 LF/CRLF 上不同，`workflow_hash/binding_hash` 会不同（本报告与 manifest 记录的是部署运行树的指纹）。建议后续加 `.gitattributes` 固定换行，避免历史 Job 恢复跨树失败。
 3. 13 个 INTERRUPTED 历史 Job 依赖已归档模型，确认不可续跑；未删除、未改写。
 4. 归档目录含 1 组 SHA256 重复文件（两个文件名、同一实体内容），未做二次清理。
+
+## 14. 轻量验收包
+
+`D:\AIHome_2.0_L1_L2\archive\W4.0_acceptance_2026-11-03.zip`（5.96 MB）：
+- `docs/W4_0_REPORT.md`、`docs/W4_0_MODEL_INVENTORY.csv`
+- `DELIVERY.txt`（提交、CI、G3、测试汇总）
+- `evidence/preflight_four.json`、`evidence/gate0_job_stats.txt`、`evidence/carrier_acceptance.txt`
+- `evidence/g3/` 四条链输出原图（4 张 PNG）
