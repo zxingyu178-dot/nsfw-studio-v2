@@ -37,6 +37,13 @@ class ValidationError(AppError):
     code = "VALIDATION_ERROR"
 
 
+class UnprocessableError(AppError):
+    """请求语义正确但当前产品无法处理（HTTP 422；如已下线的 Agent 参数）。"""
+
+    status_code = 422
+    code = "UNPROCESSABLE"
+
+
 class ConflictError(AppError):
     status_code = 409
     code = "CONFLICT"

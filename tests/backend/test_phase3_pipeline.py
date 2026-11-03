@@ -1,11 +1,11 @@
-"""Phase 3 多阶段管线 + 高清放大回归（合同 §0.1 / §0.4 / §六~§十 / §二十五）。
+"""Phase 3 多阶段管线 + 处理型模块回归（合同 §0.1 / §0.4 / §六~§十 / §二十五）。
 
 全部离线可跑（Mock 引擎 + stub），无需真实 ComfyUI：
-- 双阶段执行顺序：basic×N 全部完成 → 才进入 upscale×N（禁止交错）；
+- 双阶段执行顺序：basic×N 全部完成 → 才进入处理型 Stage×N（禁止交错）；
 - Stage Gate：任一 StageItem FAILED → Stage FAILED → Job FAILED → 后续 Stage 不启动；
 - Stage 2 暂停 / 取消 / 崩溃恢复（按 StageItem 核对）；
-- 图库已有图片 → upscale-only process Job（同一 Worker / 同一 UpscaleModule）；
-- parent_image_id / kind=upscaled / images/upscaled 存储；
+- 图库已有图片 → 处理型 process Job（同一 Worker / 同一处理型测试替身）；
+- parent_image_id / kind=upscaled / images/upscaled 存储（历史 kind 语义保留）；
 - §0.1 Worker 代码级异常 → INTERRUPTED + 队列暂停；§十 ENGINE_TIMEOUT；§0.4 固定 Seed。
 """
 from __future__ import annotations
@@ -57,8 +57,8 @@ def make_snapshot(count=1, **overrides):
     return snapshot
 
 
-def pipeline_snapshot(count=1, modules=("basic_generate", "upscale"), **overrides):
-    """生成工作台"开启高清"后的快照：workflow_modules = 基础生成 + 高清放大（§五/§十五）。"""
+def pipeline_snapshot(count=1, modules=("basic_generate", "fake_process"), **overrides):
+    """生成工作台"开启后处理"后的快照：workflow_modules = 基础生成 + 处理型测试替身（§五/§十五）。"""
     snapshot = make_snapshot(count=count, **overrides)
     snapshot["workflow_modules"] = [{"module_id": module_id} for module_id in modules]
     return snapshot
@@ -69,7 +69,7 @@ async def _noop_stop(timeout: float = 10.0) -> None:  # 跳过优雅收尾，制
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -97,24 +97,24 @@ def test_basic_only_single_stage(mock_client):
     assert len(images) == 3 and all(image["kind"] == "original" for image in images)
 
 
-# ===== §二十五(2)(3)(10)：3 张 basic + upscale（严格顺序 + 父子关系） =====
+# ===== §二十五(2)(3)(10)：3 张 basic + 处理型 Stage（严格顺序 + 父子关系） =====
 
-def test_basic_then_upscale_strict_order_and_parents(mock_client):
+def test_basic_then_process_strict_order_and_parents(mock_client):
     adapter = mock_client.app.state.adapter
     job = mock_client.post("/api/v1/jobs", json={"snapshot": pipeline_snapshot(count=3)}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=60)
 
-    # 执行顺序严格为 basic1 basic2 basic3 → upscale1 upscale2 upscale3（禁止交错）
+    # 执行顺序严格为 basic1 basic2 basic3 → process1 process2 process3（禁止交错）
     modules_seq = [request.binding.module_id for request in adapter.submitted_requests]
-    assert modules_seq == ["basic_generate"] * 3 + ["upscale"] * 3
+    assert modules_seq == ["basic_generate"] * 3 + ["fake_process"] * 3
     stage_seq = [request.metadata.get("stage_index") for request in adapter.submitted_requests]
     assert stage_seq == [0, 0, 0, 1, 1, 1]
-    # upscale 的输入是上一 Stage 同槽位的输出（生成 N 张全部完成才开始高清）
-    first_upscale = next(r for r in adapter.submitted_requests if r.binding.module_id == "upscale")
-    assert first_upscale.parameters.get("input_image"), "upscale 必须注入已上传的输入图片引用"
+    # 处理型 Stage 的输入是上一 Stage 同槽位的输出（生成 N 张全部完成才开始处理）
+    first_process = next(r for r in adapter.submitted_requests if r.binding.module_id == "fake_process")
+    assert first_process.parameters.get("input_image"), "处理型模块必须注入已上传的输入图片引用"
 
     stages = final["stages"]
-    assert [stage["module_id"] for stage in stages] == ["basic_generate", "upscale"]
+    assert [stage["module_id"] for stage in stages] == ["basic_generate", "fake_process"]
     assert all(stage["status"] == "COMPLETED" for stage in stages)
     stage0_items = {item["item_index"]: item for item in stages[0]["items"]}
     for item in stages[1]["items"]:
@@ -184,7 +184,7 @@ def test_stage2_partial_failure_keeps_all_originals(mock_client):
     state = {"upscale_count": 0}
 
     async def failing_second_upscale(request):
-        if request.binding.module_id == "upscale":
+        if request.binding.module_id == "fake_process":
             state["upscale_count"] += 1
             if state["upscale_count"] == 2:
                 raise EngineError("OUTPUT_MISSING", "mock: 第 2 张高清失败")
@@ -269,7 +269,7 @@ def test_stage2_cancel_keeps_generated(mock_client):
 
 # ===== §二十五(8)：Stage 2 崩溃恢复（按 StageItem 核对） =====
 
-def test_stage2_crash_recovery(settings, monkeypatch):
+def test_stage2_crash_recovery(settings, monkeypatch, process_registry):
     from fastapi.testclient import TestClient
 
     from app.engine.base import EngineJobStatus, EngineOutputFile
@@ -318,7 +318,7 @@ def test_stage2_crash_recovery(settings, monkeypatch):
         assert "JOB_RECOVERED_COMPLETED" in types
 
 
-# ===== §二十五(9)(11)：图库 N 张 → upscale-only process Job =====
+# ===== §二十五(9)(11)：图库 N 张 → 处理型 process Job =====
 
 def _seed_gallery_images(client, count: int, png_bytes: bytes) -> list[str]:
     from app.services import image_service
@@ -335,25 +335,38 @@ def _seed_gallery_images(client, count: int, png_bytes: bytes) -> list[str]:
         return ids
 
 
-def test_gallery_upscale_creates_process_job(mock_client, png_bytes):
+def test_gallery_process_creates_process_job(mock_client, png_bytes):
+    """图库已有图片 → 处理型 process Job（不重跑基础生成；深链由服务层构造）。"""
+    from app.services import job_service
+
     adapter = mock_client.app.state.adapter
     source_ids = _seed_gallery_images(mock_client, 3, png_bytes)
 
-    response = mock_client.post("/api/v1/images/upscale", json={"image_ids": source_ids})
-    assert response.status_code == 201
-    job = response.json()
-    assert job["job_kind"] == "process"
-    assert [stage["module_id"] for stage in job["stages"]] == ["upscale"], "不得重跑基础生成"
-    assert job["requested_count"] == 3
+    modules = [{
+        "module_id": "fake_process", "module_version": "v1", "provider": "mock",
+        "binding_version": "v1", "workflow_hash": None, "binding_hash": None,
+    }]
+    snapshot = make_snapshot(count=3, workflow_modules=[{"module_id": "fake_process"}])
+    snapshot.update(prompt_mode="structured", structured_prompt={}, full_prompt="", negative_prompt="")
+    with mock_client.app.state.session_factory() as session:
+        job, _ = job_service.create_job(
+            session, source="web", snapshot=snapshot, workflow_modules=modules,
+            job_kind="process", input_image_ids=source_ids,
+        )
+        job_id = job.id
+    detail = mock_client.get(f"/api/v1/jobs/{job_id}").json()
+    assert detail["job_kind"] == "process"
+    assert [stage["module_id"] for stage in detail["stages"]] == ["fake_process"], "不得重跑基础生成"
+    assert detail["requested_count"] == 3
 
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=60)
-    assert [r.binding.module_id for r in adapter.submitted_requests] == ["upscale"] * 3
+    final = wait_for(mock_client, job_id, lambda j: j["status"] == "COMPLETED", timeout=60)
+    assert [r.binding.module_id for r in adapter.submitted_requests] == ["fake_process"] * 3
     stage_items = final["stages"][0]["items"]
     assert [item["input_image_id"] for item in stage_items] == source_ids, \
         "StageItem.input_image_id 必须是对应的已有图片（不得另存为新原图）"
 
     # 高清图 parent 正确；源图片不会被复制成新的"原图"
-    images = gallery(mock_client, job["id"])
+    images = gallery(mock_client, job_id)
     assert len(images) == 3 and all(image["kind"] == "upscaled" for image in images)
     parents = {image["parent_image_id"] for image in images}
     assert parents == set(source_ids)
@@ -446,9 +459,9 @@ def test_stage_item_execution_timeout(mock_client):
         adapter.delay_per_item_ms = 50
 
 
-# ===== §二十五(15)：Recipe 开启高清后保存 / 恢复一致 =====
+# ===== §二十五(15)：Recipe 保存 / 恢复处理型模块一致 =====
 
-def test_recipe_roundtrip_with_upscale_module(mock_client):
+def test_recipe_roundtrip_with_process_module(mock_client):
     from app.services import recipe_service
 
     with mock_client.app.state.session_factory() as session:
@@ -458,16 +471,16 @@ def test_recipe_roundtrip_with_upscale_module(mock_client):
             prompt_mode="structured",
             structured={"style": "anime"},
             generation_settings={"width": 512, "height": 768, "default_count": 2},
-            workflow_modules=[{"module_id": "basic_generate"}, {"module_id": "upscale"}],
+            workflow_modules=[{"module_id": "basic_generate"}, {"module_id": "fake_process"}],
         )
         version = recipe_service.get_current_version(session, recipe)
         modules = json.loads(version.workflow_snapshot_json)["modules"]
-    assert [module["module_id"] for module in modules] == ["basic_generate", "upscale"], \
-        "保存配方必须完整保留高清开关（basic_generate + upscale）"
+    assert [module["module_id"] for module in modules] == ["basic_generate", "fake_process"], \
+        "保存配方必须完整保留处理型模块（basic_generate + fake_process）"
 
     # 用恢复出的 workflow_modules 创建 Job：Pipeline 必须两次物化
     snapshot = make_snapshot(count=1)
     snapshot["workflow_modules"] = modules
     job = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=60)
-    assert [stage["module_id"] for stage in final["stages"]] == ["basic_generate", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["basic_generate", "fake_process"]

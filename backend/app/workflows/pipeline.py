@@ -4,7 +4,7 @@
 QueueWorker
   ↓ 根据 JobStage（固化身份）解析模块
 PipelineExecutor.resolve_stage_module(stage)
-  ↓ BasicGenerateModule / UpscaleModule（标准输入 / 引擎请求由模块构造）
+  ↓ BasicGenerateModule / Img2ImgModule（标准输入 / 引擎请求由模块构造）
 WorkflowModule.prepare_inputs → build_engine_request
   ↓
 EngineAdapter → provider binding（每次请求动态绑定，§0.2/§二十二）

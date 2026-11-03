@@ -12,7 +12,6 @@ from app.workflows.base import (
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.pipeline import PipelineExecutor
 from app.workflows.registry import ModuleRegistry, default_registry
-from app.workflows.upscale import UpscaleModule
 
 __all__ = [
     "BasicGenerateModule",
@@ -22,7 +21,6 @@ __all__ = [
     "ModuleRegistry",
     "ParameterSpec",
     "PipelineExecutor",
-    "UpscaleModule",
     "WorkflowInput",
     "WorkflowModule",
     "WorkflowOutput",

@@ -814,7 +814,6 @@ export const IMAGE_SOURCE_LABEL: Record<string, string> = {
 export const MODULE_LABEL: Record<string, string> = {
   basic_generate: '基础生成',
   img2img: '图生图',
-  upscale: '高清放大',
 }
 
 export const JOB_SOURCE_LABEL: Record<string, string> = {

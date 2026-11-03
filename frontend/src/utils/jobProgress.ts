@@ -1,4 +1,4 @@
-// 多阶段进度展示（Phase 3 §十七/§十八）：原图生成 / 高清放大 各自一行，用户一眼知道当前处于哪个阶段。
+// 多阶段进度展示（Phase 3 §十七/§十八）：每个 Stage 各自一行，用户一眼知道当前处于哪个阶段。
 import { MODULE_LABEL, type JobDTO, type JobStageDTO } from '../types/workbench'
 
 export interface StageProgressLine {

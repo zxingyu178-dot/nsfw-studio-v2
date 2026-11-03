@@ -52,12 +52,12 @@ def make_snapshot(count=1, **overrides):
 
 def pipeline_snapshot(count=1):
     snapshot = make_snapshot(count=count)
-    snapshot["workflow_modules"] = [{"module_id": "basic_generate"}, {"module_id": "upscale"}]
+    snapshot["workflow_modules"] = [{"module_id": "basic_generate"}, {"module_id": "fake_process"}]
     return snapshot
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -154,7 +154,7 @@ def test_image_workbench_traces_root_generate_job(mock_client):
     original = next(image for image in images if image["kind"] == "original")
     upscaled = next(image for image in images if image["kind"] == "upscaled")
 
-    # 高清图（派生图）→ 恢复的是根生成 Job 的配置，不是高清 process Job 的空 Prompt
+    # 处理图（派生图）→ 恢复的是根生成 Job 的配置，不是处理型 process Job 的空 Prompt
     response = mock_client.get(f"/api/v1/images/{upscaled['id']}/workbench")
     assert response.status_code == 200
     payload = response.json()
@@ -162,7 +162,7 @@ def test_image_workbench_traces_root_generate_job(mock_client):
     assert payload["snapshot"]["structured_prompt"]["scene"] == "cafe"
     # Task9：workflow_modules 携带完整执行身份（含版本 + provider + 指纹字段）
     modules = payload["snapshot"]["workflow_modules"]
-    assert [module["module_id"] for module in modules] == ["basic_generate", "upscale"]
+    assert [module["module_id"] for module in modules] == ["basic_generate", "fake_process"]
     for module in modules:
         assert module["module_version"] == "v1"
         assert module["provider"] == "mock"
@@ -177,16 +177,31 @@ def test_image_workbench_traces_root_generate_job(mock_client):
     assert response_original["seed"] == import_seed
 
 
-def test_manual_upscale_workbench_returns_original_generation_config(mock_client):
-    """图库手动高清（process Job）→ 从高清图打开工作台，恢复**来源原图**的生成配置。"""
+def test_manual_process_workbench_returns_original_generation_config(mock_client):
+    """图库手动处理型 Job（process）→ 从处理图打开工作台，恢复**来源原图**的生成配置。"""
+    from app.services import job_service
+
     job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=1)}).json()
     wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
     original = gallery(mock_client, job["id"])[0]
 
-    process = mock_client.post("/api/v1/images/upscale", json={"image_ids": [original["id"]]}).json()
-    assert process["job_kind"] == "process"
-    wait_for(mock_client, process["id"], lambda j: j["status"] == "COMPLETED")
-    upscaled = gallery(mock_client, process["id"])[0]
+    modules = [{
+        "module_id": "fake_process", "module_version": "v1", "provider": "mock",
+        "binding_version": "v1", "workflow_hash": None, "binding_hash": None,
+    }]
+    process_snapshot = make_snapshot(count=1, workflow_modules=[{"module_id": "fake_process"}])
+    process_snapshot.update(
+        prompt_mode="structured", structured_prompt={}, full_prompt="", negative_prompt="",
+        width=original["width"], height=original["height"],
+    )
+    with mock_client.app.state.session_factory() as session:
+        process, _ = job_service.create_job(
+            session, source="web", snapshot=process_snapshot, workflow_modules=modules,
+            job_kind="process", input_image_ids=[original["id"]],
+        )
+        process_id = process.id
+    wait_for(mock_client, process_id, lambda j: j["status"] == "COMPLETED")
+    upscaled = gallery(mock_client, process_id)[0]
 
     payload = mock_client.get(f"/api/v1/images/{upscaled['id']}/workbench").json()
     assert payload["snapshot"]["structured_prompt"]["style"] == "anime", \
@@ -232,7 +247,7 @@ def test_image_provenance_full_chain(mock_client, png_bytes):
     assert provenance["parent_image_id"] == original["id"]
     assert provenance["root_image_id"] == original["id"]
     assert provenance["stage_index"] == 1
-    assert provenance["module_id"] == "upscale" and provenance["module_version"] == "v1"
+    assert provenance["module_id"] == "fake_process" and provenance["module_version"] == "v1"
     assert provenance["provider"] == "mock" and provenance["binding_version"] == "v1"
     assert provenance["stage_item_id"] and provenance["stage_id"]
     assert provenance["seed"] is None

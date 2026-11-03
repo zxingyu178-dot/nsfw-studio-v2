@@ -197,7 +197,7 @@ describe('TaskDock Phase 0.17.1：收起态常驻阶段与真实 Step', () => {
           id: 'stg_2',
           job_id: 'job_running_1',
           stage_index: 1,
-          module_id: 'upscale',
+          module_id: 'process_stage',
           status: 'QUEUED',
           total_count: 2,
           completed_count: 0,
@@ -226,7 +226,7 @@ describe('TaskDock Phase 0.17.1：收起态常驻阶段与真实 Step', () => {
     expect(dock.textContent).toContain('Step 12/25')
   })
 
-  it('非采样阶段（如 upscale）不伪造 Step', () => {
+  it('非采样阶段不伪造 Step', () => {
     mockUseJobStore.mockReturnValue(
       storeWithQueue({
         queue: {

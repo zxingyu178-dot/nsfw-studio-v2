@@ -39,8 +39,6 @@ export interface GalleryDetailDrawerProps {
   onClose: () => void
   onUpdated: (image: ImageDTO) => void
   onSelectImage: (image: ImageDTO) => void
-  onUpscale: (imageId: string) => void
-  upscaling: boolean
   onUseAsInput: (image: ImageDTO) => void
   onReviewStart: (previous: ImageReviewStatus) => void
   onFavoriteStart: (previous: boolean) => void
@@ -49,7 +47,7 @@ export interface GalleryDetailDrawerProps {
 }
 
 export function GalleryDetailDrawer({
-  image, onClose, onUpdated, onSelectImage, onUpscale, upscaling,
+  image, onClose, onUpdated, onSelectImage,
   onUseAsInput, onReviewStart, onFavoriteStart, onPreviewLightbox, onDeleted,
 }: GalleryDetailDrawerProps) {
   const navigate = useNavigate()
@@ -282,7 +280,6 @@ export function GalleryDetailDrawer({
       <div className="gal-detail">
         <div className="gal-detail__preview" onDoubleClick={onPreviewLightbox} title="双击放大查看">
           <img src={imageContentUrl(image.id)} alt="" />
-          {image.kind === 'upscaled' && <span className="gal-detail__hd">HD</span>}
         </div>
 
         <section className="gal-detail-section" aria-labelledby="gal-overview-title">
@@ -369,9 +366,6 @@ export function GalleryDetailDrawer({
         <section className="gal-detail-section" aria-labelledby="gal-versions-title">
           <h3 id="gal-versions-title" className="gal-section-title">版本</h3>
           <div className="gal-version-links">
-            <Button size="sm" variant="secondary" disabled={upscaling} onClick={() => onUpscale(image.id)}>
-              {upscaling ? '提交中…' : '高清放大'}
-            </Button>
             {versions?.parent && (
               <Button size="sm" variant="ghost" onClick={() => onSelectImage(versions.parent as ImageDTO)}>
                 来源原图：{IMAGE_KIND_LABEL[versions.parent.kind] ?? versions.parent.kind} · 查看

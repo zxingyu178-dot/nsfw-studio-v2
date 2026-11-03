@@ -59,15 +59,6 @@ export const IconStar = (p: IconProps) => (
   </svg>
 )
 
-export const IconUpscale = (p: IconProps) => (
-  <svg {...base(p)}>
-    <polyline points="15 4 20 4 20 9" />
-    <polyline points="9 20 4 20 4 15" />
-    <line x1="20" y1="4" x2="14" y2="10" />
-    <line x1="4" y1="20" x2="10" y2="14" />
-  </svg>
-)
-
 export const IconImage = (p: IconProps) => (
   <svg {...base(p)}>
     <rect x="3" y="4" width="18" height="16" rx="2" />

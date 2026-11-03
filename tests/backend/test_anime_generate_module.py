@@ -4,7 +4,7 @@
 - 身份独立：module_id=anime_generate、标题/描述为动漫向（写实请用 basic_generate）；
 - /modules：registered + available（仓库内已有 comfyui binding）；
 - 端到端（Mock 引擎）：创建 → COMPLETED → kind=original / seed 记录 / 引擎请求参数正确；
-- anime_generate → upscale 链式合法。
+- anime_generate → 处理型测试替身 链式合法。
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -72,7 +72,7 @@ def test_anime_capabilities_mirror_basic_contract_with_anime_identity():
     anime = AnimeGenerateModule().capabilities()
     basic = BasicGenerateModule().capabilities()
     assert anime.module_id == "anime_generate" and anime.module_version == "v1"
-    assert "Anima" in anime.title and "动漫" in anime.title
+    assert "动漫" in anime.title
     assert anime.description != basic.description
     # 契约完全一致（尺寸/seed/输入/输出语义）
     assert anime.uses_seed is True
@@ -157,15 +157,15 @@ def test_anime_rejects_input_image(mock_client, png_bytes):
     assert response.json()["error"]["code"] == "UNUSED_INPUT_IMAGE"
 
 
-def test_anime_then_upscale_chain(mock_client, session):
+def test_anime_then_process_chain(mock_client, session):
     job = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(
             count=1,
-            workflow_modules=[{"module_id": "anime_generate"}, {"module_id": "upscale"}],
+            workflow_modules=[{"module_id": "anime_generate"}, {"module_id": "fake_process"}],
         ),
     }).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    assert [stage["module_id"] for stage in final["stages"]] == ["anime_generate", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["anime_generate", "fake_process"]
     stage1_item = final["stages"][1]["items"][0]
     assert stage1_item["input_image_id"] == final["stages"][0]["items"][0]["output_image_id"]
     upscaled = session.get(Image, stage1_item["output_image_id"])
@@ -175,6 +175,9 @@ def test_anime_then_upscale_chain(mock_client, session):
 # ===== /modules：注册 + 可用（binding 在仓库内） =====
 
 def test_modules_api_exposes_anime_generate(client):
+    # 当前产品默认已切到 v2；本用例锁定 v1 冻结版本的历史放行信息。
+    engine_cfg = client.app.state.settings.workflow.raw["engine"]
+    engine_cfg.setdefault("modules", {})["anime_generate"] = {"binding_version": "v1"}
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     anime = modules["anime_generate"]
     assert anime["registered"] is True
@@ -189,4 +192,4 @@ def test_modules_api_exposes_anime_generate(client):
     assert anime["release_status"]["default_profile_verified"] is False
     assert anime["is_generative"] is True
     assert anime["input_slots"] == []
-    assert anime["title"] == "动漫生图（Anima）"
+    assert anime["title"] == "动漫生图（MiaoMiao）"

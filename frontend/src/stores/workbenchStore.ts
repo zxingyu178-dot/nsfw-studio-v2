@@ -34,7 +34,7 @@ export interface WorkbenchState {
   seedMode: 'random' | 'fixed'
   seed: number | null
   /**
-   * 工作流模块列表（Phase 4 Task8）：真实状态是模块列表，不是 upscaleEnabled 布尔。
+   * 工作流模块列表（Phase 4 Task8）：真实状态是模块列表。
    * Phase 5.1 Task6：Primary Module 与生成模式必须一致——
    * 文生图 = basic_generate；图片生成 = 可用的图片条件模块（如 img2img）；
    * 普通新建：只携带 module_id；历史恢复（Task9）：携带完整执行身份。
@@ -103,11 +103,6 @@ export function useWorkbench(): WorkbenchState {
   return useSyncExternalStore(subscribeWorkbench, getWorkbenchState)
 }
 
-/** 派生值：高清放大是否开启（Task8：供 UI/进度展示，不再作为唯一状态） */
-export function hasUpscaleModule(modules: WorkflowModuleRef[]): boolean {
-  return modules.some((module) => module.module_id === 'upscale')
-}
-
 /**
  * 计划 §21：图片条件 Primary Module 的能力判断（不再用 output_kind==='processed' 猜）。
  *
@@ -155,7 +150,7 @@ export function textPrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): ModuleC
 }
 
 /** W1.2：图片生成候选（声明图片输入槽 + 生成型 + 允许 generate）。
- *  process 模块（如 upscale）由 isImageStartModule 单独表达，不能混入生成候选。 */
+ *  process 模块由 isImageStartModule 单独表达，不能混入生成候选。 */
 export function imagePrimaryCandidates(catalog: ModuleCapabilitiesDTO[]): ModuleCapabilitiesDTO[] {
   return catalog.filter(
     (m) =>
@@ -252,7 +247,7 @@ export function inputRoleLabel(role: 'source' | 'reference' | 'face_reference'):
 
 /** Task7/§21：可用的图片条件 Primary（能力判断）。
  *  W1.2：图片生成只接受 is_generative 且允许 generate 的图片输入模块；
- *  process 模块（upscale 等）不再混入生成候选。 */
+ *  process 模块不再混入生成候选。 */
 export function availableImageModuleIds(catalog: ModuleCapabilitiesDTO[]): string[] {
   return imagePrimaryCandidates(catalog).map((module) => module.module_id)
 }
@@ -270,8 +265,8 @@ export function isImageCapablePrimary(state: WorkbenchState): boolean {
  *   UI 不硬编码 basic_generate）；换模块时丢弃旧身份；
  * - 图片生成：primary 必须是**可用**的图片生成候选；恢复出的完整身份在可用时原样保留，
  *   不可用 / 是文生图模块（历史矛盾数据）时切换到目录中的候选（丢弃旧身份）；
- * - 非 Primary 模块（高清 / 未来 Reference 后处理…）**保持原有顺序与完整身份**：
- *   禁止重建裸 {module_id:'upscale'}，从 History / Recipe / Image 恢复出的
+ * - 非 Primary 模块（历史 Recipe / Image 恢复的后处理链）**保持原有顺序与完整身份**：
+ *   禁止重建裸模块引用，从 History / Recipe / Image 恢复出的
  *   module_version / provider / binding_version / 双 hash / config 必须原样保留；
  * - 切换模式不影响输入图片（回到图片模式不丢选择）。
  */
@@ -469,24 +464,6 @@ export function setSeed(seed: number | null): void {
   persistParams()
 }
 
-/** 工作流开关（§十五/Task8）：② 高清放大 —— 增删列表中的 upscale 模块（保留其余模块身份） */
-export function setUpscaleEnabled(enabled: boolean): void {
-  const base = state.workflowModules.filter((module) => module.module_id !== 'upscale')
-  let kept = base
-  if (kept.length === 0) {
-    // 目录未加载时不能凭 UI 猜测默认模块；加载后由服务端 is_default 校正
-    const defaultId =
-      state.mode === 'image'
-        ? availableImageModuleIds(state.moduleCatalog)[0]
-        : defaultTextModuleId(state.moduleCatalog)
-    kept = defaultId ? [{ module_id: defaultId }] : []
-  }
-  if (enabled && kept.length === 0) return
-  setState({
-    workflowModules: (enabled ? [...kept, { module_id: 'upscale' }] : kept).map((module) => ({ ...module })),
-  })
-}
-
 /** 生成模式切换（§二十 + Phase 5.1 Task6）：Primary Module 同步切换，禁止模式与模块自相矛盾 */
 export function setWorkbenchMode(mode: WorkbenchMode): void {
   const normalized = normalizeModules(state.workflowModules, mode, state.moduleCatalog)
@@ -534,7 +511,7 @@ export function setPrimaryModuleConfig(patch: Record<string, unknown>): void {
 /**
  * 切换 Primary Module（Phase 6 Task8：轻量选择器）：
  * 新选择为裸 {module_id}（身份由后端按当前默认版本解析）；
- * 非 Primary 模块（高清等）保持原顺序与完整身份。
+ * 非 Primary 模块（历史后处理链等）保持原顺序与完整身份。
  *
  * Phase 0.12 任务 11：切换时按新模块 input_slots 重映射已有输入图的 role——
  * 单张输入图自动 source ↔ reference 迁移，不静默丢图；

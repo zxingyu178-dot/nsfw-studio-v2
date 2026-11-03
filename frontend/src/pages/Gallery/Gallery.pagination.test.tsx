@@ -13,7 +13,6 @@ vi.mock('../../api/client', () => ({
     provenance: vi.fn(),
     review: vi.fn(),
     favorite: vi.fn(),
-    upscale: vi.fn(),
     workbench: vi.fn(),
     importFiles: vi.fn(),
     jobSummary: vi.fn(),

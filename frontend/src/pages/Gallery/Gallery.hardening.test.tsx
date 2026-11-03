@@ -15,7 +15,6 @@ vi.mock('../../api/client', () => ({
     review: vi.fn(),
     favorite: vi.fn(),
     setStatus: vi.fn(),
-    upscale: vi.fn(),
     workbench: vi.fn(),
     importFiles: vi.fn(),
     jobSummary: vi.fn(),

@@ -11,7 +11,7 @@
   - ``input_required=true`` 的模块缺少输入图 → ``INPUT_IMAGE_REQUIRED``；
 - Stage N（N>0）必须能接收 Stage N-1 的输出（output_kind → input_kind 链式检查）；
 - Job kind 能力驱动（Phase 7 Task2）：模块必须声明允许当前 job_kind（allowed_job_kinds），
-  处理型 Job 的首个模块必须 can_start_from_image=true——不再硬编码"process 必须 upscale"，
+  处理型 Job 的首个模块必须 can_start_from_image=true——不再硬编码"process 必须某个特定模块"，
   未来新增处理模块（Face Repair / 背景移除）只需声明能力，不需要修改本 Validator。
 
 顺序语义（Task4）：Validator 只判断"这条 Pipeline 是否合法"，**绝不重排**——
@@ -94,7 +94,7 @@ class PipelineValidator:
                     code="MODULE_CONFIG_INVALID",
                 )
 
-        # 2) Job kind 能力驱动（Phase 7 Task2）：不再硬编码"process 必须且只能是 upscale"——
+        # 2) Job kind 能力驱动（Phase 7 Task2）：不再硬编码"process 必须且只能是某个特定模块"——
         #    - 每个模块必须声明允许当前 job_kind（allowed_job_kinds）；
         #    - 处理型 Job（每个 JobItem = 一张已有图片）的**首个模块**必须
         #      can_start_from_image=true（以已有图片为起点）。

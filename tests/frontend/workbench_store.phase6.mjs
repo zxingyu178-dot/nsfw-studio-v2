@@ -5,8 +5,8 @@
  * 用 frontend 已安装的 vite 以 SSR 方式加载**真实** workbenchStore.ts，
  * 锁定运行时行为（类型正确性由 npm run build 的 tsc 承担）：
  *
- * - Task2：pinned upscale / img2img 完整身份 hydrate → setModuleCatalog → snapshot
- *   双 hash / config 完全不丢；normalizeModules 不再重建裸 {module_id:'upscale'}；
+ * - Task2：pinned 处理型模块 / img2img 完整身份 hydrate → setModuleCatalog → snapshot
+ *   双 hash / config 完全不丢；normalizeModules 不再重建裸模块引用；
  * - Task7：generation_mode 明确恢复（无该字段时按 input_images 推断）。
  *
  * 运行：frontend 目录 `npm run test:store`（或任意目录 node tests/frontend/workbench_store.phase6.mjs）。
@@ -70,13 +70,14 @@ const CATALOG = [
     ],
   },
   {
-    module_id: 'upscale',
+    module_id: 'process_only',
     available: true,
-    input_required: false,
-    output_kind: 'upscaled',
+    input_required: true,
+    output_kind: 'processed',
     size_mode: 'input',
     is_generative: false,
-    allowed_job_kinds: ['generate', 'process'],
+    allowed_job_kinds: ['process'],
+    input_slots: [{ role: 'source', required: true, max_count: 1 }],
     parameters: [],
   },
   // 未来模块演示：Reference 只需新增声明，前端无需重写 SettingsPane（Task8）
@@ -112,13 +113,13 @@ const PINNED_IMG2IMG = {
   binding_hash: 'bnh_img2img',
   config: { denoise: 0.55 },
 }
-const PINNED_UPSCALE = {
-  module_id: 'upscale',
+const PINNED_PROCESS = {
+  module_id: 'process_only',
   module_version: 'v1',
   provider: 'comfyui',
   binding_version: 'v1',
-  workflow_hash: 'wfh_upscale',
-  binding_hash: 'bnh_upscale',
+  workflow_hash: 'wfh_process',
+  binding_hash: 'bnh_process',
   config: {},
 }
 
@@ -147,51 +148,51 @@ try {
 
   console.log('Phase 6 frontend store regression:')
 
-  // ===== Task2：pinned upscale 完整身份（文生图恢复）不丢 =====
-  await run('hydrate(text) 保留 pinned basic + pinned upscale 完整身份', () => {
+  // ===== Task2：pinned 处理型模块完整身份（文生图恢复）不丢 =====
+  await run('hydrate(text) 保留 pinned basic + pinned 处理型模块完整身份', () => {
     store.resetWorkbench()
     store.hydrateWorkbench(makeSnapshot({
-      workflow_modules: [PINNED_BASIC, PINNED_UPSCALE],
+      workflow_modules: [PINNED_BASIC, PINNED_PROCESS],
     }))
     const state = store.getWorkbenchState()
     assert.equal(state.mode, 'text')
     assert.equal(state.workflowModules.length, 2)
-    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE,
-      'Task2：禁止重建裸 {module_id:"upscale"}，双 hash / config 必须原样保留')
+    assert.deepEqual(state.workflowModules[1], PINNED_PROCESS,
+      'Task2：禁止重建裸 {module_id:"process_only"}，双 hash / config 必须原样保留')
     assert.deepEqual(state.workflowModules[0], PINNED_BASIC)
   })
 
   await run('setModuleCatalog 后身份仍不丢；snapshot 双 hash / config 完全一致', () => {
     store.setModuleCatalog(CATALOG)
     let state = store.getWorkbenchState()
-    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE,
-      'Task2：目录到达后 normalizeModules 不得破坏 pinned upscale')
+    assert.deepEqual(state.workflowModules[1], PINNED_PROCESS,
+      'Task2：目录到达后 normalizeModules 不得破坏 pinned 处理型模块')
     const snapshot = store.snapshotFromState()
-    assert.deepEqual(snapshot.workflow_modules, [PINNED_BASIC, PINNED_UPSCALE])
+    assert.deepEqual(snapshot.workflow_modules, [PINNED_BASIC, PINNED_PROCESS])
     assert.deepEqual(snapshot.workflow_modules[1].config, {})
-    assert.equal(snapshot.workflow_modules[1].workflow_hash, 'wfh_upscale')
-    assert.equal(snapshot.workflow_modules[1].binding_hash, 'bnh_upscale')
+    assert.equal(snapshot.workflow_modules[1].workflow_hash, 'wfh_process')
+    assert.equal(snapshot.workflow_modules[1].binding_hash, 'bnh_process')
     state = store.getWorkbenchState()
     assert.equal(state.mode, 'text')
   })
 
-  // ===== Task2：图片生成恢复（img2img + pinned upscale）身份不丢 =====
-  await run('hydrate(image) 保留 pinned img2img（含 denoise）+ pinned upscale', () => {
+  // ===== Task2：图片生成恢复（img2img + pinned 处理型模块）身份不丢 =====
+  await run('hydrate(image) 保留 pinned img2img（含 denoise）+ pinned 处理型模块', () => {
     store.resetWorkbench()
     store.setModuleCatalog(CATALOG)
     store.hydrateWorkbench(makeSnapshot({
       input_images: [{ role: 'source', image_id: 'img_0001' }],
-      workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
+      workflow_modules: [PINNED_IMG2IMG, PINNED_PROCESS],
     }))
     const state = store.getWorkbenchState()
     assert.equal(state.mode, 'image')
     assert.deepEqual(state.workflowModules[0], PINNED_IMG2IMG)
-    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE)
+    assert.deepEqual(state.workflowModules[1], PINNED_PROCESS)
     const snapshot = store.snapshotFromState()
     assert.deepEqual(snapshot.input_images, [{ role: 'source', image_id: 'img_0001' }])
     assert.deepEqual(snapshot.workflow_modules[0].config, { denoise: 0.55 })
     assert.equal(snapshot.workflow_modules[0].binding_hash, 'bnh_img2img')
-    assert.equal(snapshot.workflow_modules[1].binding_hash, 'bnh_upscale')
+    assert.equal(snapshot.workflow_modules[1].binding_hash, 'bnh_process')
     assert.equal(state.workflowModules[0].module_version, 'v1')
   })
 
@@ -200,29 +201,13 @@ try {
     store.setModuleCatalog([]) // 模拟 /modules 尚未加载或全部不可用
     store.hydrateWorkbench(makeSnapshot({
       input_images: [{ role: 'source', image_id: 'img_0001' }],
-      workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
+      workflow_modules: [PINNED_IMG2IMG, PINNED_PROCESS],
     }))
     const state = store.getWorkbenchState()
     // catalog 为空：无法确认可用性 → 保留现状（Gate 阻止提交，而不是换成 basic_generate）
     assert.deepEqual(state.workflowModules[0], PINNED_IMG2IMG)
-    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE)
+    assert.deepEqual(state.workflowModules[1], PINNED_PROCESS)
     assert.equal(store.isImageCapablePrimary(state), false, 'Gate：目录未就绪时不得判定可提交')
-  })
-
-  // ===== Task2：只有用户手动开启高清才创建裸 upscale =====
-  await run('手动开启/关闭高清：仅裸 {module_id:"upscale"}，其余模块身份保留', () => {
-    store.resetWorkbench()
-    store.setModuleCatalog(CATALOG)
-    store.hydrateWorkbench(makeSnapshot({ workflow_modules: [PINNED_BASIC] }))
-    store.setUpscaleEnabled(true)
-    let state = store.getWorkbenchState()
-    assert.deepEqual(state.workflowModules.map((m) => m.module_id), ['basic_generate', 'upscale'])
-    assert.deepEqual(state.workflowModules[1], { module_id: 'upscale' }, '首次手动开启 = 裸模块，由后端解析身份')
-    assert.deepEqual(state.workflowModules[0], PINNED_BASIC)
-    store.setUpscaleEnabled(false)
-    state = store.getWorkbenchState()
-    assert.deepEqual(state.workflowModules.map((m) => m.module_id), ['basic_generate'])
-    assert.deepEqual(state.workflowModules[0], PINNED_BASIC)
   })
 
   // ===== Task7：generation_mode 以显式字段为准（无字段时向后兼容推断）=====
@@ -286,13 +271,13 @@ try {
     assert.equal(snapshot.workflow_modules[0].config.denoise, 0.8)
   })
 
-  await run('Task8：Primary Module 选择器——新模块为裸引用，非 Primary（高清）身份完整保留', () => {
+  await run('Task8：Primary Module 选择器——新模块为裸引用，非 Primary（处理型）身份完整保留', () => {
     store.resetWorkbench()
     store.setModuleCatalog(CATALOG)
     store.hydrateWorkbench(makeSnapshot({
       generation_mode: 'image',
       input_images: [{ role: 'source', image_id: 'img_0001' }],
-      workflow_modules: [PINNED_IMG2IMG, PINNED_UPSCALE],
+      workflow_modules: [PINNED_IMG2IMG, PINNED_PROCESS],
     }))
     // 未来 Reference 模块：仅凭 catalog 声明即可出现在选择器候选（前端零改动）。
     // W1.2 起使用 imagePrimaryCandidates（generate 语义）；process 的 isImageStartModule 不再混用。
@@ -302,7 +287,7 @@ try {
     store.setPrimaryModule('reference_generate')
     const state = store.getWorkbenchState()
     assert.deepEqual(state.workflowModules[0], { module_id: 'reference_generate' })
-    assert.deepEqual(state.workflowModules[1], PINNED_UPSCALE, '切换 primary 不得破坏高清模块身份')
+    assert.deepEqual(state.workflowModules[1], PINNED_PROCESS, '切换 primary 不得破坏处理型模块身份')
   })
 
   await run('历史矛盾数据（图片模式 + basic_generate + 输入图）→ 校正为可用图片模块', () => {

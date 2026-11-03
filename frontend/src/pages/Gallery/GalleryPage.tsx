@@ -73,7 +73,6 @@ export default function GalleryPage() {
   const [detail, setDetail] = useState<ImageDTO | null>(null)
   const detailTimer = useRef<number | null>(null)
 
-  const [upscaling, setUpscaling] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
   const [pendingBatchReview, setPendingBatchReview] = useState<PendingBatchReview | null>(null)
@@ -184,23 +183,6 @@ export default function GalleryPage() {
   function openLightboxAt(image: ImageDTO): void {
     const index = query.items.findIndex((item) => item.id === image.id)
     if (index >= 0) setLightboxIndex(index)
-  }
-
-  async function submitUpscale(imageIds: string[]): Promise<unknown> {
-    if (imageIds.length === 0) return null
-    setUpscaling(true)
-    setNotice(null)
-    try {
-      const job = await imageApi.upscale(imageIds)
-      setNotice({ text: `已创建高清任务 ${shortJobId(job.id)}（${imageIds.length} 张），完成后可在图库查看高清版本` })
-      selection.exitSelect()
-      return job
-    } catch (err) {
-      query.setError(err instanceof ApiRequestError ? err.message : '创建高清任务失败')
-      return null
-    } finally {
-      setUpscaling(false)
-    }
   }
 
   async function selectCurrentFilter(): Promise<void> {
@@ -511,11 +493,9 @@ export default function GalleryPage() {
       {selection.selectMode && (
         <GallerySelectionBar
           count={selection.selectedIds.length}
-          upscaling={upscaling}
           selectingAll={selectingAll}
           busy={batchBusy}
           onSelectAll={() => void selectCurrentFilter()}
-          onUpscale={() => void submitUpscale(selection.selectedIds)}
           onBatchKeep={() => requestBatchReview('KEEP')}
           onBatchReject={() => requestBatchReview('REJECT')}
           onBatchArchive={() => requestBatchReview('ARCHIVED')}
@@ -599,8 +579,6 @@ export default function GalleryPage() {
             setDetail(image)
             query.applyItemUpdated(image)
           }}
-          onUpscale={(imageId) => void submitUpscale([imageId])}
-          upscaling={upscaling}
           onUseAsInput={useAsInput}
           onReviewStart={(prev) => recordUndo({ imageId: detail.id, status: prev, label: '审核修改' })}
           onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}

@@ -63,19 +63,19 @@ describe('jobStore liveProgress（v0.15 Task 8 / v0.15.1 stage_item_id）', () =
     expect(liveProgressForStageItem(getJobStoreState(), 'stage_item_1')?.step).toBe(17)
   })
 
-  it('同一 job_item_id 的 basic/upscale 两个 stage_item 进度互不覆盖（多阶段隔离）', () => {
+  it('同一 job_item_id 的多阶段 stage_item 进度互不覆盖（多阶段隔离）', () => {
     // stage0 基础生成采样中
     handleJobEvent(progressEvent({
       payload: { progress: 0.5, stage: 'sampling', stage_index: 0, step: 15, max_step: 30, stage_item_id: 'stage_item_1' },
     }))
-    // 同一 job_item_id（item_1）进入 stage1 放大：必须是另一条 key，不覆盖 stage0
+    // 同一 job_item_id（item_1）进入 stage1：必须是另一条 key，不覆盖 stage0
     handleJobEvent(progressEvent({
-      payload: { progress: 0.8, stage: 'upscale', stage_index: 1, step: null, max_step: null, stage_item_id: 'stage_item_2' },
+      payload: { progress: 0.8, stage: 'process_stage', stage_index: 1, step: null, max_step: null, stage_item_id: 'stage_item_2' },
     }))
     const map = getJobStoreState().liveProgressByStageItem
     expect(map['stage_item_1'].step).toBe(15)
     expect(map['stage_item_2'].step).toBeNull()
-    expect(map['stage_item_2'].engineStage).toBe('upscale')
+    expect(map['stage_item_2'].engineStage).toBe('process_stage')
   })
 
   it('progress SSE 不每个 tick 触发全量回源（不调 GET /queue、/engine/status）', () => {
@@ -120,7 +120,7 @@ describe('jobStore liveProgress（v0.15 Task 8 / v0.15.1 stage_item_id）', () =
       payload: { progress: 1, stage: 'save_image', stage_index: 0, step: null, max_step: null, stage_item_id: 'stage_item_1' },
     }))
     handleJobEvent(progressEvent({
-      payload: { progress: 0.8, stage: 'upscale', stage_index: 1, step: null, max_step: null, stage_item_id: 'stage_item_2' },
+      payload: { progress: 0.8, stage: 'process_stage', stage_index: 1, step: null, max_step: null, stage_item_id: 'stage_item_2' },
     }))
 
     // 后端事实源：stage0 已完成、stage1 仍在运行（共用 job_item_id=item_1）
@@ -133,7 +133,7 @@ describe('jobStore liveProgress（v0.15 Task 8 / v0.15.1 stage_item_id）', () =
           items: [{ id: 'stage_item_1', job_item_id: 'item_1', status: 'COMPLETED', progress: 1, item_index: 0 }],
         },
         {
-          id: 's1', stage_index: 1, module_id: 'upscale', status: 'RUNNING',
+          id: 's1', stage_index: 1, module_id: 'process_stage', status: 'RUNNING',
           total_count: 1, completed_count: 0, current_item: 0,
           items: [{ id: 'stage_item_2', job_item_id: 'item_1', status: 'RUNNING', progress: 0.8, item_index: 0 }],
         },
@@ -145,6 +145,6 @@ describe('jobStore liveProgress（v0.15 Task 8 / v0.15.1 stage_item_id）', () =
     const map = getJobStoreState().liveProgressByStageItem
     expect(map['stage_item_1']).toBeUndefined()
     expect(map['stage_item_2']).toBeDefined()
-    expect(map['stage_item_2'].engineStage).toBe('upscale')
+    expect(map['stage_item_2'].engineStage).toBe('process_stage')
   })
 })

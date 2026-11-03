@@ -1,0 +1,60 @@
+# img2img v3 — ComfyUI Provider Binding（W4.0）
+#
+# 基础 = 现有 v2（denoise 0.8 / 25 步 / cfg1 / euler simple），唯一变化：
+# VAE 换成官方推荐的 texture-fix 解码器。v1 / v2 全部冻结，历史 Job 不受影响。
+#
+# 图结构：LoadImage → VAEEncode → TextEncodeQwenImage21 → KSampler(denoise)
+#         → VAEDecode → SaveImage
+
+binding_version: v3
+module: img2img
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（input_image = 已上传的引擎侧引用名）
+inputs:
+  input_image:     {node: "4", field: "image"}
+  positive_prompt: {node: "6", field: "prompt"}
+  negative_prompt: {node: "6", field: "negative_prompt"}
+  seed:            {node: "7", field: "seed"}
+  denoise:         {node: "7", field: "denoise"}
+
+# 固定默认（denoise 不在 defaults 中——由模块 config 注入，defaults 会覆盖 inputs）
+defaults:
+  "6": {resolution: 1024}
+  "7": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  denoise_range: {min: 0.05, max: 1.0, default: 0.8}
+  output_size: input_image          # 输出尺寸 = 输入尺寸（VAEEncode 决定）
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: UnetLoaderGGUF, source: custom, package: ComfyUI-GGUF, version: unverified}
+    - {class_type: CLIPLoader, source: comfyui_core}
+    - {class_type: VAELoader, source: comfyui_core}
+    - {class_type: LoadImage, source: comfyui_core}
+    - {class_type: VAEEncode, source: comfyui_core}
+    - {class_type: TextEncodeQwenImage21, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: diffusion_models, filename: qwen-image-2.1-UC-Q4_0.gguf, sha256: unverified, precision: q4_0}
+    - {type: text_encoders, filename: qwen3vl_8b_w4a8.safetensors, sha256: unverified, precision: w4a8}
+    - {type: vae, filename: texture_fix_vae_for_qwen_image_2.1_bf16.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: unverified
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  notes: "v2 的 768 档实测 496s（docs/PHASE51_REPORT.md）；v3 仅换 VAE，未重新做 G4"

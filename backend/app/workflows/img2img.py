@@ -1,6 +1,6 @@
 """Img2ImgModule — 第三套正式 WorkflowModule（Phase 5.1 Gate C 成功路径）。
 
-- 输入图片经 EngineAdapter.upload_input_image 正式契约上传（同 UpscaleModule §十三）；
+- 输入图片经 EngineAdapter.upload_input_image 正式契约上传；
 - 标准输入：input_image + Prompt/Negative + Seed + denoise（模块参数唯一来源 = JobStage.config_json，
   由 PipelineExecutor 注入 JobRequestContext.module_config）；
 - 输出 kind=processed / parent_policy=input_image / seed 进入 StageItem（由通用层落库）；

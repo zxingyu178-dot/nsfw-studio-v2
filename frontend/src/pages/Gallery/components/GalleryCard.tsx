@@ -68,7 +68,6 @@ export function GalleryCard({
       </span>
       <span className="gal-card__overlay">
         <span className="gal-card__overlay-meta">
-          {image.kind === 'upscaled' && <span className="gal-card__overlay-hd">HD</span>}
           {image.width}×{image.height} · {IMAGE_STATUS_LABEL[status]}
           {imported && <span className="gal-card__overlay-import">导入</span>}
         </span>

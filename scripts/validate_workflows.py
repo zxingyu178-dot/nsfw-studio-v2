@@ -30,7 +30,6 @@ LEGACY_BINDINGS = {
     ("img2img", "v1"),
     ("reference_generate", "v1"),
     ("anime_generate", "v1"),
-    ("upscale", "v1"),
 }
 
 # 精确白名单：禁止用 startswith 把未知节点误判为核心节点。
@@ -46,8 +45,7 @@ CORE_NODE_TYPES = {
     "TextEncodeQwenImage21",
     "CLIPTextEncode",
     "UNETLoader",
-    "UpscaleModelLoader",
-    "ImageUpscaleWithModel",
+    "CheckpointLoaderSimple",
     "LoraLoader",
     "LoraLoaderModelOnly",
 }
@@ -64,8 +62,7 @@ NODE_OUTPUT_COUNTS = {
     "TextEncodeQwenImage21": 3,  # positive / negative / latent
     "CLIPTextEncode": 1,
     "UNETLoader": 1,
-    "UpscaleModelLoader": 1,
-    "ImageUpscaleWithModel": 1,
+    "CheckpointLoaderSimple": 3,
     "LoraLoader": 2,
     "LoraLoaderModelOnly": 1,
     "UnetLoaderGGUF": 1,
@@ -73,18 +70,17 @@ NODE_OUTPUT_COUNTS = {
 MODEL_FIELDS = {
     "UnetLoaderGGUF": "unet_name",
     "UNETLoader": "unet_name",
+    "CheckpointLoaderSimple": "ckpt_name",
     "CLIPLoader": "clip_name",
     "VAELoader": "vae_name",
     "LoraLoader": "lora_name",
     "LoraLoaderModelOnly": "lora_name",
-    "UpscaleModelLoader": "model_name",
 }
 REQUIRED_INPUTS = {
     "basic_generate": {"positive_prompt", "negative_prompt", "width", "height", "seed"},
     "anime_generate": {"positive_prompt", "negative_prompt", "width", "height", "seed"},
     "img2img": {"input_image", "positive_prompt", "negative_prompt", "seed", "denoise"},
     "reference_generate": {"input_image", "positive_prompt", "negative_prompt", "seed", "resolution"},
-    "upscale": {"input_image"},
 }
 PROFILE_REQUIRED_FIELDS = (
     "width", "height", "steps", "cfg", "sampler", "scheduler", "batch_size",
@@ -434,6 +430,32 @@ def validate_binding(binding_dir: Path, root: Path, result: Result) -> None:
             result.error(f"{label}: 禁止把模型/图片/日志放入 binding 目录: {path.name}")
 
 
+def _discover_binding_dirs(root: Path, providers: Path) -> list[Path]:
+    """G0 校验范围：git 仓库内只校验已跟踪 binding；非 git 目录回退为全量扫描。
+
+    - 仓库根：`git ls-files workflows/providers` → 只有已入库的 binding 才算“当前仓库”；
+      本地未跟踪的草稿目录（尚未 add）与归档后残留空目录不参与 G0；
+    - 临时目录 / 非 git root：回退为文件系统全量扫描（负向测试仍能发现坏图）。
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--", "workflows/providers"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        completed = None
+    if completed is not None and completed.returncode == 0:
+        dirs = {
+            (root / line.strip()).parent
+            for line in completed.stdout.splitlines()
+            if line.strip().endswith("binding.yaml") and (root / line.strip()).is_file()
+        }
+        dirs = {path for path in dirs if path.is_dir()}
+        if dirs:
+            return sorted(dirs)
+    return sorted(path for path in providers.glob("*/*/*") if path.is_dir())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="G0 workflow static validator")
     parser.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
@@ -445,7 +467,7 @@ def main() -> int:
         return 2
 
     result = Result()
-    binding_dirs = sorted(path for path in providers.glob("*/*/*") if path.is_dir())
+    binding_dirs = _discover_binding_dirs(root, providers)
     for binding_dir in binding_dirs:
         validate_binding(binding_dir, root, result)
     _scan_tracked_weights(root, result)

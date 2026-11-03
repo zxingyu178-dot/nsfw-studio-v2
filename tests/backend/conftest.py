@@ -59,6 +59,44 @@ from app.services.system_service import bootstrap
 
 
 @pytest.fixture()
+def process_registry(monkeypatch: pytest.MonkeyPatch):
+    """测试用注册表：产品默认 4 模块 + 「处理型测试替身」（替代已下线 upscale）。"""
+    from app.engine import release
+    from app.workflows.registry import ModuleRegistry, default_registry
+    from fake_process_module import FakeProcessModule
+
+    base = default_registry()
+    registry = ModuleRegistry([base.get(module_id) for module_id in base.ids()] + [FakeProcessModule()])
+
+    def _registry() -> ModuleRegistry:
+        return registry
+
+    # 测试替身只存在于测试进程：放行清单同步补一条 ready 条目，避免被正式放行门禁误伤。
+    manifest = dict(release.load_release_manifest())
+    modules = dict(manifest.get("modules") or {})
+    modules["fake_process"] = {
+        "bindings": {
+            "v1": {
+                "dependencies_ready": True,
+                "real_gate_passed": True,
+                "hardware_status": "normal",
+                "default_profile_verified": False,
+            }
+        }
+    }
+    manifest["modules"] = modules
+    monkeypatch.setattr("app.engine.release.load_release_manifest", lambda: manifest)
+
+    monkeypatch.setattr("app.workflows.registry.default_registry", _registry)
+    monkeypatch.setattr("app.workflows.default_registry", _registry)
+    monkeypatch.setattr("app.workflows.pipeline.default_registry", _registry)
+    monkeypatch.setattr("app.api.v1.modules.default_registry", _registry)
+    monkeypatch.setattr("app.services.pipeline_validator.default_registry", _registry)
+    monkeypatch.setattr("app.services.agent_service.default_registry", _registry)
+    return registry
+
+
+@pytest.fixture()
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("NSFW_STUDIO_DATA_ROOT", str(tmp_path / "data"))
     return load_settings()

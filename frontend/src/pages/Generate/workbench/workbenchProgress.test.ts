@@ -1,7 +1,7 @@
 /**
  * Canvas Progress HUD 计算合同（v0.15 Task 9/13）：
  * - 总进度按全部 Stage 工作单元加权，不能用当前 stage 冒充；
- * - Step 仅在真实采样 step/maxStep 有值时显示；upscale 等非采样阶段必须 indeterminate（处理中…），绝不伪造。
+ * - Step 仅在真实采样 step/maxStep 有值时显示；非采样阶段必须 indeterminate（处理中…），绝不伪造。
  */
 import { describe, expect, it } from 'vitest'
 import { hudSnapshot, workOverall } from './workbenchProgress'
@@ -40,17 +40,17 @@ describe('workOverall：跨 Stage 工作单元加权', () => {
     expect(workOverall(job, {})).toBe(31)
   })
 
-  it('basic+upscale 双阶段：总进度=(2+0.5+0)/16，不能用当前 stage 冒充整体', () => {
-    const upscale = {
+  it('basic+process 双阶段：总进度=(2+0.5+0)/16，不能用当前 stage 冒充整体', () => {
+    const processStage = {
       id: 'st_up',
       stage_index: 1,
-      module_id: 'upscale',
+      module_id: 'process_stage',
       status: 'PENDING',
       total_count: 8,
       completed_count: 0,
       items: [],
     }
-    const job = makeJob({ stages: [basicStage(), upscale] })
+    const job = makeJob({ stages: [basicStage(), processStage] })
     // 2.5 / 16 = 15.625% → 16%
     expect(workOverall(job, {})).toBe(16)
   })
@@ -63,7 +63,7 @@ describe('workOverall：跨 Stage 工作单元加权', () => {
   })
 })
 
-describe('hudSnapshot：Step 仅采样型，upscale 处理中', () => {
+describe('hudSnapshot：Step 仅采样型，非采样阶段处理中', () => {
   it('basic 采样：有 step/maxStep 时返回真实 Step，不 indeterminate', () => {
     const job = makeJob({ stages: [basicStage()] })
     const live: Record<string, LiveProgress> = { si_run: { progress: 0.5, step: 10, maxStep: 20, updatedAt: 1 } }
@@ -78,7 +78,7 @@ describe('hudSnapshot：Step 仅采样型，upscale 处理中', () => {
     expect(hud.stageCount).toBe(1)
   })
 
-  it('upscale 阶段：即使 step=null 也显示“高清放大/处理中”，绝不伪造 Step', () => {
+  it('非采样阶段：即使 step=null 也显示“处理中”，绝不伪造 Step', () => {
     const basicDone = {
       id: 'st_basic',
       stage_index: 0,
@@ -91,17 +91,17 @@ describe('hudSnapshot：Step 仅采样型，upscale 处理中', () => {
     const upRunning = {
       id: 'st_up',
       stage_index: 1,
-      module_id: 'upscale',
+      module_id: 'process_stage',
       status: 'RUNNING',
       total_count: 8,
       completed_count: 1,
       items: [{ id: 'si_up', job_item_id: 'it_up', status: 'RUNNING', item_index: 1, progress: 0.25 }],
     }
     const job = makeJob({ stages: [basicDone, upRunning] })
-    // upscale 引擎不给 step（save_image 类）
+    // 非采样引擎不给 step（save_image 类）
     const live: Record<string, LiveProgress> = { si_up: { progress: 0.25, step: null, maxStep: null, updatedAt: 1 } }
     const hud = hudSnapshot(job, live)
-    expect(hud.stageLabel).toBe('高清放大')
+    expect(hud.stageLabel).toBe('process_stage')
     expect(hud.step).toBeNull()
     expect(hud.maxStep).toBeNull()
     expect(hud.indeterminate).toBe(true)

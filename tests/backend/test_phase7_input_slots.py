@@ -30,7 +30,7 @@ from app.workflows.base import (
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
 from app.workflows.registry import ModuleRegistry
-from app.workflows.upscale import UpscaleModule
+from fake_process_module import FakeProcessModule
 
 
 def mock_settings(settings: Settings, **options) -> Settings:
@@ -114,7 +114,7 @@ class _FakeReferenceModule(WorkflowModule):
 
 def _registry() -> ModuleRegistry:
     return ModuleRegistry([
-        BasicGenerateModule(), Img2ImgModule(), UpscaleModule(), _FakeReferenceModule(),
+        BasicGenerateModule(), Img2ImgModule(), FakeProcessModule(), _FakeReferenceModule(),
     ])
 
 
@@ -125,8 +125,8 @@ def test_module_input_slot_declarations():
     assert [(slot.role, slot.required, slot.max_count) for slot in img2img_slots] == [
         ("source", True, 1),
     ]
-    upscale_slots = UpscaleModule().capabilities().input_slots
-    assert [(slot.role, slot.required, slot.max_count) for slot in upscale_slots] == [
+    process_slots = FakeProcessModule().capabilities().input_slots
+    assert [(slot.role, slot.required, slot.max_count) for slot in process_slots] == [
         ("source", True, 1),
     ]
     assert BasicGenerateModule().capabilities().input_slots == ()
@@ -177,7 +177,7 @@ def test_validator_slot_role_required_and_limit():
                 input_slots=(InputSlotSpec("reference", required=False, max_count=2),),
             )
 
-    registry = ModuleRegistry([BasicGenerateModule(), Img2ImgModule(), UpscaleModule(), _TwoRefModule()])
+    registry = ModuleRegistry([BasicGenerateModule(), Img2ImgModule(), FakeProcessModule(), _TwoRefModule()])
     PipelineValidator(registry=registry).validate(
         [{"module_id": "two_ref"}], job_kind="generate", has_input_image=True,
         input_roles={"reference": 2},
@@ -249,5 +249,5 @@ def test_modules_api_exposes_input_slots(client):
         "role": "source", "required": True, "max_count": 1,
         "description": "图生图输入（来源图片，来自 Studio 图库）",
     }]
-    assert modules["upscale"]["input_slots"][0]["role"] == "source"
+    assert "upscale" not in modules
     assert modules["basic_generate"]["input_slots"] == []

@@ -186,10 +186,10 @@ def test_preflight_cache_hit_and_ttl_refresh(settings, monkeypatch):
 def test_multi_module_pipeline_checked(settings):
     http, calls = make_http()
     result = service(settings, FakeComfyAdapter(), http).check_modules([
-        module_identity("basic_generate"), module_identity("upscale"),
+        module_identity("basic_generate"), module_identity("img2img"),
     ])
     assert result["status"] == "READY"
-    assert [item["module_id"] for item in result["modules"]] == ["basic_generate", "upscale"]
+    assert [item["module_id"] for item in result["modules"]] == ["basic_generate", "img2img"]
     assert "/object_info/KSampler" in calls
 
 
@@ -273,7 +273,7 @@ def test_jobs_gate_blocks_without_prompt_or_job(settings, session, monkeypatch):
         preflight.RuntimePreflightService, "check_modules",
         lambda self, modules: _blocked_result(),
     )
-    app = create_app(settings)  # 默认 comfyui provider；检测被 Mock 为 BLOCKED
+    app = create_app(_mock_settings(settings))  # 本用例只验证 preflight Gate；与正式放行解耦
     before = (session.query(Prompt).count(), session.query(Job).count(), session.query(JobStage).count())
     with TestClient(app) as client:
         response = client.post("/api/v1/jobs", json={
@@ -298,7 +298,7 @@ def test_agent_gate_blocks_without_prompt_or_job(settings, session, monkeypatch)
         preflight.RuntimePreflightService, "check_modules",
         lambda self, modules: _blocked_result(),
     )
-    app = create_app(settings)
+    app = create_app(_mock_settings(settings))  # 本用例只验证 preflight Gate；与正式放行解耦
     before = (session.query(Prompt).count(), session.query(Job).count(), session.query(JobStage).count())
     with TestClient(app) as client:
         response = client.post(

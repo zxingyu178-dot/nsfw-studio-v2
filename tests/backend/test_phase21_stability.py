@@ -263,7 +263,7 @@ def test_registry_rejects_unknown_module():
         default_registry().get("unknown_module", "v1")
     assert excinfo.value.error_type == "WORKFLOW_ERROR"
     assert default_registry().has("basic_generate", "v1")
-    assert default_registry().has("upscale", "v1"), "Phase 3 §十一：高清模块已注册"
+    assert not default_registry().has("upscale", "v1"), "upscale 模块已下线，不再注册"
 
 
 # ===== §五：Resume 必须使用新随机 Seed =====

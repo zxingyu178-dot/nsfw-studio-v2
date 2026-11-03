@@ -53,7 +53,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -121,34 +121,34 @@ def test_workbench_import_then_img2img_restores_img2img(mock_client, session, pn
     assert body["snapshot"]["seed_mode"] == "random"
 
 
-def test_workbench_img2img_then_upscale_still_restores_img2img(mock_client, session, png_bytes):
-    """import → img2img → upscale（同一 generate Job 内嵌后处理）：仍恢复 Img2Img，
-    Seed 取 img2img Stage 的真实 Seed（upscale 输出 Seed 为 NULL，不能拿它当上下文）。"""
+def test_workbench_img2img_then_process_still_restores_img2img(mock_client, session, png_bytes):
+    """import → img2img → 处理型 Stage（同一 generate Job 内嵌后处理）：仍恢复 Img2Img，
+    Seed 取 img2img Stage 的真实 Seed（处理型输出 Seed 为 NULL，不能拿它当上下文）。"""
     source = import_one(mock_client, "p6_chain_src.png", png_bytes)
     final = run_generate(mock_client, make_snapshot(
         input_images=[{"role": "source", "image_id": source["id"]}],
         workflow_modules=[{"module_id": "img2img", "config": {"denoise": 0.55}},
-                          {"module_id": "upscale"}],
+                          {"module_id": "fake_process"}],
     ))
-    assert [stage["module_id"] for stage in final["stages"]] == ["img2img", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["img2img", "fake_process"]
     img2img_out_id = final["stages"][0]["items"][0]["output_image_id"]
     upscaled_id = final["stages"][1]["items"][0]["output_image_id"]
     img2img_out = session.get(Image, img2img_out_id)
     upscaled = session.get(Image, upscaled_id)
-    assert upscaled.seed is None, "前置条件：upscale 输出无 Seed"
+    assert upscaled.seed is None, "前置条件：处理型输出无 Seed"
 
     body = workbench_of(mock_client, upscaled_id)
     modules = body["snapshot"]["workflow_modules"]
-    assert [module["module_id"] for module in modules] == ["img2img", "upscale"]
+    assert [module["module_id"] for module in modules] == ["img2img", "fake_process"]
     assert modules[0]["module_id"] == "img2img", "Primary 必须是 Img2Img（不是导入图 / basic）"
     assert body["seed"] == img2img_out.seed and body["seed"] is not None, \
-        "Seed 必须取 img2img 的真实 Seed，而不是 upscale 的 NULL"
+        "Seed 必须取 img2img 的真实 Seed，而不是处理型 Stage 的 NULL"
 
 
-def test_workbench_basic_then_upscale_restores_basic(mock_client, session, png_bytes):
-    """basic → upscale（同一 generate Job）：恢复 basic，Seed = 原图真实 Seed。"""
+def test_workbench_basic_then_process_restores_basic(mock_client, session, png_bytes):
+    """basic → 处理型 Stage（同一 generate Job）：恢复 basic，Seed = 原图真实 Seed。"""
     final = run_generate(mock_client, make_snapshot(
-        workflow_modules=[{"module_id": "basic_generate"}, {"module_id": "upscale"}],
+        workflow_modules=[{"module_id": "basic_generate"}, {"module_id": "fake_process"}],
     ))
     images = gallery(mock_client, final["id"])
     original = next(image for image in images if image["kind"] == "original")
@@ -156,13 +156,13 @@ def test_workbench_basic_then_upscale_restores_basic(mock_client, session, png_b
 
     body = workbench_of(mock_client, upscaled["id"])
     modules = body["snapshot"]["workflow_modules"]
-    assert [module["module_id"] for module in modules] == ["basic_generate", "upscale"]
+    assert [module["module_id"] for module in modules] == ["basic_generate", "fake_process"]
     assert body["snapshot"]["structured_prompt"]["style"] == "anime"
     assert body["seed"] == original["seed"] and body["seed"] is not None
 
 
-def test_workbench_basic_then_img2img_then_upscale_restores_img2img(mock_client, session, png_bytes):
-    """basic → img2img → upscale：恢复 Img2Img（不是 basic，也不是树根），
+def test_workbench_basic_then_img2img_then_process_restores_img2img(mock_client, session, png_bytes):
+    """basic → img2img → 处理型 Stage：恢复 Img2Img（不是 basic，也不是树根），
     Seed 取 img2img 的真实 Seed（不是 basic 原图 Seed）。"""
     basic_final = run_generate(mock_client, make_snapshot(count=1))
     original = gallery(mock_client, basic_final["id"])[0]
@@ -170,7 +170,7 @@ def test_workbench_basic_then_img2img_then_upscale_restores_img2img(mock_client,
     final = run_generate(mock_client, make_snapshot(
         input_images=[{"role": "source", "image_id": original["id"]}],
         workflow_modules=[{"module_id": "img2img", "config": {"denoise": 0.55}},
-                          {"module_id": "upscale"}],
+                          {"module_id": "fake_process"}],
     ))
     img2img_out_id = final["stages"][0]["items"][0]["output_image_id"]
     upscaled_id = final["stages"][1]["items"][0]["output_image_id"]
@@ -262,9 +262,9 @@ def test_resolve_workflow_modules_preserves_request_order(settings):
     from app.engine.factory import resolve_workflow_modules
 
     identities = resolve_workflow_modules(
-        mock_settings(settings), [{"module_id": "upscale"}, {"module_id": "basic_generate"}],
+        mock_settings(settings), [{"module_id": "fake_process"}, {"module_id": "basic_generate"}],
     )
-    assert [item["module_id"] for item in identities] == ["upscale", "basic_generate"], \
+    assert [item["module_id"] for item in identities] == ["fake_process", "basic_generate"], \
         "Pipeline 顺序必须严格等于请求顺序"
 
 
@@ -283,7 +283,7 @@ def test_recipe_rejects_duplicate_module(mock_client):
     response = mock_client.post("/api/v1/recipes", json={
         "name": "P6 重复模块",
         "snapshot": make_snapshot(workflow_modules=[
-            {"module_id": "upscale"}, {"module_id": "upscale"},
+            {"module_id": "fake_process"}, {"module_id": "fake_process"},
         ]),
     })
     assert response.status_code == 400, response.text
@@ -341,7 +341,7 @@ def test_module_availability_keeps_version_domains_separate(settings):
 
 def test_modules_api_reports_registered_and_reason(mock_client):
     modules = {item["module_id"]: item for item in mock_client.get("/api/v1/modules").json()}
-    for module_id in ("basic_generate", "img2img", "upscale"):
+    for module_id in ("basic_generate", "img2img", "fake_process"):
         module = modules[module_id]
         assert module["registered"] is True
         assert module["module_version"] == "v1"
@@ -400,7 +400,7 @@ def test_modules_api_exposes_parameter_specs_and_size_mode(mock_client):
     assert denoise["configurable"] is True
     assert denoise["default"] == 0.8 and denoise["title"] == "变化强度"
 
-    assert modules["upscale"]["size_mode"] == "input"
+    assert modules["fake_process"]["size_mode"] == "input"
 
 
 def test_img2img_denoise_config_chain_from_schema_default(mock_client, session, png_bytes):

@@ -9,7 +9,7 @@
     .venv/Scripts/python scripts/agent_generate.py --prompt "1girl, silver hair, kimono, shrine" \
         [--module <workflow_id>] [--list-workflows] \
         [--negative "..."] [--width 768] [--height 1024] [--count 1] [--seed 42] \
-        [--upscale] [--next] [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
+        [--next] [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
 
 W1.2 工作流规则：
 - 不传 --module → 使用服务端当前默认工作流（不在 CLI 硬编码）；
@@ -113,7 +113,6 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=1024)
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--seed", type=int, default=None, help="固定 Seed（默认随机）")
-    parser.add_argument("--upscale", action="store_true", help="生成后再接一次高清放大")
     parser.add_argument("--next", dest="queue_next", action="store_true",
                         help="插队到等待队列最前（默认排到队尾）")
     parser.add_argument("--out", default=".", help="输出目录（默认当前目录）")
@@ -144,8 +143,8 @@ def main() -> int:
         print("[FAIL] --module 不能为空字符串或纯空白；使用服务端默认请完全省略 --module")
         return 2
 
-    # 旧 /jobs 路径无法由服务端自动追加 upscale，因此需要先解析实际 Primary；
-    # Agent 加固路径则把 module_id 省略交给服务端解析（不在 CLI 里写默认）。
+    # Agent 加固路径把 module_id 省略交给服务端解析（不在 CLI 里写默认）；
+    # 旧 /jobs 路径需要先解析实际 Primary。
     use_agent_endpoint = bool(load_token(args.token)) and not args.legacy
     if args.module is not None:
         primary_id: str | None = args.module.strip()
@@ -158,8 +157,6 @@ def main() -> int:
                   "（CLI 不猜测默认，也不自动切换）")
             return 2
     modules = [{"module_id": primary_id}] if primary_id else []
-    if args.upscale and primary_id:
-        modules.append({"module_id": "upscale"})
 
     # W1.2.1：Prompt 由服务端在 Job 创建事务内统一关联（不再提前调 /prompts/ensure）；
     # 未放行/非法请求不会提前产生 Prompt。
@@ -171,7 +168,6 @@ def main() -> int:
             "negative_prompt": args.negative,
             # 不传 module_id = 服务端默认；显式传入由服务端做能力/放行校验
             **({"module_id": args.module.strip()} if args.module is not None else {}),
-            "upscale": args.upscale,
             "width": args.width,
             "height": args.height,
             "count": args.count,

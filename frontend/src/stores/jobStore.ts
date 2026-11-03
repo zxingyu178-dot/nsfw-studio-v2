@@ -12,7 +12,7 @@ import type { EngineStatusDTO, JobDTO, JobEventDTO, QueueDTO, WorkbenchSnapshot 
 export interface LiveProgress {
   /** 归一化进度 0~1（引擎不支持时为 null） */
   progress?: number | null
-  /** 引擎阶段标识（sampling / save_image / upscale …） */
+  /** 引擎阶段标识（sampling / save_image …） */
   engineStage?: string | null
   /** 当前 Stage 序号（从 0 开始） */
   stageIndex?: number | null
@@ -21,7 +21,7 @@ export interface LiveProgress {
   /** 采样总步数（仅采样型工作流有值） */
   maxStep?: number | null
   updatedAt: number
-  /** v0.15.1：所属 StageItem id（多阶段身份，唯一索引键）；同一 job_item_id 在 basic/upscale 各有一条 */
+  /** v0.15.1：所属 StageItem id（多阶段身份，唯一索引键）；同一 job_item_id 在各 Stage 各有一条 */
   stageItemId?: string
   /** 内部：所属 Job id，用于 Job 终态/切换时清理 */
   jobId?: string
@@ -35,7 +35,7 @@ export interface JobStoreState {
   trackedJob: JobDTO | null
   /**
    * v0.15.1：按 stage_item_id 索引的实时进度（瞬态，不随持久快照刷新）。
-   * 必须用 stage_item_id 而非 job_item_id：同一逻辑槽位在 basic/upscale 两个 Stage
+   * 必须用 stage_item_id 而非 job_item_id：同一逻辑槽位在每个 Stage
    * 共用同一 job_item_id，按 job_item_id 会让 stage0 的进度覆盖/误删 stage1 的进度。
    */
   liveProgressByStageItem: Record<string, LiveProgress>

@@ -12,7 +12,6 @@ vi.mock('../../api/client', () => ({
     provenance: vi.fn(),
     review: vi.fn(),
     favorite: vi.fn(),
-    upscale: vi.fn(),
     workbench: vi.fn(),
     importFiles: vi.fn(),
     batchStatus: vi.fn(),
@@ -84,16 +83,6 @@ describe('GalleryPage 图库', () => {
     expect(screen.getByRole('button', { name: '保留 (K)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '淘汰 (R)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '☆ 收藏 (F)' })).toBeInTheDocument()
-  })
-
-  it('进入选择模式后显示高清放大操作', async () => {
-    vi.mocked(imageApi.list).mockResolvedValue({ items: [baseImage], total: 1 } as never)
-    renderPage()
-    await screen.findByText('共 1 张')
-
-    fireEvent.click(screen.getByRole('button', { name: '选择' }))
-    expect(screen.getByText('已选 0 张')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '高清放大' })).toBeDisabled()
   })
 
   it('批量归档所选图片并显示归档数量', async () => {

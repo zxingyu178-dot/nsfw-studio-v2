@@ -4,7 +4,7 @@
 - 规范 §二十九（节点 ID / Workflow JSON 只存在于 provider binding 层）、§三十（标准输入注入）；
 - Phase 2.1 §七（binding 版本由 module_id + binding_version 解析）；
 - Phase 3 §0.2（一个 Adapter 服务全部模块，绑定属于每次请求）、§0.3（workflow_hash 校验）、
-  §二十二（basic_generate / upscale / basic_generate 交替动态加载）。
+  §二十二（basic_generate / anime_generate / basic_generate 交替动态加载）。
 """
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from app.engine.base import EngineBindingRef, EngineError, EngineJobRequest
 from app.engine.comfyui import PROVIDERS_DIR, ComfyUIAdapter
 
 BINDING_DIR = PROVIDERS_DIR / "basic_generate" / "v1"
-UPSCALE_DIR = PROVIDERS_DIR / "upscale" / "v1"
 
 
 def make_adapter() -> ComfyUIAdapter:
@@ -114,25 +113,25 @@ def test_binding_hash_mismatch_rejected():
 def test_binding_self_description_mismatch_rejected(tmp_path, monkeypatch):
     """Task1：binding 自描述（module/provider/binding_version）与请求身份不符 → 直接拒绝。"""
     adapter = make_adapter()
-    fake_dir = tmp_path / "upscale" / "v1"
+    fake_dir = tmp_path / "fake_module" / "v1"
     fake_dir.mkdir(parents=True)
     (fake_dir / "workflow.json").write_text("{}", encoding="utf-8")
     (fake_dir / "binding.yaml").write_text(
-        "binding_version: v1\nmodule: not_upscale\nprovider: comfyui\n",
+        "binding_version: v1\nmodule: not_fake_module\nprovider: comfyui\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(ComfyUIAdapter, "binding_dir", staticmethod(lambda _m, _v: fake_dir))
     with pytest.raises(EngineError) as excinfo:
         adapter.load_binding(EngineBindingRef(
-            module_id="upscale", provider="comfyui", binding_version="v1",
+            module_id="fake_module", provider="comfyui", binding_version="v1",
         ))
     assert excinfo.value.error_type == "BINDING_IDENTITY_MISMATCH"
 
 
 def test_binding_yaml_change_changes_binding_hash(tmp_path, monkeypatch):
     """Task1：修改 binding.yaml（workflow.json 不动）必须改变 binding_hash → 老 Job 拒绝静默执行。"""
-    source = UPSCALE_DIR / "v1" if (UPSCALE_DIR / "v1").is_dir() else UPSCALE_DIR
-    fake_dir = tmp_path / "upscale" / "v1"
+    source = BINDING_DIR
+    fake_dir = tmp_path / "basic_generate" / "v1"
     fake_dir.mkdir(parents=True)
     (fake_dir / "workflow.json").write_text((source / "workflow.json").read_text(encoding="utf-8"), encoding="utf-8")
     binding_text = (source / "binding.yaml").read_text(encoding="utf-8")
@@ -141,7 +140,7 @@ def test_binding_yaml_change_changes_binding_hash(tmp_path, monkeypatch):
 
     adapter = make_adapter()
     _workflow, _binding, workflow_hash, binding_hash = adapter.load_binding(EngineBindingRef(
-        module_id="upscale", provider="comfyui", binding_version="v1",
+        module_id="basic_generate", provider="comfyui", binding_version="v1",
     ))
 
     # 只修改 binding.yaml（inputs/defaults/save_image_prefix 级别的内容变化），workflow.json 不变
@@ -152,14 +151,14 @@ def test_binding_yaml_change_changes_binding_hash(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     _w2, _b2, workflow_hash2, binding_hash2 = adapter2.load_binding(EngineBindingRef(
-        module_id="upscale", provider="comfyui", binding_version="v1",
+        module_id="basic_generate", provider="comfyui", binding_version="v1",
     ))
     assert workflow_hash2 == workflow_hash, "workflow.json 未改动，workflow_hash 必须不变"
     assert binding_hash2 != binding_hash, "binding.yaml 改动必须改变 binding_hash"
 
     # 老 Job 携带旧 binding_hash → 拒绝执行（BINDING_HASH_MISMATCH）
     stale = EngineBindingRef(
-        module_id="upscale", provider="comfyui", binding_version="v1",
+        module_id="basic_generate", provider="comfyui", binding_version="v1",
         workflow_hash=workflow_hash, binding_hash=binding_hash,
     )
     with pytest.raises(EngineError) as excinfo:
@@ -168,26 +167,13 @@ def test_binding_yaml_change_changes_binding_hash(tmp_path, monkeypatch):
 
 
 def test_one_adapter_serves_all_modules_dynamically():
-    """§0.2/§二十二：同一 Adapter 交替加载 basic_generate/v1、upscale/v1、basic_generate/v1。"""
+    """§0.2/§二十二：同一 Adapter 交替加载 basic_generate/v1、anime_generate/v1、basic_generate/v1。"""
     adapter = make_adapter()
-    for module_id in ("basic_generate", "upscale", "basic_generate"):
+    for module_id in ("basic_generate", "anime_generate", "basic_generate"):
         _workflow, binding, _hash, _binding_hash = adapter.load_binding(EngineBindingRef(
             module_id=module_id, provider="comfyui", binding_version="v1",
         ))
         assert binding.get("module") == module_id
     # 缓存 key 是 (module_id, binding_version)，不是整个 Adapter 只有一个绑定
     assert ("basic_generate", "v1") in adapter._bindings
-    assert ("upscale", "v1") in adapter._bindings
-
-
-def test_upscale_workflow_uses_load_image_and_upscale_model():
-    """upscale/v1：LoadImage → UpscaleModelLoader(4x-UltraSharp) → ImageUpscaleWithModel → SaveImage。"""
-    workflow = json.loads((UPSCALE_DIR / "workflow.json").read_text(encoding="utf-8"))
-    assert workflow["1"]["class_type"] == "LoadImage"
-    assert workflow["2"]["class_type"] == "UpscaleModelLoader"
-    assert workflow["2"]["inputs"]["model_name"] == "4x-UltraSharp.pth"
-    assert workflow["3"]["class_type"] == "ImageUpscaleWithModel"
-    assert workflow["3"]["inputs"]["image"] == ["1", 0]
-    assert workflow["4"]["class_type"] == "SaveImage"
-    binding = (UPSCALE_DIR / "binding.yaml").read_text(encoding="utf-8")
-    assert "input_image" in binding
+    assert ("anime_generate", "v1") in adapter._bindings

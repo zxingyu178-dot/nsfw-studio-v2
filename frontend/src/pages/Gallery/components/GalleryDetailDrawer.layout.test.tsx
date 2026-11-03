@@ -46,8 +46,6 @@ function renderDrawer() {
         onClose={vi.fn()}
         onUpdated={vi.fn()}
         onSelectImage={vi.fn()}
-        onUpscale={vi.fn()}
-        upscaling={false}
         onUseAsInput={vi.fn()}
         onReviewStart={vi.fn()}
         onFavoriteStart={vi.fn()}

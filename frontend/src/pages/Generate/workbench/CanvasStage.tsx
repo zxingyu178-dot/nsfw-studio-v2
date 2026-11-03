@@ -238,7 +238,7 @@ export function CanvasStage() {
             imageWidth={shown.width}
             imageHeight={shown.height}
             alt="生成结果"
-            badge={shown.kind === 'upscaled' ? 'HD' : shown.kind === 'processed' ? '处理图' : undefined}
+            badge={shown.kind === 'processed' ? '处理图' : undefined}
             onFullscreen={() => setLightboxOpen(true)}
           />
         )}
@@ -280,14 +280,12 @@ export function CanvasStage() {
                 type="button"
                 className={`wb4-filmstrip__item${shown?.id === image.id ? ' wb4-filmstrip__item--active' : ''}`}
                 aria-pressed={shown?.id === image.id}
-                aria-label={`查看第 ${images.indexOf(image) + 1} 张${image.kind === 'upscaled' ? '（高清放大）' : ''}`}
-                title={`${image.kind === 'upscaled' ? '高清 · ' : ''}Seed ${image.seed ?? '—'}`}
+                aria-label={`查看第 ${images.indexOf(image) + 1} 张`}
+                title={`Seed ${image.seed ?? '—'}`}
                 onClick={() => setSelectedId(image.id)}
               >
                 <img src={imageThumbUrl(image.id)} alt="" loading="lazy" />
-                <span className="wb4-filmstrip__badge">
-                  {image.kind === 'upscaled' ? 'HD' : images.indexOf(image) + 1}
-                </span>
+                <span className="wb4-filmstrip__badge">{images.indexOf(image) + 1}</span>
               </button>
             ))}
           </div>

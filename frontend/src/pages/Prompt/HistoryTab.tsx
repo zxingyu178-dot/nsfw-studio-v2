@@ -416,7 +416,7 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
               <div key={image.id} className="pp-thumbs__item">
                 <img src={imageContentUrl(image.id)} alt="" loading="lazy" />
                 <span className="pp-thumbs__badge">
-                  {image.kind === 'upscaled' ? 'HD' : image.kind === 'original' ? '原图' : '处理'}
+                  {image.kind === 'original' ? '原图' : image.kind === 'upscaled' ? '高清' : '处理'}
                 </span>
               </div>
             ))}

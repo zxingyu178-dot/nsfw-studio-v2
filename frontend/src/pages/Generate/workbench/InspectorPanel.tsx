@@ -2,17 +2,16 @@
  * InspectorPanel 4.0（v0.15 Task 10）：右栏只负责「怎么生成」。
  * 移除 EngineState（→ TopNav Power）、CurrentJobCard / QueuePanel（→ TaskDock）。
  * 顺序：Workflow（PopoverSelect 卡片，不可用就地 warning）→ Ratio/Resolution（紧凑）→
- * Count（NumberStepper）→ Seed（Random/Fixed）→ Upscale（Switch 行 + 副标）→ Advanced 折叠。
+ * Count（NumberStepper）→ Seed（Random/Fixed）→ 运行环境 → Advanced 折叠。
  * 底部固定 SplitGenerateAction（左 生成 N 张 / 右 ⚡ 插队）。
  */
 import { useEffect, useState } from 'react'
-import { Field, Switch } from '../../../components/ui'
+import { Field } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconRestart, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import { engineRuntimeApi } from '../../../api/client'
 import type { RuntimePreflightDTO } from '../../../types/workbench'
 import {
   defaultWorkflowNotice,
-  hasUpscaleModule,
   imagePrimaryCandidates,
   releaseStatusNotice,
   setCount,
@@ -20,7 +19,6 @@ import {
   setPrimaryModuleConfig,
   setSeed,
   setSize,
-  setUpscaleEnabled,
   textPrimaryCandidates,
   useWorkbench,
 } from '../../../stores/workbenchStore'
@@ -40,7 +38,6 @@ export function InspectorPanel({
 }) {
   const state = useWorkbench()
 
-  const upscaleEnabled = hasUpscaleModule(state.workflowModules)
   const primaryModule = state.workflowModules[0]?.module_id ?? ''
   const primaryCapabilities =
     state.moduleCatalog.find((module) => module.module_id === primaryModule) ?? null
@@ -60,7 +57,7 @@ export function InspectorPanel({
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
 
-  // W2.0：最小运行环境检测入口（不轮询；工作流/高清变化即清除旧结果）
+  // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
   const preflightKey = preflightModuleIds.join('|')
   const [preflight, setPreflight] = useState<RuntimePreflightDTO | null>(null)
@@ -134,18 +131,6 @@ export function InspectorPanel({
               当前没有可用的文生图工作流，请检查 Engine 与模型绑定。
             </p>
           )}
-        </div>
-
-        <div className="wb4-switch-row">
-          <div className="wb4-switch-row__text">
-            <span className="wb4-switch-row__label">高清放大</span>
-            <span className="wb4-switch-row__sub">原图全部完成后处理</span>
-          </div>
-          <Switch
-            checked={upscaleEnabled}
-            onChange={(event) => setUpscaleEnabled(event.target.checked)}
-            aria-label="高清放大"
-          />
         </div>
 
         <div className="wb4-switch-row">

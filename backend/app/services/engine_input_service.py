@@ -1,6 +1,6 @@
 """引擎输入缓存治理（Phase 4 Task11）。
 
-背景：处理型 Stage（高清放大等）会把待处理图片上传到引擎 input 目录的
+背景：处理型 Stage（图生图 / 后处理等）会把待处理图片上传到引擎 input 目录的
 ``NSFWStudio_inputs/`` 子目录；ComfyUI 没有"安全删除 input 文件"的公开 API，
 上传文件会随使用逐步积累。
 

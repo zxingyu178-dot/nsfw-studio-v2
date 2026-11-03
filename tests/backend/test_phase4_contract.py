@@ -24,7 +24,7 @@ from app.main import create_app
 from app.workflows.base import InputImageRef, JobRequestContext
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.registry import default_registry
-from app.workflows.upscale import UpscaleModule
+from fake_process_module import FakeProcessModule
 
 
 def mock_settings(settings: Settings, **options) -> Settings:
@@ -66,12 +66,12 @@ def make_snapshot(count=1, **overrides):
 
 def pipeline_snapshot(count=1):
     snapshot = make_snapshot(count=count)
-    snapshot["workflow_modules"] = [{"module_id": "basic_generate"}, {"module_id": "upscale"}]
+    snapshot["workflow_modules"] = [{"module_id": "basic_generate"}, {"module_id": "fake_process"}]
     return snapshot
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -83,15 +83,33 @@ def gallery(client, job_id: str) -> list[dict]:
     return client.get("/api/v1/images", params={"job_id": job_id, "limit": 200}).json()["items"]
 
 
+def create_process_job(client, source_ids: list[str]) -> str:
+    """服务层直建处理型 Job（替代已下线的图库高清 API）。"""
+    from app.services import job_service
+
+    modules = [{
+        "module_id": "fake_process", "module_version": "v1", "provider": "mock",
+        "binding_version": "v1", "workflow_hash": None, "binding_hash": None,
+    }]
+    snapshot = make_snapshot(count=len(source_ids), workflow_modules=[{"module_id": "fake_process"}])
+    snapshot.update(prompt_mode="structured", structured_prompt={}, full_prompt="", negative_prompt="")
+    with client.app.state.session_factory() as session:
+        job, _ = job_service.create_job(
+            session, source="web", snapshot=snapshot, workflow_modules=modules,
+            job_kind="process", input_image_ids=source_ids,
+        )
+        return job.id
+
+
 # ===== Task2：ModuleCapabilities 输入/输出语义 =====
 
 def test_module_capabilities_declare_io_semantics():
     basic = BasicGenerateModule().capabilities()
     assert (basic.uses_seed, basic.input_kind, basic.output_kind) == (True, "none", "original")
     assert (basic.parent_policy, basic.output_cardinality) == ("none", 1)
-    upscale = UpscaleModule().capabilities()
-    assert (upscale.uses_seed, upscale.input_kind, upscale.output_kind) == (False, "image", "upscaled")
-    assert (upscale.parent_policy, upscale.output_cardinality) == ("input_image", 1)
+    process = FakeProcessModule().capabilities()
+    assert (process.uses_seed, process.input_kind, process.output_kind) == (False, "image", "upscaled")
+    assert (process.parent_policy, process.output_cardinality) == ("input_image", 1)
 
 
 def test_output_kind_comes_from_capabilities_not_input_image_id(mock_client, png_bytes):
@@ -125,14 +143,14 @@ def test_output_kind_comes_from_capabilities_not_input_image_id(mock_client, png
 
 # ===== Task3：StageItem Seed 正式化 =====
 
-def test_stage_item_seed_real_for_basic_null_for_upscale(mock_client):
+def test_stage_item_seed_real_for_basic_null_for_process(mock_client):
     job = mock_client.post("/api/v1/jobs", json={"snapshot": pipeline_snapshot(count=2)}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=60)
 
     stage0_items = final["stages"][0]["items"]
     stage1_items = final["stages"][1]["items"]
     assert all(item["seed"] is not None for item in stage0_items), "basic StageItem 必须有真实 Seed"
-    assert all(item["seed"] is None for item in stage1_items), "upscale StageItem.seed 必须为 NULL"
+    assert all(item["seed"] is None for item in stage1_items), "处理型 StageItem.seed 必须为 NULL"
     # JobItem.seed 保留为快捷字段（仅第一个 Stage / 使用随机性时写入）
     assert all(item["seed"] is not None for item in final["items"])
 
@@ -142,10 +160,10 @@ def test_stage_item_seed_real_for_basic_null_for_upscale(mock_client):
     for item in stage0_items:
         assert originals[item["output_image_id"]]["seed"] == item["seed"], \
             "原图 Image.seed 必须来自对应 StageItem.seed"
-    assert all(image["seed"] is None for image in upscaled), "高清图绝不携带假 Seed"
+    assert all(image["seed"] is None for image in upscaled), "处理型输出图绝不携带假 Seed"
 
 
-def test_manual_upscale_image_seed_null(mock_client, png_bytes):
+def test_manual_process_image_seed_null(mock_client, png_bytes):
     from app.services import image_service
     from app.storage.manager import StorageManager
 
@@ -156,19 +174,19 @@ def test_manual_upscale_image_seed_null(mock_client, png_bytes):
         )
         source_id = source.id
 
-    job = mock_client.post("/api/v1/images/upscale", json={"image_ids": [source_id]}).json()
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED", timeout=60)
+    job_id = create_process_job(mock_client, [source_id])
+    final = wait_for(mock_client, job_id, lambda j: j["status"] == "COMPLETED", timeout=60)
     assert final["stages"][0]["items"][0]["seed"] is None
     assert all(item["seed"] is None for item in final["items"]), "process Job 的 JobItem.seed 必须为 NULL"
-    images = gallery(mock_client, job["id"])
+    images = gallery(mock_client, job_id)
     assert len(images) == 1
     assert images[0]["kind"] == "upscaled" and images[0]["seed"] is None
 
 
 # ===== Task4：EngineAdapter 输入图片正式契约 =====
 
-def test_upscale_prepare_inputs_uses_formal_contract():
-    module = UpscaleModule()
+def test_process_prepare_inputs_uses_formal_contract():
+    module = FakeProcessModule()
     image = InputImageRef(image_id="img_x", file_name="a.png", data=b"data", width=8, height=8)
     context = JobRequestContext(input_image=image)
 
@@ -179,7 +197,7 @@ def test_upscale_prepare_inputs_uses_formal_contract():
 
 
 def test_engine_input_unsupported_is_explicit_and_systemic():
-    module = UpscaleModule()
+    module = FakeProcessModule()
     image = InputImageRef(image_id="img_x", file_name="a.png", data=b"data")
     context = JobRequestContext(input_image=image)
     with pytest.raises(EngineError) as excinfo:
@@ -207,8 +225,8 @@ def test_engine_input_unsupported_fails_job_and_pauses_queue(mock_client, png_by
 
     adapter.upload_input_image = unsupported
     try:
-        job = mock_client.post("/api/v1/images/upscale", json={"image_ids": [source_id]}).json()
-        final = wait_for(mock_client, job["id"], lambda j: j["status"] == "FAILED", timeout=30)
+        job_id = create_process_job(mock_client, [source_id])
+        final = wait_for(mock_client, job_id, lambda j: j["status"] == "FAILED", timeout=30)
         assert final["error_type"] == "ENGINE_INPUT_UNSUPPORTED"
         assert mock_client.get("/api/v1/queue").json()["worker"]["queue_paused"] is True
     finally:
@@ -230,7 +248,7 @@ def test_binding_hash_recorded_in_job_stage_snapshot_and_api(mock_client):
     modules = [
         {"module_id": "basic_generate", "module_version": "v1", "provider": "mock",
          "binding_version": "v1", "workflow_hash": "wf_hash_11111111", "binding_hash": "bd_hash_11111111"},
-        {"module_id": "upscale", "module_version": "v1", "provider": "mock",
+        {"module_id": "fake_process", "module_version": "v1", "provider": "mock",
          "binding_version": "v1", "workflow_hash": "wf_hash_22222222", "binding_hash": "bd_hash_22222222"},
     ]
     with mock_client.app.state.session_factory() as session:
@@ -273,8 +291,8 @@ def test_resolve_workflow_modules_pins_restored_identity(settings):
     comfy = _comfyui_settings(settings)
 
     # 普通新建（只有 module_id）→ 解析当前默认身份（含真实双指纹）
-    resolved = resolve_workflow_modules(comfy, [{"module_id": "basic_generate"}, {"module_id": "upscale"}])
-    assert [item["module_id"] for item in resolved] == ["basic_generate", "upscale"]
+    resolved = resolve_workflow_modules(comfy, [{"module_id": "basic_generate"}, {"module_id": "img2img"}])
+    assert [item["module_id"] for item in resolved] == ["basic_generate", "img2img"]
     basic = resolved[0]
     assert basic["provider"] == "comfyui"
     assert basic["workflow_hash"] and basic["binding_hash"], "comfyui 必须记录双指纹"
@@ -338,7 +356,7 @@ def _insert_running_stage_item(session, image_id: str) -> None:
     ))
     session.execute(text(
         "INSERT INTO job_stages (id, job_id, stage_index, module_id, module_version, status, "
-        "created_at, updated_at) VALUES ('stg_reg', 'job_reg', 0, 'upscale', 'v1', 'RUNNING', 't', 't')"
+        "created_at, updated_at) VALUES ('stg_reg', 'job_reg', 0, 'fake_process', 'v1', 'RUNNING', 't', 't')"
     ))
     session.execute(text(
         "INSERT INTO job_stage_items (id, job_stage_id, job_item_id, item_index, input_image_id, "

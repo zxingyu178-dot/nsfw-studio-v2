@@ -16,15 +16,13 @@ export interface HudSnapshot {
   stageIndex: number | null
   stageCount: number
   stageLabel: string | null
-  /** 真实采样步数；仅采样型工作流有值，upscale 等阶段必须为 null。 */
+  /** 真实采样步数；仅采样型工作流有值，非采样阶段必须为 null。 */
   step: number | null
   maxStep: number | null
-  /** 非采样阶段（如 upscale）：显示“处理中…”，绝不伪造 Step。 */
+  /** 非采样阶段（引擎不给 step）：显示“处理中…”，绝不伪造 Step。 */
   indeterminate: boolean
   startedAt: string | null
 }
-
-const UPSCALE_MODULES = new Set(['upscale'])
 
 /**
  * 跨 Stage 工作单元总进度：total=Σ stage.total_count，done=Σ(completed + 当前 running item 进度)。
@@ -76,8 +74,7 @@ export function hudSnapshot(job: JobDTO, liveByStageItem: Record<string, LivePro
   // 实时 step 优先；缺失则 null（不伪造）。
   const step = live?.step ?? null
   const maxStep = live?.maxStep ?? null
-  const isUpscale = runningStage ? UPSCALE_MODULES.has(runningStage.module_id) : false
-  // 非采样阶段（upscale，或引擎明确不给 step）→ 处理中
+  // 非采样阶段（引擎明确不给 step）→ 处理中
   const indeterminate = Boolean(runningStage) && (step === null || maxStep === null || maxStep <= 0)
 
   return {
@@ -86,10 +83,10 @@ export function hudSnapshot(job: JobDTO, liveByStageItem: Record<string, LivePro
     itemTotal: runningStage?.total_count ?? job.requested_count ?? null,
     stageIndex,
     stageCount,
-    stageLabel: isUpscale ? '高清放大' : stageLabel,
+    stageLabel,
     step,
     maxStep,
-    indeterminate: isUpscale ? true : indeterminate,
+    indeterminate,
     startedAt: job.started_at,
   }
 }

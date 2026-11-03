@@ -7,7 +7,6 @@ const mockSetSize = vi.fn()
 
 vi.mock('../../stores/workbenchStore', () => ({
   useWorkbench: (...args: unknown[]) => mockUseWorkbench(...args),
-  hasUpscaleModule: vi.fn(() => false),
   isImageCapablePrimary: vi.fn(() => true),
   isImageStartModule: vi.fn(() => false),
   imagePrimaryCandidates: vi.fn(() => []),
@@ -19,7 +18,6 @@ vi.mock('../../stores/workbenchStore', () => ({
   setPrimaryModuleConfig: vi.fn(),
   setSeed: vi.fn(),
   setSize: (...args: unknown[]) => mockSetSize(...args),
-  setUpscaleEnabled: vi.fn(),
   snapshotFromState: vi.fn(() => ({})),
 }))
 

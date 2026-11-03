@@ -1,0 +1,65 @@
+# basic_generate v2 — ComfyUI Provider Binding（W4.0）
+#
+# 由冻结的 v1 演进：唯一变化是 VAE 换成官方推荐的 texture-fix 解码器，
+# 并把默认步数从 8（turbo 草稿档）改为 12（实测细节更好，单张约 60s）。
+# v1 保留冻结，历史 Job 只按其自身 binding hash 续跑。
+#
+# 模型：qwen-image-2.1-UC-Q4_0.gguf + qwen3vl_8b_w4a8 + texture-fix VAE
+#       + turbo8 LoRA + f23gg LoRA。
+# 节点图与 v1 相同：UnetLoaderGGUF → 双 LoraLoader → TextEncodeQwenImage21
+#   → EmptyLatentImage → KSampler → VAEDecode → SaveImage。
+
+binding_version: v2
+module: basic_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "8"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "4", field: "prompt"}
+  negative_prompt: {node: "4", field: "negative_prompt"}
+  width:           {node: "5", field: "width"}
+  height:          {node: "5", field: "height"}
+  seed:            {node: "6", field: "seed"}
+
+# 固定默认（12 步为 W4.0 实测默认；Module 标准输入不暴露）
+defaults:
+  "4": {resolution: 1024}
+  "6": {steps: 12, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # TextEncodeQwenImage21 原生支持 negative_prompt
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: UnetLoaderGGUF, source: custom, package: ComfyUI-GGUF, version: unverified}
+    - {class_type: CLIPLoader, source: comfyui_core}
+    - {class_type: VAELoader, source: comfyui_core}
+    - {class_type: TextEncodeQwenImage21, source: comfyui_core}
+    - {class_type: LoraLoader, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: diffusion_models, filename: qwen-image-2.1-UC-Q4_0.gguf, sha256: unverified, precision: q4_0}
+    - {type: text_encoders, filename: qwen3vl_8b_w4a8.safetensors, sha256: unverified, precision: w4a8}
+    - {type: vae, filename: texture_fix_vae_for_qwen_image_2.1_bf16.safetensors, sha256: unverified, precision: bf16}
+    - {type: loras, filename: qwen_image_2.1_turbo8_lora.safetensors, sha256: unverified}
+    - {type: loras, filename: f23gg_nsfw_qwen21.safetensors, sha256: unverified}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 12, cfg: 1.0, sampler: euler, scheduler: simple, batch_size: 1, sampling_seconds: 60, source: "W4.0 本机 A/B 对照（2026-11-02，模型常驻）"}
+  notes: "W4.0 对照：832×1216 / 12 步 / cfg1 / euler simple 约 60s/张（模型常驻）"

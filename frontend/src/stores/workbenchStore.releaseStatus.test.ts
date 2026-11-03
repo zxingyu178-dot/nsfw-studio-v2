@@ -211,14 +211,6 @@ describe('W1.2 工作流选择候选（text / image / 默认）', () => {
     input_required: true,
     input_slots: [{ role: 'reference', required: true, max_count: 1 }],
   })
-  const upscale = makeModule({
-    module_id: 'upscale',
-    title: '高清放大',
-    input_required: true,
-    input_slots: [{ role: 'source', required: true, max_count: 1 }],
-    allowed_job_kinds: ['generate', 'process'],
-    is_generative: false,
-  })
   const processOnly = makeModule({
     module_id: 'process_only',
     input_required: true,
@@ -233,14 +225,14 @@ describe('W1.2 工作流选择候选（text / image / 默认）', () => {
   })
 
   it('文生图候选：基础生成 + 动漫生成；排除图片模块 / 处理模块 / 未放行', () => {
-    const ids = textPrimaryCandidates([basic, anime, img2img, upscale, processOnly, unreleasedText])
+    const ids = textPrimaryCandidates([basic, anime, img2img, processOnly, unreleasedText])
       .map((m) => m.module_id)
     expect(ids).toEqual(['basic_generate', 'anime_generate'])
   })
 
-  it('图片生成候选：img2img + reference_generate；排除文生图 / upscale / 未放行', () => {
+  it('图片生成候选：img2img + reference_generate；排除文生图 / 处理模块 / 未放行', () => {
     const ids = imagePrimaryCandidates([
-      basic, anime, img2img, reference, upscale, unreleasedText,
+      basic, anime, img2img, reference, processOnly, unreleasedText,
     ]).map((m) => m.module_id)
     expect(ids).toEqual(['img2img', 'reference_generate'])
   })
@@ -262,7 +254,7 @@ describe('W1.2 工作流选择候选（text / image / 默认）', () => {
 
   it('未放行模块不进入任何选择列表', () => {
     resetWorkbench()
-    setModuleCatalog([unreleasedText, upscale])
+    setModuleCatalog([unreleasedText, processOnly])
     expect(textPrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
     expect(imagePrimaryCandidates(getWorkbenchState().moduleCatalog)).toEqual([])
   })

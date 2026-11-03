@@ -27,7 +27,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_session
 from app.api.v1.jobs import check_disk_space
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN
-from app.core.errors import ForbiddenError, TooManyRequestsError, UnauthorizedError
+from app.core.errors import (
+    ForbiddenError,
+    TooManyRequestsError,
+    UnauthorizedError,
+    UnprocessableError,
+)
 from app.engine.release import ensure_modules_released
 from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
@@ -100,13 +105,19 @@ def submit_agent_job(
     session: Session = Depends(get_session),
 ) -> JobResponse:
     _require_token(request)
+    extra = body.model_extra or {}
+    if "upscale" in extra:
+        raise UnprocessableError(
+            "upscale 参数已下线：产品不再提供 4x 高清放大；请移除该字段后重试",
+            code="AGENT_UPSCALE_REMOVED",
+        )
     disk = check_disk_space(request)
     settings = request.app.state.settings
 
     # W1.2-B/C：先解析实际工作流（不传 module_id = 服务器默认）→ 正式放行 → 能力校验。
     # 任一检查失败都在 Prompt 关联（commit=False）与 Job 创建之前返回，不产生副作用。
     workflow_modules = agent_service.resolve_agent_workflow_modules(
-        settings, body.module_id, upscale=body.upscale
+        settings, body.module_id
     )
     ensure_modules_released(workflow_modules)
     agent_service.validate_agent_primary(settings, workflow_modules)

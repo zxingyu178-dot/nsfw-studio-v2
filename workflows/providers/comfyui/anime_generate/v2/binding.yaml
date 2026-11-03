@@ -1,0 +1,58 @@
+# anime_generate v2 — ComfyUI Provider Binding（W4.0）
+#
+# 模型：单文件 SDXL 动漫底模 miaomiaoHarem_v14.safetensors（CheckpointLoaderSimple，
+# CLIP 与 VAE 均取自 checkpoint 内部，不再单独加载 Anima/Qwen 编码器）。
+#
+# 来源：本机已验证的出图组合（2026-11-01 起 260+ 张真实生成）：
+#   832×1216 / 30 步 / cfg 4.0 / er_sde / simple / denoise 1.0。
+#
+# 历史：v1 为 Anima 2.9B + Qwen3-0.6B + qwen_image_vae，保留冻结给历史 Job；
+# 不再使用损坏的 MiaoMiao GGUF 转换文件。
+
+binding_version: v2
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+# 固定默认（本机实测；Module 标准输入不暴露）
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # CLIPTextEncode 标准负向提示词
+  output_size: explicit            # 尺寸由工作台显式宽高决定（EmptyLatentImage 注入）
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, batch_size: 1, sampling_seconds: 33, source: "2026-11-01/02 真实 Studio 批次"}
+  notes: "832×1216 / 30 步 / cfg4.0 / er_sde simple 约 30–35s/张（模型常驻）"

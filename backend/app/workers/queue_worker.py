@@ -7,7 +7,7 @@
 - Stage Gate（§六）：Stage N 全部 StageItem COMPLETED → Stage COMPLETED → 才启动 Stage N+1；
   任一 StageItem FAILED → Stage FAILED → Job FAILED → 后续 Stage 不启动；
 - 暂停语义（§七）：pause_requested → 当前 StageItem 完成 → 不领取下一个 → Stage/Job PAUSED（不强杀）；
-- 取消语义（§七）：请求 Adapter 安全取消；已完成的原图/高清图全部保留；Job 终态 CANCELLED；
+- 取消语义（§七）：请求 Adapter 安全取消；已完成的图片全部保留；Job 终态 CANCELLED；
 - Seed 规则（§0.4）：默认每张独立随机 Seed；仅单张精确复现（seed_mode=fixed 且 count=1）使用固定
   Seed，且固定 Seed 只作用于第一个 Stage；
 - 瞬态网络错误自动重试 ≤2；系统性失败（离线/OOM/工作流/模型/节点/绑定缺失）→
@@ -363,7 +363,7 @@ class SingleQueueWorker:
             stage_item = session.get(JobStageItem, stage_item_id)
             if job is None or stage is None or stage_item is None:
                 return "FAILED"
-            # uses_seed=false 的 Stage 绝不分配"假 Seed"（Task3：upscale StageItem.seed 必须为 NULL）
+            # uses_seed=false 的 Stage 绝不分配"假 Seed"（Task3：处理型 StageItem.seed 必须为 NULL）
             seed = self._seed_for(job, stage) if uses_seed else None
             timeout_seconds = self._stage_timeout_for(stage)
             if stage_item.input_image_id is None and stage.stage_index > 0:
@@ -435,7 +435,7 @@ class SingleQueueWorker:
         cancel_sent = False
         # v0.15.1：sampling stall 与 general execution timeout 分离。
         # 仅在采样阶段（step/max_step 有值）用“step 长时间不变化”判采样卡死；
-        # 模型加载 / VAE / 高清放大 / 保存等无 step 阶段不套短 stall，统一交给执行总超时。
+        # 模型加载 / VAE / 后处理 / 保存等无 step 阶段不套短 stall，统一交给执行总超时。
         last_step: int | None = None
         last_step_time = time.monotonic()
         while True:
@@ -485,7 +485,7 @@ class SingleQueueWorker:
 
             # v0.15.1：采样卡死（step 冻结）看门狗。
             # 只在采样阶段（step/max_step 有值）启用短 stall；step 推进即续命，
-            # step 长时间不变 → ENGINE_STALLED。无 step 阶段（model load/VAE/upscale/save）
+            # step 长时间不变 → ENGINE_STALLED。无 step 阶段（model load/VAE/后处理/save）
             # 不在此判定，由上面的执行总超时（ENGINE_TIMEOUT）兜底。
             step_now = getattr(status, "step", None)
             max_step_now = getattr(status, "max_step", None)
@@ -854,7 +854,7 @@ class SingleQueueWorker:
         return "SYSTEMIC"
 
     def _cancel_remaining(self, session: Session, job: Job) -> None:
-        """取消：已生成的原图/高清图全部保留，只取消未完成部分（§七）。"""
+        """取消：已生成的图片全部保留，只取消未完成部分（§七）。"""
         now = utc_now_iso()
         job.status = "CANCELLED"
         job.finished_at = now

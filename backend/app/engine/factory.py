@@ -74,7 +74,7 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
       BINDING_HASH_MISMATCH / BINDING_IDENTITY_MISMATCH 直接拒绝）。
     Phase 6 Task4：
     - **严格保持请求顺序**（不再按硬编码 MODULE_ORDER 重排——
-      否则 reference_generate → upscale 会被错误重排成 upscale → reference_generate；
+      否则 reference_generate → img2img 会被错误重排成 img2img → reference_generate；
       合法性由 PipelineValidator + ModuleCapabilities 校验）；
     - 同一 module_id 在 Pipeline 中重复出现 → PIPELINE_DUPLICATE_MODULE（第一版禁止）。
     """

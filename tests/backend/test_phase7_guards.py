@@ -31,7 +31,7 @@ from app.workflows.base import (
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
 from app.workflows.registry import ModuleRegistry
-from app.workflows.upscale import UpscaleModule
+from fake_process_module import FakeProcessModule
 
 
 # ===== 工具（与其他 Phase 测试同构） =====
@@ -46,7 +46,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -113,7 +113,7 @@ class _FakeProcessModule(WorkflowModule):
 
 def _extended_registry() -> ModuleRegistry:
     return ModuleRegistry([
-        BasicGenerateModule(), Img2ImgModule(), UpscaleModule(), _FakeProcessModule(),
+        BasicGenerateModule(), Img2ImgModule(), FakeProcessModule(), _FakeProcessModule(),
     ])
 
 
@@ -123,9 +123,9 @@ def test_process_validation_is_capability_driven_not_upscale_hardcode():
     validator = PipelineValidator(registry=_extended_registry())
 
     # 既有行为保持：upscale 处理型合法；basic/img2img 混入处理型仍被拒绝
-    validator.validate([{"module_id": "upscale"}], job_kind="process", has_input_image=True)
+    validator.validate([{"module_id": "fake_process"}], job_kind="process", has_input_image=True)
     with pytest.raises(ValidationError) as error:
-        validator.validate([{"module_id": "basic_generate"}, {"module_id": "upscale"}],
+        validator.validate([{"module_id": "basic_generate"}, {"module_id": "fake_process"}],
                            job_kind="process", has_input_image=True)
     assert error.value.code == "PIPELINE_INVALID"
     with pytest.raises(ValidationError) as error:
@@ -136,7 +136,7 @@ def test_process_validation_is_capability_driven_not_upscale_hardcode():
     # 单个处理模块；以及 处理模块 → upscale 的链式处理 Pipeline
     validator.validate([{"module_id": "face_repair"}], job_kind="process", has_input_image=True)
     validator.validate(
-        [{"module_id": "face_repair"}, {"module_id": "upscale"}],
+        [{"module_id": "face_repair"}, {"module_id": "fake_process"}],
         job_kind="process", has_input_image=True,
     )
 
@@ -151,7 +151,7 @@ def test_module_capabilities_declare_job_kinds():
     assert BasicGenerateModule().capabilities().allowed_job_kinds == ("generate",)
     assert Img2ImgModule().capabilities().allowed_job_kinds == ("generate",)
     assert Img2ImgModule().capabilities().can_start_from_image is True
-    upscale = UpscaleModule().capabilities()
+    upscale = FakeProcessModule().capabilities()
     assert upscale.allowed_job_kinds == ("generate", "process")
     assert upscale.can_start_from_image is True
     # Task8-②：生成语义声明（basic/img2img 是生成型；upscale 不是）
@@ -233,7 +233,7 @@ def test_modules_api_capabilities_follow_selected_module_version(client, monkeyp
             )
 
     registry = ModuleRegistry([
-        BasicGenerateModule(), _Img2Img(), Img2ImgV2(), UpscaleModule(),
+        BasicGenerateModule(), _Img2Img(), Img2ImgV2(), FakeProcessModule(),
     ])
     # modules.py 顶层 import 与 factory 运行时 import 都要指向带 v2 的注册表
     monkeypatch.setattr("app.api.v1.modules.default_registry", lambda: registry)
@@ -248,7 +248,7 @@ def test_modules_api_capabilities_follow_selected_module_version(client, monkeyp
         assert img2img["module_version"] == "v2"
         assert img2img["title"] == "图生图 V2（测试）"
         # 其余模块不受影响
-        assert modules["upscale"]["module_version"] == "v1"
+        assert modules["fake_process"]["module_version"] == "v1"
     finally:
         engine_cfg["modules"].pop("img2img", None)
 
@@ -261,7 +261,7 @@ def test_workbench_context_survives_missing_seed_on_generation_output(mock_clien
     snapshot = make_snapshot(
         count=1,
         input_images=[{"role": "source", "image_id": source["id"]}],
-        workflow_modules=[{"module_id": "img2img"}, {"module_id": "upscale"}],
+        workflow_modules=[{"module_id": "img2img"}, {"module_id": "fake_process"}],
     )
     job = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")

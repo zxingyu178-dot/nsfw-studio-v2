@@ -11,7 +11,6 @@ const mockUseWorkbench = vi.fn()
 
 vi.mock('../../../stores/workbenchStore', () => ({
   useWorkbench: (...args: unknown[]) => mockUseWorkbench(...args),
-  hasUpscaleModule: vi.fn(() => false),
   isImageStartModule: vi.fn(() => false),
   imagePrimaryCandidates: vi.fn(() => []),
   releaseStatusNotice: vi.fn(() => null),
@@ -22,7 +21,6 @@ vi.mock('../../../stores/workbenchStore', () => ({
   setPrimaryModuleConfig: vi.fn(),
   setSeed: vi.fn(),
   setSize: vi.fn(),
-  setUpscaleEnabled: vi.fn(),
   MODULE_LABEL: { basic_generate: '基础生成' },
 }))
 

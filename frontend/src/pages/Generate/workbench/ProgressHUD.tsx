@@ -2,7 +2,7 @@
  * ProgressHUD（v0.15 Task 9/13）：Canvas 顶部轻量毛玻璃，集中展示生成进度。
  * - 总进度：跨全部 Stage 工作单元加权（workOverall），不用当前 stage 冒充；
  * - 第 N/M 张；阶段 x/y · 名称；
- * - Step x/y · pct% 仅在真实采样 step 有值时显示；upscale/非采样阶段显示“处理中…”，绝不伪造；
+ * - Step x/y · pct% 仅在真实采样 step 有值时显示；非采样阶段显示“处理中…”，绝不伪造；
  * - Elapsed 仅在此处显示（CurrentJobCard 不再重复）。
  */
 import { ElapsedTimer } from '../../../components/ui/ElapsedTimer'

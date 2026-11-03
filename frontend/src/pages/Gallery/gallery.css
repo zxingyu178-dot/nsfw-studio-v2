@@ -96,19 +96,7 @@
   font-family: inherit;
 }
 
-/* Badge：左上 HD；右上收藏/checkbox */
-.gal-card__hd {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  z-index: 1;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-}
+/* Badge：右上收藏/checkbox */
 .gal-card__corner {
   position: absolute;
   top: 6px;
@@ -199,17 +187,6 @@
   position: relative;
 }
 .gal-detail__preview img { max-width: 100%; max-height: 60vh; object-fit: contain; }
-.gal-detail__hd {
-  position: absolute;
-  top: var(--space-2);
-  left: var(--space-2);
-  background: var(--info);
-  color: var(--on-accent);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-sm);
-}
 
 .gal-detail-section {
   display: flex;
@@ -521,15 +498,6 @@ button.gal-group__main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.gal-card__overlay-hd {
-  margin-right: 6px;
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 10px;
 }
 
 .gal-card__overlay-import {

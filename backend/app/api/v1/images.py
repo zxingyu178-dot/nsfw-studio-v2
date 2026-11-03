@@ -8,10 +8,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session, get_storage
-from app.api.v1.jobs import check_disk_space, resolve_requested_modules
 from app.core.errors import NotFoundError, ValidationError
 from app.core.filetypes import MAX_UPLOAD_BYTES, mime_for_suffix
-from app.engine.release import ensure_modules_released
 from app.schemas.image import (
     ImageBatchStatusRequest,
     ImageBatchStatusResponse,
@@ -32,17 +30,14 @@ from app.schemas.image import (
     ImageReviewRequest,
     ImageStatsResponse,
     ImageStatusRequest,
-    ImageUpscaleRequest,
     ImageVersionsResponse,
     ImageWorkbenchResponse,
     image_response,
 )
-from app.schemas.job import JobResponse, job_response
 from app.services import (
     cleanup_service,
     image_reference_service,
     image_service,
-    job_service,
     thumbnail_service,
 )
 from app.storage.manager import StorageManager
@@ -360,52 +355,6 @@ def image_provenance(image_id: str, session: Session = Depends(get_session)) -> 
             summary="图片引用检查（Phase 5 §十一）：删除前知道仍被哪些对象引用")
 def image_references(image_id: str, session: Session = Depends(get_session)) -> ImageReferencesResponse:
     return ImageReferencesResponse(**image_reference_service.count_references(session, image_id))
-
-
-@router.post("/upscale", response_model=JobResponse, status_code=201,
-             summary="图库图片高清放大（创建处理型 Job，§二十/§二十四）")
-def upscale_images(request: Request, body: ImageUpscaleRequest,
-                   session: Session = Depends(get_session),
-                   storage: StorageManager = Depends(get_storage)) -> JobResponse:
-    """选择已有图片（1 张或多张）→ 创建 job_kind=process 的普通 Job，由同一 QueueWorker 执行。
-
-    绝不在此直接调用引擎；Pipeline = upscale（不重跑基础生成，§二十）。
-    """
-    disk = check_disk_space(request)
-    settings = request.app.state.settings
-    image_ids = list(dict.fromkeys(body.image_ids))  # 去重且保持选择顺序
-    images = [image_service.get_image(session, image_id) for image_id in image_ids]
-    for image in images:
-        if not storage.absolutize(image.file_path).is_file():
-            raise ValidationError(f"图片文件缺失，无法放大: {image.id}", code="IMAGE_FILE_MISSING")
-
-    modules = resolve_requested_modules(settings, [{"module_id": "upscale"}])
-    ensure_modules_released(modules)
-    first = images[0]
-    snapshot = {
-        "prompt_mode": "structured",
-        "structured_prompt": {},
-        "full_prompt": "",
-        "negative_prompt": "",
-        "selected_assets": {},
-        "width": first.width,
-        "height": first.height,
-        "count": len(images),
-        "seed_mode": "random",
-        "seed": None,
-        "workflow_modules": [{"module_id": "upscale"}],
-    }
-    job, _created = job_service.create_job(
-        session,
-        source="web",
-        snapshot=snapshot,
-        workflow_modules=modules,
-        job_kind="process",
-        input_image_ids=image_ids,
-    )
-    response = job_response(job)
-    response.disk_space = disk
-    return response
 
 
 @router.get("/{image_id}/versions", response_model=ImageVersionsResponse,

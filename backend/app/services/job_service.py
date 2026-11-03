@@ -161,7 +161,7 @@ def _first_module_input_slots(modules: list[dict[str, Any]]):
 def _primary_input_image_id(pairs: list[tuple[str, str]], slots) -> str | None:
     """Stage0 链式主输入（StageItem.input_image_id）= 模块声明顺序中第一个有图的槽位。
 
-    img2img/upscale：source；未来 reference 模块：其声明的首个槽位（如 face_reference）。
+    img2img：source；未来 reference 模块：其声明的首个槽位（如 face_reference）。
     槽位声明顺序即优先级；未声明任何槽位时回退到第一张输入图（会被 Validator 拒绝消费）。
     """
     for slot in slots:
@@ -617,7 +617,7 @@ def create_job(
             raise ValidationError("快照输入图片与处理型输入不一致", code="PIPELINE_INVALID")
         stage0_input_ids = image_ids
         # 处理型 Job 的输入是**每 JobItem 一张**（不是 Job 级 N 张）：按"每个槽位 1 张 source"校验，
-        # 否则图库多选高清会被误判为超出 input_slots.max_count（Phase 7 Task5）
+        # 否则图库多选处理型输入会被误判为超出 input_slots.max_count（Phase 7 Task5）
         input_roles = {"source": 1} if image_ids else {}
     elif snapshot_inputs:
         # 生成型 Job：输入图片冻结到 Stage0 全部槽位；链式主输入 = 模块声明顺序中第一个有图的槽位

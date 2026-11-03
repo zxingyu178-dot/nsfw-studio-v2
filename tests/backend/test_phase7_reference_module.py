@@ -52,7 +52,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -172,16 +172,16 @@ def test_reference_job_produces_original_child(mock_client, session, png_bytes):
     assert any(image_id == reference["id"] for _name, image_id in mock_client.app.state.adapter.uploaded_inputs)
 
 
-def test_reference_then_upscale_chain(mock_client, session, png_bytes):
+def test_reference_then_process_chain(mock_client, session, png_bytes):
     reference = import_one(mock_client, "ref_chain_src.png", png_bytes)
     snapshot = make_snapshot(
         count=1,
         input_images=[{"role": "reference", "image_id": reference["id"]}],
-        workflow_modules=[{"module_id": "reference_generate"}, {"module_id": "upscale"}],
+        workflow_modules=[{"module_id": "reference_generate"}, {"module_id": "fake_process"}],
     )
     job = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    assert [stage["module_id"] for stage in final["stages"]] == ["reference_generate", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["reference_generate", "fake_process"]
     stage0_item = final["stages"][0]["items"][0]
     stage1_item = final["stages"][1]["items"][0]
     assert stage1_item["input_image_id"] == stage0_item["output_image_id"]
@@ -193,6 +193,9 @@ def test_reference_then_upscale_chain(mock_client, session, png_bytes):
 # ===== /modules 可用性（comfyui binding 在仓库内） =====
 
 def test_modules_api_exposes_reference_generate(client):
+    # 当前产品默认已切到 v2；本用例锁定 v1 冻结版本的历史放行信息。
+    engine_cfg = client.app.state.settings.workflow.raw["engine"]
+    engine_cfg.setdefault("modules", {})["reference_generate"] = {"binding_version": "v1"}
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     reference = modules["reference_generate"]
     assert reference["registered"] is True

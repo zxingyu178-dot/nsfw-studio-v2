@@ -27,7 +27,7 @@ class EngineBindingRef:
     """引擎任务要使用的 provider binding 身份（Phase 3 §0.2；Phase 4 Task1 增加 binding_hash）。
 
     绑定属于**每次请求**，不属于 Adapter 实例——同一个 Adapter 可以交替执行
-    basic_generate/v1、upscale/v1、basic_generate/v1 而不需要多套 Adapter。
+    basic_generate/v1、img2img/v1、reference_generate/v1 而不需要多套 Adapter。
     执行指纹 = workflow_hash（workflow.json）+ binding_hash（binding.yaml，覆盖
     inputs/defaults/save_image_node/save_image_prefix 等一切执行相关配置）。
     """
@@ -60,7 +60,7 @@ class EngineJobStatus:
 
     v0.15 真实采样 Step：
     - ``step`` / ``max_step`` 表示采样型工作流当前/总步数（如 ComfyUI KSampler 17/30）；
-    - 仅在引擎明确报告时有值；非采样阶段（如高清放大、保存图片）必须为 None，
+    - 仅在引擎明确报告时有值；非采样阶段（如图片保存、后处理）必须为 None，
       上层据此显示"处理中…"，**绝不允许伪造 Step**；
     - 任务成功/失败进入终态时 step/max_step 必须清空，避免 UI 停在 25/25。
     - ``progress`` 仍为 0.0~1.0 归一化进度（step 存在时 = step/max_step）。
@@ -122,7 +122,7 @@ class EngineAdapter(ABC):
     async def upload_input_image(self, *, image_id: str, file_name: str, data: bytes) -> str:
         """输入图片资产契约（Phase 4 Task4）：把待处理图片上传到引擎侧，返回引擎侧引用名。
 
-        处理型模块（upscale / 未来 img2img / reference / inpaint）统一通过本方法上传输入图片，
+        处理型模块（img2img / reference / inpaint 及未来处理模块）统一通过本方法上传输入图片，
         禁止再依赖 ``getattr(engine, "upload_image")`` 之类的 duck typing。
         默认实现明确拒绝（ENGINE_INPUT_UNSUPPORTED）——不支持输入图片的 Adapter 无需覆写；
         支持处理型模块的 Adapter（ComfyUI / Mock）必须覆写。

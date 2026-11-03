@@ -112,7 +112,7 @@ def test_agent_cannot_bypass_release_gate(agent_client, monkeypatch):
 def test_idempotent_replay_returns_same_job(agent_client, monkeypatch):
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-4")
     headers = {"Authorization": "Bearer test-token-4"}
-    body = payload(upscale=True)
+    body = payload()
     first = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
     second = agent_client.post("/api/v1/agent/jobs", json=body, headers=headers)
     assert first.status_code == 201 and second.status_code == 201
@@ -142,10 +142,9 @@ def test_prompt_too_long_and_invalid_module_rejected(agent_client, monkeypatch):
     bad_module = agent_client.post(
         "/api/v1/agent/jobs", json=payload(module_id="upscale"), headers=headers,
     )
-    # W1.2：upscale 是处理型模块（input_required=true / allowed_job_kinds 含 process），
-    # 能力校验必须明确拒绝，不能静默降级到 basic_generate。
+    # upscale 模块已下线：不能再被解析为可用工作流，必须明确拒绝
     assert bad_module.status_code == 400
-    assert bad_module.json()["error"]["code"] == "AGENT_MODULE_NOT_TEXT_GENERATE"
+    assert bad_module.json()["error"]["code"] == "AGENT_MODULE_UNKNOWN"
 
 
 # ===== W1.2-B/C：默认工作流、显式选择、能力门禁与副作用 =====
@@ -209,33 +208,32 @@ def test_default_unreleased_rejected_without_fallback(agent_client, session, mon
 
 
 def test_non_text_module_rejected_without_side_effects(agent_client, session, monkeypatch):
+    """已放行的图片输入模块（img2img）仍必须被 Agent 文本生成能力门禁拒绝。"""
+    monkeypatch.setattr("app.api.v1.agent.ensure_modules_released", lambda _modules: None)
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-process")
     monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
     headers = {"Authorization": "Bearer test-token-process"}
     before = db_counts(session)
     response = agent_client.post(
-        "/api/v1/agent/jobs", json=payload(module_id="upscale"), headers=headers,
+        "/api/v1/agent/jobs", json=payload(module_id="img2img"), headers=headers,
     )
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "AGENT_MODULE_NOT_TEXT_GENERATE"
     assert db_counts(session) == before
 
 
-def test_upscale_appended_after_selected_primary(agent_client, monkeypatch):
-    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-upscale")
+def test_upscale_parameter_rejected_with_explicit_code(agent_client, session, monkeypatch):
+    """旧 Agent 客户端继续传 upscale=true：必须 422 + 固定错误码，不静默忽略、不产生副作用。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-upscale-removed")
     monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
-    headers = {"Authorization": "Bearer test-token-upscale"}
+    headers = {"Authorization": "Bearer test-token-upscale-removed"}
+    before = db_counts(session)
     response = agent_client.post(
-        "/api/v1/agent/jobs",
-        json=payload(module_id="anime_generate", upscale=True),
-        headers=headers,
+        "/api/v1/agent/jobs", json=payload(upscale=True), headers=headers,
     )
-    assert response.status_code == 201, response.text
-    modules = response.json()["workflow_snapshot"]["modules"]
-    assert [item["module_id"] for item in modules] == ["anime_generate", "upscale"]
-    assert [
-        item["module_id"] for item in response.json()["workbench_snapshot"]["workflow_modules"]
-    ] == ["anime_generate", "upscale"]
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "AGENT_UPSCALE_REMOVED"
+    assert db_counts(session) == before, "拒绝请求不得创建 Prompt / Job / Stage"
 
 
 # ===== W1.2.1：事务 / 严格 module_id / CLI 服务端行为 =====

@@ -89,9 +89,9 @@ const reference = makeModule({
   input_kind: 'image',
   input_slots: [{ role: 'reference', required: true, max_count: 1 }],
 })
-const upscale = makeModule({
-  module_id: 'upscale',
-  title: '高清放大',
+const processModule = makeModule({
+  module_id: 'process_only',
+  title: '处理模块',
   input_required: true,
   input_kind: 'image',
   allowed_job_kinds: ['generate', 'process'],
@@ -136,21 +136,21 @@ beforeEach(() => {
 
 describe('W1.2-A InspectorPanel 工作流候选', () => {
   it('文生图：显示基础生成与动漫生成，不混入图片/处理模块', () => {
-    renderPanel('text', 'basic_generate', [basic, anime, img2img, reference, upscale])
+    renderPanel('text', 'basic_generate', [basic, anime, img2img, reference, processModule])
     fireEvent.click(screen.getByRole('button', { name: '工作流' }))
     expect(optionLabels()).toEqual(expect.arrayContaining(['基础生成', '动漫生成']))
     expect(optionLabels()).not.toContain('图生图')
     expect(optionLabels()).not.toContain('参考图生成')
-    expect(optionLabels()).not.toContain('高清放大')
+    expect(optionLabels()).not.toContain('处理模块')
   })
 
-  it('图片模式：显示 img2img 与 reference_generate，不混入文生图/upscale', () => {
-    renderPanel('image', 'img2img', [basic, anime, img2img, reference, upscale])
+  it('图片模式：显示 img2img 与 reference_generate，不混入文生图/处理模块', () => {
+    renderPanel('image', 'img2img', [basic, anime, img2img, reference, processModule])
     fireEvent.click(screen.getByRole('button', { name: '工作流' }))
     expect(optionLabels()).toEqual(expect.arrayContaining(['图生图', '参考图生成']))
     expect(optionLabels()).not.toContain('基础生成')
     expect(optionLabels()).not.toContain('动漫生成')
-    expect(optionLabels()).not.toContain('高清放大')
+    expect(optionLabels()).not.toContain('处理模块')
   })
 
   it('未放行模块自动隐藏；唯一候选时退回静态标题', () => {

@@ -83,7 +83,7 @@ def wait_for(client, job_id: str, predicate, timeout: float = 60.0) -> dict:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -215,11 +215,10 @@ def test_process_job_snapshot_input_mismatch_rejected(session, settings, png_byt
         job_service.create_job(
             session, source="web",
             snapshot={**make_snapshot(), "input_images": [{"role": "source", "image_id": images[0].id}]},
-            workflow_modules=[{"module_id": "upscale", "module_version": "v1"}],
+            workflow_modules=[{"module_id": "fake_process", "module_version": "v1"}],
             job_kind="process", input_image_ids=[images[1].id],
         )
     assert error.value.code == "PIPELINE_INVALID"
-
 
 # ===== §九：Recipe 输入图快照 =====
 
@@ -341,8 +340,24 @@ def test_image_reference_counts_across_all_sources(mock_client, session, png_byt
         "name": "溯源素材", "type": "scene", "source_image_id": image["id"],
     })
     # 4) 处理型 Job（StageItem 输入）→ 产出派生图（parent_image_id）
-    job = mock_client.post("/api/v1/images/upscale", json={"image_ids": [image["id"]]}).json()
-    final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
+    from app.services import job_service
+
+    modules = [{
+        "module_id": "fake_process", "module_version": "v1", "provider": "mock",
+        "binding_version": "v1", "workflow_hash": None, "binding_hash": None,
+    }]
+    process_snapshot = make_snapshot(count=1, workflow_modules=[{"module_id": "fake_process"}])
+    process_snapshot.update(
+        prompt_mode="structured", structured_prompt={}, full_prompt="", negative_prompt="",
+        width=image["width"], height=image["height"],
+    )
+    with mock_client.app.state.session_factory() as session:
+        job, _ = job_service.create_job(
+            session, source="web", snapshot=process_snapshot, workflow_modules=modules,
+            job_kind="process", input_image_ids=[image["id"]],
+        )
+        job_id = job.id
+    final = wait_for(mock_client, job_id, lambda j: j["status"] == "COMPLETED")
     child_id = final["stages"][0]["items"][0]["output_image_id"]
     assert child_id
 
@@ -368,9 +383,7 @@ def test_image_reference_counts_across_all_sources(mock_client, session, png_byt
 def test_modules_api_declares_input_capabilities(client):
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     assert modules["basic_generate"]["input_required"] is False
-    assert modules["upscale"]["input_required"] is True
-    assert modules["upscale"]["input_role"] == "source"
-    assert modules["upscale"]["output_kind"] == "upscaled"
+    assert "upscale" not in modules
 
     # Phase 5.1（Gate C）：img2img 已注册并可用，成为图片生成模式 Primary Module
     # （Phase 5 时的"无可用图片条件模块"Gate B 已解除；Gate 判定依据 available=true）

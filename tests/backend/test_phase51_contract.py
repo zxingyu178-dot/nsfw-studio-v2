@@ -57,7 +57,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -193,7 +193,7 @@ def test_job_stage_config_json_materialized(mock_client, session):
     """Task3：Workbench workflow_modules[].config → Job.workflow_snapshot → JobStage.config_json。"""
     snapshot = make_snapshot(count=1, workflow_modules=[
         {"module_id": "basic_generate", "config": {"marker": "a"}},
-        {"module_id": "upscale", "config": {"marker": "b"}},
+        {"module_id": "fake_process", "config": {"marker": "b"}},
     ])
     response = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot})
     assert response.status_code == 201, response.text
@@ -221,26 +221,26 @@ def test_generate_job_rejects_unused_input_image(mock_client, png_bytes):
 
 
 def test_generate_job_requires_input_for_input_module(mock_client):
-    """P0：Pipeline 需要输入图（upscale 为首模块）却没有输入图 → 必须拒绝。"""
+    """P0：Pipeline 需要输入图（处理型测试替身为首模块）却没有输入图 → 必须拒绝。"""
     response = mock_client.post("/api/v1/jobs", json={
-        "snapshot": make_snapshot(workflow_modules=[{"module_id": "upscale"}]),
+        "snapshot": make_snapshot(workflow_modules=[{"module_id": "fake_process"}]),
     })
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "INPUT_IMAGE_REQUIRED"
 
 
-def test_pipeline_validator_rules():
+def test_pipeline_validator_rules(process_registry):
     """Task5：PipelineValidator 统一规则（Stage0 输入需求 / 链式接收 / 未知模块）。"""
     validator = PipelineValidator()
 
     # 合法：纯文生图；文生图 → 高清（链式接收上一 Stage 输出）
     validator.validate([{"module_id": "basic_generate"}], job_kind="generate", has_input_image=False)
     validator.validate(
-        [{"module_id": "basic_generate"}, {"module_id": "upscale"}],
+        [{"module_id": "basic_generate"}, {"module_id": "fake_process"}],
         job_kind="generate", has_input_image=False,
     )
     # 合法：处理型 Job（upscale-only + 输入图）
-    validator.validate([{"module_id": "upscale"}], job_kind="process", has_input_image=True)
+    validator.validate([{"module_id": "fake_process"}], job_kind="process", has_input_image=True)
 
     # 非法：输入图片没人消费
     with pytest.raises(ValidationError) as error:
@@ -249,7 +249,7 @@ def test_pipeline_validator_rules():
 
     # 非法：需要输入图却没有
     with pytest.raises(ValidationError) as error:
-        validator.validate([{"module_id": "upscale"}], job_kind="generate", has_input_image=False)
+        validator.validate([{"module_id": "fake_process"}], job_kind="generate", has_input_image=False)
     assert error.value.code == "INPUT_IMAGE_REQUIRED"
 
     # 非法：同一模块重复出现（Phase 6 Task4：第一版明确禁止，专用错误码）
@@ -263,7 +263,7 @@ def test_pipeline_validator_rules():
     # 非法：中间 Stage 不消费上一 Stage 输出（链式执行无意义）
     with pytest.raises(ValidationError) as error:
         validator.validate(
-            [{"module_id": "upscale"}, {"module_id": "basic_generate"}],
+            [{"module_id": "fake_process"}, {"module_id": "basic_generate"}],
             job_kind="generate", has_input_image=True,
         )
     assert error.value.code == "PIPELINE_INVALID"
@@ -273,24 +273,24 @@ def test_pipeline_validator_rules():
         validator.validate([{"module_id": "nope"}], job_kind="generate", has_input_image=False)
     assert error.value.code == "WORKFLOW_ERROR"
 
-    # 非法：处理型 Job 混入非 upscale 模块
+    # 非法：处理型 Job 混入非处理型模块
     with pytest.raises(ValidationError) as error:
         validator.validate(
-            [{"module_id": "basic_generate"}, {"module_id": "upscale"}],
+            [{"module_id": "basic_generate"}, {"module_id": "fake_process"}],
             job_kind="process", has_input_image=True,
         )
     assert error.value.code == "PIPELINE_INVALID"
 
 
 def test_legal_chain_job_completes(mock_client):
-    """合法链（basic_generate → upscale）在新校验下照常执行。"""
+    """合法链（basic_generate → 处理型测试替身）在新校验下照常执行。"""
     job = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(count=1, workflow_modules=[
-            {"module_id": "basic_generate"}, {"module_id": "upscale"},
+            {"module_id": "basic_generate"}, {"module_id": "fake_process"},
         ]),
     }).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    assert [stage["module_id"] for stage in final["stages"]] == ["basic_generate", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["basic_generate", "fake_process"]
 
 
 # ===== Task7：/modules 真实可用性 =====
@@ -298,13 +298,14 @@ def test_legal_chain_job_completes(mock_client):
 def test_modules_api_reports_real_availability(client):
     """comfyui provider：binding 在磁盘 → available=true；报告 provider/binding_version。"""
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
-    for module_id in ("basic_generate", "upscale"):
+    for module_id in ("basic_generate", "img2img", "reference_generate", "anime_generate"):
         info = modules[module_id]
         assert info["registered"] is True
         assert info["available"] is True, info
         assert info["provider"] == "comfyui"
-        assert info["binding_version"] == "v1"
+        assert info["binding_version"] in ("v1", "v2", "v3")
         assert info["unavailable_reason"] is None
+    assert "upscale" not in modules
 
 
 def test_modules_api_unavailable_when_binding_missing(client, monkeypatch, tmp_path):
@@ -313,11 +314,12 @@ def test_modules_api_unavailable_when_binding_missing(client, monkeypatch, tmp_p
 
     monkeypatch.setattr(comfyui_module, "PROVIDERS_DIR", tmp_path / "empty_providers")
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
-    for module_id in ("basic_generate", "upscale"):
+    for module_id in ("basic_generate", "img2img", "reference_generate", "anime_generate"):
         info = modules[module_id]
         assert info["registered"] is True
         assert info["available"] is False
         assert info["unavailable_reason"] == "binding_not_configured"
+    assert "upscale" not in modules
 
 
 def test_modules_api_unavailable_without_engine(settings):

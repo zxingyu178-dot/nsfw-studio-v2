@@ -31,6 +31,7 @@ STATUS_UNKNOWN = "UNKNOWN"
 MODEL_LOADERS: dict[str, tuple[str, str]] = {
     "UnetLoaderGGUF": ("unet_name", "diffusion_models"),
     "UNETLoader": ("unet_name", "diffusion_models"),
+    "CheckpointLoaderSimple": ("ckpt_name", "checkpoints"),
     "CLIPLoader": ("clip_name", "text_encoders"),
     "VAELoader": ("vae_name", "vae"),
     "LoraLoader": ("lora_name", "loras"),
@@ -45,6 +46,7 @@ FOLDER_ALIASES = {
     "clip": "text_encoders",
     "vae": "vae",
     "loras": "loras",
+    "checkpoints": "checkpoints",
     "upscale_models": "upscale_models",
 }
 

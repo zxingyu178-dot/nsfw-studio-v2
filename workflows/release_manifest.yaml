@@ -1,8 +1,8 @@
 schema_version: 1
-# 工作流正式放行清单（W1-1 / W1.1-3）
+# 工作流正式放行清单（W1-1 / W1.1-3；W4.0 收敛）
 #
 # 状态语义：
-#   dependencies_ready        节点/模型依赖是否齐全（W1 由人工登记；W2 改为实际探测）
+#   dependencies_ready        节点/模型依赖是否齐全（W2 起以实际探测为准）
 #   real_gate_passed          是否已有该 binding 的真实 G3 Studio 出图证据
 #   hardware_status           normal | slow | experimental | unsupported
 #   default_profile_verified  当前默认分辨率/步数是否有对应 G4 证据（独立语义，不参与放行）
@@ -10,22 +10,22 @@ schema_version: 1
 #                             real_gate_passed + hardware_status != unsupported 计算
 #
 # 证据三分法（不得混写）：
-#   comfyui_node_chain         直接 ComfyUI API / 节点链出图
-#   studio_production          经 Studio Job + Queue + Stage 的完整生产链
-#   default_profile_performance 当前默认配置的性能测量（G4）
+#   comfyui_node_chain / studio_production / default_profile_performance
 #
-# 数据来源：只读审计 D:/NSFW-Studio-Data/database/studio.db（2026-10-30）。
-# 禁止把模型文件大小或估算值写成实测性能；缺证据必须 false/unverified。
+# W4.0：正式模块收敛为四个（basic/anime/img2img/reference），upscale 已下线；
+# 新版本（basic v2 / anime v2 / img2img v3 / reference v2）只有在完成依赖探测与
+# 真实 Studio G3 后才允许把 evidence 写为 passed，不得沿用旧版本证据。
 
 modules:
   basic_generate:
     bindings:
       v1:
+        frozen: true
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: normal
         default_profile_verified: false
-        notes: "Qwen-Image 2.1 UC Q4 + Turbo8 + f23gg，8 步；主力文生图"
+        notes: "冻结历史版本（8 步 turbo，qwen_image_2.1_vae）；仅历史 Job 引用"
         evidence:
           comfyui_node_chain:
             status: passed
@@ -38,10 +38,23 @@ modules:
           default_profile_performance:
             status: unverified
             reason: "Turbo8 双 LoRA 默认档未做独立 G4 峰值/耗时记录"
+      v2:
+        dependencies_ready: false
+        real_gate_passed: false
+        hardware_status: normal
+        default_profile_verified: false
+        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；待依赖探测与真实 G3"
+        evidence:
+          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          default_profile_performance:
+            status: unverified
+            reason: "G4 未测"
 
   img2img:
     bindings:
       v1:
+        frozen: true
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
@@ -58,57 +71,84 @@ modules:
             status: verified
             reason: "768×768 / 25 步 / denoise 0.55 有真实记录"
       v2:
+        frozen: true
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
         default_profile_verified: true
-        notes: "新任务默认；denoise 0.8；节点图与 v1 相同，0.8 已由 Studio 真实执行"
+        notes: "冻结版本（denoise 0.8）；节点图与 v1 相同"
         evidence:
           comfyui_node_chain:
             status: passed
-            method: "与 v1 同一节点图；0.8 由 job_37b4723e…（current v1 hash）在 Studio 执行"
+            method: "与 v1 同一节点图；0.8 由历史 Studio Job 执行"
           studio_production:
             status: passed_inherited
             binding_hash: "2f2d5c06055c623a"
             reference_jobs:
-              - "job_843514fd-2316-4311-adfa-eda217251b54"   # denoise 0.8
-              - "job_37b4723e-d7f6-4716-b1dc-07f01c45ae11"    # denoise 0.8
-            note: "v2 仅默认值不同且运行时被模块 config 覆盖；v2 自身尚无独立 Job"
+              - "job_843514fd-2316-4311-adfa-eda217251b54"
+              - "job_37b4723e-d7f6-4716-b1dc-07f01c45ae11"
+            note: "v2 仅默认值不同且运行时被模块 config 覆盖"
           default_profile_performance:
             status: verified_inherited
             sampling_seconds: 496
             source: "docs/PHASE51_REPORT.md + Phase 6 实测"
+      v3:
+        dependencies_ready: false
+        real_gate_passed: false
+        hardware_status: slow
+        default_profile_verified: false
+        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；待 G0/G3"
+        evidence:
+          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          default_profile_performance:
+            status: unverified
+            reason: "仅换 VAE，未重新 G4"
 
   reference_generate:
     bindings:
       v1:
+        frozen: true
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "低频高质量；当前 binding 的 Studio 证据为 768 档，1024 默认未验证"
+        notes: "冻结历史版本；当前 binding 的 Studio 证据为 768 档，1024 默认未验证"
         evidence:
           comfyui_node_chain:
             status: passed
-            config: "640 / 20 步（2026-10-07 直连 ComfyUI API，非 Studio，未记录 binding hash）"
+            config: "640 / 20 步（2026-10-07 直连 ComfyUI API）"
           studio_production:
             status: passed
             binding_hash: "1022da22e48721e6"
             reference_jobs:
-              - "job_25c14f4d-0e86-486a-a7b9-292516629a53"   # resolution=768，output 672×896
-            note: "当前 binding 仅 768 档；1024/25 默认没有当前 hash 的 Studio 证据"
+              - "job_25c14f4d-0e86-486a-a7b9-292516629a53"
+            note: "仅 768 档；1024/25 默认没有当前 hash 的 Studio 证据"
           default_profile_performance:
             status: unverified
             reason: "640/20 证据不对应当前 binding 的 1024/25 默认"
+      v2:
+        dependencies_ready: false
+        real_gate_passed: false
+        hardware_status: slow
+        default_profile_verified: false
+        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；待 G0/G3"
+        evidence:
+          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          default_profile_performance:
+            status: unverified
+            reason: "仅换 VAE，未重新 G4"
 
   anime_generate:
     bindings:
       v1:
+        frozen: true
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "当前 binding 已有 2 个真实 Studio 完成 Job；G4 未测"
+        notes: "冻结历史版本（Anima 2.9B）；仅历史 Job 引用"
         evidence:
           comfyui_node_chain:
             status: passed
@@ -117,28 +157,21 @@ modules:
             status: passed
             binding_hash: "dfa750836ac536eb"
             reference_jobs:
-              - "job_9961f5f1-b2a0-4691-b314-35e2d02d4db7"   # 832×1216，2026-10-20，约 4.5 分钟
-              - "job_430e3dd7-94c6-421e-a28b-0b1ee834ab19"   # 1920×1088，2026-10-20
-            note: "W0/W1 文档曾误记为未验收；数据库真实证据与当前 binding hash 一致"
+              - "job_9961f5f1-b2a0-4691-b314-35e2d02d4db7"
+              - "job_430e3dd7-94c6-421e-a28b-0b1ee834ab19"
+            note: "数据库真实证据与当时 binding hash 一致"
           default_profile_performance:
             status: unverified
             reason: "无独立 G4 峰值与默认档耗时记录"
-
-  upscale:
-    bindings:
-      v1:
-        dependencies_ready: true
-        real_gate_passed: true
+      v2:
+        dependencies_ready: false
+        real_gate_passed: false
         hardware_status: normal
         default_profile_verified: false
-        notes: "4x-UltraSharp；轻量优先，SeedVR2 暂不接入"
+        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；待 G0/G3"
         evidence:
-          comfyui_node_chain: {status: passed, method: "用户放大链 API 化"}
-          studio_production:
-            status: passed
-            binding_hash: "6a7a21944d428ef6"
-            completed_stages: 8
-            method: "Studio 完整生产链"
+          comfyui_node_chain: {status: pending, method: "W4.0 G0 探测待执行"}
+          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
           default_profile_performance:
             status: unverified
-            reason: "放大后内存/输出尺寸 G4 未测"
+            reason: "G4 未测（已有 260+ 张真实生成，但未做独立峰值记录）"

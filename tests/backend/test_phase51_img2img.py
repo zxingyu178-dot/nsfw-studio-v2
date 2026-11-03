@@ -2,7 +2,7 @@
 
 覆盖：
 - img2img 作为 Stage0（图片生成模式 Primary Module）→ kind=processed / parent=输入图 / Seed 记录；
-- Pipeline 链式（img2img → upscale）Stage Gate 正常；
+- Pipeline 链式（img2img → 处理型测试替身）Stage Gate 正常；
 - denoise 经 config 单链进入 JobStage.config_json 与引擎请求；
 - 缺输入图 / 非法 denoise 在 Job 创建期拒绝；
 - Resume 剩余：继承 img2img 身份 + config，并重新冻结输入图；
@@ -51,7 +51,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -135,22 +135,22 @@ def test_img2img_job_produces_processed_child(mock_client, session, png_bytes):
     assert output.seed == stage_item["seed"]
 
 
-def test_img2img_then_upscale_chain(mock_client, session, png_bytes):
+def test_img2img_then_process_chain(mock_client, session, png_bytes):
     source = import_one(mock_client, "chain_src.png", png_bytes)
     snapshot = make_snapshot(count=1, input_images=[{"role": "source", "image_id": source["id"]}],
-                             workflow_modules=[{"module_id": "img2img"}, {"module_id": "upscale"}])
+                             workflow_modules=[{"module_id": "img2img"}, {"module_id": "fake_process"}])
     job = mock_client.post("/api/v1/jobs", json={"snapshot": snapshot}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
-    assert [stage["module_id"] for stage in final["stages"]] == ["img2img", "upscale"]
+    assert [stage["module_id"] for stage in final["stages"]] == ["img2img", "fake_process"]
 
     stage0_item = final["stages"][0]["items"][0]
     stage1_item = final["stages"][1]["items"][0]
     assert stage1_item["input_image_id"] == stage0_item["output_image_id"], \
-        "Stage Gate：upscale 的输入 = img2img 输出"
+        "Stage Gate：处理型 Stage 的输入 = img2img 输出"
     upscaled = session.get(Image, stage1_item["output_image_id"])
     assert upscaled.kind == "upscaled"
     assert upscaled.parent_image_id == stage0_item["output_image_id"]
-    assert upscaled.seed is None, "upscale uses_seed=false → 不得携带假 Seed"
+    assert upscaled.seed is None, "处理型模块 uses_seed=false → 不得携带假 Seed"
 
 
 def test_img2img_requires_input_image(mock_client):
@@ -215,6 +215,9 @@ def test_img2img_resume_keeps_identity_and_input(mock_client, session, png_bytes
 # ===== /modules：img2img 真实可用（Gate C 依据） =====
 
 def test_modules_api_exposes_img2img_available(client):
+    # 当前产品默认已切到 v3；本用例锁定 v2 冻结版本的历史放行信息。
+    engine_cfg = client.app.state.settings.workflow.raw["engine"]
+    engine_cfg.setdefault("modules", {})["img2img"] = {"binding_version": "v2"}
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     img2img = modules["img2img"]
     assert img2img["registered"] is True

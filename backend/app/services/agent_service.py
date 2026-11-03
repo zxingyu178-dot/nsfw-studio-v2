@@ -5,7 +5,7 @@
   不在本模块另写一套默认逻辑；
 - 允许模块由 WorkflowModule capabilities 决定（is_generative / input_required /
   allowed_job_kinds），不做静态枚举；
-- 只开放单生成模块 + 可选 upscale，不开放任意 Pipeline / 输入图片链路。
+- 只开放单生成模块，不开放任意 Pipeline / 输入图片链路。
 """
 from __future__ import annotations
 
@@ -37,12 +37,10 @@ def _translate(error: EngineError, module_id: str | None) -> ValidationError:
 def resolve_agent_workflow_modules(
     settings: Settings,
     module_id: str | None,
-    *,
-    upscale: bool,
 ) -> list[dict[str, Any]]:
-    """解析实际工作流身份：显式 module_id 或服务器默认，再按需追加 upscale。
+    """解析实际工作流身份：显式 module_id 或服务器默认。
 
-    返回的是服务端解析出的真实身份列表（含 provider / binding_version / 双指纹），
+    返回的是服务端解析出的真实身份（含 provider / binding_version / 双指纹），
     Agent 不传入、也不能伪造这些字段。
     """
     if module_id is not None and not str(module_id).strip():
@@ -64,19 +62,7 @@ def resolve_agent_workflow_modules(
             code="AGENT_MODULE_UNKNOWN",
             details={"module_id": module_id},
         )
-    if upscale and primary_id == "upscale":
-        raise ValidationError(
-            "Agent 只允许文生图工作流 + 可选高清放大，upscale 不能作为 Primary",
-            code="AGENT_MODULE_NOT_TEXT_GENERATE",
-            details={"module_id": primary_id},
-        )
-    planned = [{"module_id": primary_id}]
-    if upscale:
-        planned.append({"module_id": "upscale"})
-    try:
-        return resolve_workflow_modules(settings, planned)
-    except EngineError as error:
-        raise _translate(error, primary_id) from error
+    return [primary]
 
 
 def validate_agent_primary(settings: Settings, modules: list[dict[str, Any]]) -> None:

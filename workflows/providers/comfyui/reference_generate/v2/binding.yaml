@@ -1,0 +1,59 @@
+# reference_generate v2 — ComfyUI Provider Binding（W4.0）
+#
+# 基础 = 冻结的 v1（Qwen-Image 2.1 参考图 latent 链），唯一变化：
+# VAE 换成官方推荐的 texture-fix 解码器。参考图输入结构与数量上限不变（1..16）。
+# 采样保持 25 步 / cfg 1.0 / euler / simple / denoise 1.0。
+#
+# 图结构：LoadImage(参考图) → TextEncodeQwenImage21（reference latents）
+#         → KSampler(latent = 参考尺寸空 latent) → VAEDecode → SaveImage
+
+binding_version: v2
+module: reference_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "8"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  input_image:     {node: "4", field: "image"}
+  positive_prompt: {node: "5", field: "prompt"}
+  negative_prompt: {node: "5", field: "negative_prompt"}
+  resolution:      {node: "5", field: "resolution"}
+  seed:            {node: "6", field: "seed"}
+
+# 固定默认（denoise 固定 1.0——参考条件是“生成”而非“改图”）
+defaults:
+  "6": {steps: 25, cfg: 1.0, sampler_name: euler, scheduler: simple, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  reference_mode: qwen21_reference_latents
+  output_size: input_image
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: UnetLoaderGGUF, source: custom, package: ComfyUI-GGUF, version: unverified}
+    - {class_type: CLIPLoader, source: comfyui_core}
+    - {class_type: VAELoader, source: comfyui_core}
+    - {class_type: LoadImage, source: comfyui_core}
+    - {class_type: TextEncodeQwenImage21, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: diffusion_models, filename: qwen-image-2.1-UC-Q4_0.gguf, sha256: unverified, precision: q4_0}
+    - {type: text_encoders, filename: qwen3vl_8b_w4a8.safetensors, sha256: unverified, precision: w4a8}
+    - {type: vae, filename: texture_fix_vae_for_qwen_image_2.1_bf16.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: unverified
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  notes: "v1 的 768 档有真实 Studio 证据；v2 仅换 VAE，未重新做 G4"

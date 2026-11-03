@@ -1,7 +1,7 @@
 """ModuleRegistry — WorkflowModule 注册表（Phase 2.1 规范 §三）。
 
 按 (module_id, module_version) 注册；PipelineExecutor 据此从 Job 的
-workflow_snapshot 解析实际执行的模块。新增 Upscale / Img2Img / Reference 模块时
+workflow_snapshot 解析实际执行的模块。新增 Img2Img / Reference 模块时
 只需注册新模块，不修改 Worker 核心执行逻辑。
 """
 from __future__ import annotations
@@ -14,7 +14,6 @@ from app.workflows.anime_generate import AnimeGenerateModule
 from app.workflows.basic_generate import BasicGenerateModule
 from app.workflows.img2img import Img2ImgModule
 from app.workflows.reference_generate import ReferenceGenerateModule
-from app.workflows.upscale import UpscaleModule
 
 
 class ModuleRegistry:
@@ -53,11 +52,11 @@ class ModuleRegistry:
 
 
 def default_registry() -> ModuleRegistry:
-    """产品默认注册表：基础生图 + 动漫生图 + 图生图 + 参考图生成 + 高清放大。
+    """产品默认注册表：基础生图 + 动漫生图 + 图生图 + 参考图生成。
 
-    顺序 = 产品展示顺序（Phase 3 / 5.1 / 7 / Phase 0.16 Anima 上线）。
+    顺序 = 产品展示顺序（Phase 5.1 / Phase 7 / Phase 0.16 Anima 上线）。
     """
     return ModuleRegistry([
         BasicGenerateModule(), AnimeGenerateModule(), Img2ImgModule(),
-        ReferenceGenerateModule(), UpscaleModule(),
+        ReferenceGenerateModule(),
     ])
