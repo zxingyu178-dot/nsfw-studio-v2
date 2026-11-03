@@ -49,7 +49,7 @@ requirements:
     - {class_type: VAEDecode, source: comfyui_core}
     - {class_type: SaveImage, source: comfyui_core}
   models:
-    - {type: diffusion_models, filename: qwen-image-2.1-UC-Q4_0.gguf, sha256: unverified, precision: q4_0}
+    - {type: unet_gguf, filename: qwen-image-2.1-UC-Q4_0.gguf, sha256: unverified, precision: q4_0}
     - {type: text_encoders, filename: qwen3vl_8b_w4a8.safetensors, sha256: unverified, precision: w4a8}
     - {type: vae, filename: texture_fix_vae_for_qwen_image_2.1_bf16.safetensors, sha256: unverified, precision: bf16}
 

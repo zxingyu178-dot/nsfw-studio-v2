@@ -34,10 +34,11 @@ BINDING = {
     "requirements": {"comfyui_min_version": "0.37.0"},
 }
 MODELS = {
-    "diffusion_models": ["model.gguf"],
+    "unet_gguf": ["model.gguf"],
     "text_encoders": ["clip.safetensors"],
     "vae": ["vae.safetensors"],
     "loras": ["turbo.safetensors"],
+    "checkpoints": ["checkpoint.safetensors"],
 }
 
 
@@ -139,6 +140,39 @@ def test_missing_model_blocks(settings):
     assert result["modules"][0]["missing_models"] == [
         {"folder": "loras", "filename": "turbo.safetensors"}
     ]
+
+
+def test_checkpoint_loader_checked_in_checkpoints_folder(settings):
+    """Task D：CheckpointLoaderSimple 必须按 ckpt_name 到 /models/checkpoints 检测。"""
+    workflow = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "anime.safetensors"}},
+        "6": {"class_type": "KSampler", "inputs": {}},
+        "8": {"class_type": "SaveImage", "inputs": {}},
+    }
+    workflow_nodes = {str(node["class_type"]) for node in workflow.values()}
+    models = {"checkpoints": ["anime.safetensors"]}
+    http, calls = make_http(nodes=set(workflow_nodes), models=models)
+    result = service(settings, FakeComfyAdapter(workflow=workflow), http).check_modules([module_identity("anime_generate")])
+    assert result["status"] == "READY"
+    assert "/models/checkpoints" in calls
+
+    http, _calls = make_http(nodes=set(workflow_nodes), models={"checkpoints": []})
+    blocked = service(settings, FakeComfyAdapter(workflow=workflow), http).check_modules([module_identity("anime_generate")])
+    assert blocked["status"] == "BLOCKED"
+    assert blocked["modules"][0]["missing_models"] == [
+        {"folder": "checkpoints", "filename": "anime.safetensors"}
+    ]
+
+
+def test_unknown_requirements_model_type_is_unknown(settings):
+    binding = {**BINDING, "requirements": {"models": [
+        {"type": "mystery_models", "filename": "x.safetensors"},
+    ]}}
+    result = service(
+        settings, FakeComfyAdapter(binding=binding), make_http()[0]
+    ).check_modules([module_identity()])
+    assert result["status"] == "UNKNOWN"
+    assert any("mystery_models" in reason for reason in result["modules"][0]["unknown_reasons"])
 
 
 def test_engine_offline_is_unknown(settings):

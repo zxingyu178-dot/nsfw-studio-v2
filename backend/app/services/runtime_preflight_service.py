@@ -29,7 +29,7 @@ STATUS_UNKNOWN = "UNKNOWN"
 
 # ComfyUI 模型加载节点 → (文件名输入字段, 模型目录)
 MODEL_LOADERS: dict[str, tuple[str, str]] = {
-    "UnetLoaderGGUF": ("unet_name", "diffusion_models"),
+    "UnetLoaderGGUF": ("unet_name", "unet_gguf"),
     "UNETLoader": ("unet_name", "diffusion_models"),
     "CheckpointLoaderSimple": ("ckpt_name", "checkpoints"),
     "CLIPLoader": ("clip_name", "text_encoders"),
@@ -42,6 +42,7 @@ MODEL_LOADERS: dict[str, tuple[str, str]] = {
 FOLDER_ALIASES = {
     "diffusion_models": "diffusion_models",
     "unet": "diffusion_models",
+    "unet_gguf": "unet_gguf",
     "text_encoders": "text_encoders",
     "clip": "text_encoders",
     "vae": "vae",
