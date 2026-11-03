@@ -43,10 +43,19 @@ modules:
         real_gate_passed: true
         hardware_status: normal
         default_profile_verified: false
-        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
+        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；依赖探测 READY + G3 真实出图通过（2026-11-03）"
         evidence:
           comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
-          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          studio_production:
+            status: passed
+            workflow_hash: "9da86110a20db1ed"
+            binding_hash: "e34bf33b8451ec81"
+            reference_jobs:
+              - "job_5fae2698-45c0-40a2-bfb8-9b25ba3e1dca"
+            output_image_id: "img_1488807d-d29d-448b-be38-0d8f9fd7e2af"
+            sampling_profile: "832×1216 / 12 步 / cfg1.0 / euler simple / batch1"
+            stage_seconds: 168.3
+            method: "W4.0 G3 真实 Studio Job（单张）"
           default_profile_performance:
             status: unverified
             reason: "G4 未测"
@@ -97,10 +106,19 @@ modules:
         real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
+        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；依赖探测 READY + G3 真实出图通过（2026-11-03）"
         evidence:
           comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
-          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          studio_production:
+            status: passed
+            workflow_hash: "d8fac1d3b2e9c627"
+            binding_hash: "8ed91f6860c51cb4"
+            reference_jobs:
+              - "job_40e4081b-377a-44ba-a2f3-3827d9d77b88"
+            output_image_id: "img_0897edfa-0d0d-4330-9b2c-6c3d3cb5750a"
+            sampling_profile: "denoise 0.8 / 25 步 / cfg1.0 / euler simple / batch1"
+            stage_seconds: 541.0
+            method: "W4.0 G3 真实 Studio Job（输入 = basic v2 输出图，单张）"
           default_profile_performance:
             status: unverified
             reason: "仅换 VAE，未重新 G4"
@@ -132,10 +150,19 @@ modules:
         real_gate_passed: true
         hardware_status: slow
         default_profile_verified: false
-        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
+        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；依赖探测 READY + G3 真实出图通过（2026-11-03）"
         evidence:
           comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
-          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          studio_production:
+            status: passed
+            workflow_hash: "65dbbd6ca22eb9e7"
+            binding_hash: "4ac3b58b16203412"
+            reference_jobs:
+              - "job_44dd171f-f91d-4cee-8e62-f94f1bf04755"
+            output_image_id: "img_ccbedfec-2937-4f33-bd67-5044705c44a5"
+            sampling_profile: "resolution 768 / 25 步 / cfg1.0 / euler simple / batch1（输出 640×928）"
+            stage_seconds: 683.2
+            method: "W4.0 G3 真实 Studio Job（输入 = img2img v3 输出图作为参考，单张）"
           default_profile_performance:
             status: unverified
             reason: "仅换 VAE，未重新 G4"
@@ -168,10 +195,19 @@ modules:
         real_gate_passed: true
         hardware_status: normal
         default_profile_verified: false
-        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；依赖探测 READY（2026-11-03），G3 验证中（临时放行）"
+        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；依赖探测 READY + G3 真实出图通过（2026-11-03）"
         evidence:
           comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
-          studio_production: {status: pending, method: "W4.0 G3 真实 Job 待执行"}
+          studio_production:
+            status: passed
+            workflow_hash: "144a4b9f63e8dc67"
+            binding_hash: "a0aa56fb921178b0"
+            reference_jobs:
+              - "job_0f43ce4e-e143-4079-bce3-06f9b7f6c77d"
+            output_image_id: "img_15ae8248-fd26-42a0-b17c-3dc3cdb11999"
+            sampling_profile: "832×1216 / 30 步 / cfg4.0 / er_sde simple / batch1"
+            stage_seconds: 119.1
+            method: "W4.0 G3 真实 Studio Job（单张）"
           default_profile_performance:
             status: unverified
             reason: "G4 未测（已有 260+ 张真实生成，但未做独立峰值记录）"
