@@ -154,7 +154,8 @@ ALL LIFECYCLE CHECKS PASSED
 | `b25565a` | preflight 按实际 `unet_gguf` 目录检测 + 测试 |
 | `5be526c` | 依赖探测 READY、临时放行 G3 |
 | `2f0fb06` | 本报告 + 模型清单 + manifest G3 证据 |
-| `872a5d6` | 报告补齐提交与验收包说明（最终 HEAD） |
+
+> 之后的 docs-only 提交仅修订本报告文字，不改变代码、Binding、放行清单或数据库；最终 HEAD 以 `git log -1 main` 与验收包 `DELIVERY.txt` 记录为准。
 
 CI：`41573977381`（8bb79a0）、`41578585410`（b25565a）、`41579171678`（5be526c）、`41585020866`（2f0fb06）均为 success；main 全绿。
 
