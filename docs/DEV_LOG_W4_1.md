@@ -23,9 +23,15 @@
 | 迁移 | 全量校验 | 计数完全一致；全部图片有 SHA256；父子关系 32 条不变 |
 | 测试 | 前端 build + 488 vitest | 通过 |
 | 测试 | 受影响后端定向测试 | 通过 |
-| 测试 | 后端全量 pytest | 进行中（见最终报告） |
-| 验收 | G3 / G4 / 手机回归 | 未执行（等待全量测试与部署） |
-| 交付 | Commit / Push / CI / ZIP | 未执行 |
+| 测试 | 后端全量 pytest | 697 collected；1 个 SSE 启动超时（单测复跑通过）、1 skipped |
+| 部署 | Commit `645649d` + Push + app 树 pull | 完成 |
+| 部署 | 新代码启动，正式库应用 0023 | `latest_migration=0023_mobile_event_legacy_repair` |
+| 验收 | 四模块 Preflight | 全部 READY |
+| 验收 | G3 四工作流真实出图 | 4/4 COMPLETED |
+| 验收 | G4 冷/热 + GPU/RAM 峰值 | 8 个冷/热 Job + 4 个峰值 Job，全部 COMPLETED，0 OOM |
+| 验收 | 手机端 | mobile 合同测试通过；Bridge 运行态 `api_contract=2` |
+| CI | GitHub Actions | `41789128325` @ `645649d` success |
+| 交付 | G4 放行清单 / 报告 / ZIP | 放行清单与报告已更新；ZIP 待打包 |
 
 ---
 

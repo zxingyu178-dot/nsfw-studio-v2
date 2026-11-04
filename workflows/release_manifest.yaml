@@ -42,23 +42,32 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: normal
-        default_profile_verified: false
-        notes: "W4.0 默认版本：texture-fix VAE + 12 步 turbo；依赖探测 READY + G3 真实出图通过（2026-11-03）"
+        default_profile_verified: true
+        notes: "W4.1 默认版本：texture-fix VAE + 12 步 turbo；依赖探测 READY + G3/G4 真实出图通过（2026-11-04，LF 规范化 Hash）"
         evidence:
-          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
+          comfyui_node_chain: {status: passed, method: "2026-11-04 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production:
             status: passed
-            workflow_hash: "9da86110a20db1ed"
-            binding_hash: "e34bf33b8451ec81"
+            workflow_hash: "af870a6442432dfd"
+            binding_hash: "d9ca1eba6c482f57"
+            wrong_algorithm_legacy_hash: "9da86110a20db1ed / e34bf33b8451ec81（raw-bytes-v1，历史 Job 仍可验证）"
             reference_jobs:
-              - "job_5fae2698-45c0-40a2-bfb8-9b25ba3e1dca"
-            output_image_id: "img_1488807d-d29d-448b-be38-0d8f9fd7e2af"
+              - "job_bf7490c6-55b5-4e33-8b69-99ebf3a8d876"
+              - "job_aa7fd5dd-e201-4a6a-a2d3-e086bb3cdd65"
+            output_image_id: "img_02917c97-a3bc-4839-9425-bb9a0571e0fa"
             sampling_profile: "832×1216 / 12 步 / cfg1.0 / euler simple / batch1"
-            stage_seconds: 168.3
-            method: "W4.0 G3 真实 Studio Job（单张）"
+            stage_seconds: 669.6
+            method: "W4.1 G3 真实 Studio Job（冷/热各一张；LF 规范化 Hash）"
           default_profile_performance:
-            status: unverified
-            reason: "G4 未测"
+            status: verified
+            measured_at: "2026-11-04"
+            cold_seconds: 670.7
+            hot_seconds: 82.7
+            gpu_peak_mb: 5903
+            ram_peak_mb: 16268
+            oom: false
+            failure_rate: "0/3"
+            source: "W4.1 G4 实测（冷/热连续两跑 + 峰值采样）"
 
   img2img:
     bindings:
@@ -105,23 +114,32 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
-        default_profile_verified: false
-        notes: "W4.0 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；依赖探测 READY + G3 真实出图通过（2026-11-03）"
+        default_profile_verified: true
+        notes: "W4.1 默认版本：v2 + texture-fix VAE，25 步 / cfg1 / denoise 0.8；依赖探测 READY + G3/G4 真实出图通过（2026-11-04，LF 规范化 Hash）"
         evidence:
-          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
+          comfyui_node_chain: {status: passed, method: "2026-11-04 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production:
             status: passed
-            workflow_hash: "d8fac1d3b2e9c627"
-            binding_hash: "8ed91f6860c51cb4"
+            workflow_hash: "c94f28966da4db41"
+            binding_hash: "21d056e2f9e7db77"
+            wrong_algorithm_legacy_hash: "d8fac1d3b2e9c627 / 8ed91f6860c51cb4（raw-bytes-v1，历史 Job 仍可验证）"
             reference_jobs:
-              - "job_40e4081b-377a-44ba-a2f3-3827d9d77b88"
-            output_image_id: "img_0897edfa-0d0d-4330-9b2c-6c3d3cb5750a"
+              - "job_5500fbc7-b5f5-47d3-9f26-a607cae02564"
+              - "job_da478203-588a-4143-83ad-191a14d57c16"
+            output_image_id: "img_5fdf7923-8822-4de4-9157-e2e489691755"
             sampling_profile: "denoise 0.8 / 25 步 / cfg1.0 / euler simple / batch1"
-            stage_seconds: 541.0
-            method: "W4.0 G3 真实 Studio Job（输入 = basic v2 输出图，单张）"
+            stage_seconds: 422.4
+            method: "W4.1 G3 真实 Studio Job（输入 = basic v2 输出图，冷/热各一张）"
           default_profile_performance:
-            status: unverified
-            reason: "仅换 VAE，未重新 G4"
+            status: verified
+            measured_at: "2026-11-04"
+            cold_seconds: 423.0
+            hot_seconds: 101.1
+            gpu_peak_mb: 5488
+            ram_peak_mb: 16156
+            oom: false
+            failure_rate: "0/3"
+            source: "W4.1 G4 实测（冷/热连续两跑 + 峰值采样）"
 
   reference_generate:
     bindings:
@@ -149,23 +167,32 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: slow
-        default_profile_verified: false
-        notes: "W4.0 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；依赖探测 READY + G3 真实出图通过（2026-11-03）"
+        default_profile_verified: true
+        notes: "W4.1 默认版本：v1 + texture-fix VAE；参考图结构与上限不变；依赖探测 READY + G3/G4 真实出图通过（2026-11-04，LF 规范化 Hash）"
         evidence:
-          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
+          comfyui_node_chain: {status: passed, method: "2026-11-04 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production:
             status: passed
-            workflow_hash: "65dbbd6ca22eb9e7"
-            binding_hash: "4ac3b58b16203412"
+            workflow_hash: "88007850182aff4d"
+            binding_hash: "cfc68ee2f803c9ed"
+            wrong_algorithm_legacy_hash: "65dbbd6ca22eb9e7 / 4ac3b58b16203412（raw-bytes-v1，历史 Job 仍可验证）"
             reference_jobs:
-              - "job_44dd171f-f91d-4cee-8e62-f94f1bf04755"
-            output_image_id: "img_ccbedfec-2937-4f33-bd67-5044705c44a5"
-            sampling_profile: "resolution 768 / 25 步 / cfg1.0 / euler simple / batch1（输出 640×928）"
-            stage_seconds: 683.2
-            method: "W4.0 G3 真实 Studio Job（输入 = img2img v3 输出图作为参考，单张）"
+              - "job_3c77f1ff-f1e0-4b97-bc98-74dd95a9a2c5"
+              - "job_938a7831-a02b-4d65-94c5-3234e039fa8d"
+            output_image_id: "img_edc3a55a-579d-4541-b39f-8576b0ca6fd2"
+            sampling_profile: "resolution 768 / 25 步 / cfg1.0 / euler simple / batch1"
+            stage_seconds: 684.4
+            method: "W4.1 G3 真实 Studio Job（输入 = img2img v3 输出图，冷/热各一张）"
           default_profile_performance:
-            status: unverified
-            reason: "仅换 VAE，未重新 G4"
+            status: verified
+            measured_at: "2026-11-04"
+            cold_seconds: 685.0
+            hot_seconds: 119.2
+            gpu_peak_mb: 5486
+            ram_peak_mb: 16265
+            oom: false
+            failure_rate: "0/3"
+            source: "W4.1 G4 实测（冷/热连续两跑 + 峰值采样）"
 
   anime_generate:
     bindings:
@@ -194,20 +221,29 @@ modules:
         dependencies_ready: true
         real_gate_passed: true
         hardware_status: normal
-        default_profile_verified: false
-        notes: "W4.0 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；依赖探测 READY + G3 真实出图通过（2026-11-03）"
+        default_profile_verified: true
+        notes: "W4.1 默认版本：miaomiaoHarem v14 单文件 checkpoint；30 步 / cfg4.0 / er_sde；依赖探测 READY + G3/G4 真实出图通过（2026-11-04，LF 规范化 Hash）"
         evidence:
-          comfyui_node_chain: {status: passed, method: "2026-11-03 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
+          comfyui_node_chain: {status: passed, method: "2026-11-04 POST /api/v1/engine/preflight 四模块 READY（节点/模型/版本全通过）"}
           studio_production:
             status: passed
-            workflow_hash: "144a4b9f63e8dc67"
-            binding_hash: "a0aa56fb921178b0"
+            workflow_hash: "db2bd841c260a434"
+            binding_hash: "7832e2b669aa1c44"
+            wrong_algorithm_legacy_hash: "144a4b9f63e8dc67 / a0aa56fb921178b0（raw-bytes-v1，历史 Job 仍可验证）"
             reference_jobs:
-              - "job_0f43ce4e-e143-4079-bce3-06f9b7f6c77d"
-            output_image_id: "img_15ae8248-fd26-42a0-b17c-3dc3cdb11999"
+              - "job_2b2a8e90-9047-4759-8b5c-0adadb976a9f"
+              - "job_1cdd0c5f-5bd8-4085-9857-017b066aa521"
+            output_image_id: "img_8ba43ec8-7507-42cd-a033-3de6b8b737dd"
             sampling_profile: "832×1216 / 30 步 / cfg4.0 / er_sde simple / batch1"
-            stage_seconds: 119.1
-            method: "W4.0 G3 真实 Studio Job（单张）"
+            stage_seconds: 129.8
+            method: "W4.1 G3 真实 Studio Job（冷/热各一张；LF 规范化 Hash）"
           default_profile_performance:
-            status: unverified
-            reason: "G4 未测（已有 260+ 张真实生成，但未做独立峰值记录）"
+            status: verified
+            measured_at: "2026-11-04"
+            cold_seconds: 130.5
+            hot_seconds: 36.4
+            gpu_peak_mb: 5428
+            ram_peak_mb: 15808
+            oom: false
+            failure_rate: "0/3"
+            source: "W4.1 G4 实测（冷/热连续两跑 + 峰值采样）"

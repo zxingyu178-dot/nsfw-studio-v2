@@ -18,9 +18,9 @@
 | 0023 Migration | 旧库/当前库/W4.0 快照副本演练通过 |
 | 后端定向测试 | 通过 |
 | 前端 build / vitest | 通过 / 488 通过 |
-| 后端全量 pytest | **进行中** |
-| G3 / G4 | **未执行** |
-| GitHub CI / Commit SHA | **未执行** |
+| 后端全量 pytest | 697 collected；1 个 SSE 启动超时用例（单测复跑通过），1 skipped |
+| G3 / G4 | 完成（8 个冷/热 Job + 4 个峰值采样 Job，全部 COMPLETED） |
+| GitHub CI / Commit SHA | `645649d` / CI `41789128325` success |
 
 ---
 
@@ -89,40 +89,60 @@
 
 ---
 
-## 5. 测试与验收（待补）
+## 5. 测试与验收
 
 | 项目 | 结果 |
 |---|---|
-| 后端全量 pytest | 进行中 |
+| 后端全量 pytest | 697 collected；仅 1 个 SSE 测试在磁盘高负载时启动超时（单测复跑通过）；1 skipped |
 | 前端 build | 通过（15.35s） |
 | 前端 vitest | 488 passed / 97 files |
-| G0 静态校验 | 待跑 |
-| Registry Validator | 0 error / 7 warning |
-| G3 四工作流出图 | 未执行 |
-| G4 性能 | 未执行 |
-| 手机端回归 | 待全量测试 |
-| GitHub CI | 未执行 |
+| G0 静态校验 | `checked=9 errors=0 warnings=12`（历史冻结 Binding 既有 warning） |
+| Registry Validator | `checked=40 errors=0 warnings=7` |
+| 四模块 Preflight | `status=READY`（basic / anime / img2img / reference 全 READY） |
+| 0023 正式库 | `latest_migration=0023_mobile_event_legacy_repair` |
+| 图库读取 | `GET /images` total=7,733；缩略图 200；原图 200 |
+| Prompt Center | `GET /prompts` total=292（默认排除归档）；关联图片分页可用 |
+| Image Asset 统计 | `total=7,733`；模型登记 6 个活动模型 |
+| 手机端 | 全量 pytest 中 mobile 合同测试通过；Bridge 启动运行态健康 `api_contract=2` |
+| GitHub CI | `41789128325` @ `645649d` success |
+
+### 5.1 G3 四条工作流真实出图（冷启动）
+
+| 模块 | Job | workflow_hash (LF) | binding_hash (LF) | 输出 | 尺寸 | 耗时 |
+|---|---|---|---|---|---|---|
+| basic_generate/v2 | `job_bf7490c6-55b5-4e33-8b69-99ebf3a8d876` | `af870a6442432dfd` | `d9ca1eba6c482f57` | `img_02917c97-...` | 832×1216 | 670.7s（冷） |
+| anime_generate/v2 | `job_2b2a8e90-9047-4759-8b5c-0adadb976a9f` | `db2bd841c260a434` | `7832e2b669aa1c44` | `img_8ba43ec8-...` | 832×1216 | 130.5s（冷） |
+| img2img/v3 | `job_5500fbc7-b5f5-47d3-9f26-a607cae02564` | `c94f28966da4db41` | `21d056e2f9e7db77` | `img_5fdf7923-...` | 832×1216 | 423.0s（冷） |
+| reference_generate/v2 | `job_3c77f1ff-f1e0-4b97-bc98-74dd95a9a2c5` | `88007850182aff4d` | `cfc68ee2f803c9ed` | `img_edc3a55a-...` | 640×928 | 685.0s（冷） |
+
+### 5.2 G4 冷/热与资源峰值
+
+| 模块 | 冷启动 | 热启动 | GPU 峰值 | RAM 峰值 | OOM |
+|---|---:|---:|---:|---:|---|
+| basic_generate/v2 | 670.7 s | 82.7 s | 5,903 MB | 16,268 MB | 否 |
+| anime_generate/v2 | 130.5 s | 36.4 s | 5,428 MB | 15,808 MB | 否 |
+| img2img/v3 | 423.0 s | 101.1 s | 5,488 MB | 16,156 MB | 否 |
+| reference_generate/v2 | 685.0 s | 119.2 s | 5,486 MB | 16,265 MB | 否 |
+
+- 引擎从完全停止状态启动：329.6 s 上线（ComfyUI 0.37.0）；
+- 共 12 个验收 Job（8 个冷/热 + 4 个峰值采样），全部 `COMPLETED`，失败率 0；
+- 峰值采样在模块切换后的运行中采集，包含模型加载阶段；耗时列中的“热”为同模块连续第二跑；
+- 已据此把四个活动 binding 的 `default_profile_verified` 置为 `true`。
 
 ---
 
 ## 6. 已知限制
 
-1. 全量 pytest 尚未结束，不能声明全绿。
-2. G3/G4 尚未执行，`default_profile_verified` 仍为 `false`。
-3. 旧 `images/*` 目录未归档/未删除，目前与新资产并存。
-4. 0023 尚未写入正式库 `migration` 记录（新代码启动时应用；当前结构为安全跳过）。
-5. 历史 Job 缺 `model_snapshot`，Provenance 明确标记，不伪造。
+1. 全量 pytest 存在 1 个磁盘高负载下的 SSE 启动超时 flake（单测复跑通过）；CI 独立环境已全绿。
+2. 冷启动耗时受机械盘模型加载影响很大（basic 670s / reference 685s），不代表稳态吞吐。
+3. 旧 `images/*` 目录未归档/未删除，目前与新资产并存（约占 14 GB）。
+4. 历史 Job 缺 `model_snapshot`，Provenance 明确标记，不伪造。
+5. 峰值采样为 1 秒粒度，可能低估瞬时峰值；未记录 nvidia-smi 功耗/温度。
 6. 未新增 4x / SeedVR2 / 新工作流 / 新模型。
 
 ---
 
-## 7. 后续执行顺序
+## 7. 交付状态
 
-1. 全量 pytest 通过；
-2. Commit + Push + GitHub CI；
-3. 部署树 `git pull` + 重构建，启动新代码（应用 0023）；
-4. G3 四工作流真实出图；
-5. G4 冷/热启动、GPU/RAM 峰值；
-6. 手机端回归 + 真实 HTTP probe；
-7. 更新 `release_manifest.yaml` 的 G4 证据；
-8. 最终报告 + `NSFW_Studio_W4.1_Review_Package.zip`，然后停止。
+已完成：Gate 0、Gate 1、四个中心代码、0023、Hash 兼容、历史迁移、G3/G4、前端与 CI。
+剩余：最终验收 ZIP 打包与停止。
