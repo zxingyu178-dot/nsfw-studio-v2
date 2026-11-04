@@ -41,11 +41,13 @@ from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
 
 IMAGE_SOURCES = ("comfyui", "mock", "import", "engine")
+# 旧结构目录（迁移前历史文件仍可能在这里；新写入统一走 assets/images）
 IMAGE_KIND_DIRS = {
     "original": "images/originals",
     "upscaled": "images/upscaled",
     "processed": "images/processed",
 }
+ASSET_IMAGES_DIR = "assets/images"
 IMAGE_IDS_LIMIT = 10_000
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,33 @@ def _kind_dir(kind: str) -> str:
     if directory is None:
         raise ValidationError(f"非法图片 kind: {kind}", code="IMAGE_KIND_INVALID")
     return directory
+
+
+def _cleanup_empty_parents(storage: StorageManager, directory: Path, root: Path) -> None:
+    """回滚时清理空的 YYYY/MM 父目录，避免 assets/images 根下残留空目录。"""
+    parent = directory.parent
+    while parent != root and parent.is_dir():
+        try:
+            next(parent.iterdir())
+            break
+        except StopIteration:
+            parent.rmdir()
+            parent = parent.parent
+        except OSError:
+            break
+
+
+def asset_storage_key(image_id: str, kind: str, suffix: str, created_at: str | None = None) -> str:
+    """W4.1 统一资产存储键：assets/images/YYYY/MM/<asset_id>/<kind>.<ext>。"""
+    if kind not in IMAGE_KIND_DIRS:
+        raise ValidationError(f"非法图片 kind: {kind}", code="IMAGE_KIND_INVALID")
+    stamp = created_at or utc_now_iso()
+    try:
+        year = stamp[0:4]
+        month = stamp[5:7]
+    except Exception:
+        year, month = "1970", "01"
+    return f"{ASSET_IMAGES_DIR}/{year}/{month}/{image_id}/{kind}{suffix}"
 
 
 def get_image(session: Session, image_id: str) -> Image:
@@ -184,9 +213,11 @@ class PreparedImageOutput:
     relative_path: str
     width: int
     height: int
-    # Phase 5：外部导入来源哈希与原始文件名（引擎输出为 None）
+    # Phase 5：外部导入来源哈希（W4.1 起引擎输出也计算）与原始文件名（仅导入）
     sha256: str | None = None
     imported_filename: str | None = None
+    # W4.1：资产创建时间决定 assets/images/YYYY/MM 存储分区
+    created_at: str = ""
 
 
 def prepare_image_output(data: bytes, *, kind: str = "original") -> PreparedImageOutput:
@@ -207,14 +238,16 @@ def prepare_image_output(data: bytes, *, kind: str = "original") -> PreparedImag
     width, height = dimensions
     suffix = ".png" if fmt == "png" else (".jpg" if fmt == "jpeg" else ".webp")
     image_id = new_id(IMAGE)
-    directory = _kind_dir(kind)
+    created_at = utc_now_iso()
     return PreparedImageOutput(
         image_id=image_id,
         data=data,
         suffix=suffix,
-        relative_path=f"{directory}/{image_id}/{kind}{suffix}",
+        relative_path=asset_storage_key(image_id, kind, suffix, created_at),
         width=width,
         height=height,
+        sha256=sha256_hex(data),
+        created_at=created_at,
     )
 
 
@@ -232,15 +265,17 @@ def prepare_import_image(data: bytes, *, filename: str | None, content_type: str
         raise ValidationError("无法解析图片尺寸", code="IMAGE_INVALID")
     width, height = dimensions
     image_id = new_id(IMAGE)
+    created_at = utc_now_iso()
     return PreparedImageOutput(
         image_id=image_id,
         data=data,
         suffix=suffix,
-        relative_path=f"{IMAGE_KIND_DIRS['original']}/{image_id}/original{suffix}",
+        relative_path=asset_storage_key(image_id, "original", suffix, created_at),
         width=width,
         height=height,
         sha256=sha256_hex(data),
         imported_filename=(filename or "").strip() or None,
+        created_at=created_at,
     )
 
 
@@ -254,7 +289,14 @@ class ImageImportBatchResult:
 
 
 def find_image_by_sha256(session: Session, digest: str) -> Image | None:
-    return session.execute(select(Image).where(Image.sha256 == digest)).scalars().first()
+    """仅在外来导入域内去重（与 uq_images_import_sha256 部分唯一索引一致）。
+
+    W4.1 起所有新图片都记录 sha256；引擎生成图与导入图内容相同不应阻止导入，
+    否则用户无法把引擎产物作为外部导入重新登记。
+    """
+    return session.execute(
+        select(Image).where(Image.sha256 == digest, Image.source == "import")
+    ).scalars().first()
 
 
 def import_images_batch(
@@ -369,13 +411,14 @@ def import_outputs_transaction(
             temp_path = storage.temp_dir / f"import_{uuid.uuid4().hex}{entry.suffix}"
             temp_path.write_bytes(entry.data)
             temp_paths.append(temp_path)
-        # 2. 全部移动到正式目录（kind → images/originals|upscaled|processed）
+        # 2. 全部移动到正式目录（W4.1：assets/images/YYYY/MM/<asset_id>/<kind>.<ext>）
         for entry, temp_path in zip(prepared, temp_paths):
-            final_dir = storage.resolve_under(directory, entry.image_id)
+            stamp = entry.created_at or utc_now_iso()
+            final_dir = storage.resolve_under(ASSET_IMAGES_DIR, stamp[0:4], stamp[5:7], entry.image_id)
             final_dir.mkdir(parents=True, exist_ok=True)
             created_dirs.append(final_dir)
             storage.atomic_move_into(temp_path, final_dir, f"{kind}{entry.suffix}")
-        # 3. 单事务写入全部 Image
+        # 3. 单事务写入全部 Image（mime/file_size/asset_type/sha256 同步固化）
         images = [
             Image(
                 id=entry.image_id,
@@ -392,7 +435,13 @@ def import_outputs_transaction(
                 source=source,
                 sha256=entry.sha256,
                 imported_filename=entry.imported_filename,
-                metadata_json=json.dumps(metadata or {}, ensure_ascii=False),
+                metadata_json=json.dumps({
+                    **(metadata or {}),
+                    "mime_type": mime_for_suffix(entry.suffix),
+                    "file_size": len(entry.data),
+                    "asset_type": kind,
+                }, ensure_ascii=False),
+                created_at=entry.created_at or utc_now_iso(),
             )
             for entry in prepared
         ]
@@ -408,8 +457,10 @@ def import_outputs_transaction(
         session.rollback()
         for path in temp_paths:
             storage.safe_delete(path)
+        root = storage.path(ASSET_IMAGES_DIR).resolve()
         for directory in created_dirs:
             storage.safe_delete(directory)
+            _cleanup_empty_parents(storage, directory, root)
         raise
 
 

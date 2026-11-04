@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: qwen_3_06b_base
+version: 1.0.0
+display_name: qwen_3_06b_base
+family: legacy
+model_type: text_encoder
+format: safetensors
+status: archived
+files:
+- filename: qwen_3_06b_base.safetensors
+  folder: text_encoders
+  required: false
+  size_bytes: 1192135096
+  sha256: cd2a512003e2f9f3cd3c32a9c3573f820bb28c940f73c57b1ddaa983d9223eba
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

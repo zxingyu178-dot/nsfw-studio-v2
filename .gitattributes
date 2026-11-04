@@ -1,0 +1,12 @@
+# W4.1 — Git 换行统一
+#
+# 目的：JSON/YAML 在 Git 中以 LF 存储，保证 workflow_hash / binding_hash
+# 的 LF 规范化值在不同工作树、Windows/Linux、CI 上一致。
+#
+# 注意：
+# - 本文件不追溯修改已提交的 Binding 内容，也不执行 renormalize；
+#   历史 Binding 原始字节 Hash 继续由 release_manifest / Job 记录保留。
+# - 运行时 Hash 同时支持 raw-bytes-v1（历史）与 lf-normalized-v1（新标准）。
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf

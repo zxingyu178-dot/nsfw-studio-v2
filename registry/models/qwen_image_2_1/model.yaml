@@ -1,0 +1,23 @@
+schema_version: '1.0'
+model_id: qwen_image_2_1
+version: 2.1.0
+display_name: Qwen Image 2.1 (UC Q4_0)
+family: qwen_image
+model_type: diffusion_model
+format: gguf
+status: released
+files:
+- filename: qwen-image-2.1-UC-Q4_0.gguf
+  folder: diffusion_models
+  required: true
+  size_bytes: 4151573280
+  sha256: 13f59f20656efc0aa385d03c1fcac1a9dc2ad6e5ccc0ea9bfe1d6ac636f2c5b9
+  precision: q4_0
+dependencies: []
+compatible_workflows:
+- basic_generate
+- img2img
+- reference_generate
+notes: Qwen-Image 2.1 主模型；basic/img2img/reference 三条活动链共用。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

@@ -29,7 +29,7 @@ def test_import_engine_output(session, settings, png_bytes):
         metadata={"workflow_hash": "abc123"},
     )
     assert image.id.startswith("img_")
-    assert image.file_path.startswith("images/originals/")
+    assert image.file_path.startswith("assets/images/")
     assert ":" not in image.file_path, "禁止绝对路径入库"
     assert (image.width, image.height) == (1, 1)
     assert image.review_status == "UNREVIEWED" and image.favorite is False
@@ -83,7 +83,7 @@ def test_import_batch_atomic_valid_plus_corrupt(session, settings, png_bytes):
         image_service.import_adapter_outputs(session, storage, job, stage_item, outputs)
 
     assert image_service.list_images(session, job_id=job.id)[1] == 0, "整批失败不得留下半成功图片"
-    assert _dir_entries(storage.resolve_under("images/originals")) == [], "originals 不得有残留"
+    assert _dir_entries(storage.resolve_under("assets/images")) == [], "资产根不得有残留"
     assert _dir_entries(storage.temp_dir) == [], "temp 不得有残留"
 
 
@@ -132,7 +132,7 @@ def test_import_batch_rolls_back_when_move_fails(session, settings, png_bytes, m
         image_service.import_adapter_outputs(session, storage, job, stage_item, outputs)
 
     assert image_service.list_images(session, job_id=job.id)[1] == 0
-    assert _dir_entries(storage.resolve_under("images/originals")) == [], \
+    assert _dir_entries(storage.resolve_under("assets/images")) == [], \
         "第一张已移动成功的正式文件也必须随整批回滚删除"
     assert _dir_entries(storage.temp_dir) == []
 

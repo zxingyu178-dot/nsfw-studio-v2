@@ -1,0 +1,24 @@
+schema_version: '1.0'
+model_id: qwen_image_2_1_turbo8_lora
+version: 1.0.0
+display_name: Qwen Image 2.1 Turbo8 LoRA
+family: qwen_image
+model_type: lora
+format: safetensors
+status: released
+files:
+- filename: qwen_image_2.1_turbo8_lora.safetensors
+  folder: loras
+  required: true
+  size_bytes: 913314512
+  sha256: 208dd43250e1e01467ba190572ae2e7107a7870ec1ff026bc65f791fa1e80e95
+  precision: bf16
+dependencies:
+- model_id: qwen_image_2_1
+  required: true
+  note: LoRA 作用于 Qwen 主模型
+compatible_workflows:
+- basic_generate
+notes: basic v2 双 LoRA 之一；12 步日常档。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

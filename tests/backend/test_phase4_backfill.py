@@ -130,7 +130,7 @@ def test_v032_database_backfill_and_queued_job_still_runs(settings, monkeypatch)
         "0015_image_variant_system", "0016_image_review_status",
         "0017_image_review_semantics", "0018_mobile_review_bridge", "0019_prompt_scoring",
         "0020_review_session_end_reason", "0021_mobile_event_log_mutations",
-        "0022_mobile_v2_compat",
+        "0022_mobile_v2_compat", "0023_mobile_event_legacy_repair",
     ]
 
     # ===== 3) Stage / StageItem 回填正确 =====

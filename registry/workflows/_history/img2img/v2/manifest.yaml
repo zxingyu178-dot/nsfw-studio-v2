@@ -1,0 +1,53 @@
+schema_version: '1.0'
+workflow_id: img2img
+version: v2
+display_name: 图生图 v2（冻结）
+description: 历史 Qwen 图生图，denoise 0.8；节点图与 v1 相同。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/img2img/v2/workflow.json
+binding_file: workflows/providers/comfyui/img2img/v2/binding.yaml
+model_dependencies:
+- model_id: qwen_image_2_1
+  role: diffusion_model
+- model_id: qwen3vl_8b_w4a8
+  role: text_encoder
+- model_id: qwen_image_2_1_vae_bf16
+  role: vae
+input_schema:
+  mode: image
+  slots:
+  - role: source
+    required: true
+    max_count: 1
+output_schema:
+  kind: image
+  asset_type: processed
+  parent_policy: input_image
+  cardinality: 1..n
+default_parameters:
+  denoise: 0.8
+  steps: 25
+  cfg: 1.0
+  sampler: euler
+  scheduler: simple
+  batch_size: 1
+parameter_constraints:
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: fab10a5356d0a4af
+  binding_hash: 70d52c82bee41f84
+  legacy_raw_workflow_hash:
+  - 9c7d1a1f1113391d
+  legacy_raw_binding_hash:
+  - 6cec17b26508726c
+release_status: frozen
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: 历史 Studio Job 证据；冻结
+notes: ''
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

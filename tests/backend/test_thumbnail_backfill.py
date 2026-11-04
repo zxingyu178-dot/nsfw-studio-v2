@@ -142,4 +142,4 @@ def test_backfill_kind_preview(client):
                 ImageVariant.image_id == iid, ImageVariant.variant_type == "preview"
             ).first()
             assert row is not None
-            assert "images/previews/" in row.path
+            assert "cache/previews/" in row.path

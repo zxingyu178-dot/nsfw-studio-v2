@@ -28,6 +28,9 @@ jobs:
       - name: Validate workflows (G0)
         run: python scripts/validate_workflows.py
 
+      - name: Validate registry (W4.1)
+        run: python scripts/validate_registry.py
+
   frontend:
     name: Frontend (typecheck + vitest + build)
     runs-on: ubuntu-latest

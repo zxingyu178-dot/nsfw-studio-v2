@@ -18,6 +18,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from app.database.mobile_event_repair import ensure_mobile_events_w41
 from app.database.mobile_v2_compat import ensure_mobile_event_log_tables, migrate_mobile_v2_compat
 
 
@@ -746,6 +747,16 @@ MIGRATIONS: tuple[Migration, ...] = (
             "建立 mobile_image_seen。幂等可重试，不删除图片/Job/Prompt/评分/设备。"
         ),
         statements=(migrate_mobile_v2_compat,),
+    ),
+    Migration(
+        migration_id="0023_mobile_event_legacy_repair",
+        version="1.4.0",
+        description=(
+            "W4.1：mobile_image_events 旧结构兼容修复——识别 legacy event 列/缺 event_id/event_type，"
+            "重建主干结构，保留全部事件行与 seq，保留索引与唯一约束；已修复库安全跳过。"
+            "不修改 0021/0022，不删除任何事件。"
+        ),
+        statements=(ensure_mobile_events_w41,),
     ),
 )
 

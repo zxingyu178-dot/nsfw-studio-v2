@@ -31,7 +31,7 @@ def test_historical_upscaled_images_remain_queryable_and_readable(client, sessio
     listing = client.get("/api/v1/images", params={"kind": "upscaled"}).json()
     item = next(item for item in listing["items"] if item["id"] == image_id)
     assert item["kind"] == "upscaled"
-    assert item["file_path"].startswith("images/upscaled/")
+    assert item["file_path"].startswith("assets/images/")
 
     assert client.get(f"/api/v1/images/{image_id}").status_code == 200
     assert client.get(f"/api/v1/images/{image_id}/content").status_code == 200

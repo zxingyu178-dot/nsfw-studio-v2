@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nsfw-studio.local/schemas/prompt.schema.json",
+  "title": "NSFW Studio Prompt Center Record",
+  "description": "W4.1 统一 Prompt 记录。数据库仍使用既有 prompts / prompt_versions 表，本 Schema 定义对 API 与导出记录的稳定字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt_id", "version", "title", "category", "positive_prompt",
+    "negative_prompt", "tags", "favorite", "created_at", "updated_at"
+  ],
+  "properties": {
+    "prompt_id": {"type": "string", "pattern": "^prm_[0-9a-f-]+$"},
+    "version": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 1, "maxLength": 255},
+    "category": {
+      "type": "string",
+      "enum": ["keep", "candidate", "eliminated"]
+    },
+    "positive_prompt": {"type": "string"},
+    "negative_prompt": {"type": "string"},
+    "structured_fields": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "style": {"type": "string"},
+        "character": {"type": "string"},
+        "clothing": {"type": "string"},
+        "action": {"type": "string"},
+        "scene": {"type": "string"},
+        "camera": {"type": "string"},
+        "lighting": {"type": "string"},
+        "extra": {"type": "string"}
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 64},
+      "uniqueItems": true
+    },
+    "favorite": {"type": "boolean"},
+    "rating": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 5
+    },
+    "legacy_import": {"type": "boolean"},
+    "source_system": {"type": "string", "maxLength": 32},
+    "linked_image_count": {"type": "integer", "minimum": 0},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"}
+  }
+}

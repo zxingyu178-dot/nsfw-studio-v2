@@ -123,7 +123,7 @@ async def import_images(
     session: Session = Depends(get_session),
     storage: StorageManager = Depends(get_storage),
 ) -> ImageImportResponse:
-    """外部图片（PNG / JPG / JPEG / WEBP）→ 校验 → 复制进 DataRoot/images/originals/ → Gallery。
+    """外部图片（PNG / JPG / JPEG / WEBP）→ AssetIngestService → DataRoot/assets/images/ → Gallery。
 
     - **绝不引用用户原始文件路径**（§五）；source=import，job_id/job_item_id 为 null；
     - sha256 去重（§六）：重复文件不创建第二份，返回已存在的 image_id；
@@ -135,7 +135,9 @@ async def import_images(
     for upload in files:
         data = upload.file.read(MAX_UPLOAD_BYTES + 1)
         uploads.append((upload.filename, upload.content_type, data))
-    result = image_service.import_images_batch(session, storage, uploads)
+    from app.services import asset_ingest_service
+
+    result = asset_ingest_service.ingest_uploads(session, storage, uploads)
     return ImageImportResponse(
         imported=[ImageImportItem(filename=_display_name(image.imported_filename), image=image_response(image))
                   for image in result.imported],

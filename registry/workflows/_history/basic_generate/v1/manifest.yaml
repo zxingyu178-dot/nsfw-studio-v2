@@ -1,0 +1,53 @@
+schema_version: '1.0'
+workflow_id: basic_generate
+version: v1
+display_name: 文生图 v1（冻结）
+description: 历史 Qwen-Image 2.1 + 旧 Qwen VAE + turbo8/f23gg，8 步 turbo 档。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/basic_generate/v1/workflow.json
+binding_file: workflows/providers/comfyui/basic_generate/v1/binding.yaml
+model_dependencies:
+- model_id: qwen_image_2_1
+  role: diffusion_model
+- model_id: qwen3vl_8b_w4a8
+  role: text_encoder
+- model_id: qwen_image_2_1_vae_bf16
+  role: vae
+- model_id: qwen_image_2_1_turbo8_lora
+  role: lora
+- model_id: f23gg_nsfw_qwen21
+  role: lora
+input_schema:
+  mode: text
+  slots: []
+output_schema:
+  kind: image
+  asset_type: original
+  parent_policy: none
+  cardinality: 1..n
+default_parameters:
+  steps: 8
+  cfg: 1.0
+  sampler: euler
+  scheduler: simple
+  batch_size: 1
+parameter_constraints:
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: 65bcf20b8974cc26
+  binding_hash: 7b271def8d3dbf0e
+  legacy_raw_workflow_hash:
+  - d2ed92e0f1b44d76
+  legacy_raw_binding_hash:
+  - 6c1a64481fc4802e
+release_status: frozen
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: 历史 Studio Job 证据；W4.0 冻结保留
+notes: 历史 Job 的 binding_hash 6c1a64481fc4802e 等原始值仍可验证；不参与新任务。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

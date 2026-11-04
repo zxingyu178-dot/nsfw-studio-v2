@@ -50,12 +50,13 @@ class RenditionSpec:
 THUMBNAIL_MAX_SIDE = 512
 THUMBNAIL_FORMAT = "webp"
 THUMBNAIL_QUALITY = 80
-THUMBNAIL_DIR = "images/thumbnails"
+# W4.1：rendition 是派生缓存，统一落 DataRoot/cache；不是正式资产根。
+THUMBNAIL_DIR = "cache/thumbnails"
 THUMBNAIL_FILENAME = "thumbnail.webp"
 
 PREVIEW_MAX_SIDE = 1536  # 落在 1280~1600
 PREVIEW_QUALITY = 85
-PREVIEW_DIR = "images/previews"
+PREVIEW_DIR = "cache/previews"
 PREVIEW_FILENAME = "preview.webp"
 
 VARIANT_SPECS: dict[str, RenditionSpec] = {

@@ -3,6 +3,11 @@ from __future__ import annotations
 
 EXPECTED_DIRS = [
     "database",
+    # W4.1 统一资产根 + 缓存
+    "assets/images",
+    "cache/thumbnails",
+    "cache/previews",
+    "cache/temp",
     "images/originals",
     "images/upscaled",
     "images/processed",

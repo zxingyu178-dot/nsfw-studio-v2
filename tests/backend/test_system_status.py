@@ -52,8 +52,8 @@ def test_system_status_contract(client):
     assert 0 <= body["thumbnail_count"] <= body["image_count"]
     assert 0 <= body["preview_count"] <= body["image_count"]
 
-    # 最新迁移（本基线最新 = 0022）
-    assert body["latest_migration"] == "0022_mobile_v2_compat"
+    # 最新迁移（W4.1 基线最新 = 0023）
+    assert body["latest_migration"] == "0023_mobile_event_legacy_repair"
 
     # engine_runtime 是现有状态摘要（含 state）
     assert isinstance(body["engine_runtime"], dict)

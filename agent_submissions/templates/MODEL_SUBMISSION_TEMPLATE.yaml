@@ -1,0 +1,21 @@
+# 模型提交模板（W4.1）
+# 复制到 agent_submissions/<submission_id>/submission.yaml，并按实际情况填写。
+schema_version: "1.0"
+submission_id: sub_<model_id>_<change>
+submission_type: model
+resource_id: <model_id>
+resource_version: <major.minor.patch>
+change_reason: "<为什么需要这个模型/版本；不得为空>"
+dependencies:
+  - model_id: <依赖模型 ID，可空列表>
+files:
+  - path: registry/models/<model_id>/model.yaml
+    sha256: "<64 位 SHA256 或 unverified（仅 draft）>"
+input_output:
+  model_type: <diffusion_model|text_encoder|vae|lora|checkpoint|upscaler|other>
+  format: <gguf|safetensors|pth|ckpt|other>
+compatibility: "<与历史 Job / Binding / 现有工作流的关系>"
+test_method: "<G0/G2/G3 命令与预期；未执行必须写未执行>"
+rollback: "<如何回到上一版本；不得依赖删除历史>"
+status: draft
+created_at: "YYYY-MM-DD"

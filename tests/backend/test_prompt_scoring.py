@@ -172,7 +172,8 @@ def test_migration_existing_rows_and_constraints(monkeypatch):
     all_migrations = migrations.MIGRATIONS
     try:
         with monkeypatch.context() as patch:
-            patch.setattr(migrations, "MIGRATIONS", all_migrations[:-4])
+            # 留 0019~0023 共 5 个迁移待应用（W4.1 新增 0023）
+            patch.setattr(migrations, "MIGRATIONS", all_migrations[:-5])
             init_database(engine)
         with engine.begin() as conn:
             conn.execute(text("INSERT INTO prompts (id, name, created_at, updated_at) "
@@ -180,7 +181,7 @@ def test_migration_existing_rows_and_constraints(monkeypatch):
         assert [item.migration_id for item in init_database(engine)] == [
             "0019_prompt_scoring", "0020_review_session_end_reason",
             "0021_mobile_event_log_mutations",
-            "0022_mobile_v2_compat",
+            "0022_mobile_v2_compat", "0023_mobile_event_legacy_repair",
         ]
         assert init_database(engine) == []
         with engine.connect() as conn:

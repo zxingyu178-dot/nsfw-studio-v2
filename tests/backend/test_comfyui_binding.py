@@ -79,10 +79,16 @@ def test_build_prompt_clamps_seed_and_does_not_mutate_template():
     assert again["5"]["inputs"]["width"] != 512  # 模板未被上一次注入污染
 
 
+def _lf_hash(path) -> str:
+    data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
 def test_workflow_hash_and_binding_version_traceable():
+    """W4.1：对外身份统一使用 LF 规范化 Hash（跨 dev/app/CI 稳定）。"""
     adapter = make_adapter()
-    expected = hashlib.sha256((BINDING_DIR / "workflow.json").read_bytes()).hexdigest()[:16]
-    expected_binding = hashlib.sha256((BINDING_DIR / "binding.yaml").read_bytes()).hexdigest()[:16]
+    expected = _lf_hash(BINDING_DIR / "workflow.json")
+    expected_binding = _lf_hash(BINDING_DIR / "binding.yaml")
     assert adapter.binding_identity("basic_generate", "v1") == ("v1", expected, expected_binding)
 
 

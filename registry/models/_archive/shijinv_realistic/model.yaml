@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: shijinv_realistic
+version: 1.0.0
+display_name: shijinv_realistic
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: shijinv_realistic.safetensors
+  folder: loras
+  required: false
+  size_bytes: 47302168
+  sha256: c8f5fa8c6d93e38b2073e1db5eaef8b0ad3000083131613eb7b92229db4c9b25
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

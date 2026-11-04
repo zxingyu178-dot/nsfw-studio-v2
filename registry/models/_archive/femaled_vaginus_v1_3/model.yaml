@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: femaled_vaginus_v1_3
+version: 1.0.0
+display_name: femaledVaginus_v1.3
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: femaledVaginus_v1.3.safetensors
+  folder: loras
+  required: false
+  size_bytes: 637587392
+  sha256: 4e1b8db3ef339aae3b5d2ef6d9b5c0261329559b6da790481535ebba9de77685
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

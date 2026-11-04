@@ -160,7 +160,7 @@ def test_service_failure_rolls_back_all_business_rows(sample, session_factory, m
     results = list((root / "backups").glob("*-result.json"))
     assert json.loads(results[0].read_text(encoding="utf-8"))["status"].startswith("failed")
     # 文件系统不能与 SQLite 一起回滚，按禁止删除约束保留并在日志中定位。
-    assert list((root / "images/originals").glob("*/original.png"))
+    assert list((root / "assets/images").rglob("original.png"))
 
 
 def test_source_change_after_plan_is_refused(sample, session_factory, monkeypatch):
@@ -191,7 +191,7 @@ def test_plan_write_failure_prevents_apply(sample, session_factory, monkeypatch,
     with pytest.raises(PermissionError):
         module.run(source, output, root, apply=True)
     assert counts(session_factory) == (0, 0)
-    assert not list((root / "images/originals").glob("*/original.png"))
+    assert not list((root / "assets/images").rglob("original.png"))
     assert '"will_import": 3' in capsys.readouterr().out
 
 

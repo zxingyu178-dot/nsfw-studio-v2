@@ -35,7 +35,7 @@ def test_generate_thumbnail_records_variant(session, settings):
     assert variant.format == "webp"
     # 1024x768 → 最长边下采样到 512 → 512x384（等比）
     assert (variant.width, variant.height) == (512, 384)
-    assert variant.path.startswith("images/thumbnails/")
+    assert variant.path.startswith("cache/thumbnails/")
     # 解码确认是 WebP
     with PILImage.open(path) as im:
         assert im.format == "WEBP"

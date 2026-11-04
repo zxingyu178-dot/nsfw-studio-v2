@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as _dt
-import hashlib
 import json
 import logging
 import time
@@ -28,8 +27,10 @@ from pathlib import Path
 import httpx
 import yaml
 
+from app.core.resource_hash import LF_ALGORITHM, RAW_ALGORITHM, file_hash_pair, match_algorithm
 from app.engine.base import (
     EngineAdapter,
+    EngineBindingRef,
     EngineError,
     EngineJobRequest,
     EngineJobStatus,
@@ -97,8 +98,8 @@ class ComfyUIAdapter(EngineAdapter):
         # Task11：Studio Input Registry（只登记自己上传的输入文件，供 TTL 清理）
         self.input_registry = input_registry
         # Phase 3 §0.2：binding 属于每次请求；缓存 key = (module_id, binding_version)
-        # 缓存值 = (workflow, binding, workflow_hash, binding_hash)
-        self._bindings: dict[tuple[str, str], tuple[dict, dict, str, str]] = {}
+        # W4.1：缓存值同时携带 raw / LF 双 Hash；对外标准值 = LF 规范化 Hash。
+        self._bindings: dict[tuple[str, str], dict] = {}
         # prompt_id → {"stage","progress","state","error","updated"}（WebSocket 实时层）
         self._live: dict[str, dict] = {}
         self._missing_polls: dict[str, int] = {}
@@ -133,49 +134,78 @@ class ComfyUIAdapter(EngineAdapter):
                 f"provider binding 自描述与请求身份不一致（{directory}）: {'; '.join(problems)}",
             )
 
+    def _binding_entry(self, ref) -> dict:
+        """加载并缓存 binding；同时计算 raw / LF 双 Hash（W4.1）。"""
+        key = (ref.module_id, ref.binding_version)
+        cached = self._bindings.get(key)
+        if cached is not None:
+            return cached
+        directory = self.binding_dir(ref.module_id, ref.binding_version)
+        workflow_path = directory / "workflow.json"
+        binding_path = directory / "binding.yaml"
+        if not workflow_path.is_file() or not binding_path.is_file():
+            raise EngineError("BINDING_NOT_FOUND", f"provider binding 不存在: {directory}")
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
+        self._validate_binding_self_description(ref, binding, directory)
+        workflow_hashes = file_hash_pair(workflow_path)
+        binding_hashes = file_hash_pair(binding_path)
+        cached = {
+            "workflow": workflow,
+            "binding": binding,
+            "workflow_raw": workflow_hashes["raw"],
+            "workflow_lf": workflow_hashes["lf"],
+            "binding_raw": binding_hashes["raw"],
+            "binding_lf": binding_hashes["lf"],
+        }
+        self._bindings[key] = cached
+        return cached
+
     def load_binding(self, ref) -> tuple[dict, dict, str, str]:
         """按请求身份加载 (workflow, binding, workflow_hash, binding_hash)。
 
-        - 缓存 key = (module_id, binding_version)，一个 Adapter 服务所有模块；
-        - 已投入使用的 binding 目录视为 **immutable**：请求携带的 workflow_hash /
-          binding_hash 与磁盘不一致 → WORKFLOW_HASH_MISMATCH / BINDING_HASH_MISMATCH，
-          禁止静默执行（§0.3 / Task1）；
-        - 首次加载同时校验 binding 自描述（Task1）。
+        W4.1：返回的 Hash 统一为 **LF 规范化值**（``lf-normalized-v1``）。
+        校验时同时接受历史原始字节值（``raw-bytes-v1``）与 LF 值，
+        因此历史 Job 不会因为换行差异而全部失效；两者都不匹配才拒绝。
         """
         key = (ref.module_id, ref.binding_version)
-        cached = self._bindings.get(key)
-        if cached is None:
-            directory = self.binding_dir(ref.module_id, ref.binding_version)
-            workflow_path = directory / "workflow.json"
-            binding_path = directory / "binding.yaml"
-            if not workflow_path.is_file() or not binding_path.is_file():
-                raise EngineError("BINDING_NOT_FOUND", f"provider binding 不存在: {directory}")
-            workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
-            binding = yaml.safe_load(binding_path.read_text(encoding="utf-8"))
-            self._validate_binding_self_description(ref, binding, directory)
-            workflow_hash = hashlib.sha256(workflow_path.read_bytes()).hexdigest()[:16]
-            binding_hash = hashlib.sha256(binding_path.read_bytes()).hexdigest()[:16]
-            cached = (workflow, binding, workflow_hash, binding_hash)
-            self._bindings[key] = cached
-        workflow, binding, workflow_hash, binding_hash = cached
-        if ref.workflow_hash and ref.workflow_hash != workflow_hash:
-            raise EngineError(
-                "WORKFLOW_HASH_MISMATCH",
-                f"workflow_hash 不一致（binding 视为 immutable，修改请新建版本）: "
-                f"job={ref.workflow_hash} 磁盘={workflow_hash} ({key[0]}/{key[1]})",
-            )
-        if ref.binding_hash and ref.binding_hash != binding_hash:
-            raise EngineError(
-                "BINDING_HASH_MISMATCH",
-                f"binding_hash 不一致（binding.yaml 视为 immutable，修改请新建版本）: "
-                f"job={ref.binding_hash} 磁盘={binding_hash} ({key[0]}/{key[1]})",
-            )
-        return cached
+        entry = self._binding_entry(ref)
+        if ref.workflow_hash:
+            algo = match_algorithm(ref.workflow_hash, entry["workflow_raw"], entry["workflow_lf"])
+            if algo is None:
+                raise EngineError(
+                    "WORKFLOW_HASH_MISMATCH",
+                    f"workflow_hash 不一致（binding 视为 immutable，修改请新建版本）: "
+                    f"job={ref.workflow_hash} 磁盘LF={entry['workflow_lf']} "
+                    f"磁盘RAW={entry['workflow_raw']} ({key[0]}/{key[1]})",
+                )
+        if ref.binding_hash:
+            algo = match_algorithm(ref.binding_hash, entry["binding_raw"], entry["binding_lf"])
+            if algo is None:
+                raise EngineError(
+                    "BINDING_HASH_MISMATCH",
+                    f"binding_hash 不一致（binding.yaml 视为 immutable，修改请新建版本）: "
+                    f"job={ref.binding_hash} 磁盘LF={entry['binding_lf']} "
+                    f"磁盘RAW={entry['binding_raw']} ({key[0]}/{key[1]})",
+                )
+        return entry["workflow"], entry["binding"], entry["workflow_lf"], entry["binding_lf"]
+
+    def binding_hash_details(self, module_id: str, binding_version: str) -> dict:
+        """返回双算法 Hash 明细；供 Job 身份记录与跨平台诊断。"""
+        entry = self._binding_entry(
+            EngineBindingRef(module_id=module_id, provider="comfyui", binding_version=binding_version)
+        )
+        return {
+            "workflow_raw": entry["workflow_raw"],
+            "workflow_lf": entry["workflow_lf"],
+            "binding_raw": entry["binding_raw"],
+            "binding_lf": entry["binding_lf"],
+            "algorithm": LF_ALGORITHM,
+            "legacy_algorithm": RAW_ALGORITHM,
+        }
 
     def binding_identity(self, module_id: str, binding_version: str) -> tuple[str, str, str]:
         """返回 (实际 binding_version, workflow_hash, binding_hash)，供 Job 创建时记录真实身份。"""
-        from app.engine.base import EngineBindingRef
-
         _workflow, binding, workflow_hash, binding_hash = self.load_binding(
             EngineBindingRef(module_id=module_id, provider="comfyui", binding_version=binding_version)
         )

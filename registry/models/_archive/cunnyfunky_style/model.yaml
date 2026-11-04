@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: cunnyfunky_style
+version: 1.0.0
+display_name: cunnyfunky_style
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: cunnyfunky_style.safetensors
+  folder: loras
+  required: false
+  size_bytes: 78018140
+  sha256: 996c4f39b505f228a8a4ea981f60c5e736cd7b7ecf55d6e1772490f555fce273
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

@@ -1,0 +1,55 @@
+schema_version: '1.0'
+workflow_id: anime_generate
+version: v2
+display_name: 动漫生图（MiaoMiao）
+description: miaomiaoHarem v14 单文件 SDXL 动漫底模；30 步 er_sde，写实主体请使用 basic_generate。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/anime_generate/v2/workflow.json
+binding_file: workflows/providers/comfyui/anime_generate/v2/binding.yaml
+model_dependencies:
+- model_id: miaomiao_harem_v14
+  role: checkpoint
+input_schema:
+  mode: text
+  slots: []
+output_schema:
+  kind: image
+  asset_type: original
+  parent_policy: none
+  cardinality: 1..n
+default_parameters:
+  width: 1024
+  height: 1024
+  steps: 30
+  cfg: 4.0
+  sampler: er_sde
+  scheduler: simple
+  denoise: 1.0
+  batch_size: 1
+parameter_constraints:
+  width:
+  - 512
+  - 2040
+  height:
+  - 512
+  - 2040
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: db2bd841c260a434
+  binding_hash: 7832e2b669aa1c44
+  legacy_raw_workflow_hash:
+  - 144a4b9f63e8dc67
+  - db2bd841c260a434
+  legacy_raw_binding_hash:
+  - 7832e2b669aa1c44
+  - a0aa56fb921178b0
+release_status: released
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: POST /api/v1/engine/preflight READY + W4.0 G3 真实出图 job_0f43ce4e
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

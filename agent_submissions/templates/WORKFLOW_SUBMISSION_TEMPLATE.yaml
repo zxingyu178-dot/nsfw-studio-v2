@@ -1,0 +1,28 @@
+# 工作流提交模板（W4.1）
+schema_version: "1.0"
+submission_id: sub_<workflow_id>_<version>
+submission_type: workflow
+resource_id: <workflow_id>
+resource_version: v<N>
+change_reason: "<新增/升版原因；不得为空>"
+dependencies:
+  - model_id: <模型 ID>
+  - model_id: <模型 ID>
+files:
+  - path: registry/workflows/<workflow_id>/v<N>/manifest.yaml
+    sha256: "<64 位 SHA256 或 unverified（仅 draft）>"
+  - path: workflows/providers/comfyui/<workflow_id>/v<N>/workflow.json
+    sha256: "<64 位 SHA256>"
+  - path: workflows/providers/comfyui/<workflow_id>/v<N>/binding.yaml
+    sha256: "<64 位 SHA256>"
+input_output:
+  mode: <text|image>
+  slots: []
+  output_kind: image
+  asset_type: <original|processed|upscaled>
+  parent_policy: <none|input_image>
+compatibility: "<历史 Binding 保留；旧 Job 是否可恢复；手机端影响>"
+test_method: "<G0/G1/G3/G4 命令、Job ID、耗时；未执行必须写未执行>"
+rollback: "<回滚到哪个版本；如何保留历史文件>"
+status: draft
+created_at: "YYYY-MM-DD"

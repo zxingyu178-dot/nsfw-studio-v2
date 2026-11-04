@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: vnccs_qi2_pose_studio_v1_1
+version: 1.0.0
+display_name: VNCCS_QI2_PoseStudioV1.1
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: VNCCS_QI2_PoseStudioV1.1.safetensors
+  folder: loras
+  required: false
+  size_bytes: 159436408
+  sha256: d03c0ca3dd47c0de4c26c9c56562d12e7c968442c9decbb14d4b16bd5db3843d
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

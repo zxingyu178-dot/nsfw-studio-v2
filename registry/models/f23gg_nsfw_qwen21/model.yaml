@@ -1,0 +1,24 @@
+schema_version: '1.0'
+model_id: f23gg_nsfw_qwen21
+version: 1.0.0
+display_name: f23gg NSFW Qwen 2.1 LoRA
+family: qwen_image
+model_type: lora
+format: safetensors
+status: released
+files:
+- filename: f23gg_nsfw_qwen21.safetensors
+  folder: loras
+  required: true
+  size_bytes: 159436456
+  sha256: c29f503f3515877882fd6b10f6849c78a4f2337c09021f4bd4b93d060c311aea
+  precision: bf16
+dependencies:
+- model_id: qwen_image_2_1
+  required: true
+  note: LoRA 作用于 Qwen 主模型
+compatible_workflows:
+- basic_generate
+notes: basic v2 双 LoRA 之一。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

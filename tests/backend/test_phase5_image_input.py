@@ -98,7 +98,7 @@ def test_import_single_png_into_gallery(client, settings, session, png_bytes):
     image = import_one(client, "桌面图片.png", png_bytes)
     assert image["source"] == "import" and image["kind"] == "original"
     assert image["job_id"] is None and image["job_item_id"] is None
-    assert image["file_path"].startswith("images/originals/") and ":" not in image["file_path"]
+    assert image["file_path"].startswith("assets/images/") and ":" not in image["file_path"]
     assert (image["width"], image["height"]) == (1, 1)
 
     stored = session.get(Image, image["id"])

@@ -27,10 +27,15 @@ from app.schemas.prompt import (
     prompt_evaluation_response,
     prompt_version_response,
 )
-from app.services import prompt_image_service, prompt_scoring_service, prompt_service
+from app.services import prompt_center_service, prompt_image_service, prompt_scoring_service, prompt_service
 from app.services.prompt_composer import compose_structured
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
+
+
+@router.get("/stats", summary="Prompt Center 统计（W4.1）")
+def prompt_stats(session: Session = Depends(get_session)) -> dict:
+    return prompt_center_service.stats(session)
 
 
 @router.post("/compose", response_model=ComposeResponse, summary="结构化 Prompt 合成预览（与保存规则一致）")

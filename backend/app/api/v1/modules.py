@@ -14,6 +14,7 @@ from fastapi import APIRouter, Request
 from app.core.config import Settings
 from app.engine.base import EngineError
 from app.engine.factory import module_availability
+from app.services.workflow_registry_service import WorkflowRegistryService
 from app.workflows.registry import default_registry
 
 router = APIRouter(prefix="/modules", tags=["modules"])
@@ -33,6 +34,11 @@ def list_modules(request: Request) -> list[dict]:
     """
     settings: Settings = request.app.state.settings
     availability = {item["module_id"]: item for item in module_availability(settings)}
+    workflow_registry = WorkflowRegistryService(settings)
+    manifests = {
+        f"{item.get('workflow_id')}/{item.get('version')}": item
+        for item in workflow_registry.list_workflows(include_history=True)
+    }
 
     registry = default_registry()
     result: list[dict] = []
@@ -49,6 +55,8 @@ def list_modules(request: Request) -> list[dict]:
                 capabilities = None
         if capabilities is None:
             capabilities = registry.get(module_id).capabilities()
+        binding_version = info.get("binding_version")
+        manifest = manifests.get(f"{module_id}/{binding_version}") if binding_version else None
         result.append({
             "module_id": capabilities.module_id,
             # Task5（Phase 6）：新 Job 将使用的代码版本（availability 已校验真实注册）
@@ -107,5 +115,14 @@ def list_modules(request: Request) -> list[dict]:
             # W1-1：正式放行状态（按 module_id + binding_version）；
             # available 保留兼容语义，前端正式选择必须使用 release_status.ready_to_run
             "release_status": info.get("release_status"),
+            # W4.1：Workflow Registry 投影（前端不得自行维护第二份工作流配置）
+            "registry": None if manifest is None else {
+                "workflow_id": manifest.get("workflow_id"),
+                "version": manifest.get("version"),
+                "hashes": manifest.get("hashes"),
+                "model_dependencies": manifest.get("model_dependencies"),
+                "default_parameters": manifest.get("default_parameters"),
+                "release_status": manifest.get("release_status"),
+            },
         })
     return result

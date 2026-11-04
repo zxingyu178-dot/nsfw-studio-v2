@@ -1,0 +1,30 @@
+# Prompt 模板提交（W4.1）
+schema_version: "1.0"
+submission_id: sub_prompt_<name>
+submission_type: prompt
+resource_id: <prompt_id 或 new>
+resource_version: "<version_no 或 1>"
+change_reason: "<新增模板/修订原因>"
+dependencies: []
+files:
+  - path: agent_submissions/<submission_id>/manifest.yaml
+    sha256: "<64 位 SHA256>"
+input_output:
+  mode: <structured|full>
+  positive_prompt: "<完整正向文本>"
+  negative_prompt: "<完整负向文本>"
+  structured_fields:
+    style: "<风格>"
+    character: "<人物>"
+    clothing: "<服装>"
+    action: "<动作>"
+    scene: "<场景>"
+    camera: "<镜头>"
+    lighting: "<光线>"
+    extra: "<其他>"
+  tags: []
+compatibility: "<旧 Prompt ID/版本/图片关联是否保留>"
+test_method: "<Prompt 版本创建、历史版本读取、图片关联分页命令>"
+rollback: "<恢复到上一版本；不得覆盖历史版本>"
+status: draft
+created_at: "YYYY-MM-DD"

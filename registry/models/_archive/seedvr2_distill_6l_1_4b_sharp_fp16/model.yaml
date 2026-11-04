@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: seedvr2_distill_6l_1_4b_sharp_fp16
+version: 1.0.0
+display_name: seedvr2_distill_6L_1.4B_sharp_fp16_comfyui
+family: legacy
+model_type: upscaler
+format: safetensors
+status: archived
+files:
+- filename: seedvr2_distill_6L_1.4B_sharp_fp16_comfyui.safetensors
+  folder: diffusion_models
+  required: false
+  size_bytes: 2886486040
+  sha256: bdce240cdbfcfa90ec8ad8b535667b93507cbaa0fb96b2970cc10b1389cc1080
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

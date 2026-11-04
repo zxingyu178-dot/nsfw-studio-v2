@@ -1,0 +1,21 @@
+schema_version: '1.0'
+model_id: miaomiao_harem_v14
+version: 14.0.0
+display_name: MiaoMiao Harem v14
+family: sdxl_anime
+model_type: checkpoint
+format: safetensors
+status: released
+files:
+- filename: miaomiaoHarem_v14.safetensors
+  folder: checkpoints
+  required: true
+  size_bytes: 6938042912
+  sha256: e2039a9f785b1fc1c692d3d49a92c8c5694def0e78bd0bae2d0e8a738d65dd59
+  precision: bf16
+dependencies: []
+compatible_workflows:
+- anime_generate
+notes: anime v2 单文件 checkpoint；CLIP/VAE 内置。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

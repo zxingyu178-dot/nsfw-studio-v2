@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: ntc_glamour_shot
+version: 1.0.0
+display_name: ntc_glamour-shot
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: ntc_glamour-shot.safetensors
+  folder: loras
+  required: false
+  size_bytes: 8789076
+  sha256: 81d08d89d5790b34685671f264e2f19d6fcf9ba92542a01a3acc680bdce4162a
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

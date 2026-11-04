@@ -135,10 +135,10 @@ def test_basic_then_process_strict_order_and_parents(mock_client):
     upscaled = [image for image in images if image["kind"] == "upscaled"]
     assert len(originals) == 3 and len(upscaled) == 3
     for image in upscaled:
-        assert image["file_path"].startswith("images/upscaled/")
+        assert image["file_path"].startswith("assets/images/")
         assert image["parent_image_id"] in originals
     for image in originals.values():
-        assert image["file_path"].startswith("images/originals/")
+        assert image["file_path"].startswith("assets/images/")
 
     # 父子关系 API（§十九）
     one = upscaled[0]
@@ -329,7 +329,7 @@ def _seed_gallery_images(client, count: int, png_bytes: bytes) -> list[str]:
         ids = []
         for index in range(count):
             image = image_service.import_engine_output(
-                session, storage, data=png_bytes, original_filename=f"seed{index}.png", source="import",
+                session, storage, data=png_bytes, original_filename=f"seed{index}.png", source="comfyui",
             )
             ids.append(image.id)
         return ids
@@ -371,7 +371,7 @@ def test_gallery_process_creates_process_job(mock_client, png_bytes):
     parents = {image["parent_image_id"] for image in images}
     assert parents == set(source_ids)
     for image in images:
-        assert image["file_path"].startswith("images/upscaled/")
+        assert image["file_path"].startswith("assets/images/")
 
 
 # ===== §0.1：Worker 代码级异常 → 当前 Job INTERRUPTED + 队列暂停 + 不启动第二 Job =====

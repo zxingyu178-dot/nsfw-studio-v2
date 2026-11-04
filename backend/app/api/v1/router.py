@@ -12,6 +12,7 @@ from app.api.v1 import (
     modules,
     prompts,
     recipes,
+    registry,
     review,
     system,
 )
@@ -29,3 +30,4 @@ api_v1_router.include_router(engine_runtime.router)
 api_v1_router.include_router(system.router)
 api_v1_router.include_router(review.router)
 api_v1_router.include_router(mobile_review_admin.router)
+api_v1_router.include_router(registry.router)

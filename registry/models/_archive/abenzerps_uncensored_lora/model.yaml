@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: abenzerps_uncensored_lora
+version: 1.0.0
+display_name: abenzerps_uncensored_lora
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: abenzerps_uncensored_lora.safetensors
+  folder: loras
+  required: false
+  size_bytes: 33586704
+  sha256: 00ee2cb7f00a37b097640c1880ed0d17e368e30599f34bb348fee0e8c2cc4ca1
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

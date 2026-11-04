@@ -1,0 +1,55 @@
+schema_version: '1.0'
+workflow_id: reference_generate
+version: v1
+display_name: 参考图生成 v1（冻结）
+description: 历史 Qwen reference latents，旧 Qwen VAE。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/reference_generate/v1/workflow.json
+binding_file: workflows/providers/comfyui/reference_generate/v1/binding.yaml
+model_dependencies:
+- model_id: qwen_image_2_1
+  role: diffusion_model
+- model_id: qwen3vl_8b_w4a8
+  role: text_encoder
+- model_id: qwen_image_2_1_vae_bf16
+  role: vae
+input_schema:
+  mode: image
+  slots:
+  - role: reference
+    required: true
+    max_count: 1
+output_schema:
+  kind: image
+  asset_type: original
+  parent_policy: input_image
+  cardinality: 1..n
+default_parameters:
+  resolution: 1024
+  steps: 25
+  cfg: 1.0
+  sampler: euler
+  scheduler: simple
+  batch_size: 1
+parameter_constraints:
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: b9413c99c1f4ddeb
+  binding_hash: 1022da22e48721e6
+  legacy_raw_workflow_hash:
+  - 0d816c324a8dbd71
+  - b9413c99c1f4ddeb
+  legacy_raw_binding_hash:
+  - 1022da22e48721e6
+  - 8a395f7b8f5a597b
+release_status: frozen
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: 历史 Studio Job 证据；冻结
+notes: ''
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

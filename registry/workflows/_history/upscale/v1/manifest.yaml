@@ -1,0 +1,40 @@
+schema_version: '1.0'
+workflow_id: upscale
+version: v1
+display_name: 高清放大 v1（已下线归档）
+description: 4x-UltraSharp 历史 upscale；W4.0 已彻底下线，不再注册。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/upscale/v1/workflow.json
+binding_file: workflows/providers/comfyui/upscale/v1/binding.yaml
+model_dependencies: []
+input_schema:
+  mode: image
+  slots:
+  - role: source
+    required: true
+    max_count: 1
+output_schema:
+  kind: image
+  asset_type: upscaled
+  parent_policy: input_image
+  cardinality: 1..n
+default_parameters:
+  scale: 4
+parameter_constraints:
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: '0000000000000000'
+  binding_hash: '0000000000000000'
+  legacy_raw_workflow_hash: []
+  legacy_raw_binding_hash: []
+release_status: archived
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: 仅保留历史 Job/图片证据；活动注册已移除
+notes: workflow.json / binding.yaml 已归档至 archive/workflows-2026-11/upscale-v1/，不参与 Registry 加载。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

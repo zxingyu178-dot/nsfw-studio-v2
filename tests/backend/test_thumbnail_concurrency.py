@@ -126,8 +126,8 @@ def test_preview_and_thumbnail_independent(session, settings):
     # thumbnail 长边 512：1400x1050 → 512x384
     assert (t_variant.width, t_variant.height) == (512, 384)
     # 目录互不干扰
-    assert "images/thumbnails/" in t_variant.path
-    assert "images/previews/" in p_variant.path
+    assert "cache/thumbnails/" in t_variant.path
+    assert "cache/previews/" in p_variant.path
     with PILImage.open(p_path) as im:
         assert im.format == "WEBP"
 

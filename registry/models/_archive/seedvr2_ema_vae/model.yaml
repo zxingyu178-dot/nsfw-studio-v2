@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: seedvr2_ema_vae
+version: 1.0.0
+display_name: seedvr2_ema_vae
+family: legacy
+model_type: vae
+format: pth
+status: archived
+files:
+- filename: seedvr2_ema_vae.pth
+  folder: vae
+  required: false
+  size_bytes: 1002691902
+  sha256: c7df8a67e68b7f9aca3d5d2153d2ce8ab4373687741a0f9ce87cb356ace51cac
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

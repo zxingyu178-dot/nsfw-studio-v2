@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: ntc_sharp_focus
+version: 1.0.0
+display_name: ntc_sharp-focus
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: ntc_sharp-focus.safetensors
+  folder: loras
+  required: false
+  size_bytes: 8789076
+  sha256: 59ac81f6e61a16ea3875f680b78943cfdcf17e43bd25e7e0ec571ed78b6caf5c
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

@@ -115,5 +115,5 @@ def test_real_basic_generation_smoke(real_client):
     images = real_client.get("/api/v1/images", params={"job_id": job["id"]}).json()
     assert images["total"] == 1
     image = images["items"][0]
-    assert image["kind"] == "original" and image["file_path"].startswith("images/originals/")
+    assert image["kind"] == "original" and image["file_path"].startswith("assets/images/")
     assert image["width"] == 640 and image["height"] == 960

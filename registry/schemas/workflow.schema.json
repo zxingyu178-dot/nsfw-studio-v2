@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nsfw-studio.local/schemas/workflow.schema.json",
+  "title": "NSFW Studio Workflow Manifest",
+  "description": "W4.1 Workflow Center 工作流（Binding）注册定义。定义进 Git，运行状态进数据库。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "workflow_id", "version", "display_name", "description",
+    "provider", "workflow_file", "binding_file", "model_dependencies",
+    "input_schema", "output_schema", "default_parameters", "parameter_constraints",
+    "hashes", "release_status", "validation_report"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "workflow_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*$"},
+    "version": {"type": "string", "pattern": "^v\\d+$"},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 100},
+    "description": {"type": "string", "minLength": 1, "maxLength": 500},
+    "provider": {"type": "string", "enum": ["comfyui", "mock", "other"]},
+    "workflow_file": {"type": "string", "minLength": 1, "maxLength": 300},
+    "binding_file": {"type": "string", "minLength": 1, "maxLength": 300},
+    "model_dependencies": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["model_id"],
+        "properties": {
+          "model_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*$"},
+          "role": {"type": "string", "maxLength": 64},
+          "required": {"type": "boolean"}
+        }
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["mode", "slots"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["text", "image"]},
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["role", "required"],
+            "properties": {
+              "role": {"type": "string", "maxLength": 32},
+              "required": {"type": "boolean"},
+              "max_count": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "output_schema": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["image"]},
+        "asset_type": {"type": "string", "enum": ["original", "processed", "upscaled"]},
+        "parent_policy": {"type": "string", "maxLength": 64},
+        "cardinality": {"type": "string", "maxLength": 32}
+      }
+    },
+    "default_parameters": {"type": "object"},
+    "parameter_constraints": {"type": "object"},
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "workflow_hash", "binding_hash"],
+      "properties": {
+        "algorithm": {"type": "string", "const": "lf-normalized-v1"},
+        "workflow_hash": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+        "binding_hash": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+        "legacy_raw_workflow_hash": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-f0-9]{16}$"}
+        },
+        "legacy_raw_binding_hash": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-f0-9]{16}$"}
+        }
+      }
+    },
+    "release_status": {
+      "type": "string",
+      "enum": ["released", "frozen", "archived", "experimental", "draft"]
+    },
+    "validation_report": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "checked_at"],
+      "properties": {
+        "status": {"type": "string", "enum": ["passed", "failed", "unverified"]},
+        "checked_at": {"type": "string"},
+        "method": {"type": "string", "maxLength": 300},
+        "notes": {"type": "string", "maxLength": 500}
+      }
+    },
+    "hardware_profile": {"type": "object"},
+    "notes": {"type": "string", "maxLength": 500},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"}
+  }
+}

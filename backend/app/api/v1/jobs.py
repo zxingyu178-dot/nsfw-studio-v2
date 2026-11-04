@@ -25,7 +25,7 @@ from app.schemas.job import (
     QueueResponse,
     job_response,
 )
-from app.services import job_service, prompt_service
+from app.services import generation_provenance_service, job_service, prompt_service
 from app.services.runtime_preflight_service import run_preflight
 
 router = APIRouter(tags=["jobs"])
@@ -136,6 +136,11 @@ def list_history(
         ],
         total=total, limit=limit, offset=offset,
     )
+
+
+@router.get("/jobs/{job_id}/provenance", summary="任务完整溯源（W4.1：工作流/模型/Prompt/Seed/资产）")
+def job_provenance(job_id: str, session: Session = Depends(get_session)) -> dict:
+    return generation_provenance_service.job_provenance(session, job_id)
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse, summary="任务详情")

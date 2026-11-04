@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: qwen_image_vae
+version: 1.0.0
+display_name: qwen_image_vae
+family: legacy
+model_type: vae
+format: safetensors
+status: archived
+files:
+- filename: qwen_image_vae.safetensors
+  folder: vae
+  required: false
+  size_bytes: 253806246
+  sha256: a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

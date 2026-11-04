@@ -1,0 +1,59 @@
+schema_version: '1.0'
+workflow_id: reference_generate
+version: v2
+display_name: 参考图生成
+description: Qwen-Image 2.1 原生 reference latents；1 张参考图 + Prompt，输出挂到参考图下。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/reference_generate/v2/workflow.json
+binding_file: workflows/providers/comfyui/reference_generate/v2/binding.yaml
+model_dependencies:
+- model_id: qwen_image_2_1
+  role: diffusion_model
+- model_id: qwen3vl_8b_w4a8
+  role: text_encoder
+- model_id: texture_fix_vae_qwen_image_2_1
+  role: vae
+input_schema:
+  mode: image
+  slots:
+  - role: reference
+    required: true
+    max_count: 1
+output_schema:
+  kind: image
+  asset_type: original
+  parent_policy: input_image
+  cardinality: 1..n
+default_parameters:
+  resolution: 1024
+  steps: 25
+  cfg: 1.0
+  sampler: euler
+  scheduler: simple
+  denoise: 1.0
+  batch_size: 1
+parameter_constraints:
+  resolution:
+  - 512
+  - 2048
+  - 64
+  seed:
+  - 0
+  - 2147483647
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: 88007850182aff4d
+  binding_hash: cfc68ee2f803c9ed
+  legacy_raw_workflow_hash:
+  - 65dbbd6ca22eb9e7
+  - 88007850182aff4d
+  legacy_raw_binding_hash:
+  - 4ac3b58b16203412
+  - cfc68ee2f803c9ed
+release_status: released
+validation_report:
+  status: passed
+  checked_at: '2026-11-03'
+  method: POST /api/v1/engine/preflight READY + W4.0 G3 真实出图 job_44dd171f
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

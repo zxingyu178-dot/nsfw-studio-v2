@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: ntc_micro_details
+version: 1.0.0
+display_name: ntc_micro-details
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: ntc_micro-details.safetensors
+  folder: loras
+  required: false
+  size_bytes: 8789076
+  sha256: 987fad40ab25a3c1cfc34b8028f9b061fe58ed06eb8bbc69cfaec5c68c125ab2
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

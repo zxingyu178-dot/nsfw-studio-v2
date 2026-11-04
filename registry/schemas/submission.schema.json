@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nsfw-studio.local/schemas/submission.schema.json",
+  "title": "NSFW Studio AI Agent Submission",
+  "description": "W4.1 统一 AI Agent 提交包外层合同。模型/工作流/Prompt/Asset 提交共用本结构，具体内容放 manifest.yaml。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "submission_id", "submission_type", "resource_id",
+    "resource_version", "change_reason", "files", "compatibility",
+    "test_method", "rollback", "status"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "submission_id": {"type": "string", "pattern": "^sub_[a-z0-9_]+$"},
+    "submission_type": {
+      "type": "string",
+      "enum": ["model", "workflow", "prompt", "asset_import"]
+    },
+    "resource_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "resource_version": {"type": "string", "minLength": 1, "maxLength": 32},
+    "change_reason": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "dependencies": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 500},
+          "sha256": {"type": "string", "pattern": "^(unverified|[a-f0-9]{64})$"}
+        }
+      }
+    },
+    "input_output": {"type": "object"},
+    "compatibility": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "test_method": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "rollback": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "status": {
+      "type": "string",
+      "enum": ["draft", "staged", "validated", "approved", "released", "rejected"]
+    },
+    "review_note": {"type": "string", "maxLength": 500},
+    "created_at": {"type": "string"}
+  }
+}

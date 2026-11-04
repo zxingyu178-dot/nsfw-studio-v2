@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: anima_2_9b_preview_v1
+version: 1.0.0
+display_name: Anima-2.9B-preview-v1_int8_convrot
+family: legacy
+model_type: diffusion_model
+format: safetensors
+status: archived
+files:
+- filename: Anima-2.9B-preview-v1_int8_convrot.safetensors
+  folder: diffusion_models
+  required: false
+  size_bytes: 3082486758
+  sha256: cfb6ee2dde085de2b1c52b3fbe098dbc8c9ebd24f290c59755ab2c5f9291d396
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

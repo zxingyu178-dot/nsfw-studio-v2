@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: detail_tweaker
+version: 1.0.0
+display_name: DetailTweaker
+family: legacy
+model_type: lora
+format: safetensors
+status: archived
+files:
+- filename: DetailTweaker.safetensors
+  folder: loras
+  required: false
+  size_bytes: 57427492
+  sha256: e1be0e295af0bb83b09e64466ceb85047b0a067a58675c9c32291375b65e8edd
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

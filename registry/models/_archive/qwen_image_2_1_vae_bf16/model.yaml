@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: qwen_image_2_1_vae_bf16
+version: 1.0.0
+display_name: qwen_image_2.1_vae_bf16
+family: legacy
+model_type: vae
+format: safetensors
+status: archived
+files:
+- filename: qwen_image_2.1_vae_bf16.safetensors
+  folder: vae
+  required: false
+  size_bytes: 675509688
+  sha256: bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

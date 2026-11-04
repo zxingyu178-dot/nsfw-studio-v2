@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nsfw-studio.local/schemas/asset.schema.json",
+  "title": "NSFW Studio Image Asset Record",
+  "description": "W4.1 Image Asset Center 统一资产记录。数据库以 images 表为实体，本 Schema 定义稳定投影字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "asset_id", "storage_key", "sha256", "mime_type", "width", "height",
+    "file_size", "asset_type", "review_status", "favorite", "created_at"
+  ],
+  "properties": {
+    "asset_id": {"type": "string", "pattern": "^img_[0-9a-f-]+$"},
+    "storage_key": {
+      "type": "string",
+      "pattern": "^assets/images/\\d{4}/\\d{2}/img_[0-9a-f-]+/(original|processed|upscaled)\\.[a-z0-9]+$"
+    },
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "mime_type": {"type": "string", "enum": ["image/png", "image/jpeg", "image/webp"]},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "file_size": {"type": "integer", "minimum": 1},
+    "asset_type": {
+      "type": "string",
+      "enum": ["original", "processed", "upscaled", "imported", "other_variant"]
+    },
+    "parent_asset_id": {
+      "type": ["string", "null"],
+      "pattern": "^img_[0-9a-f-]+$"
+    },
+    "job_id": {"type": ["string", "null"]},
+    "generation_item_id": {"type": ["string", "null"]},
+    "prompt_id": {"type": ["string", "null"]},
+    "prompt_version": {"type": ["integer", "null"], "minimum": 1},
+    "workflow_id": {"type": ["string", "null"]},
+    "workflow_version": {"type": ["string", "null"]},
+    "model_snapshot": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "model_id": {"type": "string"},
+          "version": {"type": "string"},
+          "sha256": {"type": "string"}
+        }
+      }
+    },
+    "seed": {"type": ["integer", "null"]},
+    "review_status": {
+      "type": "string",
+      "enum": ["NEW", "KEEP", "REJECT", "ARCHIVED"]
+    },
+    "favorite": {"type": "boolean"},
+    "legacy": {"type": "boolean"},
+    "unlinked": {"type": "boolean"},
+    "created_at": {"type": "string"}
+  }
+}

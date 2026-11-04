@@ -81,6 +81,9 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
             "binding_version": module.get("binding_version"),
             "workflow_hash": module.get("workflow_hash"),
             "binding_hash": module.get("binding_hash"),
+            # W4.1：Hash 算法与模型快照必须随 Job 固化，历史 Job 不追溯改写
+            "hash_algorithm": module.get("hash_algorithm") or "lf-normalized-v1",
+            "model_snapshot": module.get("model_snapshot") or [],
             "config": module.get("config") if isinstance(module.get("config"), dict) else {},
         }
         for module in modules

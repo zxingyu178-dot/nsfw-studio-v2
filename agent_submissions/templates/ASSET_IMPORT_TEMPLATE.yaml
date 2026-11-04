@@ -1,0 +1,24 @@
+# 图片/资产导入模板（W4.1）
+schema_version: "1.0"
+submission_id: sub_asset_import_<batch>
+submission_type: asset_import
+resource_id: "<asset_id 或 batch_id>"
+resource_version: "<无版本，填 1>"
+change_reason: "<导入来源/目的；不得为空的猜测>"
+dependencies: []
+files:
+  - path: <相对路径>
+    sha256: "<64 位 SHA256>"
+input_output:
+  asset_type: <original|processed|upscaled|imported|other_variant>
+  parent_asset_id: <null 或 img_...>
+  prompt_id: <null 或 prm_...>
+  job_id: <null 或 job_...>
+  width: <整数>
+  height: <整数>
+  mime_type: <image/png|image/jpeg|image/webp>
+compatibility: "<是否影响原图/父子关系/手机审核>"
+test_method: "<幂等重复导入、SHA256 校验、缩略图重建、孤立识别>"
+rollback: "<软删除/归档；不得永久删除原图>"
+status: draft
+created_at: "YYYY-MM-DD"

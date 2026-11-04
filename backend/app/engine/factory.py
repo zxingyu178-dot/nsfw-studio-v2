@@ -45,6 +45,18 @@ def create_engine_adapter(settings: Settings) -> EngineAdapter:
     return UnboundEngineAdapter()
 
 
+def _model_snapshot(settings: Settings, binding: dict | None) -> list[dict]:
+    """W4.1：binding.requirements.models → 稳定模型快照（model_id/version/sha256）。"""
+    if not isinstance(binding, dict):
+        return []
+    try:
+        from app.services.model_registry_service import ModelRegistryService
+
+        return ModelRegistryService(settings).model_snapshot(binding)
+    except Exception:  # noqa: BLE001 —— 注册中心异常不得阻断既有生成链
+        return []
+
+
 def _pinned_identity(entry: dict) -> dict[str, str | None] | None:
     """从请求项提取"完整执行身份"（Task9）；任一身字段缺失 → 视为普通新建（None）。"""
     module_id = str(entry.get("module_id") or "").strip()
@@ -124,9 +136,21 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
                 _workflow, binding, workflow_hash, binding_hash = adapter.load_binding(
                     EngineBindingRef(**pinned)
                 )
+                details = adapter.binding_hash_details(module_id, pinned["binding_version"])
+                # 历史 Job 的原始 Hash 必须原样保留；只有引用值本身是 LF 值时
+                # 才标记为 W4.1 规范算法。混合命中（raw workflow + lf binding）
+                # 归为 legacy，避免伪造单一算法标识。
+                both_lf = (
+                    pinned.get("workflow_hash") == details["workflow_lf"]
+                    and pinned.get("binding_hash") == details["binding_lf"]
+                )
+                pinned["hash_algorithm"] = (
+                    "lf-normalized-v1" if both_lf else "raw-bytes-v1"
+                )
                 pinned["binding_version"] = str(binding.get("binding_version", pinned["binding_version"]))
-                pinned["workflow_hash"] = workflow_hash
-                pinned["binding_hash"] = binding_hash
+                pinned["workflow_hash"] = pinned.get("workflow_hash") or workflow_hash
+                pinned["binding_hash"] = pinned.get("binding_hash") or binding_hash
+                pinned["model_snapshot"] = _model_snapshot(settings, binding)
             identities.append(pinned)
             continue
 
@@ -140,6 +164,7 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
             "binding_version": str(per_module.get("binding_version") or fallback_binding),
             "workflow_hash": None,
             "binding_hash": None,
+            "hash_algorithm": "lf-normalized-v1",
         }
         if provider == "comfyui":
             if adapter is None:
@@ -152,6 +177,18 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
             identity["binding_version"] = actual_version
             identity["workflow_hash"] = workflow_hash
             identity["binding_hash"] = binding_hash
+            try:
+                _workflow, binding, _wf, _bh = adapter.load_binding(
+                    EngineBindingRef(
+                        module_id=module_id,
+                        module_version=identity["module_version"],
+                        provider=provider,
+                        binding_version=actual_version,
+                    )
+                )
+                identity["model_snapshot"] = _model_snapshot(settings, binding)
+            except EngineError:
+                identity["model_snapshot"] = []
         identities.append(identity)
     return identities
 

@@ -126,6 +126,13 @@ class ImageResponse(BaseModel):
     metadata: dict[str, Any]
     created_at: str
     updated_at: str
+    # W4.1 Image Asset Center 投影（只读；不新增重复列）
+    sha256: str | None = None
+    storage_key: str | None = None
+    mime_type: str | None = None
+    file_size: int | None = None
+    asset_type: str | None = None
+    parent_asset_id: str | None = None
 
 
 class ImageListResponse(BaseModel):
@@ -236,12 +243,23 @@ class ImageProvenanceResponse(BaseModel):
 
 
 def image_response(image: Image) -> ImageResponse:
+    metadata = json.loads(image.metadata_json or "{}")
+    suffix = "." + image.file_path.rsplit(".", 1)[-1].lower() if "." in image.file_path else ""
+    mime = metadata.get("mime_type") or {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+    }.get(suffix)
     return ImageResponse(
         id=image.id, job_id=image.job_id, job_item_id=image.job_item_id,
         parent_image_id=image.parent_image_id, kind=image.kind, file_path=image.file_path,
         width=image.width, height=image.height, seed=image.seed,
         review_status=image.review_status, favorite=image.favorite, source=image.source,
         status=image.status, reviewed_at=image.reviewed_at, review_note=image.review_note or "",
-        metadata=json.loads(image.metadata_json or "{}"),
+        metadata=metadata,
         created_at=image.created_at, updated_at=image.updated_at,
+        sha256=image.sha256,
+        storage_key=image.file_path,
+        mime_type=mime,
+        file_size=metadata.get("file_size"),
+        asset_type=image.kind,
+        parent_asset_id=image.parent_image_id,
     )

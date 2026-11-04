@@ -178,6 +178,15 @@ class RuntimePreflightService:
         self.settings = settings
         self.adapter = adapter
         self._http_get = http_get or _http_get_json
+        self._model_registry = None
+
+    @property
+    def model_registry(self):
+        if self._model_registry is None:
+            from app.services.model_registry_service import ModelRegistryService
+
+            self._model_registry = ModelRegistryService(self.settings)
+        return self._model_registry
 
     # ===== provider / 引擎 =====
     def _provider(self) -> str:
@@ -359,6 +368,7 @@ class RuntimePreflightService:
             "workflow_hash": module.get("workflow_hash"),
             "binding_hash": module.get("binding_hash"),
             "status": STATUS_READY,
+            "hash_algorithm": "lf-normalized-v1",
             "missing_nodes": [],
             "missing_models": [],
             "missing_requirements": [],
@@ -403,6 +413,15 @@ class RuntimePreflightService:
             elif not registered:
                 base["missing_nodes"].append(class_type)
 
+        requirements = binding.get("requirements") if isinstance(binding.get("requirements"), dict) else {}
+        declared_models: set[tuple[str, str]] = set()
+        for item in requirements.get("models") or []:
+            if not isinstance(item, dict) or not item.get("filename"):
+                continue
+            folder = FOLDER_ALIASES.get(str(item.get("type") or item.get("folder") or ""))
+            if folder is not None:
+                declared_models.add((folder, str(item["filename"]).replace("\\", "/").split("/")[-1]))
+
         folder_names: dict[str, list[str] | None] = {}
         for item in models:
             folder = str(item.get("folder") or "")
@@ -416,8 +435,19 @@ class RuntimePreflightService:
                 continue
             if filename not in names:
                 base["missing_models"].append({"folder": folder, "filename": filename})
+                continue
+            # W4.1：正式 Binding 声明的模型必须先在 Model Center 登记；
+            # 未登记不能被当作 READY。未声明 requirements.models 的历史/测试
+            # Binding 不做强制登记检查（但仍会检查文件存在性）。
+            if (folder, filename) in declared_models:
+                manifest = self.model_registry.resolve_file(folder, filename)
+                if manifest is None:
+                    unknown_reasons.append(f"模型未在 registry 登记：{folder}/{filename}")
+                elif str(manifest.get("status")) != "released":
+                    base["missing_requirements"].append(
+                        f"模型 {manifest.get('model_id')} 状态={manifest.get('status')}，活动工作流要求 released"
+                    )
 
-        requirements = binding.get("requirements") if isinstance(binding.get("requirements"), dict) else {}
         min_version = str(requirements.get("comfyui_min_version") or "").strip()
         if min_version:
             current = _parse_version(str(engine_info.get("version") or ""))

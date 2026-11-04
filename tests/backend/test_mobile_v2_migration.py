@@ -74,6 +74,7 @@ def test_branch_0021_database_upgrades_without_data_loss(tmp_path, monkeypatch):
     applied = init_database(engine)
     assert [item.migration_id for item in applied] == [
         "0021_mobile_event_log_mutations", "0022_mobile_v2_compat",
+        "0023_mobile_event_legacy_repair",
     ]
     with engine.begin() as conn:
         triggers = conn.execute(text(
@@ -114,7 +115,9 @@ def test_main_0021_database_backfills_historical_images(tmp_path, monkeypatch):
         assert conn.execute(text("SELECT count(*) FROM mobile_image_events")).scalar_one() == 0
 
     applied = init_database(engine)
-    assert [item.migration_id for item in applied] == ["0022_mobile_v2_compat"]
+    assert [item.migration_id for item in applied] == [
+        "0022_mobile_v2_compat", "0023_mobile_event_legacy_repair",
+    ]
     with engine.begin() as conn:
         rows = conn.execute(text(
             "SELECT image_id,event_type,revision FROM mobile_image_events ORDER BY seq"

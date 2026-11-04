@@ -1,0 +1,19 @@
+schema_version: '1.0'
+model_id: clip_g
+version: 1.0.0
+display_name: clip_g
+family: legacy
+model_type: text_encoder
+format: safetensors
+status: archived
+files:
+- filename: clip_g.safetensors
+  folder: text_encoders
+  required: false
+  size_bytes: 2778702264
+  sha256: 3a6032f63d37ae02bbc74ccd6a27440578cd71701f96532229d0154f55a8d3ff
+dependencies: []
+compatible_workflows: []
+notes: W4.0 归档；物理文件位于 AIHome archive/models-2026-11，不参与活动工作流。
+created_at: '2026-11-04'
+updated_at: '2026-11-04'

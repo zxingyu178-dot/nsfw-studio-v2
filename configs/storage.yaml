@@ -4,6 +4,13 @@ storage:
   database_filename: "studio.db"
   layout:
     - database
+    # W4.1 统一图片资产根与缓存（新图片写入）
+    - assets/images
+    - cache
+    - cache/thumbnails
+    - cache/previews
+    - cache/temp
+    # 兼容旧结构（迁移验收前保留）
     - images/originals
     - images/upscaled
     - images/processed
