@@ -44,16 +44,23 @@ def registry_summary(request: Request) -> dict:
     }
 
 
-@router.get("/models", summary="模型登记与安装状态")
+@router.get("/models", summary="模型登记与安装状态（可按 workflow_id 查询兼容模型）")
 def list_models(
     request: Request,
     include_archived: bool = Query(default=False),
     verify_hash: bool = Query(default=False, description="是否逐文件计算 SHA256（GB 级文件会较慢）"),
+    workflow_id: str | None = Query(default=None, description="只返回 compatible_workflows 命中的模型"),
 ) -> dict:
     models, _workflows = _services(request)
+    manifests = (
+        models.models_for_workflow(workflow_id, include_archived=include_archived)
+        if workflow_id else models.list_models(include_archived=include_archived)
+    )
     items = []
-    for manifest in models.list_models(include_archived=include_archived):
-        status = models.install_status(manifest["model_id"], verify_hash=verify_hash)
+    for manifest in manifests:
+        status = models.install_status(
+            manifest["model_id"], version=manifest.get("version"), verify_hash=verify_hash
+        )
         items.append({
             **manifest,
             "install": {

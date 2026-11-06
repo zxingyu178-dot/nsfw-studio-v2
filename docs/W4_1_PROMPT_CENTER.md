@@ -66,24 +66,35 @@ W4.1 标准字段：
 - Prompt 列表卡片仅返回有限预览（默认 3 张），并返回真实总数；
 - 前端 `+N` 抽屉按服务端分页加载，不把前三张当全集。
 
-## 5. 性能
+## 5. 标签与评分（W4.1 标准字段）
+
+- `tags`：保存在 `prompt_versions.structured_json.tags`（不新建表/不迁移），
+  创建或新增版本时通过 `tags` 字段写入；读取投影同时兼容 `structured.extra.tags`；
+- `rating`：取该 Prompt 最新一条 `prompt_evaluations.overall_score`（1–5），无评分为 `null`；
+- `GET /api/v1/prompts/{id}/center` 返回统一投影：
+  `prompt_id / version / title / category / positive_prompt / negative_prompt /
+  structured_fields / tags / favorite / rating / legacy_import / created_at / updated_at`；
+- `GET /api/v1/prompts?include_evaluation=true` 的列表项同时返回 `tags` 与 `rating`。
+
+## 6. 性能
 
 - 列表页图片使用 `prompt_ids` 下推的 UNION + 窗口函数批量查询，无 N+1；
 - 列表与图片详情分开加载；
 - 缩略图走 `cache/thumbnails`，不批量加载原图；
 - 分页使用稳定 `created_at desc, id desc` 排序。
 
-## 6. API
+## 7. API
 
 | 端点 | 说明 |
 |---|---|
-| `GET /api/v1/prompts` | 列表（分页、筛选、排序、可选预览） |
+| `GET /api/v1/prompts` | 列表（分页、筛选、排序、可选预览；含 tags/rating） |
 | `GET /api/v1/prompts/stats` | Prompt Center 统计（W4.1 新增） |
+| `GET /api/v1/prompts/{id}/center` | 统一投影（版本/结构化字段/tags/rating） |
 | `GET /api/v1/prompts/{id}/images` | 全部关联图片分页 |
 | `POST /api/v1/prompts/{id}/versions` | 创建新版本（不可覆盖） |
 | `POST /api/v1/prompts/{id}/evaluations` | 评分 |
 
-## 7. 结论
+## 8. 结论
 
 - 全部历史 Prompt 已纳入统一体系；
 - 无需新增 Prompt 表或重写现有 Service；

@@ -122,7 +122,7 @@ def submit_agent_job(
     ensure_modules_released(workflow_modules)
     agent_service.validate_agent_primary(settings, workflow_modules)
     # W2.0：运行环境前置检测（在 Prompt 关联与 Job 创建之前）
-    run_preflight(settings, request.app.state.adapter, workflow_modules)
+    preflight = run_preflight(settings, request.app.state.adapter, workflow_modules)
 
     # 快照必须记录最终实际使用的模块身份（不能记录空的默认选择）。
     snapshot_modules = [
@@ -162,6 +162,7 @@ def submit_agent_job(
             queue_mode=body.queue_mode,
             workflow_modules=workflow_modules,
             job_kind="generate",
+            engine_version=str((preflight.get("engine") or {}).get("version") or "") or None,
         )
     except Exception:
         session.rollback()

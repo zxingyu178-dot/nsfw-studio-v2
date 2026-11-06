@@ -161,6 +161,7 @@ def list_prompts(
         if include_evaluation:
             evaluation = evaluations.get(prompt.id)
             data["latest_evaluation"] = prompt_evaluation_response(evaluation) if evaluation else None
+            data["rating"] = evaluation.overall_score if evaluation else None
         if include_images:
             data["images"], data["images_total"] = images[prompt.id]
         items.append(PromptListItemResponse(**data))

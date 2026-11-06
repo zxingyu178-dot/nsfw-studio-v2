@@ -81,9 +81,13 @@ def validate_submission(path: Path) -> dict:
             issues.extend(registry_validator.validate_manifest(registry_root, kind, manifest))
             if kind == "model":
                 model_id = str(manifest.get("model_id") or "")
-                if any(item.get("model_id") == model_id for item in models.list_models(include_archived=True)):
+                version = str(manifest.get("version") or "")
+                if any(
+                    item.get("model_id") == model_id and str(item.get("version")) == version
+                    for item in models.list_models(include_archived=True)
+                ):
                     issues.append({"level": "error", "code": "ID_DUPLICATE", "path": str(manifest_file),
-                                   "message": f"模型已登记: {model_id}"})
+                                   "message": f"模型版本已登记: {model_id}/{version}"})
             if kind == "workflow":
                 key = f"{manifest.get('workflow_id')}/{manifest.get('version')}"
                 if any(f"{i.get('workflow_id')}/{i.get('version')}" == key for i in workflows.list_workflows(include_history=True)):

@@ -10,7 +10,7 @@
 
 | 中心 | 职责 | 定义真源 | 运行真源 |
 |---|---|---|---|
-| Model Center | 模型身份、版本、文件、Hash、依赖、安装/归档状态 | `registry/models/**/model.yaml`（Git） | 本地扫描 + ComfyUI `/models`（DB 不复制定义） |
+| Model Center | 模型身份、版本、文件、Hash、依赖、安装/归档状态 | `registry/models/**/model.yaml`（Git；支持 `<id>/model.yaml` 与 `<id>/<version>/model.yaml`） | 本地扫描（大小 + SHA256）+ ComfyUI `/models`（DB 不复制定义） |
 | Workflow Center | 工作流/绑定身份、输入输出、默认参数、依赖、Hash、放行状态 | `registry/workflows/**/manifest.yaml` + `workflows/providers/**`（Git） | `configs/workflow.yaml` 选择默认 binding；`workflows/release_manifest.yaml` 记录 Gate 证据 |
 | Prompt Center | Prompt 标题、版本、结构化字段、标签、收藏、评分、图片关联 | `registry/schemas/prompt.schema.json` + 既有 ORM | `prompts` / `prompt_versions` / `prompt_evaluations` |
 | Image Asset Center | 图片资产身份、存储、Hash、派生关系、审核/收藏、生成溯源 | `registry/schemas/asset.schema.json` + 既有 `images` ORM | `images` / `image_variants` + DataRoot 文件 |
@@ -70,7 +70,9 @@ Workbench（前端）
   → GET /api/v1/registry/workflows # 资源管理/诊断（只读）
   → GET /api/v1/registry/models    # 模型登记与安装状态
   → GET /api/v1/images             # Image Asset Center
+  → GET /api/v1/images/{id}/provenance # Prompt / 工作流 / 模型 / 引擎版本追溯
   → GET /api/v1/prompts            # Prompt Center
+  → GET /api/v1/prompts/{id}/center# 统一投影（版本/结构化字段/tags/rating）
   → GET /api/v1/prompts/{id}/images# 全量关联图片分页
 ```
 
@@ -94,9 +96,12 @@ images.sha256 / metadata_json(mime_type, file_size, module_id, v1_output)
 ```
 
 - `images.file_path` 即 `storage_key`，永远是 DataRoot 相对路径；
-- 不新增重复业务表；`asset_type` = `images.kind`，`parent_asset_id` = `parent_image_id`；
+- 不新增重复业务表；`asset_type` 由 `source` + `kind` 投影：
+  `import` → `imported`；`original/processed/upscaled` → 同名；其余 → `other_variant`；
+  `parent_asset_id` = `parent_image_id`；
 - Prompt 与图片的双通道关联（Job 快照 + 导入元数据）保留，不做第二套关系表；
-- 历史 `kind=upscaled` 与 `image_variants` 历史类型继续可读。
+- 历史 `kind=upscaled` 与 `image_variants` 历史类型继续可读；
+- `workflow_snapshot_json` 额外记录 `engine_version`（Job 创建时 preflight 实测值；历史 Job 缺失为 null）。
 
 ---
 
@@ -121,11 +126,14 @@ images.sha256 / metadata_json(mime_type, file_size, module_id, v1_output)
 
 | 资源 | ID 形式 | 版本形式 | 不可变规则 |
 |---|---|---|---|
-| 模型 | `model_id`：`^[a-z0-9][a-z0-9_]*$` | 语义版本 `1.0.0` | 已发布版本不可原地覆盖 |
+| 模型 | `model_id`：`^[a-z0-9][a-z0-9_]*$` | 语义版本 `1.0.0`；同 ID 可并存多版本目录 | 已发布版本不可原地覆盖 |
 | 工作流 | `workflow_id`：现有模块名 | `vN`（binding） | 已发布 binding 不可覆盖 |
 | Prompt | `prm_<uuid>` | 整数 `version_no`，从 1 递增 | 版本只 INSERT |
 | 图片资产 | `img_<uuid>` | 无版本；派生图为新 asset | 不覆盖原图 |
 | Job | `job_<uuid>` | 执行身份 = workflow_hash + binding_hash | 历史 Job 不改写 |
+
+模型多版本解析规则：`get_model(model_id)` 默认返回最高语义版本；`version` 显式指定时精确匹配；
+同一 `(model_id, version)` 在活动/归档目录重复 → `DUPLICATE_MODEL_VERSION`，禁止覆盖历史版本。
 
 ---
 
@@ -142,6 +150,18 @@ images.sha256 / metadata_json(mime_type, file_size, module_id, v1_output)
 3. `ComfyUIAdapter.load_binding` 同时接受 raw 与 LF；不匹配才拒绝；
 4. 历史 Job 的 `workflow_hash` / `binding_hash` 原样保留，不批量改写；
 5. `.gitattributes` 固定 JSON/YAML 为 LF，但不 renormalize 已发布 Binding。
+
+### 7.1 运行依赖校验（§4.5）
+
+`RuntimePreflightService` 在每次 Job 创建前执行：
+
+1. 解析 workflow.json 中的模型 Loader（`UnetLoaderGGUF` / `UNETLoader` / `CheckpointLoaderSimple` /
+   `CLIPLoader` / `VAELoader` / `LoraLoader*` / `UpscaleModelLoader`）；
+2. 未知 Loader → `UNKNOWN`，不得 READY；
+3. Binding `requirements.models` 必须已在 Model Center 登记且 `released`；
+4. 配置 `model_registry.search_roots` 时，对本机文件校验 **存在性 + 大小 + SHA256**
+   （`verify_hash: true`，Hash 按 path+size+mtime 缓存在 `DataRoot/cache/registry_model_hashes.json`）；
+5. 任一缺失/大小或 Hash 不一致 → `BLOCKED`；无法验证 → `UNKNOWN`；两者都不得放行 Job。
 
 ---
 

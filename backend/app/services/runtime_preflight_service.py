@@ -278,6 +278,7 @@ class RuntimePreflightService:
                     "missing_requirements": [],
                     "unknown_reasons": [] if status == STATUS_READY else ["engine_not_configured"],
                     "notes": ["mock engine：跳过真实依赖检测"] if provider == "mock" else [],
+                    "model_install": [],
                     "cache_hit": False,
                 }
                 for module in modules
@@ -349,6 +350,7 @@ class RuntimePreflightService:
                     "missing_requirements": [],
                     "unknown_reasons": [reason],
                     "notes": [],
+                    "model_install": [],
                     "cache_hit": False,
                 }
                 for module in modules
@@ -374,6 +376,7 @@ class RuntimePreflightService:
             "missing_requirements": [],
             "unknown_reasons": [],
             "notes": [],
+            "model_install": [],
             "cache_hit": False,
         }
         ref = EngineBindingRef(
@@ -448,6 +451,9 @@ class RuntimePreflightService:
                         f"模型 {manifest.get('model_id')} 状态={manifest.get('status')}，活动工作流要求 released"
                     )
 
+        # W4.1 §4.5：声明模型必须做本机文件大小 / SHA256 校验（有搜索根时才可验证）。
+        base["model_install"] = self._check_declared_model_files(declared_models, base)
+
         min_version = str(requirements.get("comfyui_min_version") or "").strip()
         if min_version:
             current = _parse_version(str(engine_info.get("version") or ""))
@@ -471,6 +477,63 @@ class RuntimePreflightService:
             base["status"] = STATUS_READY
         base["unknown_reasons"] = unknown_reasons
         return base, bool(base["cache_hit"])
+
+    def _check_declared_model_files(
+        self, declared_models: set[tuple[str, str]], base: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """§4.5：对 Binding 声明的模型做本机文件大小 / SHA256 校验。
+
+        只有配置了 ``model_registry.search_roots`` 才能验证本地文件；没有搜索根时
+        明确写入 notes（"未验证"），绝不以"没查到"冒充"已验证"。
+        """
+        checks: list[dict[str, Any]] = []
+        if not declared_models:
+            return checks
+        registry_config = self.settings.model_registry or {}
+        search_roots = registry_config.get("search_roots") or []
+        verify_hash = bool(registry_config.get("verify_hash", False))
+        if not search_roots:
+            base["notes"].append("未配置 model_registry.search_roots：未校验模型文件大小/SHA256")
+            return checks
+        seen: set[tuple[str, str]] = set()
+        for folder, filename in sorted(declared_models):
+            manifest = self.model_registry.resolve_file(folder, filename)
+            if manifest is None:
+                continue
+            model_id = str(manifest.get("model_id") or "")
+            version = str(manifest.get("version") or "")
+            if (model_id, version) in seen:
+                continue
+            seen.add((model_id, version))
+            install = self.model_registry.install_status(model_id, version=version, verify_hash=verify_hash)
+            checks.append({
+                "model_id": model_id,
+                "version": version,
+                "status": install.status,
+                "missing_files": install.missing_files,
+                "size_mismatch": install.size_mismatch,
+                "sha256_mismatch": install.sha256_mismatch,
+                "sha256_verified": verify_hash,
+            })
+            if install.status == "missing":
+                for item in install.missing_files:
+                    base["missing_requirements"].append(
+                        f"模型 {model_id}/{version} 缺少文件 {item.get('folder')}/{item.get('filename')}"
+                    )
+                for item in install.size_mismatch:
+                    base["missing_requirements"].append(
+                        f"模型 {model_id}/{version} 文件大小不匹配 {item.get('filename')}："
+                        f"期望 {item.get('expected')} 实际 {item.get('actual')}"
+                    )
+                for item in install.sha256_mismatch:
+                    base["missing_requirements"].append(
+                        f"模型 {model_id}/{version} SHA256 不匹配 {item.get('filename')}"
+                    )
+            elif install.status == "unknown":
+                base["notes"].append(f"模型 {model_id}/{version} 本机安装状态无法验证")
+        if not verify_hash:
+            base["notes"].append("model_registry.verify_hash=false：已校验文件大小，未校验 SHA256")
+        return checks
 
 
 def run_preflight(settings: Settings, adapter, modules: list[dict[str, Any]]) -> dict[str, Any]:

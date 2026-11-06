@@ -93,9 +93,13 @@ class WorkflowModuleRefModel(BaseModel):
 
 
 class WorkflowSnapshotModel(BaseModel):
-    """工作流快照（执行真源）：模块执行身份列表（Phase 5.1 Task1 正式类型化）。"""
+    """工作流快照（执行真源）：模块执行身份列表（Phase 5.1 Task1 正式类型化）。
+
+    W4.1：``engine_version`` 记录 Job 创建时 preflight 实测引擎版本（历史 Job 为 None）。
+    """
 
     modules: list[WorkflowModuleRefModel] = Field(default_factory=list)
+    engine_version: str | None = None
 
 
 class WorkbenchSnapshotModel(BaseModel):

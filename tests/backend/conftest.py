@@ -1,6 +1,7 @@
 """后端测试夹具：全部用例使用临时 DataRoot，绝不触碰真实数据目录。"""
 from __future__ import annotations
 
+import dataclasses
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -99,7 +100,8 @@ def process_registry(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture()
 def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("NSFW_STUDIO_DATA_ROOT", str(tmp_path / "data"))
-    return load_settings()
+    # W4.1：测试不依赖本机模型目录，也不触发大文件 SHA256（生产由 config.local 开启）。
+    return dataclasses.replace(load_settings(), model_registry={})
 
 
 @pytest.fixture()

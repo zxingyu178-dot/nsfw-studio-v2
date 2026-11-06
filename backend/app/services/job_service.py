@@ -65,13 +65,16 @@ def _publish(event_type: str, job_id: str, *, item_id: str | None = None, payloa
         })
 
 
-def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
+def _workflow_snapshot_from_modules(
+    modules: list[dict[str, Any]], *, engine_version: str | None = None
+) -> dict:
     """§四/§二十三：由真实模块身份列表构造 workflow_snapshot（唯一执行真源）。
 
     Phase 4 Task1/Task9：身份包含 workflow_hash + binding_hash 两个执行指纹，
     从历史恢复（打开工作台 / 配方）时携带完整身份即可固定原版本执行。
     Phase 5.1 Task1/Task3：config 进入快照（Workbench → Recipe → Job → JobStage.config_json 单链），
     禁止再经第二事实源传递模块参数。
+    W4.1 §7：快照额外记录 ``engine_version``（Job 创建时 preflight 实测引擎版本）。
     """
     normalized = [
         {
@@ -89,7 +92,7 @@ def _workflow_snapshot_from_modules(modules: list[dict[str, Any]]) -> dict:
         for module in modules
         if module.get("module_id")
     ]
-    return {"modules": normalized}
+    return {"modules": normalized, "engine_version": engine_version}
 
 
 def _merge_module_configs(
@@ -517,6 +520,7 @@ def create_job(
     job_kind: str = "generate",
     input_image_ids: list[str] | None = None,
     stage_configs: list[dict[str, Any]] | None = None,
+    engine_version: str | None = None,
 ) -> tuple[Job, bool]:
     """创建 Job + N 个 JobItem + 物化 JobStage/JobStageItem（单事务，Phase 3 §五）。
 
@@ -639,7 +643,7 @@ def create_job(
     )
 
     identity = modules[0]
-    workflow_snapshot = _workflow_snapshot_from_modules(modules)
+    workflow_snapshot = _workflow_snapshot_from_modules(modules, engine_version=engine_version)
     # Phase 6 Task7：生成模式显式保存（text/image；旧调用方缺省 → None，由快照 input_images 语义兜底）
     generation_mode = snapshot.get("generation_mode")
     generation_settings = {

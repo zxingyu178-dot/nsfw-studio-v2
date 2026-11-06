@@ -69,37 +69,67 @@ class ModelRegistryService:
         self.settings = settings
         self.registry_root = Path(registry_root) if registry_root else REGISTRY_ROOT
         self.models_root = self.registry_root / "models"
-        self._cache: dict[str, ModelRecord] | None = None
+        # 模型身份 = (model_id, version)：同一 model_id 允许并存多个版本目录
+        self._cache: dict[tuple[str, str], ModelRecord] | None = None
         self._hash_cache_path = settings.storage.data_root / "cache" / "registry_model_hashes.json"
 
     # ===== Manifest =====
     def _iter_manifest_paths(self) -> list[tuple[Path, bool]]:
+        """支持 ``models/<id>/model.yaml`` 与 ``models/<id>/<version>/model.yaml`` 两种布局。"""
         paths: list[tuple[Path, bool]] = []
         if not self.models_root.is_dir():
             return paths
         for path in sorted(self.models_root.glob("*/model.yaml")):
+            if path.parent.name == ARCHIVE_DIR:
+                continue
+            paths.append((path, False))
+        for path in sorted(self.models_root.glob("*/*/model.yaml")):
+            if path.parent.parent.name == ARCHIVE_DIR:
+                continue
             paths.append((path, False))
         archive = self.models_root / ARCHIVE_DIR
         if archive.is_dir():
             for path in sorted(archive.glob("*/model.yaml")):
                 paths.append((path, True))
+            for path in sorted(archive.glob("*/*/model.yaml")):
+                paths.append((path, True))
         return paths
 
-    def _load_all(self) -> dict[str, ModelRecord]:
+    @staticmethod
+    def _version_key(manifest: dict[str, Any]) -> tuple[int, ...]:
+        parts = str(manifest.get("version") or "").split(".")
+        key: list[int] = []
+        for part in parts:
+            try:
+                key.append(int(part))
+            except ValueError:
+                return ()
+        return tuple(key)
+
+    def _load_all(self) -> dict[tuple[str, str], ModelRecord]:
         if self._cache is not None:
             return self._cache
-        records: dict[str, ModelRecord] = {}
+        records: dict[tuple[str, str], ModelRecord] = {}
         for path, archived in self._iter_manifest_paths():
             try:
                 manifest = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             except (OSError, yaml.YAMLError) as error:
                 raise ValueError(f"模型 Manifest 无法读取: {path}: {error}") from error
             record = ModelRecord(manifest=manifest, path=path, archived=archived)
-            if record.model_id in records:
-                raise ValueError(f"模型 ID 重复: {record.model_id} ({path})")
-            records[record.model_id] = record
+            key = (record.model_id, record.version)
+            if key in records:
+                raise ValueError(f"模型版本重复: {record.model_id}/{record.version} ({path})")
+            records[key] = record
         self._cache = records
         return records
+
+    def _records_by_id(self) -> dict[str, list[ModelRecord]]:
+        grouped: dict[str, list[ModelRecord]] = {}
+        for record in self._load_all().values():
+            grouped.setdefault(record.model_id, []).append(record)
+        for items in grouped.values():
+            items.sort(key=lambda item: (item.archived, self._version_key(item.manifest)))
+        return grouped
 
     def refresh(self) -> None:
         self._cache = None
@@ -114,18 +144,48 @@ class ModelRegistryService:
                 "archived": record.archived,
                 "manifest_path": str(record.path.relative_to(PROJECT_ROOT).as_posix()),
             })
-        return sorted(result, key=lambda item: (item.get("status") != "released", item.get("model_id") or ""))
+        return sorted(
+            result,
+            key=lambda item: (
+                item.get("status") != "released",
+                item.get("model_id") or "",
+                self._version_key(item),
+            ),
+        )
 
-    def get_model(self, model_id: str) -> dict[str, Any]:
-        record = self._load_all().get(model_id)
-        if record is None:
+    def get_model(self, model_id: str, version: str | None = None) -> dict[str, Any]:
+        """按 model_id 取模型；version 为空时返回最高版本（同版本优先活动目录）。"""
+        records = self._records_by_id().get(model_id)
+        if not records:
             raise KeyError(f"模型未登记: {model_id}")
-        return record.manifest
+        if version:
+            for record in records:
+                if record.version == version:
+                    return record.manifest
+            raise KeyError(f"模型版本未登记: {model_id}/{version}")
+        return records[-1].manifest
+
+    def models_for_workflow(
+        self, workflow_id: str, *, include_archived: bool = False,
+    ) -> list[dict[str, Any]]:
+        """兼容工作流查询：返回 Manifest 声明对该 workflow_id 兼容的模型。"""
+        return [
+            manifest for manifest in self.list_models(include_archived=include_archived)
+            if workflow_id in (manifest.get("compatible_workflows") or [])
+        ]
 
     def resolve_file(self, folder: str, filename: str) -> dict[str, Any] | None:
-        """按物理目录 + 文件名反查模型 Manifest（用于 binding → model_id）。"""
+        """按物理目录 + 文件名反查模型 Manifest（用于 binding → model_id）。
+
+        优先活动、已发布、最高版本，避免历史版本抢占当前执行身份。
+        """
         target_folder = FOLDER_ALIASES.get(folder, folder)
-        for record in self._load_all().values():
+        candidates = sorted(
+            self._load_all().values(),
+            key=lambda record: (record.archived, str(record.manifest.get("status")) != "released",
+                                tuple(-x for x in self._version_key(record.manifest))),
+        )
+        for record in candidates:
             for item in record.manifest.get("files") or []:
                 if (
                     FOLDER_ALIASES.get(str(item.get("folder")), str(item.get("folder"))) == target_folder
@@ -152,8 +212,8 @@ class ModelRegistryService:
         except OSError:
             pass
 
-    def install_status(self, model_id: str, *, verify_hash: bool = False) -> InstallStatus:
-        manifest = self.get_model(model_id)
+    def install_status(self, model_id: str, *, version: str | None = None, verify_hash: bool = False) -> InstallStatus:
+        manifest = self.get_model(model_id, version)
         if manifest.get("status") == "archived":
             return InstallStatus(status="archived", installed=None)
         roots = self._search_roots()
@@ -241,6 +301,8 @@ class ModelRegistryService:
     def validate_all(self) -> dict[str, Any]:
         issues: list[dict[str, str]] = []
         checked = 0
+        loaded: list[tuple[Path, dict[str, Any]]] = []
+        seen: set[tuple[str, str]] = set()
         for path, _archived in self._iter_manifest_paths():
             checked += 1
             try:
@@ -248,6 +310,16 @@ class ModelRegistryService:
             except (OSError, yaml.YAMLError) as error:
                 issues.append({"level": "error", "code": "MANIFEST_UNREADABLE", "path": str(path), "message": str(error)})
                 continue
+            loaded.append((path, manifest))
+            key = (str(manifest.get("model_id") or ""), str(manifest.get("version") or ""))
+            if key in seen:
+                issues.append({
+                    "level": "error", "code": "DUPLICATE_MODEL_VERSION",
+                    "path": str(path), "message": f"重复注册模型版本 {key[0]}/{key[1]}",
+                })
+            seen.add(key)
+        known_ids = {key[0] for key in seen}
+        for path, manifest in loaded:
             for issue in registry_validator.validate_manifest(self.registry_root, "model", manifest):
                 issues.append({**issue, "path": f"{path}:{issue['path']}"})
             if manifest.get("status") == "released":
@@ -257,5 +329,19 @@ class ModelRegistryService:
                             "level": "error", "code": "MODEL_SHA_UNVERIFIED",
                             "path": str(path), "message": "已发布模型不得使用 unverified SHA256",
                         })
+            for dependency in manifest.get("dependencies") or []:
+                dependency_id = str(dependency.get("model_id") or "")
+                dependency_version = str(dependency.get("version") or "")
+                known = (
+                    (dependency_id, dependency_version) in seen
+                    if dependency_version else dependency_id in known_ids
+                )
+                if not known:
+                    issues.append({
+                        "level": "error", "code": "MODEL_DEPENDENCY_UNKNOWN",
+                        "path": str(path),
+                        "message": f"未登记依赖模型 {dependency_id}"
+                                   + (f"/{dependency_version}" if dependency_version else ""),
+                    })
         return {"checked": checked, "errors": sum(1 for i in issues if i["level"] == "error"),
                 "warnings": sum(1 for i in issues if i["level"] == "warning"), "issues": issues}

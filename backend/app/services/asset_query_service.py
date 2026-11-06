@@ -8,11 +8,20 @@ import os
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models import Image, ImageVariant
 from app.storage.manager import StorageManager
+
+
+def _asset_type(image: Image) -> str:
+    """W4.1 资产类型：original / processed / upscaled(历史) / imported / other_variant。"""
+    if image.source == "import":
+        return "imported"
+    if image.kind in ("original", "processed", "upscaled"):
+        return image.kind
+    return "other_variant"
 
 
 def image_asset_view(image: Image) -> dict[str, Any]:
@@ -24,6 +33,7 @@ def image_asset_view(image: Image) -> dict[str, Any]:
         metadata = json.loads(image.metadata_json or "{}")
     except ValueError:
         metadata = {}
+    imported = image.source == "import"
     return {
         "asset_id": image.id,
         "storage_key": image.file_path,
@@ -32,7 +42,7 @@ def image_asset_view(image: Image) -> dict[str, Any]:
         "width": image.width,
         "height": image.height,
         "file_size": metadata.get("file_size"),
-        "asset_type": image.kind,
+        "asset_type": _asset_type(image),
         "parent_asset_id": image.parent_image_id,
         "job_id": image.job_id,
         "generation_item_id": image.job_item_id,
@@ -40,8 +50,9 @@ def image_asset_view(image: Image) -> dict[str, Any]:
         "review_status": image.status,
         "favorite": bool(image.favorite),
         "created_at": image.created_at,
-        "legacy": image.job_id is None,
-        "unlinked": image.job_id is None,
+        # 外部导入图本来就没有 Job 关联，不属于"历史缺失关联"。
+        "legacy": image.job_id is None and not imported,
+        "unlinked": image.job_id is None and not imported,
     }
 
 
@@ -70,9 +81,26 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
     variant_types = dict(session.execute(
         select(ImageVariant.variant_type, func.count()).group_by(ImageVariant.variant_type)
     ).all())
+    with_thumbnail = session.execute(text(
+        "SELECT count(DISTINCT image_id) FROM image_variants WHERE variant_type = 'thumbnail'"
+    )).scalar_one()
+    with_prompt = session.execute(text("""
+        SELECT count(*) FROM images i
+        WHERE (
+          i.job_id IS NOT NULL AND EXISTS (
+            SELECT 1 FROM jobs j
+            WHERE j.id = i.job_id
+              AND json_extract(j.workbench_snapshot_json, '$.source_prompt_id') IS NOT NULL
+          )
+        ) OR (
+          i.source = 'import'
+          AND json_array_length(COALESCE(json_extract(i.metadata_json, '$.v1_output.prompts'), '[]')) > 0
+        )
+    """)).scalar_one()
 
     missing_images: list[dict[str, Any]] = []
     missing_variants: list[dict[str, Any]] = []
+    missing_thumbnails: list[dict[str, Any]] = []
     if check_files:
         for image in session.execute(select(Image)).scalars():
             if not storage.absolutize(image.file_path).is_file():
@@ -83,6 +111,10 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
                     "variant_id": variant.id, "asset_id": variant.image_id,
                     "variant_type": variant.variant_type, "path": variant.path,
                 })
+                if variant.variant_type == "thumbnail":
+                    missing_thumbnails.append({
+                        "variant_id": variant.id, "asset_id": variant.image_id, "path": variant.path,
+                    })
 
     return {
         "total": total,
@@ -96,6 +128,12 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
         "missing_sha256": total - with_sha,
         "variants_total": variants,
         "variants_by_type": variant_types,
+        "images_with_thumbnail": with_thumbnail,
+        "images_without_thumbnail": total - with_thumbnail,
+        "thumbnails_missing": len(missing_thumbnails),
+        "thumbnails_missing_samples": missing_thumbnails[:20],
+        "with_prompt": with_prompt,
+        "without_prompt": total - with_prompt,
         "missing_files": len(missing_images),
         "missing_file_samples": missing_images[:20],
         "missing_variant_files": len(missing_variants),

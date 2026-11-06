@@ -287,6 +287,24 @@ def test_preflight_api_with_comfyui_adapter(settings, monkeypatch):
         assert body["modules"][0]["binding_hash"] == "bhash"
 
 
+def test_job_snapshot_records_engine_version(settings):
+    """W4.1 §7：Job 快照必须固化 preflight 实测引擎版本。"""
+    with mock_client(settings) as client:
+        response = client.post("/api/v1/jobs", json={
+            "source": "web",
+            "client_request_id": "w41-engine-version",
+            "snapshot": {
+                "prompt_mode": "full", "full_prompt": "engine version", "negative_prompt": "",
+                "width": 512, "height": 512, "count": 1, "seed_mode": "fixed", "seed": 42,
+                "workflow_modules": [],
+            },
+        })
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["workflow_snapshot"]["engine_version"] == "mock"
+        assert body["workflow_snapshot"]["modules"]
+
+
 def _blocked_result() -> dict:
     return {
         "status": "BLOCKED",

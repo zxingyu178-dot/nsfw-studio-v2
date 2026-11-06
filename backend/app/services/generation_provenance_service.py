@@ -120,6 +120,7 @@ def job_provenance(session: Session, job_id: str) -> dict[str, Any]:
         "workflow_hash": job.workflow_hash,
         "binding_hash": job.binding_hash,
         "hash_algorithm": (modules[0]["hash_algorithm"] if modules else None),
+        "engine_version": workflow.get("engine_version"),
         "modules": modules,
         "prompt": prompt,
         "items": items,

@@ -65,7 +65,7 @@ def create_job(
     # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
     ensure_modules_released(modules)
     # W2.0：运行环境前置检测（READY 才继续；BLOCKED/UNKNOWN 在 Prompt 关联前拒绝）
-    run_preflight(settings, request.app.state.adapter, modules)
+    preflight = run_preflight(settings, request.app.state.adapter, modules)
     # W1.2.1：Agent / CLI 旧路径由服务端统一关联提示词；Prompt 与 Job 同事务，
     # commit=False 只 flush，成功时由 JobService 统一提交，失败时统一 rollback。
     if body.source in ("agent", "doubao"):
@@ -79,6 +79,7 @@ def create_job(
             queue_mode=body.queue_mode,
             workflow_modules=modules,
             job_kind="generate",
+            engine_version=str((preflight.get("engine") or {}).get("version") or "") or None,
         )
     except Exception:
         session.rollback()

@@ -240,6 +240,13 @@ class ImageProvenanceResponse(BaseModel):
     # Phase 0.12 Task12：工作台最初从哪个 Recipe 打开（轻量 provenance；None=非 Recipe 来源）
     source_recipe_id: str | None
     source_recipe_version_id: str | None
+    # W4.1 统一生成快照（历史 Job 缺失为 None / 空数组，不伪造）
+    prompt_id: str | None = None
+    prompt_version_id: str | None = None
+    workflow_id: str | None = None
+    workflow_version: str | None = None
+    model_snapshot: list[dict] = Field(default_factory=list)
+    engine_version: str | None = None
 
 
 def image_response(image: Image) -> ImageResponse:

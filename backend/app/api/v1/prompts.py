@@ -120,6 +120,7 @@ def create_prompt(request: PromptCreateRequest, session: Session = Depends(get_s
         negative_prompt=request.negative_prompt,
         structured=request.structured.model_dump(),
         favorite=request.favorite,
+        tags=request.tags,
     )
     return prompt_response(prompt, prompt_service.get_current_version(session, prompt))
 
@@ -134,6 +135,14 @@ def ensure_prompt(request: PromptEnsureRequest, session: Session = Depends(get_s
         name=request.name,
     )
     return PromptEnsureResponse(prompt_id=prompt.id, version_id=version.id, created=created)
+
+
+@router.get("/{prompt_id}/center", summary="Prompt Center 统一投影（版本/结构化字段/tags/rating）")
+def prompt_center_detail(prompt_id: str, session: Session = Depends(get_session)) -> dict:
+    prompt = prompt_service.get_prompt(session, prompt_id)
+    version = prompt_service.get_current_version(session, prompt)
+    evaluation = prompt_center_service.latest_evaluation(session, prompt_id)
+    return prompt_center_service.prompt_view(prompt, version, evaluation)
 
 
 @router.get("/{prompt_id}", response_model=PromptResponse, summary="Prompt 详情")
@@ -175,6 +184,7 @@ def add_prompt_version(
         positive_prompt=request.positive_prompt,
         negative_prompt=request.negative_prompt,
         structured=request.structured.model_dump(),
+        tags=request.tags,
     )
     return prompt_version_response(version)
 

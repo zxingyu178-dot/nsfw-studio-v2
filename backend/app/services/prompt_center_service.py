@@ -39,7 +39,36 @@ def legacy_import(prompt: Prompt, version: PromptVersion | None) -> bool:
     return bool(isinstance(structured, dict) and structured.get("_v1_migration"))
 
 
-def prompt_view(prompt: Prompt, version: PromptVersion | None) -> dict[str, Any]:
+def _tags(structured: dict[str, Any]) -> list[str]:
+    """标准标签：优先 structured.tags，其次 structured.extra.tags；去重且保持顺序。"""
+    raw = structured.get("tags")
+    if not isinstance(raw, list):
+        extra = structured.get("extra")
+        raw = extra.get("tags") if isinstance(extra, dict) else []
+    if not isinstance(raw, list):
+        return []
+    tags: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in tags:
+            tags.append(text)
+    return tags
+
+
+def latest_evaluation(session: Session, prompt_id: str) -> PromptEvaluation | None:
+    return session.execute(
+        select(PromptEvaluation)
+        .where(PromptEvaluation.prompt_id == prompt_id)
+        .order_by(PromptEvaluation.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def prompt_view(
+    prompt: Prompt,
+    version: PromptVersion | None,
+    evaluation: PromptEvaluation | None = None,
+) -> dict[str, Any]:
     structured: dict[str, Any] = {}
     if version is not None:
         try:
@@ -55,7 +84,9 @@ def prompt_view(prompt: Prompt, version: PromptVersion | None) -> dict[str, Any]
         "positive_prompt": version.positive_prompt if version is not None else "",
         "negative_prompt": version.negative_prompt if version is not None else "",
         "structured_fields": canonical_structured(structured),
+        "tags": _tags(structured),
         "favorite": bool(prompt.favorite),
+        "rating": evaluation.overall_score if evaluation is not None else None,
         "legacy_import": legacy_import(prompt, version),
         "created_at": prompt.created_at,
         "updated_at": prompt.updated_at,

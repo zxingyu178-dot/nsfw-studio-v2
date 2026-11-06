@@ -166,6 +166,12 @@ def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
     # 经 Image → Job.workbench_snapshot_json 读出；旧 Job / 非 Recipe 来源 → None（前端据此隐藏该行）。
     source_recipe_id = None
     source_recipe_version_id = None
+    prompt_id = None
+    prompt_version_id = None
+    workflow_id = None
+    workflow_version = None
+    model_snapshot: list[dict[str, Any]] = []
+    engine_version = None
     if image.job_id:
         job = session.get(Job, image.job_id)
         if job is not None:
@@ -176,6 +182,23 @@ def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
             if isinstance(snapshot, dict):
                 source_recipe_id = snapshot.get("source_recipe_id")
                 source_recipe_version_id = snapshot.get("source_recipe_version_id")
+                prompt_id = snapshot.get("source_prompt_id")
+                prompt_version_id = snapshot.get("source_prompt_version_id")
+            try:
+                workflow_snapshot = json.loads(job.workflow_snapshot_json or "{}")
+            except ValueError:
+                workflow_snapshot = {}
+            if isinstance(workflow_snapshot, dict):
+                engine_version = workflow_snapshot.get("engine_version")
+                for module in workflow_snapshot.get("modules") or []:
+                    if not isinstance(module, dict):
+                        continue
+                    if stage is not None and module.get("module_id") != stage.module_id:
+                        continue
+                    workflow_id = module.get("module_id")
+                    workflow_version = module.get("module_version")
+                    model_snapshot = module.get("model_snapshot") or []
+                    break
 
     scale = None
     if parent is not None and parent.width > 0 and image.width > 0 and parent.width != image.width:
@@ -200,6 +223,13 @@ def get_provenance(session: Session, image_id: str) -> dict[str, Any]:
         "seed": image.seed,
         "source_recipe_id": source_recipe_id,
         "source_recipe_version_id": source_recipe_version_id,
+        # W4.1 统一生成快照：Prompt / 工作流 / 模型 / 引擎版本（历史缺失为 None，不伪造）
+        "prompt_id": prompt_id,
+        "prompt_version_id": prompt_version_id,
+        "workflow_id": workflow_id,
+        "workflow_version": workflow_version,
+        "model_snapshot": model_snapshot,
+        "engine_version": engine_version,
     }
 
 

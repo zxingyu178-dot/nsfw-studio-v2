@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 from sqlalchemy import case, func, or_, select
@@ -53,6 +54,7 @@ def create_prompt(
     negative_prompt: str = "",
     structured: dict | None = None,
     favorite: bool = False,
+    tags: list[str] | None = None,
     commit: bool = True,
 ) -> Prompt:
     """创建 Prompt + v1。
@@ -71,7 +73,9 @@ def create_prompt(
         favorite=favorite,
         archived=False,
     )
-    mode, positive, negative, structured_json = _content_fields(mode, positive_prompt, negative_prompt, structured)
+    mode, positive, negative, structured_json = _content_fields(
+        mode, positive_prompt, negative_prompt, structured, tags
+    )
     version = PromptVersion(
         id=new_id(PROMPT_VERSION),
         prompt_id=now_prompt.id,
@@ -135,16 +139,26 @@ def clear_preview_image(session: Session, prompt_id: str) -> Prompt:
 
 
 def _content_fields(
-    mode: str, positive_prompt: str, negative_prompt: str, structured: dict | None
+    mode: str, positive_prompt: str, negative_prompt: str, structured: dict | None,
+    tags: list[str] | None = None,
 ) -> tuple[str, str, str, str]:
-    """归一化内容四元组；结构化模式下正向 Prompt 由后端权威合成（规范 §九）。"""
+    """归一化内容四元组；结构化模式下正向 Prompt 由后端权威合成（规范 §九）。
+
+    W4.1：``tags`` 只作为 Prompt Center 元数据写入 structured_json，不参与八字段拼接。
+    """
     if mode not in PROMPT_MODES:
         raise ValidationError(f"非法 Prompt 模式: {mode}", code="PROMPT_MODE_INVALID")
     if mode == "structured":
         positive = positive_prompt or compose_structured(structured)
     else:
         positive = positive_prompt or ""
-    return (mode, positive, negative_prompt or "", dumps_structured(structured))
+    structured_json = dumps_structured(structured)
+    cleaned = [str(item).strip() for item in (tags or []) if str(item).strip()]
+    if cleaned:
+        payload = json.loads(structured_json)
+        payload["tags"] = cleaned
+        structured_json = json.dumps(payload, ensure_ascii=False)
+    return (mode, positive, negative_prompt or "", structured_json)
 
 
 def assign_ai_prompt(
@@ -217,10 +231,13 @@ def add_prompt_version(
     positive_prompt: str = "",
     negative_prompt: str = "",
     structured: dict | None = None,
+    tags: list[str] | None = None,
 ) -> tuple[PromptVersion, bool]:
     """内容变化 → 新版本并更新 current_version_id；与当前版本完全一致 → 不建新版本。"""
     prompt = get_prompt(session, prompt_id)
-    mode, positive, negative, structured_json = _content_fields(mode, positive_prompt, negative_prompt, structured)
+    mode, positive, negative, structured_json = _content_fields(
+        mode, positive_prompt, negative_prompt, structured, tags
+    )
 
     current = get_current_version(session, prompt)
     if current is not None and (

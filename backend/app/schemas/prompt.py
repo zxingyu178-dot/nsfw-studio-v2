@@ -16,6 +16,7 @@ class PromptCreateRequest(BaseModel):
     negative_prompt: str = ""
     structured: StructuredPromptModel = Field(default_factory=StructuredPromptModel)
     favorite: bool = False
+    tags: list[str] = Field(default_factory=list, max_length=50)
 
 
 class PromptMetaUpdateRequest(BaseModel):
@@ -46,6 +47,7 @@ class PromptVersionCreateRequest(BaseModel):
     positive_prompt: str = ""
     negative_prompt: str = ""
     structured: StructuredPromptModel = Field(default_factory=StructuredPromptModel)
+    tags: list[str] = Field(default_factory=list, max_length=50)
 
 
 class ComposeRequest(BaseModel):
@@ -108,6 +110,9 @@ class PromptResponse(BaseModel):
     current_version: PromptVersionResponse | None
     status: PromptStatus = "candidate"
     status_reason: str = ""
+    # W4.1 Prompt Center 标准字段（tags 存 structured_json，rating 取最新评分）
+    tags: list[str] = Field(default_factory=list)
+    rating: int | None = None
 
 
 class PromptImageResponse(ImageResponse):
@@ -150,6 +155,29 @@ def prompt_version_response(version: PromptVersion) -> PromptVersionResponse:
     )
 
 
+def _version_tags(version: PromptVersion | None) -> list[str]:
+    if version is None:
+        return []
+    try:
+        data = json.loads(version.structured_json or "{}")
+    except ValueError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    raw = data.get("tags")
+    if not isinstance(raw, list):
+        extra = data.get("extra")
+        raw = extra.get("tags") if isinstance(extra, dict) else []
+    if not isinstance(raw, list):
+        return []
+    tags: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in tags:
+            tags.append(text)
+    return tags
+
+
 def prompt_response(prompt: Prompt, current_version: PromptVersion | None) -> PromptResponse:
     return PromptResponse(
         id=prompt.id,
@@ -162,6 +190,7 @@ def prompt_response(prompt: Prompt, current_version: PromptVersion | None) -> Pr
         created_at=prompt.created_at,
         updated_at=prompt.updated_at,
         current_version=prompt_version_response(current_version) if current_version else None,
+        tags=_version_tags(current_version),
     )
 
 

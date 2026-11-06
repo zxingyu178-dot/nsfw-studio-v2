@@ -28,10 +28,13 @@
 
 ### 2.1 Model Center
 - `registry/models/**/model.yaml`：模型 ID、版本、文件、大小、SHA256、依赖、状态；
+- 支持 `models/<id>/model.yaml` 与 `models/<id>/<version>/model.yaml` 两种布局；
+  同一 `model_id` 可并存多个版本，默认取最高版本，重复 `(model_id, version)` 报错；
 - 6 个活动模型全部 `released` 且 SHA256 非 `unverified`；
 - 24 个归档模型状态 `archived`，登记保留、文件不进入 Git；
-- 本机安装状态通过 `GET /api/v1/registry/models` 查询；
-- Preflight 对正式 Binding 声明的未登记模型返回 UNKNOWN，不静默 READY。
+- 本机安装状态通过 `GET /api/v1/registry/models?workflow_id=` 查询（兼容工作流过滤）；
+- Preflight 对正式 Binding 声明模型校验存在性 + 文件大小 + SHA256；
+  未登记 → UNKNOWN，缺失/大小或 Hash 不一致 → BLOCKED，不静默 READY。
 
 ### 2.2 Workflow Center
 - `registry/workflows/**/manifest.yaml`：输入/输出、默认参数、模型依赖、双 Hash、放行状态；
@@ -43,14 +46,18 @@
 - 294 Prompt / 294 版本；0 无版本、0 多版本、0 悬挂；
 - 254 个 Prompt 有图片关联，共 2,736 条链接；
 - 字段映射 `face→character / pose→action / composition→camera`，原字段保留；
+- 标准字段 `tags`（存 `structured_json`，不新建表）与 `rating`（最新评分）已纳入
+  `PromptResponse` 与 `GET /api/v1/prompts/{id}/center`；
 - `GET /api/v1/prompts/stats` 提供统计；图片分页与预览分离。
 
 ### 2.4 Image Asset Center
 - 新图片统一 `AssetIngestService` → `assets/images/YYYY/MM/<asset_id>/<kind>.<ext>`；
 - 缩略图/预览统一 `cache/thumbnails` / `cache/previews`；
 - 全部 7,733 张图片已有 SHA256、mime_type、file_size、asset_type；
+- `asset_type` 投影：`imported` / `original` / `processed` / `upscaled` / `other_variant`；
 - 派生图父子关系 32 条保留；
-- `GET /api/v1/registry/assets` 提供完整性统计。
+- `GET /api/v1/images/{id}/provenance` 返回 Prompt / 工作流 / 模型快照 / 引擎版本；
+- `GET /api/v1/registry/assets` 提供完整性统计（含缺失、孤立、缩略图缺失、Prompt 关联/未关联）。
 
 ---
 
@@ -86,6 +93,21 @@
 - `load_binding` 同时接受 raw/LF，历史 Job 不受影响；
 - `.gitattributes` 固定 JSON/YAML 为 LF，不 renormalize 已发布 Binding；
 - Job 快照新增 `hash_algorithm` 与 `model_snapshot`。
+
+### 4.3 运行依赖与模型多版本
+- Model Center 支持同一 `model_id` 多版本目录，重复版本拒绝；
+- Model Manifest 支持 `dependencies`（依赖未登记 → `MODEL_DEPENDENCY_UNKNOWN`）；
+- Preflight 对 Binding 声明模型执行本机文件大小 + SHA256 校验（Hash 缓存），
+  依赖缺失不得 READY；未知 Loader 继续返回 UNKNOWN；
+- 工作流依赖模型必须已登记，活动工作流要求 `released`。
+
+### 4.4 统一生成快照与资产溯源
+- `workflow_snapshot_json` 新增 `engine_version`（Job 创建时 preflight 实测版本）；
+- Job 快照继续包含 `model_snapshot`、`hash_algorithm`、Prompt 快照、Seed；
+- `GET /api/v1/images/{id}/provenance` 增加
+  `prompt_id / prompt_version_id / workflow_id / workflow_version / model_snapshot / engine_version`；
+- 最终拼接文本 = `jobs.positive_prompt_snapshot`；素材关键词 = `workbench_snapshot_json.selected_assets`，
+  两者均随 Job 冻结，不依赖当前工作台状态。
 
 ---
 

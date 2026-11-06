@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" font-family="Segoe UI, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowAccent" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <text x="800" y="46" text-anchor="middle" font-size="28" font-weight="700" fill="#0f172a">W4.1 Unified Resource &amp; Asset Architecture</text>
+  <text x="800" y="76" text-anchor="middle" font-size="15" fill="#64748b">NSFW Studio V2 · Git 管定义 / DB 管运行状态 / DataRoot 管实际资产</text>
+
+  <!-- Git column -->
+  <rect x="40" y="110" width="380" height="300" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="60" y="142" font-size="18" font-weight="700" fill="#1e293b">Git（定义真源）</text>
+  <rect x="60" y="158" width="340" height="54" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="76" y="180" font-size="14" font-weight="600" fill="#1e3a8a">registry/schemas/</text>
+  <text x="76" y="199" font-size="12" fill="#475569">model / workflow / prompt / asset / submission</text>
+  <rect x="60" y="222" width="340" height="54" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="76" y="244" font-size="14" font-weight="600" fill="#1e3a8a">registry/models/&lt;id&gt;/[&lt;version&gt;]/model.yaml</text>
+  <text x="76" y="263" font-size="12" fill="#475569">ID · 版本 · 文件 · size · SHA256 · 依赖 · 状态</text>
+  <rect x="60" y="286" width="340" height="54" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="76" y="308" font-size="14" font-weight="600" fill="#1e3a8a">registry/workflows/&lt;id&gt;/&lt;v&gt;/manifest.yaml</text>
+  <text x="76" y="327" font-size="12" fill="#475569">I/O · 参数 · 模型依赖 · 双 Hash · 放行</text>
+  <rect x="60" y="350" width="340" height="44" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="76" y="377" font-size="13" fill="#334155">workflows/providers/**（workflow.json + binding.yaml）</text>
+
+  <!-- DB column -->
+  <rect x="450" y="110" width="380" height="300" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="470" y="142" font-size="18" font-weight="700" fill="#1e293b">SQLite（运行/业务记录）</text>
+  <rect x="470" y="158" width="340" height="54" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="486" y="180" font-size="14" font-weight="600" fill="#166534">jobs / job_stages / job_items / job_stage_items</text>
+  <text x="486" y="199" font-size="12" fill="#475569">快照：hash_algorithm · model_snapshot · engine_version</text>
+  <rect x="470" y="222" width="340" height="54" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="486" y="244" font-size="14" font-weight="600" fill="#166534">prompts / prompt_versions / prompt_evaluations</text>
+  <text x="486" y="263" font-size="12" fill="#475569">tags 存 structured_json · rating 取最新评分</text>
+  <rect x="470" y="286" width="340" height="54" rx="8" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="486" y="308" font-size="14" font-weight="600" fill="#166534">images / image_variants</text>
+  <text x="486" y="327" font-size="12" fill="#475569">storage_key · sha256 · mime · file_size · 父子关系</text>
+  <rect x="470" y="350" width="340" height="44" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="486" y="377" font-size="13" fill="#334155">mobile_review_* / mobile_image_events（0023 兼容）</text>
+
+  <!-- Storage column -->
+  <rect x="860" y="110" width="380" height="300" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="880" y="142" font-size="18" font-weight="700" fill="#1e293b">DataRoot（实际资产）</text>
+  <rect x="880" y="158" width="340" height="76" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="896" y="180" font-size="14" font-weight="600" fill="#9a3412">assets/images/YYYY/MM/&lt;asset_id&gt;/</text>
+  <text x="896" y="199" font-size="12" fill="#475569">original / processed / upscaled（仅历史）</text>
+  <text x="896" y="218" font-size="12" fill="#475569">imported 资产同样落在统一目录</text>
+  <rect x="880" y="244" width="340" height="64" rx="8" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="896" y="266" font-size="14" font-weight="600" fill="#9a3412">cache/thumbnails/ · cache/previews/</text>
+  <text x="896" y="285" font-size="12" fill="#475569">键 = asset_id + variant_type；可重建，不是唯一存储</text>
+  <rect x="880" y="318" width="340" height="76" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="896" y="340" font-size="13" fill="#334155">database/ · backups/ · logs/ · imports/ · exports/</text>
+  <text x="896" y="359" font-size="13" fill="#334155">archive/（旧结构只读保留）</text>
+  <text x="896" y="378" font-size="12" fill="#64748b">不删除历史图片 / Prompt / Job</text>
+
+  <!-- Centers -->
+  <rect x="40" y="450" width="285" height="200" rx="14" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="182" y="484" text-anchor="middle" font-size="19" font-weight="700" fill="#1d4ed8">Model Center</text>
+  <text x="62" y="514" font-size="13" fill="#334155">模型身份 / 多版本 / 文件 / Hash</text>
+  <text x="62" y="538" font-size="13" fill="#334155">依赖 / 安装 / 缺失 / 归档</text>
+  <text x="62" y="562" font-size="13" fill="#334155">兼容工作流查询</text>
+  <text x="62" y="596" font-size="12" fill="#64748b">ModelRegistryService</text>
+  <text x="62" y="616" font-size="12" fill="#64748b">GET /registry/models</text>
+
+  <rect x="345" y="450" width="285" height="200" rx="14" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="487" y="484" text-anchor="middle" font-size="19" font-weight="700" fill="#1d4ed8">Workflow Center</text>
+  <text x="367" y="514" font-size="13" fill="#334155">Manifest / I/O / 默认参数</text>
+  <text x="367" y="538" font-size="13" fill="#334155">模型依赖 / 双 Hash / 放行</text>
+  <text x="367" y="562" font-size="13" fill="#334155">前端只读注册中心</text>
+  <text x="367" y="596" font-size="12" fill="#64748b">WorkflowRegistryService</text>
+  <text x="367" y="616" font-size="12" fill="#64748b">GET /modules · /registry/workflows</text>
+
+  <rect x="650" y="450" width="285" height="200" rx="14" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="792" y="484" text-anchor="middle" font-size="19" font-weight="700" fill="#1d4ed8">Prompt Center</text>
+  <text x="672" y="514" font-size="13" fill="#334155">版本只增不改 / legacy_import</text>
+  <text x="672" y="538" font-size="13" fill="#334155">结构化字段 / tags / favorite / rating</text>
+  <text x="672" y="562" font-size="13" fill="#334155">图片关联服务端分页</text>
+  <text x="672" y="596" font-size="12" fill="#64748b">PromptCenterService</text>
+  <text x="672" y="616" font-size="12" fill="#64748b">GET /prompts/{id}/center</text>
+
+  <rect x="955" y="450" width="285" height="200" rx="14" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="1097" y="484" text-anchor="middle" font-size="19" font-weight="700" fill="#1d4ed8">Image Asset Center</text>
+  <text x="977" y="514" font-size="13" fill="#334155">AssetIngestService 唯一写入口</text>
+  <text x="977" y="538" font-size="13" fill="#334155">original/processed/upscaled/imported</text>
+  <text x="977" y="562" font-size="13" fill="#334155">软删除 / 孤立只报告 / 缺失标记</text>
+  <text x="977" y="596" font-size="12" fill="#64748b">AssetQueryService</text>
+  <text x="977" y="616" font-size="12" fill="#64748b">GET /images · /registry/assets</text>
+
+  <!-- Flow -->
+  <rect x="40" y="720" width="700" height="210" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="60" y="752" font-size="17" font-weight="700" fill="#1e293b">生成与溯源链</text>
+  <text x="60" y="784" font-size="13" fill="#334155">Workbench → POST /jobs（Preflight READY + 快照）→ 单队列单 Worker</text>
+  <text x="60" y="810" font-size="13" fill="#334155">→ WorkflowModule → EngineAdapter → ComfyUI</text>
+  <text x="60" y="836" font-size="13" fill="#334155">→ AssetIngestService（SHA256 + 统一存储）→ images / variants / events</text>
+  <text x="60" y="862" font-size="13" fill="#334155">→ Image.provenance：prompt / workflow / model_snapshot / engine_version</text>
+  <text x="60" y="900" font-size="12" fill="#64748b">Job 快照字段：job_id · workflow_id/version · binding_version · 双 Hash · model_ids/versions/file_hashes · prompt_snapshot · seed · engine_version · output_asset_ids</text>
+
+  <rect x="770" y="720" width="470" height="210" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="790" y="752" font-size="17" font-weight="700" fill="#1e293b">Gate 与 Agent 提交</text>
+  <text x="790" y="784" font-size="13" fill="#334155">scripts/validate_registry.py → Schema / 唯一 / Hash / 依赖</text>
+  <text x="790" y="810" font-size="13" fill="#334155">agent_submissions/&lt;submission_id&gt;/ → 12 项校验 → 人工审批</text>
+  <text x="790" y="836" font-size="13" fill="#334155">G0 静态 → G1 登记 → G3 真实出图 → G4 性能 → 放行</text>
+  <text x="790" y="862" font-size="13" fill="#334155">未 READY / 未审批不得发布，不得覆盖已发布版本</text>
+  <text x="790" y="900" font-size="12" fill="#64748b">历史迁移：备份 → dry-run → 副本演练 → 复制 + SHA256 → DB 事务 → 验收 → 归档</text>
+
+  <!-- arrows between top columns -->
+  <line x1="420" y1="260" x2="445" y2="260" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="830" y1="260" x2="855" y2="260" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="182" y1="410" x2="182" y2="445" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowAccent)"/>
+  <line x1="487" y1="410" x2="487" y2="445" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowAccent)"/>
+  <line x1="792" y1="410" x2="792" y2="445" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowAccent)"/>
+  <line x1="1097" y1="410" x2="1097" y2="445" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowAccent)"/>
+
+  <text x="800" y="972" text-anchor="middle" font-size="12" fill="#94a3b8">唯一真源：定义在 Git，运行状态在 DB，实际文件在 DataRoot；禁止前端或 Agent 维护第二份配置。</text>
+</svg>
