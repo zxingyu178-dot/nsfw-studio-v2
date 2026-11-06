@@ -133,6 +133,14 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
   （18,346 文件 / 14.65 GB），由资产统计的 `legacy_retained_files/bytes` 单独计数，不混入孤立清单；
 - 全量旧路径 → 新 `storage_key` 对照：`docs/W4_1_MIGRATION_MAP.csv`（18,346 行）。
 
+备份可恢复演练（2026-11-06）：
+
+- 复制 `backups/studio-20261104-125925.db` 到 `temp/w41_backup_restore_probe.db` 后打开：
+  `PRAGMA integrity_check=ok`、`PRAGMA foreign_key_check` 无异常行；
+- 计数与迁移前一致：images 7,733 / variants 10,613 / prompts 294 / jobs 946 /
+  job_items 6,720 / job_stages 954 / mobile_image_events 8,006；
+- 证明该备份可用于 `W4_1_IMAGE_MIGRATION.md` 第 5 节回滚流程，未覆盖正式库。
+
 ## 8. 生产部署与实时验证
 
 部署树 `projects\nsfw-studio-v2-app`（`deploy/app-instance`）已 fast-forward 到 `99251d2`，
@@ -157,8 +165,10 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 - `tests/backend/test_mobile_*.py` 共 66 项测试全部通过，全部使用隔离临时 DataRoot；
 - Mobile Review V2 合同、配对鉴权、增量事件、幂等回执、冲突处理、路由守卫均未改动；
 - 图片资产与桌面端共用同一 `images` 表与 `storage_key`，手机端不提供物理删除路由；
-- 运行态 Bridge 在本次最终重启后未自动启动（`mobile_review.enabled=false`），
-  因此“Bridge 实时健康”标记为**未执行**；手机端验证依据为独立 DataRoot 的后端合同测试。
+- 真实 HTTP Bridge Probe：通过 `POST /api/v1/mobile-review/runtime/start` 启动 Bridge，
+  `GET http://127.0.0.1:8877/mobile/system/health` 返回 200：
+  `product=nsfw-studio`、`version=0.13.0`、`api_contract=2`；
+  Probe 完成后通过 `/runtime/stop` 停止，恢复到验收前“8877 未启动”的初始状态。
 
 ## 10. Git / CI
 
@@ -174,7 +184,8 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 2. 旧 `images/*` 目录保留（约 14 GB），由资产统计单独标记，未删除、未移动；
 3. 历史 Job 缺 `model_snapshot` / `engine_version` 时为 `null`，不伪造；
 4. 峰值采样为 1 秒粒度，未记录功耗/温度；
-5. 手机端 Bridge 实时健康在本次最终态未启动（配置关闭），合同测试与隔离 DataRoot 测试通过。
+5. 手机端 Bridge 默认随配置关闭；验收时已用真实 HTTP Probe 验证 `api_contract=2` 后停止，
+   未长期驻留。
 
 ## 12. 交付物
 

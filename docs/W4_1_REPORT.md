@@ -127,7 +127,7 @@
 | 图库读取 | `GET /images` total=7,746；缩略图 200；原图 200 |
 | Prompt Center | `GET /prompts` total=292（默认排除归档）；关联图片分页可用 |
 | Image Asset 统计 | `total=7,746`；`missing_files=0`；`thumbnails_missing=0` |
-| 手机端 | 66 项 mobile 合同测试通过（独立临时 DataRoot） |
+| 手机端 | 66 项 mobile 合同测试通过（独立临时 DataRoot）；真实 HTTP Bridge Probe `api_contract=2` |
 | 实时生成 | Job `job_f6de2b35-...` COMPLETED；输出 `img_905e9fb5-...` |
 | GitHub CI | 见第 7 节 |
 
