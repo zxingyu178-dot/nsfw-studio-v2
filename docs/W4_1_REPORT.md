@@ -150,6 +150,7 @@
 | 证据/放行提交 | `cb946eb` |
 | GitHub CI（`645649d`） | `41789128325` success |
 | GitHub CI（`cb946eb`） | `42238564650` success |
+| GitHub CI（`91d8f5e`） | `42239189518` success |
 | 放行状态（现场 API） | 四模块 `ready_to_run=true`、`default_profile_verified=true` |
 | 验收包 | `D:\AIHome_2.0_L1_L2\archive\NSFW_Studio_W4.1_Review_Package.zip`（6.09 MB，72 文件） |
 
