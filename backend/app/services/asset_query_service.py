@@ -101,7 +101,9 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
     missing_images: list[dict[str, Any]] = []
     missing_variants: list[dict[str, Any]] = []
     missing_thumbnails: list[dict[str, Any]] = []
+    legacy: dict[str, Any] = {"files": 0, "bytes": 0, "roots": []}
     if check_files:
+        legacy = legacy_retained(storage)
         for image in session.execute(select(Image)).scalars():
             if not storage.absolutize(image.file_path).is_file():
                 missing_images.append({"asset_id": image.id, "storage_key": image.file_path})
@@ -134,6 +136,8 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
         "thumbnails_missing_samples": missing_thumbnails[:20],
         "with_prompt": with_prompt,
         "without_prompt": total - with_prompt,
+        "legacy_retained_files": legacy["files"],
+        "legacy_retained_bytes": legacy["bytes"],
         "missing_files": len(missing_images),
         "missing_file_samples": missing_images[:20],
         "missing_variant_files": len(missing_variants),
@@ -143,10 +147,13 @@ def stats(session: Session, storage: StorageManager, *, check_files: bool = True
 
 
 def orphan_files(storage: StorageManager, known_keys: set[str], *, roots: tuple[str, ...] = (
-    "assets/images", "images/originals", "images/upscaled", "images/processed",
-    "cache/thumbnails", "cache/previews",
+    "assets/images", "cache/thumbnails", "cache/previews",
 )) -> list[dict[str, Any]]:
-    """扫描物理文件但数据库未登记的孤立资产（只报告，不删除）。"""
+    """扫描**活动存储根**中数据库未登记的孤立资产（只报告，不删除）。
+
+    旧 ``images/*`` 目录是迁移后保留的历史副本，不属于活动资产根；
+    它们单独由 :func:`legacy_retained` 统计，不能混入孤立清单。
+    """
     orphans: list[dict[str, Any]] = []
     for root in roots:
         base = storage.absolutize(root)
@@ -159,3 +166,23 @@ def orphan_files(storage: StorageManager, known_keys: set[str], *, roots: tuple[
                 if rel not in known_keys:
                     orphans.append({"path": rel, "size": path.stat().st_size})
     return orphans
+
+
+def legacy_retained(storage: StorageManager) -> dict[str, Any]:
+    """统计旧 ``images/*`` 目录（迁移后只读保留）的文件数与字节数。"""
+    roots = ("images/originals", "images/processed", "images/upscaled",
+             "images/thumbnails", "images/previews")
+    count = 0
+    total_bytes = 0
+    for root in roots:
+        base = storage.absolutize(root)
+        if not base.is_dir():
+            continue
+        for dirpath, _dirnames, filenames in os.walk(base):
+            for name in filenames:
+                try:
+                    total_bytes += (Path(dirpath) / name).stat().st_size
+                    count += 1
+                except OSError:
+                    continue
+    return {"files": count, "bytes": total_bytes, "roots": list(roots)}

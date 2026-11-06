@@ -5,7 +5,7 @@
 """
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_serializer, field_validator
 
 from app.services.prompt_composer import loads_structured
 
@@ -100,6 +100,14 @@ class WorkflowSnapshotModel(BaseModel):
 
     modules: list[WorkflowModuleRefModel] = Field(default_factory=list)
     engine_version: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_engine_version(self, handler):
+        """历史快照没有引擎版本时不新增字段，保持既有响应形状。"""
+        data = handler(self)
+        if data.get("engine_version") is None:
+            data.pop("engine_version", None)
+        return data
 
 
 class WorkbenchSnapshotModel(BaseModel):

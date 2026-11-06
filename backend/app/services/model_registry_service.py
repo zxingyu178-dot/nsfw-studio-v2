@@ -139,10 +139,15 @@ class ModelRegistryService:
         for record in self._load_all().values():
             if record.archived and not include_archived:
                 continue
+            try:
+                manifest_path = record.path.relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                # 外部/临时 registry 根（测试、Agent 预审）不在项目目录内
+                manifest_path = str(record.path)
             result.append({
                 **record.manifest,
                 "archived": record.archived,
-                "manifest_path": str(record.path.relative_to(PROJECT_ROOT).as_posix()),
+                "manifest_path": manifest_path,
             })
         return sorted(
             result,

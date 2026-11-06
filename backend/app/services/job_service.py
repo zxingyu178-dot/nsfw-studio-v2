@@ -92,7 +92,11 @@ def _workflow_snapshot_from_modules(
         for module in modules
         if module.get("module_id")
     ]
-    return {"modules": normalized, "engine_version": engine_version}
+    snapshot: dict[str, Any] = {"modules": normalized}
+    # 只有真实 preflight 提供版本时才写入，保持历史/内部快照形状不变
+    if engine_version:
+        snapshot["engine_version"] = engine_version
+    return snapshot
 
 
 def _merge_module_configs(
