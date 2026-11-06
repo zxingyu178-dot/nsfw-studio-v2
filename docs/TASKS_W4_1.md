@@ -25,4 +25,4 @@
 | 21 | G4 冷/热启动、GPU/RAM 峰值 | 完成（12 Job，0 OOM） |
 | 22 | 手机端回归 | 完成（mobile 合同测试 + Bridge 健康） |
 | 23 | Commit / Push / GitHub CI | 完成（`645649d` / CI `41789128325` success） |
-| 24 | 最终报告 + 验收 ZIP + 停止 | 报告完成；ZIP 待打包 |
+| 24 | 最终报告 + 验收 ZIP + 停止 | 完成（`archive\NSFW_Studio_W4.1_Review_Package.zip` 6.09 MB / 72 文件） |

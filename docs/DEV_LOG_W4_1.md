@@ -31,7 +31,7 @@
 | 验收 | G4 冷/热 + GPU/RAM 峰值 | 8 个冷/热 Job + 4 个峰值 Job，全部 COMPLETED，0 OOM |
 | 验收 | 手机端 | mobile 合同测试通过；Bridge 运行态 `api_contract=2` |
 | CI | GitHub Actions | `41789128325` @ `645649d` success |
-| 交付 | G4 放行清单 / 报告 / ZIP | 放行清单与报告已更新；ZIP 待打包 |
+| 交付 | G4 放行清单 / 报告 / ZIP | 放行清单、报告、验收 ZIP 均已完成（6.09 MB / 72 文件） |
 
 ---
 
