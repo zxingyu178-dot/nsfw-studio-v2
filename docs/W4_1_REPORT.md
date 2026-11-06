@@ -1,7 +1,7 @@
 # W4.1 — Unified Resource & Asset Architecture 阶段报告
 
-> 项目：`nsfw-studio-v2` · 日期：2026-11-04 · 基线：`9904e126a1fa182a8506285e0bf990308a575495`
-> 状态：**核心实现与历史资产迁移完成；全量测试/G3/G4/CI 进行中**，未虚标完成项。
+> 项目：`nsfw-studio-v2` · 日期：2026-11-06 · 基线：`9904e126a1fa182a8506285e0bf990308a575495`
+> 状态：**W4.1 全部 Gate 完成并通过验收**；最终提交与 CI 见第 7 节。
 
 ---
 
@@ -18,9 +18,10 @@
 | 0023 Migration | 旧库/当前库/W4.0 快照副本演练通过 |
 | 后端定向测试 | 通过 |
 | 前端 build / vitest | 通过 / 488 通过 |
-| 后端全量 pytest | 697 collected；1 个 SSE 启动超时用例（单测复跑通过），1 skipped |
+| 后端全量 pytest | 718 collected；退出码 0；1 skipped（既有环境跳过项） |
 | G3 / G4 | 完成（8 个冷/热 Job + 4 个峰值采样 Job，全部 COMPLETED） |
-| GitHub CI / Commit SHA | `645649d` / CI `41789128325` success |
+| 实时生产验证 | 四模块 Preflight READY + 1 个真实 Job COMPLETED，快照含 engine_version |
+| GitHub CI / Commit SHA | 见第 7 节 |
 
 ---
 
@@ -115,18 +116,20 @@
 
 | 项目 | 结果 |
 |---|---|
-| 后端全量 pytest | 697 collected；仅 1 个 SSE 测试在磁盘高负载时启动超时（单测复跑通过）；1 skipped |
-| 前端 build | 通过（15.35s） |
+| 后端全量 pytest | 718 collected；退出码 0；1 skipped |
+| 前端 build | 通过（13.22s） |
 | 前端 vitest | 488 passed / 97 files |
 | G0 静态校验 | `checked=9 errors=0 warnings=12`（历史冻结 Binding 既有 warning） |
 | Registry Validator | `checked=40 errors=0 warnings=7` |
-| 四模块 Preflight | `status=READY`（basic / anime / img2img / reference 全 READY） |
+| 四模块 Preflight | `status=READY`；每个声明模型 `installed` + `sha256_verified=true` |
+| 模型 SHA256 | 6/6 installed，大小与 Hash 全部一致（首次 130.73s，之后缓存命中） |
 | 0023 正式库 | `latest_migration=0023_mobile_event_legacy_repair` |
-| 图库读取 | `GET /images` total=7,733；缩略图 200；原图 200 |
+| 图库读取 | `GET /images` total=7,746；缩略图 200；原图 200 |
 | Prompt Center | `GET /prompts` total=292（默认排除归档）；关联图片分页可用 |
-| Image Asset 统计 | `total=7,733`；模型登记 6 个活动模型 |
-| 手机端 | 全量 pytest 中 mobile 合同测试通过；Bridge 启动运行态健康 `api_contract=2` |
-| GitHub CI | `41789128325` @ `645649d` success |
+| Image Asset 统计 | `total=7,746`；`missing_files=0`；`thumbnails_missing=0` |
+| 手机端 | 66 项 mobile 合同测试通过（独立临时 DataRoot） |
+| 实时生成 | Job `job_f6de2b35-...` COMPLETED；输出 `img_905e9fb5-...` |
+| GitHub CI | 见第 7 节 |
 
 ### 5.1 G3 四条工作流真实出图（冷启动）
 
@@ -155,12 +158,16 @@
 
 ## 6. 已知限制
 
-1. 全量 pytest 存在 1 个磁盘高负载下的 SSE 启动超时 flake（单测复跑通过）；CI 独立环境已全绿。
-2. 冷启动耗时受机械盘模型加载影响很大（basic 670s / reference 685s），不代表稳态吞吐。
-3. 旧 `images/*` 目录未归档/未删除，目前与新资产并存（约占 14 GB）。
-4. 历史 Job 缺 `model_snapshot`，Provenance 明确标记，不伪造。
-5. 峰值采样为 1 秒粒度，可能低估瞬时峰值；未记录 nvidia-smi 功耗/温度。
-6. 未新增 4x / SeedVR2 / 新工作流 / 新模型。
+1. 冷启动耗时受机械盘模型加载影响很大（basic 670s / reference 685s），不代表稳态吞吐。
+2. 旧 `images/*` 目录未归档/未删除，目前与新资产并存（约 14 GB）；资产统计以
+   `legacy_retained_files/bytes` 单独标记，不混入孤立清单。
+3. 历史 Job 缺 `model_snapshot` / `engine_version`，Provenance 明确标记，不伪造。
+4. 峰值采样为 1 秒粒度，可能低估瞬时峰值；未记录 nvidia-smi 功耗/温度。
+5. 首次实时验收生成出现一次 `ENGINE_NETWORK`（ComfyUI `/history` 请求失败），同条件重试成功；
+   判定为模型加载期间瞬态网络失败，已如实保留。
+6. 手机端 Bridge 在最终态未自动启动（配置关闭），实时健康标记为“未执行”；
+   手机端验证依据为 66 项隔离 DataRoot 合同测试。
+7. 未新增 4x / SeedVR2 / 新工作流 / 新模型。
 
 ---
 

@@ -62,8 +62,33 @@ npm run test:ci
 
 ## 3. 未执行 / 限制
 
-1. 后端全量 pytest 尚未结束，本文件不声称全绿。
-2. G3/G4 尚未开始；未产生新的四工作流出图证据。
-3. 0023 尚未在正式库启动时写入 `migration` 记录（当前库结构已主干，启动会安全跳过）。
-4. 旧 `images/*` 目录未归档、未删除。
-5. GitHub CI、Commit SHA、验收 ZIP 未生成。
+1. 手机端 Bridge 在最终验收态未启动（`mobile_review.enabled=false`），实时健康未执行；
+   手机端验证依据为 66 项隔离临时 DataRoot 的后端合同测试。
+2. 旧 `images/*` 目录未归档、未删除（约 14 GB），资产统计以 `legacy_retained_*` 单独标记。
+3. 首次实时验收生成出现一次 `ENGINE_NETWORK`（ComfyUI `/history` 请求失败），重试成功；
+   未定位到引擎日志中的确定性错误，按瞬态失败记录。
+4. 峰值采样为 1 秒粒度，未记录功耗/温度。
+
+---
+
+## 4. 2026-11-06 完成度补齐（gap closure）
+
+| 项 | 改动 | 验证 |
+|---|---|---|
+| Model Center 多版本 | 支持 `<id>/model.yaml` 与 `<id>/<version>/model.yaml`；按 `(model_id, version)` 判重 | 多版本加载、重复版本拒绝测试 |
+| 模型依赖 | Model Manifest `dependencies` 未登记即失败；工作流依赖未知模型失败 | 负例测试 |
+| 运行依赖 | Preflight 对声明模型校验存在性 + 大小 + SHA256（缓存） | 6/6 installed；四模块 READY |
+| Prompt Center | `tags`（structured_json）+ `rating`（最新评分）+ `/prompts/{id}/center` | API 测试 |
+| Image Asset | `imported/other_variant` 投影、provenance 增加 prompt/workflow/model/engine、缩略图与 Prompt 关联统计 | API/统计测试 |
+| 生成快照 | `workflow_snapshot_json.engine_version`（preflight 实测），历史快照形状不变 | 实时 Job `engine_version=0.37.0` |
+| 迁移对照 | 由 18,346 行文件盘点生成 `W4_1_MIGRATION_MAP.csv` | 行数与盘点一致 |
+| 架构图 | `W4_1_ARCHITECTURE.svg` | 文件交付 |
+| 实时验收 | 部署 app 树 → 重启 Studio → ComfyUI 0.37.0 → 1 个 basic Job COMPLETED | `job_f6de2b35-...`、`img_905e9fb5-...` |
+| 回归 | 后端 718 collected / 1 skipped；前端 488 / 97；G0 0 error；Registry 0 error | 见 `W4_1_ACCEPTANCE.md` |
+
+CI 首次运行失败（`288bd7d`）原因与修复：
+
+1. `test_api_phase1` 期望旧 `workflow_snapshot={"modules":[]}`，新增 `engine_version=None` 破坏形状
+   → 仅在 preflight 提供真实版本时写入快照，并用 serializer 省略 None；
+2. 临时 registry 根不在项目目录内导致 `Path.relative_to` ValueError
+   → `list_models` 对非项目根回退为绝对路径。

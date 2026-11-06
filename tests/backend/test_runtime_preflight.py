@@ -303,6 +303,10 @@ def test_job_snapshot_records_engine_version(settings):
         body = response.json()
         assert body["workflow_snapshot"]["engine_version"] == "mock"
         assert body["workflow_snapshot"]["modules"]
+        provenance = client.get(f"/api/v1/jobs/{body['id']}/provenance").json()
+        assert provenance["engine_version"] == "mock"
+        assert provenance["generation_parameters"]["width"] == 512
+        assert provenance["output_asset_ids"] == []
 
 
 def _blocked_result() -> dict:
