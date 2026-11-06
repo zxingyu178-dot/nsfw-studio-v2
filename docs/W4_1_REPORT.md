@@ -177,11 +177,14 @@
 |---|---|
 | 功能提交 | `645649d` |
 | 证据/放行提交 | `cb946eb` |
-| GitHub CI（`645649d`） | `41789128325` success |
-| GitHub CI（`cb946eb`） | `42238564650` success |
-| GitHub CI（`91d8f5e`） | `42239189518` success |
+| 完成度补齐提交 | `288bd7d`（多版本/Hash 校验/tags/provenance/engine_version/统计） |
+| CI 修复提交 | `e6069c1`（历史快照形状 + 外部 registry 根） |
+| 验收报告提交 | `99251d2` |
+| GitHub CI（`99251d2`） | main `42261666849` success；develop `42261689819` success |
 | 放行状态（现场 API） | 四模块 `ready_to_run=true`、`default_profile_verified=true` |
-| 验收包 | `D:\AIHome_2.0_L1_L2\archive\NSFW_Studio_W4.1_Review_Package.zip`（6.09 MB，72 文件） |
+| 实时生成（现场） | `job_f6de2b35-...` COMPLETED；`engine_version=0.37.0` |
+| 验收包 | `D:\AIHome_2.0_L1_L2\archive\NSFW_Studio_W4.1_Review_Package.zip` |
 
-已完成：Gate 0、Gate 1、四个中心代码、0023、Hash 兼容、历史迁移、G3/G4、前端与 CI、验收包。
+已完成：Gate 0、Gate 1、四个中心代码、0023、Hash 兼容、历史迁移、G3/G4、前端与 CI、
+实时部署验收、验收报告与 ZIP。
 **本阶段到此停止，不进入 W4.2。**
