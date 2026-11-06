@@ -2,7 +2,7 @@
 
 > 项目：`nsfw-studio-v2` · 日期：2026-11-06 · 基线：`9904e126a1fa182a8506285e0bf990308a575495`
 > 验收范围：W4.1 规格 §0–§17；本文件只写实际执行过的验证，未执行项明确标注。
-> 最终交付提交：`COMMIT_TBD` · GitHub CI：`CI_TBD`
+> 最终交付提交：`99251d2` · GitHub CI：main `42261666849` success / develop `42261689819` success
 
 ---
 
@@ -125,13 +125,13 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 | SHA256 不一致 | — | 0 |
 | 活动存储根孤立文件 | — | 0 |
 
-- 迁移为 Copy + SHA256 比对，数据库路径按批事务更新；旧 `images/*` 目录保留为只读历史副本，
-  由资产统计的 `legacy_retained_files/bytes` 单独计数，不混入孤立清单；
+- 迁移为 Copy + SHA256 比对，数据库路径按批事务更新；旧 `images/*` 目录保留为只读历史副本
+  （18,346 文件 / 14.65 GB），由资产统计的 `legacy_retained_files/bytes` 单独计数，不混入孤立清单；
 - 全量旧路径 → 新 `storage_key` 对照：`docs/W4_1_MIGRATION_MAP.csv`（18,346 行）。
 
 ## 8. 生产部署与实时验证
 
-部署树 `projects\nsfw-studio-v2-app`（`deploy/app-instance`）已 fast-forward 到 `COMMIT_TBD`，
+部署树 `projects\nsfw-studio-v2-app`（`deploy/app-instance`）已 fast-forward 到 `99251d2`，
 前端 dist 由 `scripts/deploy_app_dist.ps1` 构建同步；ControlHub lifecycle 重启 Studio 成功。
 
 | 项 | 实测结果 |
@@ -143,7 +143,7 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 | 输出资产 | `img_905e9fb5-aafd-4bfc-8028-aea113057e86` → `assets/images/2026/11/<id>/original.png` |
 | Job 快照 | `engine_version=0.37.0`、`hash_algorithm=lf-normalized-v1`、`model_snapshot=5` |
 | 图片溯源 | `workflow=basic_generate/v1`、`prompt=prm_a071bc00-...`、`model_snapshot=5`、`engine_version=0.37.0` |
-| 资产统计 | `total=7,746`、`missing_files=0`、`thumbnails_missing=0`、`with_prompt=2,749`、`without_prompt=4,997` |
+| 资产统计 | `total=7,746`、`missing_files=0`、`thumbnails_missing=0`、`with_prompt=2,749`、`without_prompt=4,997`；旧目录 `legacy_retained=18,346 文件 / 14.65 GB` |
 
 > 首次实时生成曾出现一次 `ENGINE_NETWORK`（ComfyUI `/history` 请求失败）；同条件重试成功，
 > 判定为引擎模型加载期间的瞬态网络失败，已在验收记录中保留，不隐藏。
@@ -160,9 +160,9 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 
 | 项 | 结果 |
 |---|---|
-| 交付提交 | `COMMIT_TBD` |
+| 交付提交 | `99251d2` |
 | 分支 | `main` 与 `develop` 同步 |
-| GitHub CI | `CI_TBD` |
+| GitHub CI | main `42261666849` success；develop `42261689819` success |
 
 ## 11. 已知限制
 

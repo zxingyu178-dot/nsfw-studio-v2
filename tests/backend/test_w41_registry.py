@@ -386,6 +386,7 @@ def test_asset_stats_report_missing_and_orphans(client, session, settings):
     session.commit()
     stats = client.get("/api/v1/registry/assets").json()
     assert stats["missing_files"] >= 1
+    assert "legacy_retained_files" in stats and "legacy_retained_bytes" in stats
     orphans = client.get("/api/v1/registry/assets/orphans").json()
     assert any(item["path"].endswith("asset_orphan_w41") for item in orphans["items"])
     assert asset_query_service.image_asset_view(missing)["asset_type"] == "original"
