@@ -2,7 +2,8 @@
 
 > 项目：`nsfw-studio-v2` · 日期：2026-11-06 · 基线：`9904e126a1fa182a8506285e0bf990308a575495`
 > 验收范围：W4.1 规格 §0–§17；本文件只写实际执行过的验证，未执行项明确标注。
-> 最终交付提交：`99251d2` · GitHub CI：main `42261666849` success / develop `42261689819` success
+> 功能/验收提交：`99251d2`（CI main `42261666849` success / develop `42261689819` success）
+> 文档与验收包收口：以 `docs/GIT_STATUS.txt` 记录的 HEAD 与 CI 运行 ID 为准
 
 ---
 
@@ -174,9 +175,10 @@ basic 5 个模型、anime 1 个、img2img 3 个、reference 3 个，`sha256_veri
 
 | 项 | 结果 |
 |---|---|
-| 交付提交 | `99251d2` |
+| 功能/验收提交 | `99251d2` |
 | 分支 | `main` 与 `develop` 同步 |
-| GitHub CI | main `42261666849` success；develop `42261689819` success |
+| GitHub CI（功能/验收提交） | main `42261666849` success；develop `42261689819` success |
+| 最终 HEAD / 文档收口 | 见 `docs/GIT_STATUS.txt`（含最终 CI 运行 ID） |
 
 ## 11. 已知限制
 
