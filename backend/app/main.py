@@ -164,14 +164,20 @@ async def lifespan(application: FastAPI):
         "后端启动完成 version=%s data_root=%s engine=%s recovered_items=%s",
         settings.app.version, report.data_root, adapter.name, len(recovered),
     )
-    yield
-    warmup_task = getattr(application.state, "warmup_task", None)
-    if warmup_task is not None and not warmup_task.done():
-        warmup_task.cancel()
-    application.state.backfill_runner.shutdown()
-    await worker.stop()
-    engine.dispose()
-    logging.getLogger(__name__).info("后端停止")
+    await application.state.mobile_review_runtime.startup()
+    try:
+        yield
+    finally:
+        try:
+            await application.state.mobile_review_runtime.shutdown()
+        finally:
+            warmup_task = getattr(application.state, "warmup_task", None)
+            if warmup_task is not None and not warmup_task.done():
+                warmup_task.cancel()
+            application.state.backfill_runner.shutdown()
+            await worker.stop()
+            engine.dispose()
+            logging.getLogger(__name__).info("后端停止")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
