@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
+import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import func, select, text
@@ -57,6 +58,30 @@ def test_health_declares_v2_capabilities(mobile_client):
 
 def test_feed_requires_pairing(mobile_client):
     assert mobile_client.get("/mobile/images/feed").status_code == 401
+
+
+@pytest.mark.parametrize("size,mime,expected_size,expected_mime", [
+    (1234, "image/png", 1234, "image/png"),
+    (0, "image/webp", 0, "image/webp"),
+    (None, None, None, None),
+    (-1, "", None, None),
+    (True, 12, None, None),
+])
+def test_details_projects_w41_asset_metadata(
+    mobile_client, session_factory, make_mobile_image, size, mime, expected_size, expected_mime,
+):
+    image = make_mobile_image(1)[0]
+    with session_factory() as session:
+        row = session.get(Image, image.id)
+        row.metadata_json = json.dumps({"file_size": size, "mime_type": mime})
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    response = mobile_client.get(f"/mobile/images/{image.id}/details", headers=headers)
+    assert response.status_code == 200
+    result = response.json()["data"]
+    assert result["size_bytes"] == expected_size
+    assert result["mime"] == expected_mime
+    assert "storage_key" not in result and "file_path" not in result
 
 
 def test_feed_first_sync_paginates_without_gap_or_duplicate(

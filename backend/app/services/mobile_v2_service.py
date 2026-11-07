@@ -152,6 +152,8 @@ def feed(session: Session, *, cursor: str | None, limit: int) -> dict[str, Any]:
 def details(session: Session, image: Image) -> dict[str, Any]:
     job = _job_for_image(session, image)
     metadata = _json(image.metadata_json)
+    size_bytes = metadata.get("file_size")
+    mime = metadata.get("mime_type")
     prompt_id, version_id, link_state = _prompt_link(session, image, job)
     return {
         "image_id": image.id,
@@ -168,8 +170,8 @@ def details(session: Session, image: Image) -> dict[str, Any]:
         "module_id": job.module_id if job is not None else metadata.get("module_id"),
         "seed": image.seed,
         "model": None,
-        "size_bytes": None,
-        "mime": None,
+        "size_bytes": size_bytes if type(size_bytes) is int and size_bytes >= 0 else None,
+        "mime": mime.strip() or None if isinstance(mime, str) else None,
         "updated_at": image.updated_at,
         "revision": str(image_event_service.latest_event_seq(session, image.id)),
     }
