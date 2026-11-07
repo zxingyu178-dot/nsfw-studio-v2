@@ -2,6 +2,12 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [Unreleased] — 手机审核桥自动启动（2026-11-07）
+
+- 接通 `mobile_review.enabled`：随 Studio 后台启动审核桥，冷启动或失败不阻塞桌面；公共模板仍默认关闭。
+- 自动与手动启动串行化，冷启动中仍可查询状态并通过停止/重启中断等待。
+- Studio 正常退出时回收自己启动的审核桥，保留外部桥及 ComfyUI；沿用既有父进程退出保护。
+
 ## [Unreleased] — W3.1 Mainline Consolidation（2026-11-01）
 
 > 将已验证的 Mobile Review Bridge V2 整合到 main；保留 W3.0 Event Log / 幂等回执，

@@ -11,12 +11,15 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any
 
 import httpx
@@ -90,6 +93,28 @@ def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _serialized(operation):
+    @wraps(operation)
+    def wrapped(self, *args, **kwargs):
+        with self._operation_lock:
+            return operation(self, *args, **kwargs)
+    return wrapped
+
+
+def _interrupting(operation):
+    @wraps(operation)
+    def wrapped(self, *args, **kwargs):
+        # 必须在等待进程操作锁前发出信号，才能打断持锁的冷启动。
+        self._start_cancel.set()
+        with self._operation_lock:
+            try:
+                return operation(self, *args, **kwargs)
+            finally:
+                if not self._closing.is_set():
+                    self._start_cancel.clear()
+    return wrapped
+
+
 class MobileReviewRuntimeService:
     """单例服务：管理 Studio 自己的 Mobile Review Bridge (uvicorn) 子进程。"""
 
@@ -110,6 +135,44 @@ class MobileReviewRuntimeService:
         self._parent_pid: int | None = None
         self._started_at: str | None = None
         self._state: str = STATE_STOPPED
+        self._operation_lock = threading.RLock()
+        self._closing = threading.Event()
+        self._start_cancel = threading.Event()
+        self._startup_task: asyncio.Task | None = None
+
+    async def startup(self) -> None:
+        """只安排后台启动；Bridge 冷启动不占用 Studio 的事件循环。"""
+        if self.enabled and self._startup_task is None and not self._closing.is_set():
+            self._startup_task = asyncio.create_task(self._autostart())
+
+    async def _autostart(self) -> None:
+        try:
+            snapshot = await asyncio.to_thread(self.start)
+            if snapshot.state != STATE_RUNNING and not self._closing.is_set():
+                logger.warning("Mobile Bridge 自动启动未就绪 state=%s log=%s",
+                               snapshot.state, self.log_location)
+        except Exception:
+            logger.warning("Mobile Bridge 自动启动失败，Studio 继续运行", exc_info=True)
+
+    async def shutdown(self) -> None:
+        """先中断冷启动等待，再回收本实例拥有的 Bridge；外部进程不处理。"""
+        self._closing.set()
+        self._start_cancel.set()
+        try:
+            await asyncio.to_thread(self._stop_owned)
+        finally:
+            if self._startup_task is not None:
+                await self._startup_task
+
+    @_serialized
+    def _stop_owned(self) -> None:
+        if self._pid is not None:
+            self._state = STATE_STOPPING
+            try:
+                self._terminate_tree(self._pid)
+            finally:
+                self._clear_record()
+                self._state = STATE_STOPPED
 
     # ===== 可替换 seam（测试 monkeypatch） =====
 
@@ -225,15 +288,25 @@ class MobileReviewRuntimeService:
         return probe
 
     def status(self) -> BridgeSnapshot:
-        probe = self._recompute()
-        return self._snapshot(probe)
+        # 冷启动持锁期间不要重算 STARTING，也不要让状态查询等待整个启动预算。
+        if not self._operation_lock.acquire(blocking=False):
+            return self._snapshot()
+        try:
+            return self._snapshot(self._recompute())
+        finally:
+            self._operation_lock.release()
 
+    @_serialized
     def start(self) -> BridgeSnapshot:
+        if self._closing.is_set() or self._start_cancel.is_set():
+            return self._snapshot()
         probe = self._recompute()
         if self._state in (STATE_RUNNING, STATE_STARTING):
             return self._snapshot(probe)
         if self._state == STATE_PORT_CONFLICT:
             raise BridgePortConflict()
+        if self._closing.is_set() or self._start_cancel.is_set():
+            return self._snapshot(probe)
 
         self._state = STATE_STARTING
         try:
@@ -248,11 +321,14 @@ class MobileReviewRuntimeService:
         deadline = time.monotonic() + self.health_timeout
         healthy = False
         while time.monotonic() < deadline:
+            if self._closing.is_set() or self._start_cancel.is_set():
+                self._state = STATE_STOPPING
+                return self._snapshot()
             probe = self._probe()
             if probe is not None and probe.get("product") == "nsfw-studio":
                 healthy = True
                 break
-            time.sleep(START_HEALTH_INTERVAL_S)
+            self._start_cancel.wait(START_HEALTH_INTERVAL_S)
 
         if healthy:
             self._state = STATE_RUNNING
@@ -267,6 +343,7 @@ class MobileReviewRuntimeService:
         self._state = STATE_ERROR
         return self._snapshot(None)
 
+    @_interrupting
     def stop(self) -> BridgeSnapshot:
         self._recompute()
         if self._state == STATE_PORT_CONFLICT:
@@ -283,6 +360,7 @@ class MobileReviewRuntimeService:
         self._state = STATE_STOPPED
         return self._snapshot(None)
 
+    @_interrupting
     def restart(self) -> BridgeSnapshot:
         self._recompute()
         if self._state == STATE_PORT_CONFLICT:
@@ -294,4 +372,6 @@ class MobileReviewRuntimeService:
             finally:
                 self._clear_record()
             self._state = STATE_STOPPED
+        if not self._closing.is_set():
+            self._start_cancel.clear()
         return self.start()
