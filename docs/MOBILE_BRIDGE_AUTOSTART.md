@@ -28,3 +28,9 @@
 
 - 受控spawn失败时start返回ERROR，但下一次status因无响应重算成STOPPED，导致设置页丢失失败状态。修正范围仅为保留无进程、无响应时既有ERROR；显式停止清除错误，再次启动和外部健康桥仍按实际探测更新。测试仅用临时目录与进程/探测替身，不改生产配置。
 - 新增回归在原代码1失败（0.42秒）；修复后2026-11-08执行 `python -m pytest tests/backend/test_mobile_runtime.py tests/backend/test_mobile_bridge_lifespan.py` 共17通过（15.13秒），1既有Starlette弃用警告。未重复全量本地回归；本项未部署，正式环境仍672aa9d。
+
+## Studio正常关闭事件推送（候选）
+
+用户批准先正常关闭推送、再排空普通请求和清理后台。新增 `app.runtime_server` 在Uvicorn开始排空前关闭EventBroker，SSE收到内部结束标记便退出退订；不改变信号处理、回退超时、端口或任务状态。真实HTTP隔离测试确认普通请求200后才进入lifespan，相关20项及另轮既有SSE1项通过，未跑本地全量。详见[实施计划与边界](GRACEFUL_EVENT_SHUTDOWN_PLAN.md)。
+
+生产目前为b06b835，包含上一节ERROR保留修复，但carrier仍使用原Uvicorn CLI，不包含本节关闭能力；实际Windows信号/入口切换/受管停服须另验。不要为了让SSE结束在lifespan finally才发送关闭通知，执行时机过晚；也不要把慢客户端/所有长请求均可在30秒内退出当成本候选的保证。
