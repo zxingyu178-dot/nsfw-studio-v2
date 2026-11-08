@@ -275,6 +275,8 @@ async def job_events(request: Request) -> StreamingResponse:
                     break
                 try:
                     data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    if data is None:
+                        break
                     yield f"data: {data}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"

@@ -19,6 +19,7 @@ class EventBroker:
         self._subscribers: set[asyncio.Queue] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
+        self._closed = False
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -26,7 +27,10 @@ class EventBroker:
     def subscribe(self) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=200)
         with self._lock:
-            self._subscribers.add(queue)
+            if self._closed:
+                queue.put_nowait(None)
+            else:
+                self._subscribers.add(queue)
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue) -> None:
@@ -35,7 +39,10 @@ class EventBroker:
 
     def publish(self, event: dict) -> None:
         """向所有订阅者广播事件（非订阅者时为 no-op）。"""
-        subscribers = list(self._subscribers)
+        with self._lock:
+            if self._closed:
+                return
+            subscribers = list(self._subscribers)
         if not subscribers:
             return
         try:
@@ -45,9 +52,12 @@ class EventBroker:
         loop = self._loop
 
         def _put() -> None:
-            for queue in subscribers:
-                if not queue.full():
-                    queue.put_nowait(data)
+            with self._lock:
+                if self._closed:
+                    return
+                for queue in subscribers:
+                    if queue in self._subscribers and not queue.full():
+                        queue.put_nowait(data)
 
         if loop is not None and loop.is_running():
             loop.call_soon_threadsafe(_put)
@@ -55,4 +65,25 @@ class EventBroker:
             _put()
 
     def subscriber_count(self) -> int:
-        return len(self._subscribers)
+        with self._lock:
+            return len(self._subscribers)
+
+    def close(self) -> None:
+        """结束实时通知；丢弃尚未发送的瞬态事件，唤醒全部订阅者正常退订。"""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            subscribers = list(self._subscribers)
+
+        def _wake() -> None:
+            for queue in subscribers:
+                while not queue.empty():
+                    queue.get_nowait()
+                queue.put_nowait(None)
+
+        loop = self._loop
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(_wake)
+        else:
+            _wake()
