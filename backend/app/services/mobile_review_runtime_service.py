@@ -283,7 +283,9 @@ class MobileReviewRuntimeService:
         elif managed_alive:
             self._state = STATE_ERROR
         else:
-            self._state = STATE_STOPPED
+            # 轮询不能把刚发生的启动故障伪装成正常停止；显式 stop 会清除错误。
+            if self._state != STATE_ERROR:
+                self._state = STATE_STOPPED
             self._clear_record()
         return probe
 

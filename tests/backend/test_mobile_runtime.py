@@ -79,6 +79,33 @@ def test_start_idempotent(tmp_path, monkeypatch):
     assert len(spawned) == 1  # 幂等，不起第二个进程
 
 
+def test_spawn_error_persists_until_stop_and_allows_later_recovery(tmp_path, monkeypatch):
+    svc = _make_service(tmp_path)
+    spawn_attempts = 0
+
+    def fake_spawn():
+        nonlocal spawn_attempts
+        spawn_attempts += 1
+        if spawn_attempts == 1:
+            raise OSError("fake spawn failure")
+        svc._parent_pid = 42
+        return 4242
+
+    monkeypatch.setattr(svc, "_spawn", fake_spawn)
+    monkeypatch.setattr(svc, "_pid_alive", lambda pid: pid == 4242)
+    monkeypatch.setattr(
+        svc, "_probe", lambda: _healthy_probe() if svc._pid == 4242 else None
+    )
+    monkeypatch.setattr(svc, "_terminate_tree", lambda pid: None)
+
+    assert svc.start().state == "ERROR"
+    assert svc.status().state == "ERROR"
+    assert svc.status().state == "ERROR"
+    assert svc.stop().state == "STOPPED"
+    assert svc.start().state == "RUNNING"
+    assert spawn_attempts == 2
+
+
 def test_port_conflict(tmp_path, monkeypatch):
     svc = _make_service(tmp_path)
     monkeypatch.setattr(svc, "_probe", lambda: {"responded": True})  # 有响应但不是 Bridge
