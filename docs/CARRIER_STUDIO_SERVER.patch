@@ -1,0 +1,12 @@
+diff --git a/runtime/carrier.py b/runtime/carrier.py
+--- a/runtime/carrier.py
++++ b/runtime/carrier.py
+@@ -275,7 +275,6 @@ class AppProcess:
+         # FastAPI only. Fixed host/port. No Vite, no npm, no port fallback.
+         self.proc = subprocess.Popen(
+-            [VENV_PY, "-m", "uvicorn", "app.main:app",
+-             "--host", APP_HOST, "--port", str(APP_PORT)],
++            [VENV_PY, "-m", "app.runtime_server"],
+             cwd=BACKEND_DIR,
+             stdout=logf,
+             stderr=subprocess.STDOUT,
