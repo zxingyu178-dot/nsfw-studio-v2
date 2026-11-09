@@ -139,6 +139,7 @@ def feed(session: Session, *, cursor: str | None, limit: int) -> dict[str, Any]:
             continue
         item = image_summary(session, image, revision=event.seq)
         item["event"] = "UPSERT"
+        item["event_type"] = event.event_type
         items.append(item)
     next_position = selected[-1].seq if selected else position
     return {

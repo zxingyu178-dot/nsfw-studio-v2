@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.models import Job
 from app.models.mobile_review import MobileReviewDevice
 from app.services import (
     image_event_service,
+    mobile_gallery_service,
     image_service,
     mobile_mutation_service,
     mobile_v2_service,
@@ -133,6 +134,24 @@ def images_feed(
     _device: MobileReviewDevice = Depends(get_current_device),
 ) -> dict:
     return mobile_v2_service.feed(session, cursor=cursor, limit=limit)
+
+
+@router.get("/gallery", summary="手机图库：按日期排序分页（与增量feed分离）")
+def image_gallery(
+    sort: Literal['created_desc', 'created_asc'] = 'created_desc',
+    from_utc: str | None = None,
+    before_utc: str | None = None,
+    page_cursor: str | None = None,
+    scope_cursor: str | None = None,
+    anchor_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    return mobile_gallery_service.gallery(
+        session, sort=sort, from_utc=from_utc, before_utc=before_utc,
+        page_cursor=page_cursor, scope_cursor=scope_cursor, anchor_id=anchor_id, limit=limit,
+    )
 
 
 @router.get("/{image_id}/details", summary="V2 图片详情（生成快照 / 可靠 Prompt 关联）")
