@@ -12,6 +12,37 @@ from app.services.cleanup_service import _purge_image_rows
 from test_mobile_v2_contract import auth
 
 
+@pytest.mark.parametrize('endpoint', ['gallery', 'feed'])
+def test_mobile_image_categories_match_existing_library_filters(
+    mobile_client, session_factory, make_mobile_image, endpoint,
+):
+    from app.models import Job
+    images = make_mobile_image(5)
+    with session_factory() as session:
+        session.add(Job(id='category_anime', source='web', prompt_mode='full',
+            workbench_snapshot_json='{}', generation_settings_json='{}',
+            requested_count=1, module_id='anime_generate'))
+        session.flush()
+        session.get(Image, images[1].id).job_id = 'category_anime'
+        for index in (2, 3, 4):
+            session.get(Image, images[index].id).source = 'import'
+        session.get(Image, images[2].id).imported_filename = 'photo.png'
+        session.get(Image, images[3].id).imported_filename = 'AnImA_output.png'
+        session.get(Image, images[4].id).metadata_json = json.dumps({'origin': 'ANIMA-v1'})
+        session.commit()
+        expected = {image.id: [] for image in images}
+        for category in ('anime', 'imported'):
+            query = image_service._apply_image_filters(select(Image), category=category)
+            for image in session.scalars(query):
+                expected[image.id].append(category)
+    assert list(expected.values()) == [[], ['anime'], ['imported'], ['anime', 'imported'], ['anime', 'imported']]
+    headers, _ = auth(mobile_client, session_factory)
+    response = mobile_client.get(f'/mobile/images/{endpoint}', headers=headers)
+    assert response.status_code == 200
+    rows = response.json()['data']['items']
+    assert {row['image_id']: row['categories'] for row in rows} == expected
+
+
 def test_gallery_filters_prompt_versions_and_new_status(mobile_client, session_factory, make_mobile_image):
     from app.services import prompt_service
     images = make_mobile_image(4)

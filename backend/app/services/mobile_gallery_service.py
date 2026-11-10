@@ -171,6 +171,7 @@ def gallery(
         start_index = 0 if previous else total
     has_more = bool(rows) and start_index + len(rows) < total
     revisions = image_event_service.latest_event_seqs(session, [row.id for row in rows])
+    categories = mobile_v2_service.image_categories(session, [row.id for row in rows])
     scope = {name: value for name, value in state.items() if name != 'direction'}
     scope['after'] = None
     next_page = None
@@ -180,7 +181,7 @@ def gallery(
     if rows and start_index > 0:
         previous_page = _encode({**scope, 'after': [rows[0].created_at, rows[0].id], 'direction': 'previous'})
     return {
-        'items': [mobile_v2_service.image_summary(session, row, revision=revisions.get(row.id, 0)) for row in rows],
+        'items': [mobile_v2_service.image_summary(session, row, revision=revisions.get(row.id, 0), categories=categories[row.id]) for row in rows],
         'next_page_cursor': next_page, 'previous_page_cursor': previous_page,
         'has_more': has_more, 'total': total, 'start_index': start_index,
         'sync_cursor': image_event_service.encode_cursor(state['wm']), 'scope_cursor': _encode(scope),
