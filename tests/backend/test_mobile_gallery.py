@@ -12,6 +12,71 @@ from app.services.cleanup_service import _purge_image_rows
 from test_mobile_v2_contract import auth
 
 
+def test_gallery_filters_prompt_versions_and_new_status(mobile_client, session_factory, make_mobile_image):
+    from app.services import prompt_service
+    images = make_mobile_image(4)
+    with session_factory() as session:
+        prompt = prompt_service.create_prompt(session, name='filter prompt', mode='full', positive_prompt='one')
+        first = prompt_service.get_current_version(session, prompt)
+        second, _ = prompt_service.add_prompt_version(session, prompt.id, mode='full', positive_prompt='two')
+        for index, image in enumerate(images):
+            row = session.get(Image, image.id)
+            row.source = 'import'
+            row.metadata_json = json.dumps({'v1_output': {'prompts': [{
+                'prompt_id': prompt.id, 'version_id': first.id if index < 3 else second.id,
+            }]}})
+        session.commit()
+        prompt_id, first_id, second_id = prompt.id, first.id, second.id
+    headers, _ = auth(mobile_client, session_factory)
+    params = dict(prompt_id=prompt_id, version_id=first_id, status='NEW', sort='created_asc', limit=1)
+    page = gallery(mobile_client, headers, **params)
+    assert page['total'] == 3
+    assert page['filters'] == {'prompt_id': prompt_id, 'version_id': first_id, 'status': 'NEW'}
+    assert [row['image_id'] for row in page['items']] == [images[0].id]
+    other = gallery(mobile_client, headers, prompt_id=prompt_id, version_id=second_id)
+    assert [row['image_id'] for row in other['items']] == [images[3].id]
+    with session_factory() as session:
+        image_service.set_image_status(session, images[0].id, 'KEEP')
+    following = gallery(mobile_client, headers, **params, page_cursor=page['next_page_cursor'])
+    assert following['total'] == 2 and following['start_index'] == 0
+    assert following['items'][0]['image_id'] == images[1].id
+    for altered in ({'version_id': second_id}, {'status': 'KEEP'}, {'prompt_id': None}):
+        query = {**params, **altered, 'page_cursor': page['next_page_cursor']}
+        query = {key: value for key, value in query.items() if value is not None}
+        assert mobile_client.get('/mobile/images/gallery', headers=headers, params=query).status_code == 422
+    assert mobile_client.get('/mobile/images/gallery', headers=headers, params={'version_id': first_id}).status_code == 422
+    assert mobile_client.get('/mobile/images/gallery', headers=headers, params={'prompt_id': 'missing'}).status_code == 404
+    assert mobile_client.get('/mobile/images/gallery', headers=headers, params={'prompt_id': prompt_id, 'version_id': 'missing'}).status_code == 404
+
+
+def test_gallery_filters_category_favorite_and_legacy_scope(mobile_client, session_factory, make_mobile_image):
+    images = make_mobile_image(3)
+    with session_factory() as session:
+        for index, image in enumerate(images):
+            row = session.get(Image, image.id)
+            row.source = 'import' if index < 2 else 'comfyui'
+            row.imported_filename = 'anima_test.png' if index == 0 else 'photo.png'
+            row.favorite = index == 0
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    anime = gallery(mobile_client, headers, category='anime', favorite=True)
+    assert [row['image_id'] for row in anime['items']] == [images[0].id]
+    imported = gallery(mobile_client, headers, category='imported', favorite=False)
+    assert imported['filters'] == {'category': 'imported', 'favorite': False}
+    assert [row['image_id'] for row in imported['items']] == [images[1].id]
+    for changed in ({'category': 'imported', 'favorite': True}, {'category': 'anime', 'favorite': False}):
+        response = mobile_client.get('/mobile/images/gallery', headers=headers,
+            params={**changed, 'scope_cursor': anime['scope_cursor']})
+        assert response.status_code == 422
+    plain = gallery(mobile_client, headers)
+    encoded = plain['scope_cursor'].removeprefix('mg1_')
+    decoded = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    assert decoded['q'] == ['created_desc', None, None]
+    assert plain['filters'] == {}
+    assert gallery(mobile_client, headers, scope_cursor=plain['scope_cursor'])['scope_cursor'] == plain['scope_cursor']
+    assert 'mobile_gallery_filters_v1' in mobile_client.get('/mobile/system/health').json()['data']['capabilities']
+
+
 def gallery(client, headers, **params):
     response = client.get('/mobile/images/gallery', headers=headers, params=params)
     assert response.status_code == 200, response.text

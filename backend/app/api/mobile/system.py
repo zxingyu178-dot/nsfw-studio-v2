@@ -27,6 +27,7 @@ CAPABILITIES = [
     "mobile_feed_v2",
     "mobile_gallery_query_v1",
     "mobile_gallery_bidirectional_v1",
+    "mobile_gallery_filters_v1",
     "mobile_image_batch_review_v1",
     "mobile_image_details_v2",
     "mobile_image_decision_v2",

@@ -90,6 +90,8 @@ def gallery(
     session: Session, *, sort: str = 'created_desc', from_utc: str | None = None,
     before_utc: str | None = None, page_cursor: str | None = None,
     scope_cursor: str | None = None, anchor_id: str | None = None, limit: int = 50,
+    prompt_id: str | None = None, version_id: str | None = None,
+    status: str | None = None, category: str | None = None, favorite: bool | None = None,
 ) -> dict:
     if sort not in ('created_desc', 'created_asc') or not 1 <= limit <= 100:
         raise _invalid()
@@ -98,7 +100,20 @@ def gallery(
         raise _invalid('开始日期必须早于结束日期')
     if page_cursor and (scope_cursor or anchor_id):
         raise _invalid()
+    if version_id is not None and prompt_id is None:
+        raise _invalid('提示词版本必须同时指定提示词')
+    if status is not None and status not in ('NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE'):
+        raise _invalid('无效审核状态')
+    if category is not None and category not in ('anime', 'imported'):
+        raise _invalid('无效图库分类')
+    filters = {name: value for name, value in {
+        'prompt_id': prompt_id, 'version_id': version_id, 'status': status,
+        'category': category, 'favorite': favorite,
+    }.items() if value is not None}
     query = [sort, start, end]
+    # 无筛选必须保留旧三元组，避免已保存scope失效。
+    if filters:
+        query.append(filters)
     _read_snapshot(session)
     cursor = page_cursor or scope_cursor
     if cursor:
@@ -115,7 +130,10 @@ def gallery(
         MobileImageEvent.event_type.in_(_CREATION_EVENTS),
         MobileImageEvent.seq > state['wm'],
     ).exists()
-    statement = select(Image).where(~created_later)
+    statement = mobile_v2_service._images_query(session, prompt_id, version_id) if prompt_id is not None else select(Image)
+    statement = image_service._apply_image_filters(
+        statement, status=status, category=category, favorite=favorite,
+    ).where(~created_later)
     if start is not None:
         statement = statement.where(Image.created_at >= start)
     if end is not None:
@@ -167,4 +185,5 @@ def gallery(
         'has_more': has_more, 'total': total, 'start_index': start_index,
         'sync_cursor': image_event_service.encode_cursor(state['wm']), 'scope_cursor': _encode(scope),
         'sort': sort, 'range': {'from_utc': start, 'before_utc': end},
+        'filters': filters,
     }

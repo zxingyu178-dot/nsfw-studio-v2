@@ -21,6 +21,12 @@
 
 ## 交付边界
 
+### 追加：图库筛选底座（未部署）
+
+`GET /mobile/images/gallery`新增可选prompt_id/version_id/status/category/favorite，默认None（不筛选）；status读取NEW/KEEP/REJECT/ARCHIVED及历史FAVORITE，category为anime/imported，favorite独立布尔（False保留）。version_id无prompt_id返回422；提示词/版本存在性及归属复用mobile_v2_service._images_query，分类、状态和收藏复用桌面image_service._apply_image_filters，不猜测版本。新增mobile_gallery_filters_v1。响应filters仅回显非None值，无筛选为{}；仅非空筛选才把filters追加到游标q，旧无筛选q仍为[sort,from_utc,before_utc]，旧scope字节保持。前/后游标、anchor、total/start均沿用同一筛选与原水位快照，状态改变可缩小存活范围，不引入offset。
+
+既有test_mobile_gallery.py新增2用例：同提示词两个版本排他、NEW审核后移出但后页不漏；动漫/导入/收藏筛选与False回显；条件跨游标拒绝、无prompt版本拒绝、未知提示词/版本404、旧scope兼容及能力声明。首轮先修正新增fixture误取add_prompt_version二元返回值，随后2项RED均实际复现旧接口忽略筛选；实现后`python -m pytest tests/backend/test_mobile_gallery.py -q --tb=short`单轮12项通过。日志在忽略的temp/mobile-gallery-filters-red-20261110.log、mobile-gallery-filters-red-corrected-20261110.log、mobile-gallery-filters-green-20261110.log。环境为既有canonical venv、当前工作树PYTHONPATH=backend与可写项目TEMP/TMP；diff检查通过，既有Starlette弃用警告保留。未全量/部署/手机验收，无依赖/数据库/工作流修改。**搜索q、标签编辑、完整库管理及两端真实组合验证仍未完成**；不据本轮筛选称计划D全部完成。
+
 追加V2详情合同补漏：手机刷新调用`GET /mobile/images/{image_id}/details`，其`mobile_v2_service.details`原未返回status，不能借另一legacy详情端点已有status假定此链路完整。增强既有`test_decision_favorite_only_preserves_status_and_conflict`的NEW/KEEP断言，以及`test_batch_review_mixed_atomic_receipt_and_device_scope`的KEEP/REJECT刷新断言；修复前2项均因缺status而失败。仅在该DTO加入`status=image.status`，同2项复验通过；没有改变状态写入、审核事件、回执或迁移。命令为既有venv、工作树根目录、进程级PYTHONPATH=backend及可写TEMP/TMP：`python -m pytest tests/backend/test_mobile_v2_contract.py::test_decision_favorite_only_preserves_status_and_conflict tests/backend/test_mobile_v2_contract.py::test_batch_review_mixed_atomic_receipt_and_device_scope -q --tb=short`。日志为忽略的temp/mobile-details-status-red-20261110.log与mobile-details-status-green-20261110.log；既有Starlette弃用警告保留，未全量、未部署、未做手机验收。
 
 主Agent检查生产diff、事务封装与定向输出，git diff --check通过；日志在忽略temp目录，既有Starlette弃用警告保留。没有新长期运行对象或脚本。尚未验证：手机前页合并及序号、9图界面、断网未知结果恢复、同提示词6/10图与评分、完整桌面到手机事件投影、实际部署。不能据接口用例称双端统一已全部完成。
