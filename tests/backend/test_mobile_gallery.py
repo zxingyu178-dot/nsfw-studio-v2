@@ -349,3 +349,47 @@ def test_first_page_and_watermark_share_a_real_read_snapshot(
         params={'cursor': page['sync_cursor']}).json()['data']['items']
     assert {row['image_id'] for row in changes} == {old.id, inserted[0].id}
     assert {row['event_type'] for row in changes} == {'IMAGE_CREATED', 'IMAGE_FAVORITE_UPDATED'}
+
+
+def test_gallery_search_and_current_prompt_tag_scope(mobile_client, session_factory, make_mobile_image):
+    from app.services import prompt_service
+    images = make_mobile_image(3)
+    with session_factory() as session:
+        prompt = prompt_service.create_prompt(session, name='night collection', mode='full', positive_prompt='silver hair', tags=['old'])
+        first = prompt_service.get_current_version(session, prompt)
+        prompt_service.add_prompt_version(session, prompt.id, mode='full', positive_prompt='new scene', tags=[' curated '])
+        row = session.get(Image, images[0].id)
+        row.source = 'import'
+        row.metadata_json = json.dumps({'v1_output': {'prompts': [{'prompt_id': prompt.id, 'version_id': first.id}]}})
+        session.get(Image, images[1].id).imported_filename = '100%_sample.png'
+        session.get(Image, images[2].id).imported_filename = '100XXsample.png'
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    for term in ('night', 'silver hair'):
+        page = gallery(mobile_client, headers, search=term, tag='curated', limit=1)
+        assert [item['image_id'] for item in page['items']] == [images[0].id]
+        assert page['filters'] == {'search': term, 'tag': 'curated'}
+        assert mobile_client.get('/mobile/images/gallery', headers=headers, params={'search': 'other', 'tag': 'curated', 'scope_cursor': page['scope_cursor']}).status_code == 422
+    assert gallery(mobile_client, headers, tag='old')['items'] == []
+    assert [item['image_id'] for item in gallery(mobile_client, headers, search='%_')['items']] == [images[1].id]
+    plain = gallery(mobile_client, headers)
+    blank = gallery(mobile_client, headers, search='  ', tag=' ', scope_cursor=plain['scope_cursor'])
+    assert blank['scope_cursor'] == plain['scope_cursor'] and blank['filters'] == {}
+    for params in ({'search': 's' * 201}, {'tag': 't' * 101}):
+        assert mobile_client.get('/mobile/images/gallery', headers=headers, params=params).status_code == 422
+    assert 'mobile_gallery_search_v1' in mobile_client.get('/mobile/system/health').json()['data']['capabilities']
+
+
+def test_gallery_tag_ignores_malformed_historical_structured_json(mobile_client, session_factory, make_mobile_image):
+    from app.services import prompt_service
+    images = make_mobile_image(1)
+    with session_factory() as session:
+        prompt = prompt_service.create_prompt(session, name='legacy', mode='full', positive_prompt='legacy')
+        version = prompt_service.get_current_version(session, prompt)
+        version.structured_json = '{broken'
+        image = session.get(Image, images[0].id)
+        image.source = 'import'
+        image.metadata_json = json.dumps({'v1_output': {'prompts': [{'prompt_id': prompt.id}]}})
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    assert gallery(mobile_client, headers, tag='curated')['items'] == []

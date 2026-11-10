@@ -36,3 +36,11 @@
 图库与feed的summary新增categories集合，复用桌面image_service._apply_image_filters，anime/imported可重叠，每页最多2次分类查询。普通生成返回空集合；旧桥不返回字段时客户端必须保留未知，不得当成空集合。没有改数据库、分类规则、工作流或部署实例。
 
 新增gallery/feed两个参数化用例覆盖普通生成、动漫模块、普通导入、文件名/metadata的Anima导入；最初2项均因缺categories出现KeyError。补实现后 `python -m pytest tests/backend/test_mobile_gallery.py -q` 14项通过（exit0），既有httpx弃用warning保留。日志在忽略temp/mobile-categories-{red,green}-20261110.log。本结果不覆盖Android或真实手机，新源码仍需后续统一候选部署。
+
+## 手机图库搜索与当前版本文字标签（2026-11-10）
+
+GET gallery新增可选search（最长200）/tag（最长100），trim后空值归None，不改变旧空scope三元组；非空写入filters回显与游标范围，变更条件后复用scope拒绝422。能力为mobile_gallery_search_v1。
+
+搜索使用SQL字面子串，%/_不作通配：导入文件名、Job正负提示词快照，以及通过既有Job/V1导入显式ID关联的Prompt名称与任意版本正负正文。标签复用Prompt当前版本structured_json的tags列表，非列表回退extra.tags；仅精确匹配strip后的文字标签，不新增标签库/选项API。历史非字符串标签不扩展支持；无效JSON按无标签处理，不报500。所有过滤在SQL分页/计数之前执行，不逐图查询或全表Python扫描。
+
+新增综合回归先证明旧API忽略条件而返回错误图片；实现后test_mobile_gallery.py整文件15通过。随后review新增坏JSON回归出现sqlite malformed JSON，json_valid保护与type=text约束后仅该单例1通过；是15+1分轮证据，不称最终16单轮全绿。日志temp/mobile-search-{red,green}-20261110.log与mobile-search-badjson-{red,green}-20261110.log。未跑全量、未部署、未读写真实媒体/评分，无迁移/依赖/生命周期改动。

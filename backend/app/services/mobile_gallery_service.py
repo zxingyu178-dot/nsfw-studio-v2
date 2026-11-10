@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 import json
 from typing import Any
 
-from sqlalchemy import false, func, select, tuple_
+from sqlalchemy import String, case, cast, false, func, or_, select, true, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationError
-from app.models import Image
+from app.models import Image, Job, Prompt, PromptVersion
 from app.models.mobile_review import MobileImageEvent
-from app.services import image_event_service, image_service, mobile_v2_service
+from app.services import image_event_service, image_service, mobile_v2_service, prompt_image_service
 
 _PREFIX = 'mg1_'
 _CREATION_EVENTS = (image_event_service.EVENT_IMAGE_CREATED, image_event_service.EVENT_IMAGE_IMPORTED)
@@ -86,12 +86,54 @@ def _read_snapshot(session: Session) -> None:
         connection.exec_driver_sql('BEGIN')
 
 
+def _text(value: str | None, maximum: int) -> str | None:
+    if value is None:
+        return None
+    if len(value) > maximum:
+        raise _invalid('搜索或标签超出长度限制')
+    return value.strip() or None
+
+
+def _library_search(statement, search: str | None, tag: str | None):
+    # 与桌面 Prompt 库同口径：标签来自当前版本，不为手机另存一份。
+    prompt_query = select(Prompt.id)
+    if tag is not None:
+        structured = case((func.json_valid(PromptVersion.structured_json) == 1, PromptVersion.structured_json), else_='{}')
+        raw = case(
+            (func.json_type(structured, '$.tags') == 'array', func.json_extract(structured, '$.tags')),
+            (func.json_type(structured, '$.extra.tags') == 'array', func.json_extract(structured, '$.extra.tags')),
+            else_='[]',
+        )
+        tags = func.json_each(raw).table_valued('key', 'value', 'type').alias('gallery_tag')
+        prompt_query = prompt_query.join(PromptVersion, PromptVersion.id == Prompt.current_version_id).join(tags, true()).where(tags.c.type == 'text', func.trim(cast(tags.c.value, String)) == tag)
+        tagged_links = prompt_image_service._prompt_image_links(prompt_ids=prompt_query)
+        statement = statement.where(Image.id.in_(select(tagged_links.c.image_id)))
+    if search is not None:
+        # contains(autoescape)是字面子串，用户%/_不能拓宽为SQL通配。
+        version_prompt_ids = select(PromptVersion.prompt_id).where(or_(
+            PromptVersion.positive_prompt.contains(search, autoescape=True),
+            PromptVersion.negative_prompt.contains(search, autoescape=True),
+        ))
+        matching_prompts = select(Prompt.id).where(or_(
+            Prompt.name.contains(search, autoescape=True), Prompt.id.in_(version_prompt_ids),
+        ))
+        links = prompt_image_service._prompt_image_links(prompt_ids=matching_prompts)
+        matching_jobs = select(Job.id).where(or_(
+            Job.positive_prompt_snapshot.contains(search, autoescape=True),
+            Job.negative_prompt_snapshot.contains(search, autoescape=True),
+        ))
+        statement = statement.where(or_(Image.imported_filename.contains(search, autoescape=True),
+            Image.job_id.in_(matching_jobs), Image.id.in_(select(links.c.image_id))))
+    return statement
+
+
 def gallery(
     session: Session, *, sort: str = 'created_desc', from_utc: str | None = None,
     before_utc: str | None = None, page_cursor: str | None = None,
     scope_cursor: str | None = None, anchor_id: str | None = None, limit: int = 50,
     prompt_id: str | None = None, version_id: str | None = None,
     status: str | None = None, category: str | None = None, favorite: bool | None = None,
+    search: str | None = None, tag: str | None = None,
 ) -> dict:
     if sort not in ('created_desc', 'created_asc') or not 1 <= limit <= 100:
         raise _invalid()
@@ -106,9 +148,10 @@ def gallery(
         raise _invalid('无效审核状态')
     if category is not None and category not in ('anime', 'imported'):
         raise _invalid('无效图库分类')
+    search, tag = _text(search, 200), _text(tag, 100)
     filters = {name: value for name, value in {
         'prompt_id': prompt_id, 'version_id': version_id, 'status': status,
-        'category': category, 'favorite': favorite,
+        'category': category, 'favorite': favorite, 'search': search, 'tag': tag,
     }.items() if value is not None}
     query = [sort, start, end]
     # 无筛选必须保留旧三元组，避免已保存scope失效。
@@ -134,6 +177,7 @@ def gallery(
     statement = image_service._apply_image_filters(
         statement, status=status, category=category, favorite=favorite,
     ).where(~created_later)
+    statement = _library_search(statement, search, tag)
     if start is not None:
         statement = statement.where(Image.created_at >= start)
     if end is not None:

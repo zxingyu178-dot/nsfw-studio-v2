@@ -217,13 +217,15 @@ def image_gallery(
     status: Literal['NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE'] | None = None,
     category: Literal['anime', 'imported'] | None = None,
     favorite: bool | None = None,
+    search: str | None = Query(default=None, max_length=200),
+    tag: str | None = Query(default=None, max_length=100),
     session: Session = Depends(get_session),
     _device: MobileReviewDevice = Depends(get_current_device),
 ) -> dict:
     return mobile_gallery_service.gallery(
         session, sort=sort, from_utc=from_utc, before_utc=before_utc,
         page_cursor=page_cursor, scope_cursor=scope_cursor, anchor_id=anchor_id, limit=limit,
-        prompt_id=prompt_id, version_id=version_id, status=status, category=category, favorite=favorite,
+        prompt_id=prompt_id, version_id=version_id, status=status, category=category, favorite=favorite, search=search, tag=tag,
     )
 
 
