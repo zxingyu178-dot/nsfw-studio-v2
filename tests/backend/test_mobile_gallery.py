@@ -1,10 +1,14 @@
 """图库查询必须直接读最新图片，不能把事件回放当日期分页。"""
+import base64
+import json
+
 import pytest
 from sqlalchemy import delete, func, select
 
 from app.models import Image
 from app.models.mobile_review import MobileImageEvent
 from app.services import image_service
+from app.services.cleanup_service import _purge_image_rows
 from test_mobile_v2_contract import auth
 
 
@@ -12,6 +16,124 @@ def gallery(client, headers, **params):
     response = client.get('/mobile/images/gallery', headers=headers, params=params)
     assert response.status_code == 200, response.text
     return response.json()['data']
+
+
+@pytest.mark.parametrize('sort', ['created_desc', 'created_asc'])
+def test_bidirectional_gallery_anchor_and_boundaries(
+    mobile_client, session_factory, make_mobile_image, sort,
+):
+    images = make_mobile_image(9)
+    with session_factory() as session:
+        for image in images:
+            session.get(Image, image.id).created_at = '2026-11-09T01:00:00.000Z'
+        session.commit()
+    expected = sorted((image.id for image in images), reverse=sort == 'created_desc')
+    headers, _ = auth(mobile_client, session_factory)
+    first = gallery(mobile_client, headers, sort=sort, limit=2)
+    scope = first['scope_cursor']
+    assert first['start_index'] == 0
+    assert first['previous_page_cursor'] is None
+    assert 'mobile_gallery_bidirectional_v1' in mobile_client.get('/mobile/system/health').json()['data']['capabilities']
+    middle = gallery(mobile_client, headers, sort=sort, scope_cursor=scope,
+                     anchor_id=expected[4], limit=2)
+    assert middle['start_index'] == 4 and middle['total'] == 9
+    assert [row['image_id'] for row in middle['items']] == expected[4:6]
+    newer = make_mobile_image(1)[0]
+    with session_factory() as session:
+        session.get(Image, newer.id).created_at = '2026-11-09T01:00:00.000Z'
+        session.commit()
+    # 从中间向前取最近两张，再向后返回原窗口；同时间戳也不漏重。
+    previous = gallery(mobile_client, headers, sort=sort, limit=2,
+                       page_cursor=middle['previous_page_cursor'])
+    assert previous['start_index'] == 2 and previous['total'] == 9
+    assert previous['scope_cursor'] == scope
+    assert [row['image_id'] for row in previous['items']] == expected[2:4]
+    returned = gallery(mobile_client, headers, sort=sort, limit=2,
+                       page_cursor=previous['next_page_cursor'])
+    assert [row['image_id'] for row in returned['items']] == expected[4:6]
+    head = gallery(mobile_client, headers, sort=sort, limit=2,
+                   page_cursor=previous['previous_page_cursor'])
+    assert [row['image_id'] for row in head['items']] == expected[:2]
+    assert head['previous_page_cursor'] is None and head['start_index'] == 0
+    collected = []
+    page = head
+    while True:
+        assert page['scope_cursor'] == scope and page['total'] == 9
+        assert page['start_index'] == len(collected)
+        collected.extend(row['image_id'] for row in page['items'])
+        if not page['has_more']:
+            break
+        page = gallery(mobile_client, headers, sort=sort, limit=2,
+                       page_cursor=page['next_page_cursor'])
+    assert collected == expected
+    assert page['next_page_cursor'] is None
+
+
+@pytest.mark.parametrize('sort', ['created_desc', 'created_asc'])
+def test_bidirectional_gallery_deletion_and_empty_pages(
+    mobile_client, session_factory, make_mobile_image, sort,
+):
+    images = make_mobile_image(5)
+    expected = sorted(images, key=lambda image: (image.created_at, image.id), reverse=sort == 'created_desc')
+    headers, _ = auth(mobile_client, session_factory)
+    first = gallery(mobile_client, headers, sort=sort, limit=1)
+    middle = gallery(mobile_client, headers, sort=sort, scope_cursor=first['scope_cursor'],
+                     anchor_id=expected[2].id, limit=1)
+    tail = gallery(mobile_client, headers, sort=sort, scope_cursor=first['scope_cursor'],
+                   anchor_id=expected[-1].id, limit=1)
+    with session_factory() as session:
+        for image_id in (expected[0].id, expected[2].id):
+            _purge_image_rows(session, image_id)
+        session.commit()
+    previous = gallery(mobile_client, headers, sort=sort, limit=2,
+                       page_cursor=middle['previous_page_cursor'])
+    assert [row['image_id'] for row in previous['items']] == [expected[1].id]
+    assert previous['start_index'] == 0 and previous['total'] == 3
+    assert previous['previous_page_cursor'] is None and previous['has_more']
+    next_page = gallery(mobile_client, headers, sort=sort, limit=2,
+                        page_cursor=middle['next_page_cursor'])
+    assert [row['image_id'] for row in next_page['items']] == [image.id for image in expected[3:]]
+    assert next_page['start_index'] == 1 and next_page['total'] == 3
+    assert next_page['next_page_cursor'] is None
+    assert mobile_client.get('/mobile/images/gallery', headers=headers, params={
+        'sort': sort, 'scope_cursor': first['scope_cursor'], 'anchor_id': expected[2].id,
+    }).status_code == 404
+    with session_factory() as session:
+        for image_id in list(session.scalars(select(Image.id))):
+            _purge_image_rows(session, image_id)
+        session.commit()
+    for cursor in (middle['previous_page_cursor'], middle['next_page_cursor']):
+        empty = gallery(mobile_client, headers, sort=sort, page_cursor=cursor)
+        assert empty['items'] == [] and empty['start_index'] == 0 and empty['total'] == 0
+        assert not empty['has_more'] and empty['next_page_cursor'] is None
+        assert empty['previous_page_cursor'] is None
+    assert tail['start_index'] == 4
+
+
+def test_bidirectional_gallery_rejects_invalid_direction_and_scope(
+    mobile_client, session_factory, make_mobile_image,
+):
+    make_mobile_image(3)
+    headers, _ = auth(mobile_client, session_factory)
+    page = gallery(mobile_client, headers, limit=1)
+    payload = json.loads(base64.urlsafe_b64decode(page['next_page_cursor'][4:] + '==='))
+    for direction in ('sideways', 'next', None, 1, []):
+        encoded = base64.urlsafe_b64encode(json.dumps({**payload, 'direction': direction}).encode()).decode().rstrip('=')
+        response = mobile_client.get('/mobile/images/gallery', headers=headers,
+                                    params={'page_cursor': 'mg1_' + encoded})
+        assert response.status_code == 422
+    second = gallery(mobile_client, headers, page_cursor=page['next_page_cursor'], limit=1)
+    backward = second['previous_page_cursor']
+    for params in ({'scope_cursor': backward},
+                   {'page_cursor': backward, 'sort': 'created_asc'},
+                   {'page_cursor': backward, 'from_utc': '2026-01-01T00:00:00Z'},
+                   {'page_cursor': backward, 'limit': 101}):
+        assert mobile_client.get('/mobile/images/gallery', headers=headers, params=params).status_code == 422
+    state = json.loads(base64.urlsafe_b64decode(backward[4:] + '==='))
+    state['after'] = None
+    forged_scope = 'mg1_' + base64.urlsafe_b64encode(json.dumps(state).encode()).decode().rstrip('=')
+    assert mobile_client.get('/mobile/images/gallery', headers=headers,
+                             params={'scope_cursor': forged_scope}).status_code == 422
 
 
 @pytest.mark.parametrize('sort', ['created_desc', 'created_asc'])
@@ -125,6 +247,7 @@ def test_first_page_and_watermark_share_a_real_read_snapshot(
     monkeypatch.setattr(image_event_service, 'newest_seq', concurrent_change)
     page = gallery(mobile_client, headers)
     assert [row['image_id'] for row in page['items']] == [old.id]
+    assert page['start_index'] == 0 and page['total'] == 1
     assert page['items'][0]['is_favorite'] is False
     changes = mobile_client.get('/mobile/images/feed', headers=headers,
         params={'cursor': page['sync_cursor']}).json()['data']['items']

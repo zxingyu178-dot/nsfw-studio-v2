@@ -70,6 +70,8 @@ def _decode(cursor: str, query: list, session: Session) -> dict:
             raise ValueError()
         _key(value['upper'])
         _key(value['after'])
+        if 'direction' in value and value['direction'] != 'previous':
+            raise ValueError()
     except (ValueError, TypeError, KeyError, UnicodeError, binascii.Error):
         raise _invalid() from None
     # 同步日志恢复/裁剪后沿用既有410语义，不把旧水位当作新快照。
@@ -101,7 +103,7 @@ def gallery(
     cursor = page_cursor or scope_cursor
     if cursor:
         state = _decode(cursor, query, session)
-        if (scope_cursor and state['after'] is not None) or (page_cursor and state['after'] is None):
+        if (scope_cursor and (state['after'] is not None or 'direction' in state)) or (page_cursor and state['after'] is None):
             raise _invalid()
     else:
         state = {'v': 1, 'q': query, 'wm': image_event_service.newest_seq(session),
@@ -126,6 +128,7 @@ def gallery(
     upper = _key(state['upper'])
     statement = statement.where(key <= upper) if upper else statement.where(false())
     total = int(session.scalar(select(func.count()).select_from(statement.subquery())) or 0)
+    scoped = statement
     if anchor_id is not None:
         anchor = session.scalar(statement.where(Image.id == anchor_id))
         if anchor is None:
@@ -133,19 +136,35 @@ def gallery(
         anchor_key = (anchor.created_at, anchor.id)
         statement = statement.where(key <= anchor_key if sort == 'created_desc' else key >= anchor_key)
     after = _key(state['after'])
+    previous = state.get('direction') == 'previous'
     if after is not None:
-        statement = statement.where(key < after if sort == 'created_desc' else key > after)
-    rows = list(session.scalars(statement.order_by(*image_service._image_order_by(sort)).limit(limit + 1)))
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+        less = (sort == 'created_desc') != previous
+        statement = statement.where(key < after if less else key > after)
+    page_sort = ('created_asc' if sort == 'created_desc' else 'created_desc') if previous else sort
+    rows = list(session.scalars(statement.order_by(*image_service._image_order_by(page_sort)).limit(limit)))
+    if previous:
+        rows.reverse()
+    # 全scope的存活序号，不能把anchor/翻页窗口当作整个范围。
+    if rows:
+        first_key = (rows[0].created_at, rows[0].id)
+        preceding = scoped.where(key > first_key if sort == 'created_desc' else key < first_key)
+        start_index = int(session.scalar(select(func.count()).select_from(preceding.subquery())) or 0)
+    else:
+        start_index = 0 if previous else total
+    has_more = bool(rows) and start_index + len(rows) < total
     revisions = image_event_service.latest_event_seqs(session, [row.id for row in rows])
-    scope = {**state, 'after': None}
+    scope = {name: value for name, value in state.items() if name != 'direction'}
+    scope['after'] = None
     next_page = None
     if has_more:
         next_page = _encode({**scope, 'after': [rows[-1].created_at, rows[-1].id]})
+    previous_page = None
+    if rows and start_index > 0:
+        previous_page = _encode({**scope, 'after': [rows[0].created_at, rows[0].id], 'direction': 'previous'})
     return {
         'items': [mobile_v2_service.image_summary(session, row, revision=revisions.get(row.id, 0)) for row in rows],
-        'next_page_cursor': next_page, 'has_more': has_more, 'total': total,
+        'next_page_cursor': next_page, 'previous_page_cursor': previous_page,
+        'has_more': has_more, 'total': total, 'start_index': start_index,
         'sync_cursor': image_event_service.encode_cursor(state['wm']), 'scope_cursor': _encode(scope),
         'sort': sort, 'range': {'from_utc': start, 'before_utc': end},
     }

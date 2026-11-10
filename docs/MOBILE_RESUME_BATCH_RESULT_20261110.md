@@ -1,0 +1,24 @@
+# 手机续审与批量接口：源码阶段记录
+
+2026-11-10。只收口既有在研后端，未部署、未修改真实媒体/审核/评分数据，未改依赖、数据库结构、工作流或服务入口。手机界面与双端组合验收仍未完成。
+
+## 双向图库
+
+现有gallery新增previous_page_cursor、0起始start_index，total仍为原scope当前存活总数；反向keyset返回最近前页，最终保持原排序。前/后页都带正确两向游标，scope剥离direction保持旧格式；查询条件/水位/上限继续绑定。新增mobile_gallery_bidirectional_v1能力，旧正向客户端不必更新请求。
+
+本轮主Agent运行`python -m pytest tests/backend/test_mobile_gallery.py -q`：8通过2失败。两失败精确复现为隔离样本直接delete(Image)违反image_variants外键；仅修改测试，复用正式cleanup_service._purge_image_rows的关联清理与REMOVE事件，不放宽数据库约束。随后`-m pytest tests/backend/test_mobile_gallery.py -k deletion_and_empty --tb=short -q`：2通过。按8+2分轮记录，不称单轮10绿。包含正反序/同时间戳、前后首尾、scope/新图隔离、删除后计数和空页、非法方向拒绝、旧日期/快照回归。
+
+## 整页混合审核
+
+- POST /mobile/images/batch-review，Header Idempotency-Key（1..128），body.items为1..10个不同image_id/action(KEEP或REJECT)/expected_revision。
+- 全页必须仍为NEW且revision匹配，先全检再修改；atomic_write持SQLite写锁并复核设备，图片状态、事件、回执同事务。保留favorite，淘汰只改状态，不删文件。
+- 返回items（image_id/status/revision）、kept_count、rejected_count；GET /mobile/images/batch-review/{request_id}/result只允许当前设备查自己的冻结回执，其他设备404。相同号相同载荷重放原结果，不同载荷409。
+- 能力mobile_image_batch_review_v1。该接口不推导未提交图片的审核结果，手机必须冻结实际可见/成功加载的提交集合。
+
+子任务使用现有venv、正确PYTHONPATH=backend及项目可写TEMP/TMP，在既有tests/backend/test_mobile_v2_contract.py补最小8用例。
+
+`-m pytest tests/backend/test_mobile_v2_contract.py -k batch_review --tb=short -q`：实现前8项405失败；实现后7通过、1测试误取V2详情is_favorite字段失败。测试改直接断言隔离DB favorite保留，生产实现不改，仅复跑`-m pytest tests/backend/test_mobile_v2_contract.py::test_batch_review_mixed_atomic_receipt_and_device_scope --tb=short -q`，1通过。覆盖混合成功、重复事件不新增、载荷冲突、跨设备、revision/已审/未知ID/重复ID/空/超限拒绝及第二项事件异常全回滚。结果为7+1分轮通过，不称单轮8绿。
+
+## 交付边界
+
+主Agent检查生产diff、事务封装与定向输出，git diff --check通过；日志在忽略temp目录，既有Starlette弃用警告保留。没有新长期运行对象或脚本。尚未验证：手机前页合并及序号、9图界面、断网未知结果恢复、同提示词6/10图与评分、完整桌面到手机事件投影、实际部署。不能据接口用例称双端统一已全部完成。

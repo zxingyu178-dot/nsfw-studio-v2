@@ -26,6 +26,8 @@ CAPABILITIES = [
     # W3.1 MediaReview V2 客户端冻结能力
     "mobile_feed_v2",
     "mobile_gallery_query_v1",
+    "mobile_gallery_bidirectional_v1",
+    "mobile_image_batch_review_v1",
     "mobile_image_details_v2",
     "mobile_image_decision_v2",
     "mobile_prompt_review_v2",
