@@ -79,6 +79,7 @@ def test_batch_review_mixed_atomic_receipt_and_device_scope(mobile_client, sessi
     result = response.json()["data"]
     assert result["kept_count"] == result["rejected_count"] == 1
     assert [row["status"] for row in result["items"]] == ["KEEP", "REJECT"]
+    assert [details(mobile_client, headers, image.id)["status"] for image in images] == ["KEEP", "REJECT"]
     with session_factory() as session:
         assert session.get(Image, images[0].id).favorite is True
     changes = feed(mobile_client, headers, cursor=before)["items"]
@@ -285,6 +286,7 @@ def test_decision_favorite_only_preserves_status_and_conflict(
     image = make_mobile_image(1)[0]
     headers, _ = auth(mobile_client, session_factory)
     data = details(mobile_client, headers, image.id)
+    assert data["status"] == "NEW"
     keep = decide(mobile_client, headers, image.id, {
         "action": "KEEP", "expected_updated_at": data["updated_at"],
         "client_request_id": "decision-1",
@@ -292,6 +294,7 @@ def test_decision_favorite_only_preserves_status_and_conflict(
     assert keep.status_code == 200
     result = keep.json()["data"]
     assert result["status"] == "KEEP" and result["revision"].isdecimal()
+    assert details(mobile_client, headers, image.id)["status"] == "KEEP"
 
     favorite = decide(mobile_client, headers, image.id, {
         "favorite": True, "expected_updated_at": result["updated_at"],

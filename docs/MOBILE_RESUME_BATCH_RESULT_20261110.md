@@ -21,4 +21,6 @@
 
 ## 交付边界
 
+追加V2详情合同补漏：手机刷新调用`GET /mobile/images/{image_id}/details`，其`mobile_v2_service.details`原未返回status，不能借另一legacy详情端点已有status假定此链路完整。增强既有`test_decision_favorite_only_preserves_status_and_conflict`的NEW/KEEP断言，以及`test_batch_review_mixed_atomic_receipt_and_device_scope`的KEEP/REJECT刷新断言；修复前2项均因缺status而失败。仅在该DTO加入`status=image.status`，同2项复验通过；没有改变状态写入、审核事件、回执或迁移。命令为既有venv、工作树根目录、进程级PYTHONPATH=backend及可写TEMP/TMP：`python -m pytest tests/backend/test_mobile_v2_contract.py::test_decision_favorite_only_preserves_status_and_conflict tests/backend/test_mobile_v2_contract.py::test_batch_review_mixed_atomic_receipt_and_device_scope -q --tb=short`。日志为忽略的temp/mobile-details-status-red-20261110.log与mobile-details-status-green-20261110.log；既有Starlette弃用警告保留，未全量、未部署、未做手机验收。
+
 主Agent检查生产diff、事务封装与定向输出，git diff --check通过；日志在忽略temp目录，既有Starlette弃用警告保留。没有新长期运行对象或脚本。尚未验证：手机前页合并及序号、9图界面、断网未知结果恢复、同提示词6/10图与评分、完整桌面到手机事件投影、实际部署。不能据接口用例称双端统一已全部完成。

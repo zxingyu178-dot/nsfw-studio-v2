@@ -158,6 +158,7 @@ def details(session: Session, image: Image) -> dict[str, Any]:
     prompt_id, version_id, link_state = _prompt_link(session, image, job)
     return {
         "image_id": image.id,
+        "status": image.status,
         "created_at": image.created_at,
         "generated_at": metadata.get("generated_at"),
         "width": image.width,
