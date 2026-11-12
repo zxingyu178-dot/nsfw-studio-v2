@@ -144,7 +144,7 @@ def gallery(
         raise _invalid()
     if version_id is not None and prompt_id is None:
         raise _invalid('提示词版本必须同时指定提示词')
-    if status is not None and status not in ('NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE'):
+    if status is not None and status not in ('NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE', 'NOT_REJECTED'):
         raise _invalid('无效审核状态')
     if category is not None and category not in ('anime', 'imported'):
         raise _invalid('无效图库分类')
@@ -175,8 +175,10 @@ def gallery(
     ).exists()
     statement = mobile_v2_service._images_query(session, prompt_id, version_id) if prompt_id is not None else select(Image)
     statement = image_service._apply_image_filters(
-        statement, status=status, category=category, favorite=favorite,
+        statement, status=None if status == 'NOT_REJECTED' else status, category=category, favorite=favorite,
     ).where(~created_later)
+    if status == 'NOT_REJECTED':
+        statement = statement.where(Image.status != 'REJECT')
     statement = _library_search(statement, search, tag)
     if start is not None:
         statement = statement.where(Image.created_at >= start)

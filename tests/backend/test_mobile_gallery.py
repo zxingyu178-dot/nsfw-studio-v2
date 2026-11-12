@@ -393,3 +393,51 @@ def test_gallery_tag_ignores_malformed_historical_structured_json(mobile_client,
         session.commit()
     headers, _ = auth(mobile_client, session_factory)
     assert gallery(mobile_client, headers, tag='curated')['items'] == []
+
+
+def test_gallery_not_rejected_pagination_and_review_change(mobile_client, session_factory, make_mobile_image):
+    images = make_mobile_image(6)
+    with session_factory() as session:
+        for image, status in zip(images, ['NEW', 'KEEP', 'ARCHIVED', 'REJECT', 'NEW', 'KEEP']):
+            session.get(Image, image.id).status = status
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    params = {'status': 'NOT_REJECTED', 'sort': 'created_asc', 'limit': 2}
+    first = gallery(mobile_client, headers, **params)
+    assert first['total'] == 5
+    assert first['filters'] == {'status': 'NOT_REJECTED'}
+    assert [item['image_id'] for item in first['items']] == [images[0].id, images[1].id]
+    second = gallery(mobile_client, headers, **params, page_cursor=first['next_page_cursor'])
+    assert second['total'] == 5
+    assert [item['image_id'] for item in second['items']] == [images[2].id, images[4].id]
+    for status in ('NEW', 'KEEP', 'REJECT', None):
+        for cursor_name, cursor in [('page_cursor', first['next_page_cursor']), ('scope_cursor', first['scope_cursor'])]:
+            altered = {**params, cursor_name: cursor}
+            if status is None:
+                altered.pop('status')
+            else:
+                altered['status'] = status
+            assert mobile_client.get('/mobile/images/gallery', headers=headers, params=altered).status_code == 422
+    with session_factory() as session:
+        image_service.set_image_status(session, images[2].id, 'REJECT')
+    changed = gallery(mobile_client, headers, **params, page_cursor=first['next_page_cursor'])
+    assert changed['total'] == 4
+    assert [item['image_id'] for item in changed['items']] == [images[4].id, images[5].id]
+    assert changed['next_page_cursor'] is None
+    assert 'mobile_gallery_review_filter_v1' in mobile_client.get('/mobile/system/health').json()['data']['capabilities']
+
+
+@pytest.mark.parametrize('status, count', [('NEW', 2), ('KEEP', 1), ('REJECT', 1)])
+def test_gallery_existing_single_review_status(mobile_client, session_factory, make_mobile_image, status, count):
+    images = make_mobile_image(4)
+    with session_factory() as session:
+        for image, value in zip(images, ['NEW', 'KEEP', 'REJECT', 'NEW']):
+            session.get(Image, image.id).status = value
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    page = gallery(mobile_client, headers, status=status)
+    assert page['total'] == count
+    assert page['filters'] == {'status': status}
+    assert {item['image_id'] for item in page['items']} == {
+        image.id for image, value in zip(images, ['NEW', 'KEEP', 'REJECT', 'NEW']) if value == status
+    }

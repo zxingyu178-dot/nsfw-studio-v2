@@ -214,7 +214,7 @@ def image_gallery(
     limit: int = Query(default=50, ge=1, le=100),
     prompt_id: str | None = Query(default=None, min_length=1, max_length=64),
     version_id: str | None = Query(default=None, min_length=1, max_length=64),
-    status: Literal['NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE'] | None = None,
+    status: Literal['NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE', 'NOT_REJECTED'] | None = None,
     category: Literal['anime', 'imported'] | None = None,
     favorite: bool | None = None,
     search: str | None = Query(default=None, max_length=200),

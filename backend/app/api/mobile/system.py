@@ -28,6 +28,7 @@ CAPABILITIES = [
     "mobile_gallery_query_v1",
     "mobile_gallery_bidirectional_v1",
     "mobile_gallery_filters_v1",
+    "mobile_gallery_review_filter_v1",
     "mobile_gallery_search_v1",
     "mobile_image_batch_review_v1",
     "mobile_image_details_v2",
