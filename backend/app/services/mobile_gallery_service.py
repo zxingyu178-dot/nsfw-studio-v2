@@ -7,13 +7,13 @@ from datetime import datetime, timezone
 import json
 from typing import Any
 
-from sqlalchemy import false, func, select, tuple_
+from sqlalchemy import String, case, cast, false, func, or_, select, true, tuple_
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, ValidationError
-from app.models import Image
+from app.models import Image, Job, Prompt, PromptVersion
 from app.models.mobile_review import MobileImageEvent
-from app.services import image_event_service, image_service, mobile_v2_service
+from app.services import image_event_service, image_service, mobile_v2_service, prompt_image_service
 
 _PREFIX = 'mg1_'
 _CREATION_EVENTS = (image_event_service.EVENT_IMAGE_CREATED, image_event_service.EVENT_IMAGE_IMPORTED)
@@ -70,6 +70,8 @@ def _decode(cursor: str, query: list, session: Session) -> dict:
             raise ValueError()
         _key(value['upper'])
         _key(value['after'])
+        if 'direction' in value and value['direction'] != 'previous':
+            raise ValueError()
     except (ValueError, TypeError, KeyError, UnicodeError, binascii.Error):
         raise _invalid() from None
     # 同步日志恢复/裁剪后沿用既有410语义，不把旧水位当作新快照。
@@ -84,10 +86,54 @@ def _read_snapshot(session: Session) -> None:
         connection.exec_driver_sql('BEGIN')
 
 
+def _text(value: str | None, maximum: int) -> str | None:
+    if value is None:
+        return None
+    if len(value) > maximum:
+        raise _invalid('搜索或标签超出长度限制')
+    return value.strip() or None
+
+
+def _library_search(statement, search: str | None, tag: str | None):
+    # 与桌面 Prompt 库同口径：标签来自当前版本，不为手机另存一份。
+    prompt_query = select(Prompt.id)
+    if tag is not None:
+        structured = case((func.json_valid(PromptVersion.structured_json) == 1, PromptVersion.structured_json), else_='{}')
+        raw = case(
+            (func.json_type(structured, '$.tags') == 'array', func.json_extract(structured, '$.tags')),
+            (func.json_type(structured, '$.extra.tags') == 'array', func.json_extract(structured, '$.extra.tags')),
+            else_='[]',
+        )
+        tags = func.json_each(raw).table_valued('key', 'value', 'type').alias('gallery_tag')
+        prompt_query = prompt_query.join(PromptVersion, PromptVersion.id == Prompt.current_version_id).join(tags, true()).where(tags.c.type == 'text', func.trim(cast(tags.c.value, String)) == tag)
+        tagged_links = prompt_image_service._prompt_image_links(prompt_ids=prompt_query)
+        statement = statement.where(Image.id.in_(select(tagged_links.c.image_id)))
+    if search is not None:
+        # contains(autoescape)是字面子串，用户%/_不能拓宽为SQL通配。
+        version_prompt_ids = select(PromptVersion.prompt_id).where(or_(
+            PromptVersion.positive_prompt.contains(search, autoescape=True),
+            PromptVersion.negative_prompt.contains(search, autoescape=True),
+        ))
+        matching_prompts = select(Prompt.id).where(or_(
+            Prompt.name.contains(search, autoescape=True), Prompt.id.in_(version_prompt_ids),
+        ))
+        links = prompt_image_service._prompt_image_links(prompt_ids=matching_prompts)
+        matching_jobs = select(Job.id).where(or_(
+            Job.positive_prompt_snapshot.contains(search, autoescape=True),
+            Job.negative_prompt_snapshot.contains(search, autoescape=True),
+        ))
+        statement = statement.where(or_(Image.imported_filename.contains(search, autoescape=True),
+            Image.job_id.in_(matching_jobs), Image.id.in_(select(links.c.image_id))))
+    return statement
+
+
 def gallery(
     session: Session, *, sort: str = 'created_desc', from_utc: str | None = None,
     before_utc: str | None = None, page_cursor: str | None = None,
     scope_cursor: str | None = None, anchor_id: str | None = None, limit: int = 50,
+    prompt_id: str | None = None, version_id: str | None = None,
+    status: str | None = None, category: str | None = None, favorite: bool | None = None,
+    search: str | None = None, tag: str | None = None,
 ) -> dict:
     if sort not in ('created_desc', 'created_asc') or not 1 <= limit <= 100:
         raise _invalid()
@@ -96,12 +142,26 @@ def gallery(
         raise _invalid('开始日期必须早于结束日期')
     if page_cursor and (scope_cursor or anchor_id):
         raise _invalid()
+    if version_id is not None and prompt_id is None:
+        raise _invalid('提示词版本必须同时指定提示词')
+    if status is not None and status not in ('NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE', 'NOT_REJECTED'):
+        raise _invalid('无效审核状态')
+    if category is not None and category not in ('anime', 'imported'):
+        raise _invalid('无效图库分类')
+    search, tag = _text(search, 200), _text(tag, 100)
+    filters = {name: value for name, value in {
+        'prompt_id': prompt_id, 'version_id': version_id, 'status': status,
+        'category': category, 'favorite': favorite, 'search': search, 'tag': tag,
+    }.items() if value is not None}
     query = [sort, start, end]
+    # 无筛选必须保留旧三元组，避免已保存scope失效。
+    if filters:
+        query.append(filters)
     _read_snapshot(session)
     cursor = page_cursor or scope_cursor
     if cursor:
         state = _decode(cursor, query, session)
-        if (scope_cursor and state['after'] is not None) or (page_cursor and state['after'] is None):
+        if (scope_cursor and (state['after'] is not None or 'direction' in state)) or (page_cursor and state['after'] is None):
             raise _invalid()
     else:
         state = {'v': 1, 'q': query, 'wm': image_event_service.newest_seq(session),
@@ -113,7 +173,13 @@ def gallery(
         MobileImageEvent.event_type.in_(_CREATION_EVENTS),
         MobileImageEvent.seq > state['wm'],
     ).exists()
-    statement = select(Image).where(~created_later)
+    statement = mobile_v2_service._images_query(session, prompt_id, version_id) if prompt_id is not None else select(Image)
+    statement = image_service._apply_image_filters(
+        statement, status=None if status == 'NOT_REJECTED' else status, category=category, favorite=favorite,
+    ).where(~created_later)
+    if status == 'NOT_REJECTED':
+        statement = statement.where(Image.status != 'REJECT')
+    statement = _library_search(statement, search, tag)
     if start is not None:
         statement = statement.where(Image.created_at >= start)
     if end is not None:
@@ -126,6 +192,7 @@ def gallery(
     upper = _key(state['upper'])
     statement = statement.where(key <= upper) if upper else statement.where(false())
     total = int(session.scalar(select(func.count()).select_from(statement.subquery())) or 0)
+    scoped = statement
     if anchor_id is not None:
         anchor = session.scalar(statement.where(Image.id == anchor_id))
         if anchor is None:
@@ -133,19 +200,37 @@ def gallery(
         anchor_key = (anchor.created_at, anchor.id)
         statement = statement.where(key <= anchor_key if sort == 'created_desc' else key >= anchor_key)
     after = _key(state['after'])
+    previous = state.get('direction') == 'previous'
     if after is not None:
-        statement = statement.where(key < after if sort == 'created_desc' else key > after)
-    rows = list(session.scalars(statement.order_by(*image_service._image_order_by(sort)).limit(limit + 1)))
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+        less = (sort == 'created_desc') != previous
+        statement = statement.where(key < after if less else key > after)
+    page_sort = ('created_asc' if sort == 'created_desc' else 'created_desc') if previous else sort
+    rows = list(session.scalars(statement.order_by(*image_service._image_order_by(page_sort)).limit(limit)))
+    if previous:
+        rows.reverse()
+    # 全scope的存活序号，不能把anchor/翻页窗口当作整个范围。
+    if rows:
+        first_key = (rows[0].created_at, rows[0].id)
+        preceding = scoped.where(key > first_key if sort == 'created_desc' else key < first_key)
+        start_index = int(session.scalar(select(func.count()).select_from(preceding.subquery())) or 0)
+    else:
+        start_index = 0 if previous else total
+    has_more = bool(rows) and start_index + len(rows) < total
     revisions = image_event_service.latest_event_seqs(session, [row.id for row in rows])
-    scope = {**state, 'after': None}
+    categories = mobile_v2_service.image_categories(session, [row.id for row in rows])
+    scope = {name: value for name, value in state.items() if name != 'direction'}
+    scope['after'] = None
     next_page = None
     if has_more:
         next_page = _encode({**scope, 'after': [rows[-1].created_at, rows[-1].id]})
+    previous_page = None
+    if rows and start_index > 0:
+        previous_page = _encode({**scope, 'after': [rows[0].created_at, rows[0].id], 'direction': 'previous'})
     return {
-        'items': [mobile_v2_service.image_summary(session, row, revision=revisions.get(row.id, 0)) for row in rows],
-        'next_page_cursor': next_page, 'has_more': has_more, 'total': total,
+        'items': [mobile_v2_service.image_summary(session, row, revision=revisions.get(row.id, 0), categories=categories[row.id]) for row in rows],
+        'next_page_cursor': next_page, 'previous_page_cursor': previous_page,
+        'has_more': has_more, 'total': total, 'start_index': start_index,
         'sync_cursor': image_event_service.encode_cursor(state['wm']), 'scope_cursor': _encode(scope),
         'sort': sort, 'range': {'from_utc': start, 'before_utc': end},
+        'filters': filters,
     }

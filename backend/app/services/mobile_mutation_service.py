@@ -22,6 +22,7 @@ from app.models.mobile_review import MobileMutationReceipt, MobileReviewDevice
 
 OP_IMAGE_DECISION = "image_decision"
 OP_IMAGE_REVIEW = "image_review"
+OP_IMAGE_BATCH_REVIEW = "image_batch_review"
 OP_PROMPT_EVALUATION = "prompt_evaluation"
 
 LEGACY_HASH_PREFIX = "legacy_fp:"

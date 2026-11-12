@@ -56,6 +56,103 @@ def test_health_declares_v2_capabilities(mobile_client):
     assert "permanent_delete" not in data["capabilities"]
 
 
+def _batch_items(client, headers, images):
+    return [{"image_id": image.id, "action": "KEEP" if index == 0 else "REJECT",
+             "expected_revision": details(client, headers, image.id)["revision"]}
+            for index, image in enumerate(images)]
+
+
+def test_batch_review_mixed_atomic_receipt_and_device_scope(mobile_client, session_factory, make_mobile_image):
+    images = make_mobile_image(2)
+    headers, _ = auth(mobile_client, session_factory)
+    other, _ = auth(mobile_client, session_factory)
+    with session_factory() as session:
+        session.get(Image, images[0].id).favorite = True
+        session.commit()
+    items = _batch_items(mobile_client, headers, images)
+    key = "batch-mixed"
+    route = "/mobile/images/batch-review"
+    request_headers = {**headers, "Idempotency-Key": key}
+    before = feed(mobile_client, headers)["next_cursor"]
+    response = mobile_client.post(route, headers=request_headers, json={"items": items})
+    assert response.status_code == 200, response.text
+    result = response.json()["data"]
+    assert result["kept_count"] == result["rejected_count"] == 1
+    assert [row["status"] for row in result["items"]] == ["KEEP", "REJECT"]
+    assert [details(mobile_client, headers, image.id)["status"] for image in images] == ["KEEP", "REJECT"]
+    with session_factory() as session:
+        assert session.get(Image, images[0].id).favorite is True
+    changes = feed(mobile_client, headers, cursor=before)["items"]
+    assert len(changes) == 2 and {row["image_id"] for row in changes} == {image.id for image in images}
+    repeated = mobile_client.post(route, headers=request_headers, json={"items": items})
+    assert repeated.status_code == 200 and repeated.json()["data"] == result
+    assert feed(mobile_client, headers, cursor=before)["items"] == changes
+    receipt = f"{route}/{key}/result"
+    assert mobile_client.get(receipt, headers=headers).json()["data"] == result
+    assert mobile_client.get(receipt, headers=other).status_code == 404
+    assert mobile_client.get(receipt).status_code == 401
+    changed = {"items": [{**items[0], "action": "REJECT"}, items[1]]}
+    conflict = mobile_client.post(route, headers=request_headers, json=changed)
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert "mobile_image_batch_review_v1" in mobile_client.get("/mobile/system/health").json()["data"]["capabilities"]
+
+
+@pytest.mark.parametrize("problem", ["revision", "reviewed", "missing", "duplicate", "empty", "oversize"])
+def test_batch_review_rejects_entire_invalid_page(mobile_client, session_factory, make_mobile_image, problem):
+    images = make_mobile_image(2)
+    headers, _ = auth(mobile_client, session_factory)
+    items = _batch_items(mobile_client, headers, images)
+    if problem == "revision":
+        items[1]["expected_revision"] = "stale"
+    elif problem == "reviewed":
+        with session_factory() as session:
+            session.get(Image, images[1].id).status = "KEEP"
+            session.commit()
+    elif problem == "missing":
+        items[1]["image_id"] = "unknown-image"
+    elif problem == "duplicate":
+        items[1] = dict(items[0])
+    elif problem == "empty":
+        items = []
+    else:
+        items = items * 6
+    with session_factory() as session:
+        events_before = session.scalar(select(func.count()).select_from(MobileImageEvent))
+    response = mobile_client.post("/mobile/images/batch-review", headers={**headers, "Idempotency-Key": "invalid-page"}, json={"items": items})
+    assert response.status_code in (404, 409, 422), response.text
+    with session_factory() as session:
+        assert session.get(Image, images[0].id).status == "NEW"
+        assert session.scalar(select(func.count()).select_from(MobileImageEvent)) == events_before
+        assert session.scalar(select(func.count()).select_from(MobileMutationReceipt)) == 0
+
+
+def test_batch_review_event_failure_rolls_back_all(mobile_client, session_factory, make_mobile_image, monkeypatch):
+    images = make_mobile_image(2)
+    headers, _ = auth(mobile_client, session_factory)
+    items = _batch_items(mobile_client, headers, images)
+    original = image_event_service.record_review_change
+    calls = 0
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("controlled event failure")
+        return original(*args, **kwargs)
+    monkeypatch.setattr(image_event_service, "record_review_change", fail_second)
+    with session_factory() as session:
+        before = session.scalar(select(func.count()).select_from(MobileImageEvent))
+    try:
+        response = mobile_client.post("/mobile/images/batch-review", headers={**headers, "Idempotency-Key": "rollback"}, json={"items": items})
+        assert response.status_code == 500
+    except RuntimeError as error:
+        assert str(error) == "controlled event failure"
+    with session_factory() as session:
+        assert all(session.get(Image, image.id).status == "NEW" for image in images)
+        assert session.scalar(select(func.count()).select_from(MobileImageEvent)) == before
+        assert session.scalar(select(func.count()).select_from(MobileMutationReceipt)) == 0
+
+
 def test_feed_requires_pairing(mobile_client):
     assert mobile_client.get("/mobile/images/feed").status_code == 401
 
@@ -189,6 +286,7 @@ def test_decision_favorite_only_preserves_status_and_conflict(
     image = make_mobile_image(1)[0]
     headers, _ = auth(mobile_client, session_factory)
     data = details(mobile_client, headers, image.id)
+    assert data["status"] == "NEW"
     keep = decide(mobile_client, headers, image.id, {
         "action": "KEEP", "expected_updated_at": data["updated_at"],
         "client_request_id": "decision-1",
@@ -196,6 +294,7 @@ def test_decision_favorite_only_preserves_status_and_conflict(
     assert keep.status_code == 200
     result = keep.json()["data"]
     assert result["status"] == "KEEP" and result["revision"].isdecimal()
+    assert details(mobile_client, headers, image.id)["status"] == "KEEP"
 
     favorite = decide(mobile_client, headers, image.id, {
         "favorite": True, "expected_updated_at": result["updated_at"],

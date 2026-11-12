@@ -106,10 +106,26 @@ def _prompt_link_dto(session: Session, image: Image, job: Job | None = None) -> 
     return {"prompt_id": prompt_id, "prompt_version_id": version_id, "link_state": link_state}
 
 
-def image_summary(session: Session, image: Image, *, revision: int) -> dict[str, Any]:
+def image_categories(session: Session, image_ids: list[str]) -> dict[str, list[str]]:
+    """复用桌面分类口径，每页最多两次分类查询，允许分类重叠。"""
+    result: dict[str, list[str]] = {image_id: [] for image_id in image_ids}
+    if not result:
+        return result
+    for category in ("anime", "imported"):
+        query = image_service._apply_image_filters(
+            select(Image.id).where(Image.id.in_(result)), category=category,
+        )
+        for image_id in session.scalars(query):
+            result[image_id].append(category)
+    return result
+
+
+def image_summary(session: Session, image: Image, *, revision: int,
+                  categories: list[str] | None = None) -> dict[str, Any]:
     data = image_review_session_service._image_summary(image)
     data["revision"] = str(revision)
     data["prompt"] = _prompt_link_dto(session, image)
+    data["categories"] = categories if categories is not None else image_categories(session, [image.id])[image.id]
     return data
 
 
@@ -128,6 +144,7 @@ def feed(session: Session, *, cursor: str | None, limit: int) -> dict[str, Any]:
     ))
     has_more = len(rows) > limit
     selected = rows[:limit]
+    categories = image_categories(session, [event.image_id for event in selected if event.image_id is not None])
     items = []
     for event in selected:
         if event.event_type == image_event_service.EVENT_IMAGE_REMOVED:
@@ -137,7 +154,7 @@ def feed(session: Session, *, cursor: str | None, limit: int) -> dict[str, Any]:
         if image is None:
             items.append({"image_id": event.image_id, "revision": str(event.seq), "event": "REMOVE"})
             continue
-        item = image_summary(session, image, revision=event.seq)
+        item = image_summary(session, image, revision=event.seq, categories=categories[image.id])
         item["event"] = "UPSERT"
         item["event_type"] = event.event_type
         items.append(item)
@@ -158,6 +175,7 @@ def details(session: Session, image: Image) -> dict[str, Any]:
     prompt_id, version_id, link_state = _prompt_link(session, image, job)
     return {
         "image_id": image.id,
+        "status": image.status,
         "created_at": image.created_at,
         "generated_at": metadata.get("generated_at"),
         "width": image.width,

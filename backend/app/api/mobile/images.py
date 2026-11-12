@@ -8,11 +8,12 @@ GET /mobile/images/{image_id}/thumbnail | preview | original
 """
 from __future__ import annotations
 
+import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -48,6 +49,22 @@ class MobileImageReviewRequest(BaseModel):
     favorite: bool | None = None
     expected_revision: str = Field(min_length=1, max_length=64)
     note: str | None = Field(default=None, max_length=500)
+
+
+class MobileBatchReviewItem(BaseModel):
+    image_id: str = Field(min_length=1, max_length=64)
+    action: Literal["KEEP", "REJECT"]
+    expected_revision: str = Field(min_length=1, max_length=64)
+
+
+class MobileBatchReviewRequest(BaseModel):
+    items: list[MobileBatchReviewItem] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def unique_images(self):
+        if len({item.image_id for item in self.items}) != len(self.items):
+            raise ValueError("同一页不能重复提交同一图片")
+        return self
 
 
 def _mobile_image_detail(session: Session, image) -> dict:
@@ -136,6 +153,56 @@ def images_feed(
     return mobile_v2_service.feed(session, cursor=cursor, limit=limit)
 
 
+@router.post("/batch-review", summary="整页待审核图片混合保留/淘汰（原子幂等）")
+def batch_review(
+    body: MobileBatchReviewRequest,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+    session: Session = Depends(get_session),
+    device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    payload = body.model_dump()
+
+    def apply_page() -> dict:
+        # 整页先检查，再执行；写锁覆盖设备/回执/版本检查及所有状态与事件。
+        images = []
+        for item in body.items:
+            image = image_service.get_image(session, item.image_id)
+            if image.status != "NEW" or image_event_service.image_revision(session, image) != item.expected_revision:
+                raise MobileReviewConflict("本页图片已变更，请刷新后重新确认")
+            images.append(image)
+        results = []
+        for item, image in zip(body.items, images, strict=True):
+            image_service.apply_review_fields(image, status=item.action)
+            image_event_service.record_review_change(
+                session, image, review_changed=True, favorite_changed=False,
+            )
+            results.append({"image_id": image.id, "status": image.status,
+                            "revision": image_event_service.image_revision(session, image)})
+        return {"items": results,
+                "kept_count": sum(item.action == "KEEP" for item in body.items),
+                "rejected_count": sum(item.action == "REJECT" for item in body.items)}
+
+    return mobile_mutation_service.atomic_write(
+        session, device_id=device.id, operation=mobile_mutation_service.OP_IMAGE_BATCH_REVIEW,
+        idempotency_key=idempotency_key, payload=payload, action=apply_page,
+    )
+
+
+@router.get("/batch-review/{request_id}/result", summary="本设备整页审核回执")
+def batch_review_result(
+    request_id: str,
+    session: Session = Depends(get_session),
+    device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    receipt = mobile_mutation_service.find_any_receipt(
+        session, device_id=device.id, operation=mobile_mutation_service.OP_IMAGE_BATCH_REVIEW,
+        idempotency_key=request_id,
+    )
+    if receipt is None:
+        raise NotFoundError("该批次回执不存在或不可访问", code="BATCH_REVIEW_RECEIPT_NOT_FOUND")
+    return json.loads(receipt.response_json)
+
+
 @router.get("/gallery", summary="手机图库：按日期排序分页（与增量feed分离）")
 def image_gallery(
     sort: Literal['created_desc', 'created_asc'] = 'created_desc',
@@ -145,12 +212,20 @@ def image_gallery(
     scope_cursor: str | None = None,
     anchor_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    prompt_id: str | None = Query(default=None, min_length=1, max_length=64),
+    version_id: str | None = Query(default=None, min_length=1, max_length=64),
+    status: Literal['NEW', 'KEEP', 'REJECT', 'ARCHIVED', 'FAVORITE', 'NOT_REJECTED'] | None = None,
+    category: Literal['anime', 'imported'] | None = None,
+    favorite: bool | None = None,
+    search: str | None = Query(default=None, max_length=200),
+    tag: str | None = Query(default=None, max_length=100),
     session: Session = Depends(get_session),
     _device: MobileReviewDevice = Depends(get_current_device),
 ) -> dict:
     return mobile_gallery_service.gallery(
         session, sort=sort, from_utc=from_utc, before_utc=before_utc,
         page_cursor=page_cursor, scope_cursor=scope_cursor, anchor_id=anchor_id, limit=limit,
+        prompt_id=prompt_id, version_id=version_id, status=status, category=category, favorite=favorite, search=search, tag=tag,
     )
 
 
