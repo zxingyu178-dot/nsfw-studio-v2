@@ -220,3 +220,13 @@ fixture：`fixtures/health_v2.json`。
   建立 `mobile_image_seen`。幂等可重试，不删除设备/图片/Job/Prompt/评分。
 - 唯一事件机制 = 业务服务显式写入；不允许服务写入与数据库触发器重复记录。
 - 事件默认永久保留；若运维裁剪，早于最小水位的游标返回 410。
+
+## 可选能力 mobile_generation_progress_v1
+
+配对设备通过 `GET /mobile/generation/progress` 读取当前生图进度。成功响应沿用 Bridge 信封，`data` 只有 `current_image`、`images_in_segment`、`remaining_segments` 三个字段。示例为 `{"current_image":3,"images_in_segment":6,"remaining_segments":20}`。响应使用 `Cache-Control: no-store`。
+
+- 只统计生成型 Job。运行、等待和暂停的每个段计一次；失败、取消和中断历史不计入。整段生成完成后剩余数减一。
+- 以执行中的 StageItem 定位逻辑 JobItem，图片序号取逻辑槽位加一，总数为该 Job 的请求图片数。阶段切换中无执行槽位，或当前只在运行纯处理任务时，两个图片字段为 null。
+- 序号、总数和剩余段数用同一条只读查询获取。设备未配对或已撤销时拒绝访问。桌面队列的任务详情和控制接口仍仅限桌面端。
+
+接入顺序为先验证缺路由的真配对测试，再补服务查询、路由与健康能力。用临时 SQLite 验证段内推进、跨段、分阶段间隙、暂停和空队列，再跑完整后端测试。无需迁移、改动队列状态机或重启服务。
