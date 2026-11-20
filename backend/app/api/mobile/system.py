@@ -35,6 +35,7 @@ CAPABILITIES = [
     "mobile_image_decision_v2",
     "mobile_prompt_review_v2",
     "mobile_prompt_evaluation_v2",
+    "mobile_generation_progress_v1",
 ]
 
 

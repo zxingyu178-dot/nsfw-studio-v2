@@ -29,6 +29,88 @@
         }
       }
     },
+    "/mobile/generation/progress": {
+      "get": {
+        "tags": [
+          "mobile-generation"
+        ],
+        "summary": "当前生图进度（已配对设备）",
+        "operationId": "generation_progress_mobile_generation_progress_get",
+        "security": [
+          {
+            "PairedDeviceBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "同一队列快照中的生图进度。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "data",
+                    "error",
+                    "request_id"
+                  ],
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "current_image",
+                        "images_in_segment",
+                        "remaining_segments"
+                      ],
+                      "properties": {
+                        "current_image": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "images_in_segment": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "remaining_segments": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "error": {
+                      "type": "null"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "需要有效的配对设备 Bearer。"
+          }
+        }
+      }
+    },
     "/mobile/pairing/status": {
       "get": {
         "tags": [
@@ -1235,6 +1317,12 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "PairedDeviceBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
     "schemas": {
       "CreateSessionRequest": {
         "properties": {
