@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiRequestError, promptApi } from '../../api/client'
 import { ComposePreview } from '../../components/ComposePreview'
@@ -19,6 +19,7 @@ import {
 import { formatDateTime } from '../../utils/format'
 import { useInfiniteList } from './useInfiniteList'
 import {
+  PROMPT_EVALUATION_DIMENSIONS,
   STRUCTURED_FIELDS,
   PROMPT_STATUS_LABEL,
   emptyStructured,
@@ -26,6 +27,7 @@ import {
   imagePreviewUrl,
   imageThumbUrl,
   type PromptDTO,
+  type PromptEvaluationDimension,
   type PromptImageDTO,
   type PromptSort,
   type PromptStatus,
@@ -41,9 +43,26 @@ import {
   readPromptFilterPrefs,
   writePromptFilterPrefs,
   type PromptFilterPrefs,
+  type PromptScoreFloor,
 } from './promptFilterPrefs'
 
-const PROMPT_FILTER_PARAM_NAMES = ['q', 'sort', 'status', 'scored'] as const
+const PROMPT_FILTER_PARAM_NAMES = [
+  'q', 'sort', 'status', 'scored', 'min_score', 'dimension', 'min_dimension',
+] as const
+
+type PromptFilterParamName = (typeof PROMPT_FILTER_PARAM_NAMES)[number]
+
+/** URL 里的评分维度参数只接受 7 个白名单值，其它一律当“全部”。 */
+function parseDimension(value: string | null): PromptEvaluationDimension | '' {
+  return PROMPT_EVALUATION_DIMENSIONS.some((dimension) => dimension.key === value)
+    ? (value as PromptEvaluationDimension)
+    : ''
+}
+
+/** 评分下限只认 3/4/5；非法值当“不限”。 */
+function parseScoreFloor(value: string | null): PromptScoreFloor {
+  return value === '3' || value === '4' || value === '5' ? value : ''
+}
 
 function prefsToSearchParams(prefs: PromptFilterPrefs, current: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(current)
@@ -52,6 +71,9 @@ function prefsToSearchParams(prefs: PromptFilterPrefs, current: URLSearchParams)
   if (prefs.sort !== 'updated_desc') next.set('sort', prefs.sort)
   if (prefs.status !== '') next.set('status', prefs.status)
   if (prefs.scored !== '') next.set('scored', prefs.scored)
+  if ((prefs.minScore ?? '') !== '') next.set('min_score', prefs.minScore as string)
+  if ((prefs.dimension ?? '') !== '') next.set('dimension', prefs.dimension as string)
+  if ((prefs.minDimension ?? '') !== '') next.set('min_dimension', prefs.minDimension as string)
   return next
 }
 
@@ -59,6 +81,9 @@ function searchParamsToPrefs(params: URLSearchParams): PromptFilterPrefs {
   const sortParam = params.get('sort')
   const statusParam = params.get('status')
   const scoredParam = params.get('scored')
+  const minScore = parseScoreFloor(params.get('min_score'))
+  const dimension = parseDimension(params.get('dimension'))
+  const minDimension = parseScoreFloor(params.get('min_dimension'))
   return {
     q: params.get('q') ?? '',
     sort: sortParam === 'score_desc' || sortParam === 'score_asc' ? sortParam : 'updated_desc',
@@ -67,6 +92,10 @@ function searchParamsToPrefs(params: URLSearchParams): PromptFilterPrefs {
         ? statusParam
         : '',
     scored: scoredParam === 'true' || scoredParam === 'false' ? scoredParam : '',
+    // 未设置时省略字段，保持旧偏好文件形状与体积。
+    ...(minScore === '' ? {} : { minScore }),
+    ...(dimension === '' ? {} : { dimension }),
+    ...(minDimension === '' ? {} : { minDimension }),
   }
 }
 
@@ -96,6 +125,14 @@ export function PromptTab() {
       : ''
   const scoredParam = useInitialPrefs ? initialFilterPrefs.scored : searchParams.get('scored')
   const scored = scoredParam === 'true' ? true : scoredParam === 'false' ? false : undefined
+  const minScoreParam = useInitialPrefs ? (initialFilterPrefs.minScore ?? '') : searchParams.get('min_score')
+  const minScore = parseScoreFloor(minScoreParam)
+  const dimensionParam = useInitialPrefs ? (initialFilterPrefs.dimension ?? '') : searchParams.get('dimension')
+  const dimension = parseDimension(dimensionParam)
+  const minDimensionParam = useInitialPrefs
+    ? (initialFilterPrefs.minDimension ?? '')
+    : searchParams.get('min_dimension')
+  const minDimension = parseScoreFloor(minDimensionParam)
 
   useEffect(() => {
     if (!useInitialPrefs) return
@@ -107,7 +144,7 @@ export function PromptTab() {
     const next = new URLSearchParams(searchParams)
     let changed = false
 
-    function remove(name: 'q' | 'sort' | 'status' | 'scored'): void {
+    function remove(name: PromptFilterParamName): void {
       if (!next.has(name)) return
       next.delete(name)
       changed = true
@@ -117,20 +154,48 @@ export function PromptTab() {
     if (sortParam !== null && sortParam !== 'score_desc' && sortParam !== 'score_asc') remove('sort')
     if (statusParam !== null && status === '') remove('status')
     if (scoredParam !== null && scored === undefined) remove('scored')
+    if (minScoreParam !== null && minScore === '') remove('min_score')
+    if (dimensionParam !== null && dimension === '') remove('dimension')
+    if (minDimensionParam !== null && minDimension === '') remove('min_dimension')
+    if (dimension === '') {
+      // 维度清空后，孤立的维度最低分不再有意义。
+      if (next.has('dimension')) remove('dimension')
+      if (next.has('min_dimension')) remove('min_dimension')
+    } else if (!next.has('min_dimension')) {
+      next.set('min_dimension', '3')
+      changed = true
+    }
 
     if (changed) setSearchParams(next, { replace: true })
-  }, [scored, scoredParam, search, searchParams, setSearchParams, sortParam, status, statusParam])
+  }, [
+    scored, scoredParam, search, searchParams, setSearchParams, sortParam, status, statusParam,
+    minScore, minScoreParam, dimension, dimensionParam, minDimension, minDimensionParam,
+  ])
 
   // 防抖回调可能晚于其它筛选变更执行，必须读取最新的 URL 参数，避免用旧快照覆盖新条件。
   const searchParamsRef = useRef(searchParams)
   searchParamsRef.current = searchParams
 
-  function updateFilter(name: 'q' | 'sort' | 'status' | 'scored', value: string): void {
+  function updateFilter(name: PromptFilterParamName, value: string): void {
     const next = new URLSearchParams(searchParamsRef.current)
     const normalizedValue = name === 'q' && value.trim() === '' ? '' : value
     const isDefault = normalizedValue === '' || (name === 'sort' && normalizedValue === 'updated_desc')
     if (isDefault) next.delete(name)
     else next.set(name, normalizedValue)
+    setSearchParams(next, { replace: true })
+    writePromptFilterPrefs(searchParamsToPrefs(next))
+  }
+
+  /** 维度与维度最低分成对维护：选维度自动带默认下限，清空维度则一并清掉下限。 */
+  function updateDimensionFilter(value: string): void {
+    const next = new URLSearchParams(searchParamsRef.current)
+    if (value === '') {
+      next.delete('dimension')
+      next.delete('min_dimension')
+    } else {
+      next.set('dimension', value)
+      if (!next.has('min_dimension')) next.set('min_dimension', '3')
+    }
     setSearchParams(next, { replace: true })
     writePromptFilterPrefs(searchParamsToPrefs(next))
   }
@@ -143,7 +208,9 @@ export function PromptTab() {
     setSearchParams(next, { replace: true })
   }
 
-  const hasNonDefaultFilters = search.trim() !== '' || sort !== 'updated_desc' || status !== '' || scored !== undefined
+  const hasNonDefaultFilters =
+    search.trim() !== '' || sort !== 'updated_desc' || status !== '' || scored !== undefined ||
+    minScore !== '' || dimension !== '' || minDimension !== ''
 
   // v0.37：搜索输入本地即时反馈 + 300ms 防抖才写 URL；避免每敲一个字整表重载。
   const [searchInput, setSearchInput] = useState(search)
@@ -172,16 +239,20 @@ export function PromptTab() {
         archived: showArchived ? null : false,
         limit,
         offset,
-        // Phase 0.17.2：卡片下直接展示「这条提示词生成过的图」。
+        // v0.37.5：卡片内直接铺满全部生成图（先取 12 张，其余点「展开全部」按需加载）
         include_images: true,
-        images_limit: 3,
+        images_limit: 12,
         // Phase 0.17.3：附带最近一次评分，卡片上展示评分与状态。
         include_evaluation: true,
         ...(sort === 'updated_desc' ? {} : { sort }),
         ...(status ? { status } : {}),
         ...(scored === undefined ? {} : { scored }),
+        ...(minScore === '' ? {} : { min_score: Number(minScore) }),
+        ...(dimension === ''
+          ? {}
+          : { dimension, min_dimension_score: Number(minDimension || '3') }),
       }),
-    [search, showArchived, sort, status, scored],
+    [search, showArchived, sort, status, scored, minScore, dimension, minDimension],
   )
 
   const {
@@ -203,12 +274,23 @@ export function PromptTab() {
     [updateItem],
   )
 
-  function openInWorkbench(prompt: PromptDTO): void {
+  // v0.37.5：卡片用 memo 渲染；这些回调必须稳定，否则每次列表刷新都会整页重渲染（观感卡顿来源之一）。
+  const openPromptEditor = useCallback((prompt: PromptDTO) => {
+    setDrawer({ open: true, prompt })
+  }, [])
+
+  const closeEditor = useCallback(() => setDrawer({ open: false, prompt: null }), [])
+
+  const showError = useCallback((text: string) => {
+    setActionNotice({ kind: 'error', text })
+  }, [])
+
+  const openInWorkbench = useCallback((prompt: PromptDTO): void => {
     setDrawer({ open: false, prompt: null })
     navigate('/generate', { state: { workbench: promptToSnapshot(prompt) } })
-  }
+  }, [navigate])
 
-  async function archivePrompt(prompt: PromptDTO): Promise<void> {
+  const archivePrompt = useCallback(async (prompt: PromptDTO): Promise<void> => {
     setActionNotice(null)
     try {
       await promptApi.archive(prompt.id)
@@ -220,7 +302,7 @@ export function PromptTab() {
         text: archiveError instanceof ApiRequestError ? archiveError.message : '删除失败',
       })
     }
-  }
+  }, [reload])
 
   return (
     <div>
@@ -267,6 +349,41 @@ export function PromptTab() {
             ]}
             onChange={(event) => updateFilter('scored', event.target.value)}
           />
+          <Select
+            aria-label="综合最低分"
+            value={minScore}
+            options={[
+              { value: '', label: '综合：不限' },
+              { value: '3', label: '综合 ≥ 3 分' },
+              { value: '4', label: '综合 ≥ 4 分' },
+              { value: '5', label: '综合 = 5 分' },
+            ]}
+            onChange={(event) => updateFilter('min_score', event.target.value)}
+          />
+          <Select
+            aria-label="评分维度"
+            value={dimension}
+            options={[
+              { value: '', label: '维度：全部' },
+              ...PROMPT_EVALUATION_DIMENSIONS.map((item) => ({
+                value: item.key,
+                label: `维度：${item.label}`,
+              })),
+            ]}
+            onChange={(event) => updateDimensionFilter(event.target.value)}
+          />
+          {dimension !== '' && (
+            <Select
+              aria-label="维度最低分"
+              value={minDimension || '3'}
+              options={[
+                { value: '3', label: '维度 ≥ 3 分' },
+                { value: '4', label: '维度 ≥ 4 分' },
+                { value: '5', label: '维度 = 5 分' },
+              ]}
+              onChange={(event) => updateFilter('min_dimension', event.target.value)}
+            />
+          )}
           {hasNonDefaultFilters && (
             <Button size="xs" variant="ghost" onClick={resetFilters}>
               重置筛选
@@ -304,11 +421,11 @@ export function PromptTab() {
             <PromptCard
               key={prompt.id}
               prompt={prompt}
-              onOpen={(p) => setDrawer({ open: true, prompt: p })}
+              onOpen={openPromptEditor}
               onUse={openInWorkbench}
               onArchive={archivePrompt}
-              onPatched={(patch) => patchPrompt(prompt.id, patch)}
-              onError={(text) => setActionNotice({ kind: 'error', text })}
+              onPatched={patchPrompt}
+              onError={showError}
             />
           ))}
         </div>
@@ -330,7 +447,7 @@ export function PromptTab() {
       {drawer.open && (
         <PromptEditorDrawer
           prompt={drawer.prompt}
-          onClose={() => setDrawer({ open: false, prompt: null })}
+          onClose={closeEditor}
           onChanged={reload}
           onOpenInWorkbench={openInWorkbench}
         />
@@ -394,10 +511,13 @@ interface PromptCardProps {
   /** 软删除并刷新外层列表。 */
   onArchive: (prompt: PromptDTO) => Promise<void>
   /** 收藏 / 评分等元数据就地更新（不整表重载）。 */
-  onPatched: (patch: Partial<PromptDTO>) => void
+  onPatched: (id: string, patch: Partial<PromptDTO>) => void
   /** 失败时回到页面错误条，不静默吞掉。 */
   onError: (text: string) => void
 }
+
+/** v0.37.5：展开全部生成图的进程内缓存——收起后再展开不重复请求。 */
+const expandedImagesCache = new Map<string, PromptImageDTO[]>()
 
 /**
  * Prompt 整行卡片：
@@ -405,24 +525,70 @@ interface PromptCardProps {
  * 无图不渲染媒体区；点图才打开预览，无图不弹错。
  * 不自动覆盖封面，封面仍在编辑抽屉里显式“设为 Prompt 封面”。
  */
-function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: PromptCardProps) {
+const PromptCard = memo(function PromptCard({
+  prompt, onOpen, onUse, onArchive, onPatched, onError,
+}: PromptCardProps) {
   const [copied, setCopied] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [favBusy, setFavBusy] = useState(false)
   // v0.37：收藏先乐观更新本地，失败再回滚；不再触发整表重载。
   const [favorite, setFavorite] = useState(prompt.favorite)
   useEffect(() => setFavorite(prompt.favorite), [prompt.favorite])
+  // v0.37.6：卡片内直接改名 / 改状态（乐观更新，失败回滚）。
+  const [renaming, setRenaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState(prompt.name)
+  const [status, setStatusLocal] = useState<PromptStatus>(prompt.status ?? 'candidate')
+  const [statusBusy, setStatusBusy] = useState(false)
+  const renameBusyRef = useRef(false)
+  const cancelRenameRef = useRef(false)
+  useEffect(() => setNameDraft(prompt.name), [prompt.name])
+  useEffect(() => setStatusLocal(prompt.status ?? 'candidate'), [prompt.status])
   // Phase 0.17.2：卡片下展示该提示词生成过的图；点击看大图。
   const [galleryImage, setGalleryImage] = useState<PromptImageDTO | null>(null)
   // Phase 0.17.3：人工评分弹窗。
   const [scoringOpen, setScoringOpen] = useState(false)
-  // v0.37 P1-A：全部关联图片抽屉（服务端分页），+N 与“查看全部”都可打开。
-  const [imagesOpen, setImagesOpen] = useState(false)
-  const [imagesTotal, setImagesTotal] = useState<number | null>(null)
+  // v0.37.5：卡片内联加载「全部」生成图。首批 12 张随列表返回；其余按需分页拉取并缓存。
+  const [extraImages, setExtraImages] = useState<PromptImageDTO[]>([])
+  const [expandState, setExpandState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [imagesOpen, setImagesOpen] = useState(false)  // 按类型/状态筛选（保留原抽屉能力）
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   // DB 有 preview_image_id 但 rendition 缺失/损坏时，移除整个媒体区。
   const [previewFailed, setPreviewFailed] = useState(false)
+
+  const baseImages = prompt.images ?? []
+  const visibleImages = extraImages.length > 0 ? [...baseImages, ...extraImages] : baseImages
+  const totalImages = prompt.images_total ?? baseImages.length
+  const hasHiddenImages = totalImages > visibleImages.length
+
+  /** 一次性拉齐该 Prompt 的全部关联图（服务端分页，最多几次请求），并去重合并。 */
+  async function expandAllImages(): Promise<void> {
+    if (expandState === 'loading') return
+    const cached = expandedImagesCache.get(prompt.id)
+    if (cached) {
+      setExtraImages(cached)
+      return
+    }
+    setExpandState('loading')
+    try {
+      const collected: PromptImageDTO[] = []
+      let offset = 0
+      for (;;) {
+        const page = await promptApi.listImages(prompt.id, { limit: 100, offset })
+        collected.push(...page.items)
+        offset += page.items.length
+        if (page.items.length === 0 || collected.length >= page.total) break
+      }
+      const baseIds = new Set(baseImages.map((image) => image.id))
+      const extras = collected.filter((image) => !baseIds.has(image.id))
+      expandedImagesCache.set(prompt.id, extras)
+      setExtraImages(extras)
+      setExpandState('idle')
+    } catch (err) {
+      setExpandState('error')
+      onError(err instanceof ApiRequestError ? err.message : '加载全部生成图失败')
+    }
+  }
 
   // 封面 id 变化（重新设置封面）时重置失败态，允许重试新加载。
   useEffect(() => {
@@ -447,12 +613,12 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
     const next = !favorite
     setFavBusy(true)
     setFavorite(next)
-    onPatched({ favorite: next })
+    onPatched(prompt.id, { favorite: next })
     try {
       await promptApi.updateMeta(prompt.id, { favorite: next })
     } catch (err) {
       setFavorite(!next)
-      onPatched({ favorite: !next })
+      onPatched(prompt.id, { favorite: !next })
       onError(err instanceof ApiRequestError ? err.message : '收藏失败')
     } finally {
       setFavBusy(false)
@@ -470,12 +636,89 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
     }
   }
 
+  /** 卡片内改名：Enter / 失焦保存，Esc 取消；空名视为放弃。 */
+  async function commitRename(): Promise<void> {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false
+      return
+    }
+    if (!renaming || renameBusyRef.current) return
+    const next = nameDraft.trim()
+    if (next === '' || next === prompt.name) {
+      setNameDraft(prompt.name)
+      setRenaming(false)
+      return
+    }
+    renameBusyRef.current = true
+    setRenaming(false)
+    onPatched(prompt.id, { name: next })
+    try {
+      await promptApi.updateMeta(prompt.id, { name: next })
+    } catch (err) {
+      setNameDraft(prompt.name)
+      onPatched(prompt.id, { name: prompt.name })
+      onError(err instanceof ApiRequestError ? err.message : '重命名失败')
+    } finally {
+      renameBusyRef.current = false
+    }
+  }
+
+  /** 卡片内切换状态：乐观更新，失败回滚并回到页面错误条。 */
+  async function handleStatusChange(next: PromptStatus): Promise<void> {
+    if (next === status || statusBusy) return
+    const previous = status
+    setStatusLocal(next)
+    setStatusBusy(true)
+    onPatched(prompt.id, { status: next })
+    try {
+      await promptApi.setStatus(prompt.id, { status: next })
+    } catch (err) {
+      setStatusLocal(previous)
+      onPatched(prompt.id, { status: previous })
+      onError(err instanceof ApiRequestError ? err.message : '更新状态失败')
+    } finally {
+      setStatusBusy(false)
+    }
+  }
+
   return (
     <article className="pp-card">
       <header className="pp-card__head">
         <h3 className="pp-card__title">
           {prompt.favorite && <span title="已收藏">★ </span>}
-          {prompt.name}
+          {renaming ? (
+            <input
+              className="pp-card__title-input"
+              aria-label="重命名 Prompt"
+              autoFocus
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void commitRename()
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelRenameRef.current = true
+                  setNameDraft(prompt.name)
+                  setRenaming(false)
+                }
+              }}
+              onBlur={() => void commitRename()}
+            />
+          ) : (
+            <button
+              type="button"
+              className="pp-card__title-text"
+              title="点击改名"
+              onClick={() => {
+                setNameDraft(prompt.name)
+                setRenaming(true)
+              }}
+            >
+              {prompt.name}
+            </button>
+          )}
           {prompt.archived && <Badge>已归档</Badge>}
         </h3>
         <div className="pp-card__meta">
@@ -483,9 +726,20 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
             <Badge tone="accent">
               {prompt.current_version?.mode === 'full' ? '完整' : '结构化'}
             </Badge>
-            <span className={`pp-card__status pp-card__status--${prompt.status ?? 'candidate'}`}>
-              {PROMPT_STATUS_LABEL[prompt.status ?? 'candidate']}
-            </span>
+            <select
+              className={`pp-card__status pp-card__status--${status} pp-card__status-select`}
+              aria-label="提示词状态"
+              title="直接切换状态"
+              value={status}
+              disabled={statusBusy}
+              onChange={(event) => void handleStatusChange(event.target.value as PromptStatus)}
+            >
+              {(['keep', 'candidate', 'eliminated'] as PromptStatus[]).map((value) => (
+                <option key={value} value={value}>
+                  {PROMPT_STATUS_LABEL[value]}
+                </option>
+              ))}
+            </select>
           </span>
           {prompt.latest_evaluation && (
             <div
@@ -524,12 +778,12 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
         </button>
       )}
 
-      {prompt.images && prompt.images.length > 0 && (
+      {visibleImages.length > 0 && (
         <div
           className="pp-card__gallery"
-          aria-label={`该提示词生成过的图片，共 ${prompt.images_total ?? prompt.images.length} 张`}
+          aria-label={`该提示词生成过的图片，共 ${totalImages} 张`}
         >
-          {prompt.images.map((image) => (
+          {visibleImages.map((image) => (
             <button
               key={image.id}
               type="button"
@@ -541,15 +795,30 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
               <img src={image.thumbnail_url} loading="lazy" decoding="async" alt="" />
             </button>
           ))}
-          {(prompt.images_total ?? 0) > prompt.images.length && (
+        </div>
+      )}
+
+      {(visibleImages.length > 0 || expandState === 'error') && (
+        <div className="pp-card__gallery-tools">
+          {hasHiddenImages && (
             <button
               type="button"
-              className="pp-card__gallery-more"
-              onClick={() => setImagesOpen(true)}
-              title="查看该提示词的全部关联图片"
-              aria-label={`查看全部 ${prompt.images_total} 张关联图片`}
+              className="pp-card__gallery-expand"
+              disabled={expandState === 'loading'}
+              onClick={() => void expandAllImages()}
             >
-              +{(imagesTotal ?? prompt.images_total ?? 0) - prompt.images.length}
+              {expandState === 'loading' ? '加载中…' : `展开全部 ${totalImages} 张`}
+            </button>
+          )}
+          {expandState === 'error' && <span className="muted">加载失败，可重试</span>}
+          {extraImages.length > 0 && (
+            <button type="button" className="pp-card__gallery-expand" onClick={() => setExtraImages([])}>
+              收起
+            </button>
+          )}
+          {totalImages > 0 && (
+            <button type="button" className="pp-card__gallery-expand" onClick={() => setImagesOpen(true)}>
+              按类型/状态筛选
             </button>
           )}
         </div>
@@ -559,10 +828,7 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
         <PromptImagesDrawer
           promptId={prompt.id}
           promptName={prompt.name}
-          onClose={(total) => {
-            if (total !== undefined) setImagesTotal(total)
-            setImagesOpen(false)
-          }}
+          onClose={() => setImagesOpen(false)}
         />
       )}
 
@@ -635,18 +901,30 @@ function PromptCard({ prompt, onOpen, onUse, onArchive, onPatched, onError }: Pr
         <PromptScoringDialog
           prompt={prompt}
           onClose={() => setScoringOpen(false)}
-          onSaved={(patch) => onPatched(patch)}
+          onSaved={(patch) => onPatched(prompt.id, patch)}
         />
       )}
     </article>
   )
-}
+})
 
 interface EditorDrawerProps {
   prompt: PromptDTO | null
   onClose: () => void
   onChanged: () => void
   onOpenInWorkbench: (prompt: PromptDTO) => void
+}
+
+/** 编辑器“已保存基线”：用于判断是否有未保存修改（Ctrl+S / 关闭确认）。 */
+function editorBaseline(prompt: PromptDTO | null) {
+  const version = prompt?.current_version
+  return {
+    name: prompt?.name ?? '',
+    mode: (version?.mode ?? 'structured') as PromptMode,
+    structured: version?.structured ?? emptyStructured(),
+    fullPrompt: version?.mode === 'full' ? version.positive_prompt : '',
+    negative: version?.negative_prompt ?? '',
+  }
 }
 
 function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: EditorDrawerProps) {
@@ -668,6 +946,16 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
   // v0.15.1：小封面 rendition 加载失败时回退“无封面”，不显示 broken-image。
   const [coverFailed, setCoverFailed] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // v0.37.5：未保存修改保护 + Ctrl+S
+  const [baseline, setBaseline] = useState(() => editorBaseline(prompt))
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+
+  const dirty =
+    name !== baseline.name ||
+    mode !== baseline.mode ||
+    fullPrompt !== baseline.fullPrompt ||
+    negative !== baseline.negative ||
+    STRUCTURED_FIELDS.some(({ key }) => structured[key] !== baseline.structured[key])
 
   useEffect(() => {
     setName(prompt?.name ?? '')
@@ -680,6 +968,8 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
     setCoverImageId(prompt?.preview_image_id ?? null)
     setCoverFailed(false)
     setPickerOpen(false)
+    setBaseline(editorBaseline(prompt))
+    setCloseConfirmOpen(false)
     if (prompt) {
       promptApi
         .listVersions(prompt.id)
@@ -710,9 +1000,11 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
         setName(updated.name)
         setCoverImageId(updated.preview_image_id)
         setCoverFailed(false)
+        setBaseline(editorBaseline(updated))
       } else {
         // 新建 Prompt：刷新外层列表，使新卡片立即出现（否则需手动刷新页面）
         onChanged()
+        setBaseline({ name, mode, structured, fullPrompt, negative })
       }
       setMessage({ kind: 'ok', text: okText })
     } catch (error) {
@@ -755,22 +1047,65 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
     await run(() => promptApi.setPreviewImage(prompt!.id, imageId), '封面已设置')
   }
 
+  /** v0.37.5：有未保存修改时关闭需二次确认，避免误关丢内容。 */
+  function requestClose(): void {
+    if (busy) return
+    if (dirty) setCloseConfirmOpen(true)
+    else onClose()
+  }
+
+  async function handleCopyAll(): Promise<void> {
+    const text = mode === 'full'
+      ? fullPrompt
+      : STRUCTURED_FIELDS.map(({ key, label }) => (structured[key] ? `${label}: ${structured[key]}` : null))
+          .filter(Boolean)
+          .join('\n')
+    const payload = negative.trim() ? `${text}\n\nNegative: ${negative}` : text
+    try {
+      await navigator.clipboard.writeText(payload)
+      setMessage({ kind: 'ok', text: '已复制完整 Prompt' })
+    } catch {
+      setMessage({ kind: 'error', text: '复制失败（剪贴板不可用）' })
+    }
+  }
+
+  // Ctrl/Cmd+S 保存；用 ref 取最新闭包，避免频繁重建监听。
+  const saveRef = useRef<() => void>(() => {})
+  saveRef.current = () => {
+    if (!busy && name.trim()) void handleSave()
+  }
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      saveRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={requestClose}
       width="wide"
       title={isNew ? '新建 Prompt' : `编辑：${prompt!.name}`}
       footer={
-        <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void handleSave()}>
-          {isNew ? '创建' : '保存为新版本'}
-        </Button>
+        <div className="pp-editor__foot">
+          {dirty && <span className="muted">未保存 · Ctrl+S 保存</span>}
+          <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void handleSave()}>
+            {isNew ? '创建' : '保存为新版本'}
+          </Button>
+        </div>
       }
     >
       {!isNew && prompt && (
         <div className="pp-toolbar">
           <Button size="sm" variant="ghost" onClick={() => void run(() => promptApi.updateMeta(prompt.id, { favorite: !prompt.favorite }), '已更新收藏')}>
             {prompt.favorite ? '★ 已收藏' : '☆ 收藏'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void handleCopyAll()}>
+            复制完整 Prompt
           </Button>
           <Button size="sm" variant="ghost" onClick={() => onOpenInWorkbench(prompt)}>
             在生成工作台打开
@@ -922,6 +1257,20 @@ function PromptEditorDrawer({ prompt, onClose, onChanged, onOpenInWorkbench }: E
           </ul>
         </section>
       )}
+
+      <ConfirmModal
+        open={closeConfirmOpen}
+        title="放弃未保存的修改？"
+        message="当前修改尚未保存为版本，关闭后会丢失。"
+        confirmText="放弃修改"
+        cancelText="继续编辑"
+        danger
+        onCancel={() => setCloseConfirmOpen(false)}
+        onConfirm={() => {
+          setCloseConfirmOpen(false)
+          onClose()
+        }}
+      />
     </Drawer>
   )
 }

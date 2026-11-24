@@ -68,7 +68,7 @@ describe('CanvasStage Lightbox / rendition（生产路径）', () => {
   it('主查看用 preview、filmstrip 用 thumbnail+lazy；全屏打开 Lightbox 定位 shown，ESC 关闭', async () => {
     const completed = {
       id: 'job_1', status: 'COMPLETED', completed_count: 2, positive_prompt_snapshot: 'p',
-      module_id: 'basic_generate', stages: [{ completed_count: 2 }],
+      module_id: 'basic_generate', stages: [{ completed_count: 2, total_count: 2, items: [] }],
     }
     mockUseJobStore.mockReturnValue({
       trackedJob: completed,

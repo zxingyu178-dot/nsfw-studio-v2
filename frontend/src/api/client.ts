@@ -351,6 +351,8 @@ export interface ImageListParams {
   job_id?: string | null
   /** 图库分类：anime（动漫）/ imported（导入） */
   category?: string | null
+  /** 0024 创作系列（Job.series）；'__none__' = 未归属系列 */
+  series?: string | null
   /** Phase 0.11 新审核状态筛选 */
   status?: ImageReviewStatus | null
   /** Phase 0.11 排序 */
@@ -383,6 +385,8 @@ export interface ImageStatsParams {
   job_id?: string | null
   /** 图库分类：anime（动漫）/ imported（导入） */
   category?: string | null
+  /** 0024 创作系列（Job.series）；'__none__' = 未归属系列 */
+  series?: string | null
   review_status?: ReviewStatus | null
   favorite?: boolean | null
   source?: string | null
@@ -403,6 +407,10 @@ export const imageApi = {
   /** 返回当前筛选命中的图片 ID，供跨页批量选择。 */
   ids(params: ImageIdsParams = {}): Promise<ImageIdsResponse> {
     return request(`/api/v1/images/ids${buildQuery(params)}`)
+  },
+  /** 0024：创作系列清单（[{series, count}]），供图库「系列」下拉动态填充。 */
+  series(): Promise<{ items: { series: string; count: number }[] }> {
+    return request('/api/v1/images/series')
   },
   /** Phase 0.12：全局图库统计（与 list 同过滤口径；SQL 单行聚合）。
    *  各状态计数与收藏计数都是命中过滤后的全局数字；favorites 为独立 favorite=true 交叉计数。 */
@@ -440,7 +448,7 @@ export const imageApi = {
     return request('/api/v1/images/cleanup-rejected', jsonInit('POST', body))
   },
   /** Phase 0.11.1：按任务聚合分页（替代逐 Job summary 的 N+1；可翻到早期任务） */
-  jobGroups(params: { page?: number; page_size?: number } = {}): Promise<ImagePage<ImageJobGroupDTO>> {
+  jobGroups(params: { page?: number; page_size?: number; series?: string | null } = {}): Promise<ImagePage<ImageJobGroupDTO>> {
     return request(`/api/v1/images/job-groups${buildQuery(params)}`)
   },
   /** Phase 0.11.1：后台回填历史缩略图（单 worker / 低并发，不占 GPU） */

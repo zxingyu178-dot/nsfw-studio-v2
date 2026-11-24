@@ -5,7 +5,7 @@
  *   并提供“查看当前运行任务”入口切换焦点。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const mockUseJobStore = vi.fn()
@@ -83,8 +83,8 @@ describe('CanvasStage RUNNING', () => {
   })
 })
 
-describe('CanvasStage QUEUED（v0.15.1）', () => {
-  it('QUEUED：不显示 ProgressHUD，显示排队横幅与前方任务数，空结果提示等待开始', async () => {
+describe('CanvasStage QUEUED（v0.37.6：进度可见）', () => {
+  it('QUEUED：显示进度 HUD（排队中 0%）与前方任务数，空结果提示等待开始', async () => {
     const running = job({ id: 'jr1', status: 'RUNNING' })
     const q1 = job({ id: 'jq1', status: 'QUEUED' })
     const tracked = job({ id: 'jq2', status: 'QUEUED' })
@@ -95,13 +95,15 @@ describe('CanvasStage QUEUED（v0.15.1）', () => {
     })
     const { container } = renderStage()
 
-    // 绝不显示采样 Step HUD
     await waitFor(() => expect(container.querySelector('.result-stage__placeholder')).toBeTruthy())
-    expect(screen.queryByTestId('progress-hud')).toBeNull()
+    // QUEUED 也显示进度 HUD，但只报排队位次，不伪造采样 Step
+    const hud = await screen.findByTestId('progress-hud')
+    expect(within(hud).getByText('排队中')).toBeInTheDocument()
+    expect(within(hud).queryByText(/Step \d/)).toBeNull()
     // 排队横幅：前方 1 个任务（jq2 在队列 index 1）
     expect(screen.getByText(/已加入队列 · 前方 1 个任务 · 等待开始/)).toBeInTheDocument()
-    // 空结果占位同样表达“排队等待”，而非“正在生成”
-    expect(screen.getByText(/已加入队列，前方 1 个任务，等待开始/)).toBeInTheDocument()
+    // 空结果占位只说明“开始后显示”，不再重复横幅里的排队信息
+    expect(screen.getByText('任务开始后，这里会实时显示画面与进度。')).toBeInTheDocument()
     // 可切换到真正运行中的任务
     const switchBtn = screen.getByRole('button', { name: '查看当前运行任务' })
     fireEvent.click(switchBtn)

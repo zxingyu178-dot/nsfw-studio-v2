@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { imageApi, jobApi } from '../../api/client'
 import GalleryPage from './GalleryPage'
-import type { ImageDTO } from '../../types/workbench'
+import type { CleanupRejectedResult, ImageDTO } from '../../types/workbench'
 
 vi.mock('../../api/client', () => ({
   ApiRequestError: class extends Error {},
@@ -93,6 +93,29 @@ describe('Gallery 淘汰图删除入口', () => {
 
     await screen.findByText('实际可删')
     expect(imageApi.cleanupRejected).toHaveBeenCalledWith({ confirm: false })
+  })
+
+  it('预览返回前先弹出“统计中”对话框（保证点击立刻有反馈）', async () => {
+    let resolvePreview!: (value: CleanupRejectedResult) => void
+    vi.mocked(imageApi.cleanupRejected).mockImplementation(
+      () => new Promise<CleanupRejectedResult>((resolve) => { resolvePreview = resolve }) as never,
+    )
+
+    renderPage()
+    await screen.findByText('共 2 张')
+    fireEvent.click(screen.getByRole('button', { name: '删除淘汰图' }))
+
+    // 预览请求尚未返回，弹窗已打开且确认按钮显示“统计中…”
+    expect(await screen.findByText('清理废片（REJECT）')).toBeInTheDocument()
+    expect(screen.getByText(/正在统计可删除/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '统计中…' })).toBeDisabled()
+
+    resolvePreview({
+      candidate_count: 2, deletable_count: 2, protected_count: 0,
+      total_bytes: 2048, protected_items: [],
+    })
+    expect(await screen.findByText('实际可删')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '确认删除 2 张' })).toBeEnabled()
   })
 
   it('多选删除使用相同 ids 预览和确认，完成后刷新并退出选择', async () => {

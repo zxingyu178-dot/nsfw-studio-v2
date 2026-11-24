@@ -162,15 +162,14 @@ describe('Prompt 全部关联图片抽屉（v0.37 P1-A）', () => {
   })
 })
 
-describe('Prompt 卡片 +N 打开全部图片（v0.37 P1-A）', () => {
+describe('Prompt 卡片内联全部生成图（v0.37.5）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('100 张图只预览 3 张，+97 可点击并展示全部', async () => {
-    const { promptApi } = await import('../../api/client')
+  it('100 张图先预览 3 张，点「展开全部」后全部铺开并可收起', async () => {
     const images = [makeImage('img_1'), makeImage('img_2'), makeImage('img_3')]
-    vi.mocked(promptApi.list).mockResolvedValue({
+    vi.mocked((await import('../../api/client')).promptApi.list).mockResolvedValue({
       items: [makePrompt({ id: 'prm_card', images, images_total: 100 })],
       total: 1,
       limit: 50,
@@ -184,10 +183,35 @@ describe('Prompt 卡片 +N 打开全部图片（v0.37 P1-A）', () => {
       </MemoryRouter>,
     )
 
-    const more = await screen.findByRole('button', { name: '查看全部 100 张关联图片' })
-    expect(more.textContent).toBe('+97')
-    fireEvent.click(more)
+    const expand = await screen.findByRole('button', { name: '展开全部 100 张' })
+    expect(document.querySelectorAll('.pp-card__gallery-thumb').length).toBe(3)
+    fireEvent.click(expand)
+    await waitFor(() => {
+      expect(document.querySelectorAll('.pp-card__gallery-thumb').length).toBe(100)
+    })
+    fireEvent.click(screen.getByRole('button', { name: '收起' }))
+    await waitFor(() => {
+      expect(document.querySelectorAll('.pp-card__gallery-thumb').length).toBe(3)
+    })
+  })
 
+  it('「按类型/状态筛选」仍可打开全部图片抽屉', async () => {
+    const images = [makeImage('img_1'), makeImage('img_2'), makeImage('img_3')]
+    vi.mocked((await import('../../api/client')).promptApi.list).mockResolvedValue({
+      items: [makePrompt({ id: 'prm_card', images, images_total: 100 })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    } as never)
+    await mockImages(100)
+
+    render(
+      <MemoryRouter>
+        <PromptTab />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: '按类型/状态筛选' }))
     expect(await screen.findByText('测试 Prompt · 全部关联图片')).toBeTruthy()
     await screen.findByText('已加载 40 / 共 100 张')
   })

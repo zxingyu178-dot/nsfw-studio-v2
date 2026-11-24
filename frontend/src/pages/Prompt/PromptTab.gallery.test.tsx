@@ -18,6 +18,7 @@ vi.mock('../../api/client', () => ({
     restoreVersion: vi.fn(),
     setPreviewImage: vi.fn(),
     clearPreviewImage: vi.fn(),
+    listImages: vi.fn(),
   },
   imageApi: { list: vi.fn(), get: vi.fn() },
 }))
@@ -89,11 +90,11 @@ describe('Prompt 卡片：提示词 → 生成图（Phase 0.17.2）', () => {
     await waitFor(() => expect(promptApi.list).toHaveBeenCalled())
     expect(vi.mocked(promptApi.list).mock.calls[0][0]).toMatchObject({
       include_images: true,
-      images_limit: 3,
+      images_limit: 12,
     })
   })
 
-  it('卡片下渲染生成图缩略行，并显示还有多少张未展示', async () => {
+  it('卡片下渲染生成图缩略网格，并显示「展开全部」', async () => {
     await mockList([
       makePrompt({
         images: [makeImage('img_1'), makeImage('img_2'), makeImage('img_3')],
@@ -105,8 +106,26 @@ describe('Prompt 卡片：提示词 → 生成图（Phase 0.17.2）', () => {
     const gallery = await screen.findByLabelText('该提示词生成过的图片，共 5 张')
     const thumbs = gallery.querySelectorAll('.pp-card__gallery-thumb')
     expect(thumbs.length).toBe(3)
-    expect(gallery.textContent).toContain('+2')
+    expect(screen.getByRole('button', { name: '展开全部 5 张' })).toBeTruthy()
     expect(gallery.querySelector('img')?.getAttribute('src')).toBe('/api/v1/images/img_1/thumbnail')
+  })
+
+  it('点击「展开全部」拉取并渲染该提示词的全部生成图', async () => {
+    await mockList([
+      makePrompt({ images: [makeImage('img_1')], images_total: 3 }),
+    ])
+    const { promptApi } = await import('../../api/client')
+    vi.mocked(promptApi.listImages).mockResolvedValue({
+      items: [makeImage('img_1'), makeImage('img_2'), makeImage('img_3')],
+      total: 3,
+    } as never)
+    renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开全部 3 张' }))
+    await waitFor(() => {
+      expect(document.querySelectorAll('.pp-card__gallery-thumb').length).toBe(3)
+    })
+    expect(vi.mocked(promptApi.listImages)).toHaveBeenCalledWith('prm_1', { limit: 100, offset: 0 })
   })
 
   it('没有生成图时不渲染缩略行', async () => {

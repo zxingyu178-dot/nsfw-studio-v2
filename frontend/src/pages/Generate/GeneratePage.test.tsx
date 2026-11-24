@@ -24,9 +24,11 @@ function renderPage() {
 describe('GeneratePage 工作台骨架', () => {
   it('挂载 WorkbenchBar 与三栏（Prompt Console / Canvas / 参数）', async () => {
     renderPage()
-    // WorkbenchBar 模式切换
-    expect(screen.getByText('文生图')).toBeInTheDocument()
-    expect(screen.getByText('图片生成')).toBeInTheDocument()
+    // WorkbenchBar 模式切换（默认收纳，点开后才显示图生图选项）
+    const modeTrigger = screen.getByRole('button', { name: /文生图/ })
+    fireEvent.click(modeTrigger)
+    expect(screen.getByRole('menuitemradio', { name: /文生图/ })).toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: /图片生成/ })).toBeInTheDocument()
     // 左栏 Prompt Console、右栏 Inspector 标题；中栏 Canvas 无标题（Canvas First）
     expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()

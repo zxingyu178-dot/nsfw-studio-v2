@@ -7,11 +7,31 @@ import {
   pauseJob,
   pauseQueue,
   reorderQueue,
+  resumeInterruptedJobs,
   resumeJob,
   resumeQueue,
   useJobStore,
 } from '../../../stores/jobStore'
-import { MODULE_LABEL, shortJobId, type JobDTO } from '../../../types/workbench'
+import { MODULE_LABEL, shortJobId, type QueueJobSummaryDTO } from '../../../types/workbench'
+
+/** 队列自动暂停原因 → 中文说明（reason 形如 CODE 或 CODE: detail）。 */
+const PAUSE_REASON_LABEL: Record<string, string> = {
+  USER_REQUEST: '用户手动暂停',
+  JOB_ORPHANED: '任务与执行器失去联系，已自动中断',
+  WORKER_INTERNAL_ERROR: '后台执行器异常',
+  ENGINE_OFFLINE: '无法连接生图引擎',
+  ENGINE_TIMEOUT: '引擎执行超时',
+  ENGINE_STALLED: '引擎采样卡死',
+  DISK_SPACE_CRITICAL: '磁盘空间严重不足',
+}
+
+function describePauseReason(reason: string | null | undefined): string {
+  if (!reason) return '未知原因'
+  const [code, detail] = reason.split(/[:：]\s*/, 2)
+  const label = PAUSE_REASON_LABEL[code]
+  if (!label) return reason
+  return detail ? `${label}：${detail}` : label
+}
 
 /**
  * 队列面板（规范 §五十四）：队列标题 + 全局暂停/继续 + 自动暂停提示 + 固定高度内部滚动列表。
@@ -23,6 +43,7 @@ export function QueuePanel() {
   const [dragJobId, setDragJobId] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearNotice, setClearNotice] = useState<string | null>(null)
+  const [recoverNotice, setRecoverNotice] = useState<string | null>(null)
 
   const queued = store.queue?.queued ?? []
   const paused = store.queue?.paused ?? []
@@ -32,6 +53,11 @@ export function QueuePanel() {
     setConfirmClear(false)
     const n = await clearStaleJobs()
     setClearNotice(n > 0 ? `已清理 ${n} 个陈旧任务` : '没有需要清理的陈旧任务')
+  }
+
+  async function handleResumeInterrupted(): Promise<void> {
+    const n = await resumeInterruptedJobs()
+    setRecoverNotice(n > 0 ? `已恢复 ${n} 个中断任务` : '没有可恢复的中断任务')
   }
 
   function moveBefore(sourceId: string, targetId: string): void {
@@ -82,10 +108,16 @@ export function QueuePanel() {
           {clearNotice}
         </p>
       )}
+      {recoverNotice && (
+        <p className="muted" role="status" onClick={() => setRecoverNotice(null)}>
+          {recoverNotice}
+        </p>
+      )}
       {store.queue?.worker.queue_paused && (
         <div className="ds-notice ds-notice--warning" role="alert">
-          <p>队列已自动暂停：{store.queue.worker.queue_paused_reason ?? '系统性失败'}</p>
+          <p>队列已暂停：{describePauseReason(store.queue.worker.queue_paused_reason)}</p>
           <ActionButton onClick={() => void resumeQueue()}>恢复队列</ActionButton>
+          <ActionButton onClick={() => void handleResumeInterrupted()}>恢复中断任务</ActionButton>
         </div>
       )}
       {queued.length === 0 && paused.length === 0 && <p className="muted">暂无等待任务</p>}
@@ -147,7 +179,7 @@ export function QueuePanel() {
 // ===== 队列行 =====
 
 interface QueueRowProps {
-  job: JobDTO
+  job: QueueJobSummaryDTO
   actions: ReactNode
   draggable?: boolean
   dragging?: boolean

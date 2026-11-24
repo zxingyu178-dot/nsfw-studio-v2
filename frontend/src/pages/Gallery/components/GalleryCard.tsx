@@ -58,6 +58,12 @@ export function GalleryCard({
     >
       <GalleryThumb image={image} fixedBox={layout === 'grid'} />
       <span className="gal-card__ratio">{ratioLabel(image.width, image.height)}</span>
+      {/* 0024：系列定位标签（如「D05 · p420」），看出这张图属于哪一天哪一段 */}
+      {image.series_ref && (
+        <span className="gal-card__series" title={`系列：${image.series ?? '未归属'}`}>
+          {image.series_ref}
+        </span>
+      )}
       <span className="gal-card__corner">
         {selectMode && (
           <span className={`gal-card__check${selected ? ' gal-card__check--on' : ''}`} aria-hidden="true">

@@ -97,6 +97,11 @@ export interface PromptListParams {
   sort?: PromptSort
   status?: PromptStatus
   scored?: boolean
+  /** 最新一次评分的综合最低分（1–5）。 */
+  min_score?: number
+  /** 按最新一次评分的指定维度筛选（需同时给 min_dimension_score）。 */
+  dimension?: PromptEvaluationDimension
+  min_dimension_score?: number
 }
 
 /** Phase 0.17.3：7 个评分维度（与后端白名单一致）。 */
@@ -482,9 +487,11 @@ export interface CleanupRejectedResult {
   protected_count?: number
   total_bytes?: number
   protected_items?: CleanupProtectedItem[]
+  /** v0.37.3：预览返回的可删 id 列表，前端按批删除以展示可视进度 */
+  deletable_ids?: string[]
   deleted_count?: number
   deleted_bytes?: number
-  failed?: { image_id: string; error: string }[]
+  failed?: { image_id: string; error?: string; error_code?: string; message?: string }[]
 }
 
 /** Phase 0.12 全局图库统计（GET /images/stats；过滤口径与 GET /images 完全一致）。
@@ -510,6 +517,9 @@ export interface ImageJobGroupDTO {
   rejected: number
   favorites: number
   preview_image_ids?: string[]
+  /** 0024 系列维度 */
+  series?: string | null
+  series_ref?: string | null
 }
 
 /** Phase 0.11.1 缩略图后台回填进度 */
@@ -617,11 +627,41 @@ export interface JobDTO {
   disk_space?: string | null
 }
 
+/** 队列条目轻量摘要（后端 QueueJobSummary）：queued/paused 不再返回完整 JobDTO。 */
+export interface QueueStageSummaryDTO {
+  stage_index: number
+  module_id: string
+  status: string
+  total_count: number
+  completed_count: number
+}
+
+export interface QueueJobSummaryDTO {
+  id: string
+  status: JobStatus
+  job_kind: 'generate' | 'process'
+  source: string
+  positive_prompt_snapshot: string
+  requested_count: number
+  completed_count: number
+  queue_position: number | null
+  pause_requested: boolean
+  cancel_requested: boolean
+  error_type: string | null
+  error_message: string | null
+  module_id: string | null
+  created_at: string
+  started_at: string | null
+  updated_at: string
+  stages: QueueStageSummaryDTO[]
+}
+
 export interface QueueDTO {
   worker: { running: boolean; queue_paused?: boolean; queue_paused_reason?: string | null; current_job_id?: string | null; adapter?: string }
+  /** running 仍是完整 JobDTO（HUD/进度需要）；queued/paused 为轻量摘要。 */
   running: JobDTO | null
-  queued: JobDTO[]
-  paused: JobDTO[]
+  queued: QueueJobSummaryDTO[]
+  paused: QueueJobSummaryDTO[]
 }
 
 export interface ImageDTO {
@@ -644,6 +684,9 @@ export interface ImageDTO {
   metadata: Record<string, unknown>
   created_at: string
   updated_at: string
+  /** 0024 系列维度（列表接口按 job 回填；其它接口可能缺省） */
+  series?: string | null
+  series_ref?: string | null
 }
 
 export interface ImageVersionsDTO {

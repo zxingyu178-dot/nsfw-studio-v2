@@ -118,6 +118,7 @@ export function SplitGenerateAction({ imageGenAvailable }: { imageGenAvailable: 
           ⚡
         </button>
       </div>
+      <p className="wb4-generate__hint muted">Ctrl + Enter 快速生成 · ⚡ 插队到当前任务之后</p>
     </div>
   )
 }

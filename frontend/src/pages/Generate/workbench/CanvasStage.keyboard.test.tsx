@@ -48,7 +48,7 @@ const images = [img('img_a', '2026-01-01T00:00:00'), img('img_b', '2026-01-01T00
 function completedJob() {
   return {
     id: 'job_1', status: 'COMPLETED', completed_count: 2, positive_prompt_snapshot: 'p',
-    module_id: 'basic_generate', stages: [{ completed_count: 2 }],
+    module_id: 'basic_generate', stages: [{ completed_count: 2, total_count: 2, items: [] }],
   }
 }
 

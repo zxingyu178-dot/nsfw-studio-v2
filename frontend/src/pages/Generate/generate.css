@@ -1333,3 +1333,244 @@
 }
 .prompt-library__fav { color: var(--warn); }
 .prompt-library__excerpt { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.5; }
+/* ===== v0.37.6：生图工作台信息层级微调 ===== */
+.wb4-dock__paused {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  color: var(--text-secondary);
+}
+
+.wb4-runtime-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: none;
+  border-top: 1px solid var(--panel-divider);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb4-runtime-row:hover:not(:disabled) .wb4-switch-row__label { color: var(--accent); }
+.wb4-runtime-row:disabled { cursor: default; opacity: 0.7; }
+.wb4-runtime-row__main { display: flex; flex-direction: column; gap: 2px; }
+
+.wb4-runtime-row__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+.wb4-runtime-row__dot--ready { background: var(--success); }
+.wb4-runtime-row__dot--blocked { background: var(--danger); }
+.wb4-runtime-row__dot--unknown,
+.wb4-runtime-row__dot--busy { background: var(--accent); }
+
+.wb4-slots__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.wb4-generate__hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+/* ===== v0.37.6：NSFW 分级词库抽屉 ===== */
+.nsfw-lib { display: flex; flex-direction: column; gap: var(--space-4); }
+.nsfw-lib__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.nsfw-lib__section-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.nsfw-lib__title { margin: 0; font-size: var(--text-sm); }
+
+.nsfw-lib__models { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.nsfw-lib__model {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.nsfw-lib__model.is-active { border-color: var(--accent); color: var(--text-primary); }
+
+.nsfw-lib__levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.nsfw-lib__level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.nsfw-lib__level-head { display: flex; align-items: baseline; justify-content: space-between; }
+.nsfw-lib__preview {
+  display: -webkit-box;
+  margin: 0;
+  padding: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.nsfw-lib__hint { margin: 0; }
+
+.nsfw-lib__groups { display: flex; flex-direction: column; gap: var(--space-3); }
+.nsfw-lib__group-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: var(--text-xs);
+}
+.nsfw-lib__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nsfw-lib__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.nsfw-lib__chip code { color: var(--text-tertiary); font-size: 10px; }
+.nsfw-lib__chip:hover { border-color: var(--accent); }
+
+/* ===== v0.37.6：生成模式收纳 + 进度/预览强化 ===== */
+.wb4-bar__mode { position: relative; }
+.wb4-bar__mode .wb4-save__menu { right: auto; left: 0; }
+.wb4-save__menu [role='menuitemradio'] {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wb4-save__menu [role='menuitemradio']:hover { background: var(--control-bg); }
+.wb4-save__menu [role='menuitemradio'][aria-checked='true'] { color: var(--accent); }
+
+.wb4-hud__status { font-weight: 600; }
+.wb4-hud__status--completed { color: var(--success); }
+.wb4-hud__status--failed { color: var(--danger); }
+.wb4-hud__status--cancelled { color: var(--text-secondary); }
+
+/* ===== v0.37.7：分级词库提权与分类页签 ===== */
+.wb4-levelbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.wb4-levelbar__label { margin-right: 2px; font-size: var(--text-xs); color: var(--text-tertiary); }
+.wb4-levelbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.wb4-levelbar__btn:hover { border-color: var(--accent); color: var(--accent); }
+.wb4-levelbar__count {
+  padding: 0 4px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--control-bg);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.nsfw-lib__tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.nsfw-lib__tabs--wrap { flex-wrap: wrap; overflow: visible; }
+.nsfw-lib__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nsfw-lib__tab.is-active { border-color: var(--accent); background: var(--control-bg); color: var(--text-primary); }
+.nsfw-lib__tab-count {
+  padding: 0 5px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--control-bg);
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.nsfw-lib__level-desc { margin: 0; }
+
+/* ===== v0.37.8：词库条目按提示词详细度着色 + 悬停简介 ===== */
+.nsfw-lib__chip { position: relative; }
+.nsfw-lib__chip--d2 {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.nsfw-lib__chip--d3 {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.nsfw-lib__chip[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  max-width: 300px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel, var(--surface-2));
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: normal;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.nsfw-lib__chip[data-tip]:hover::after,
+.nsfw-lib__chip[data-tip]:focus-visible::after { opacity: 1; }
+.nsfw-lib__legend { margin-left: auto; color: var(--text-tertiary); font-size: 10px; }

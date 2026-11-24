@@ -91,22 +91,59 @@ export function toSessionImage(raw: ReviewQueueImageDTO, index: number): Session
   }
 }
 
+/** v0.37.4：只有审核范围一致（status + job_id）的 ACTIVE 会话才能恢复。
+ *   否则「按任务审核」留下的会话会被图库的「开始审核」误恢复（反之亦然）。
+ *   mode / exclude_session_id 是建批参数，不参与范围比较。 */
+export function sameReviewScope(
+  sessionFilter: Record<string, unknown> | undefined,
+  wanted: Record<string, unknown>,
+): boolean {
+  const actual = sessionFilter ?? {}
+  return ['status', 'job_id'].every((key) => (actual[key] ?? null) === (wanted[key] ?? null))
+}
+
+/** 断点位置钳制：会话成员可能因清理而减少，避免恢复后落在空页 */
+function clampResumeIndex(session: ReviewSessionSummaryDTO): number {
+  return Math.max(0, Math.min(session.current_index, Math.max(session.total_count - 1, 0)))
+}
+
+export interface ReviewAdapterInit {
+  /** 显式恢复指定会话（用户选「继续上次审核」，跳过 latest 查询） */
+  resume?: ReviewSessionSummaryDTO | null
+  /** 打开即新建批次；abandonSessionId 会先被标为 ABANDONED（保留 items 供追溯） */
+  newBatch?: { abandonSessionId?: string | null; mode?: ReviewBatchMode } | null
+}
+
 export function createReviewSessionAdapter(
   filter: Record<string, unknown> = { status: 'NEW', sort: 'created_desc' },
+  init: ReviewAdapterInit = {},
 ): ReviewSessionAdapter {
-  let sessionId: string | null = null
-  let summary: ReviewSessionSummaryDTO | null = null
+  let sessionId: string | null = init.resume?.id ?? null
+  let summary: ReviewSessionSummaryDTO | null = init.resume ?? null
   /** 最近一次后端会话（可能已完成）；用于“另有 N 张”统计，不用于浏览 */
-  let lastKnown: ReviewSessionSummaryDTO | null = null
-  let resumeIndex = 0
+  let lastKnown: ReviewSessionSummaryDTO | null = init.resume ?? null
+  let resumeIndex = init.resume ? clampResumeIndex(init.resume) : 0
   let initialized = false
-  let pendingMode: ReviewBatchMode | null = null
+  let pendingMode: ReviewBatchMode | null = init.newBatch ? (init.newBatch.mode ?? 'only_new') : null
+  let abandonId: string | null = init.newBatch?.abandonSessionId ?? null
 
   async function ensureSession(): Promise<string | null> {
     if (sessionId) return sessionId
     if (pendingMode !== null) {
       const mode = pendingMode
       pendingMode = null
+      if (abandonId) {
+        const closingId = abandonId
+        abandonId = null
+        try {
+          lastKnown = await reviewSessionApi.abandon(closingId)
+        } catch (err) {
+          // 会话可能已被他处结束（409/404），不阻塞开新批
+          if (!(err instanceof ApiRequestError && (err.status === 409 || err.status === 404))) {
+            throw err
+          }
+        }
+      }
       const created = await reviewSessionApi.createSession(filter, { mode })
       sessionId = created.id
       summary = created
@@ -117,14 +154,14 @@ export function createReviewSessionAdapter(
     try {
       const latest = await reviewSessionApi.latestSession()
       lastKnown = latest
-      if (latest.status === 'ACTIVE') {
+      if (latest.status === 'ACTIVE' && sameReviewScope(latest.filter, filter)) {
         // 继续上次审核：断点续看，不重建
         sessionId = latest.id
         summary = latest
-        resumeIndex = latest.current_index
+        resumeIndex = clampResumeIndex(latest)
         return sessionId
       }
-      // 已完成 / 已放弃 / 空批次：不自动重建，等用户显式选择新批次
+      // 已完成 / 已放弃 / 空批次 / 别的审核范围：不自动重建，等用户显式选择新批次
       return null
     } catch (e) {
       if (e instanceof ApiRequestError && e.status === 404) return null

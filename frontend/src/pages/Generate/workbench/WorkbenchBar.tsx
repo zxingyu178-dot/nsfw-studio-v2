@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { ApiRequestError, promptApi, recipeApi } from '../../../api/client'
-import { Button, Checkbox, Field, Input, Modal, SegmentedControl } from '../../../components/ui'
+import { Button, Checkbox, Field, Input, Modal } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconRestart } from '../../../components/ui/ui3'
 import {
   resetWorkbench,
@@ -28,6 +28,27 @@ export function WorkbenchBar() {
   const [sourceLabel, setSourceLabel] = useState<string | null>(null)
   const [saveMenuOpen, setSaveMenuOpen] = useState(false)
   const saveMenuRef = useRef<HTMLDivElement | null>(null)
+  // v0.37.6：图生图不常用，生成模式收进下拉，默认只显示当前模式。
+  const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const modeMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!modeMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
+        setModeMenuOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModeMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [modeMenuOpen])
 
   useEffect(() => {
     if (!saveMenuOpen) return
@@ -118,15 +139,40 @@ export function WorkbenchBar() {
   return (
     <div className="wb4-bar glass">
       <div className="wb4-bar__left">
-        <SegmentedControl
-          value={state.mode}
-          onChange={(v) => setWorkbenchMode(v as typeof state.mode)}
-          options={[
-            { value: 'text', label: '文生图' },
-            { value: 'image', label: '图片生成' },
-          ]}
-          ariaLabel="生成模式"
-        />
+        <div className="wb4-bar__mode" ref={modeMenuRef}>
+          <button
+            type="button"
+            className="wb4-save__trigger"
+            aria-haspopup="menu"
+            aria-expanded={modeMenuOpen}
+            title="切换生成模式（图生图默认收纳）"
+            onClick={() => setModeMenuOpen((open) => !open)}
+          >
+            {state.mode === 'text' ? '文生图' : '图片生成'} <IconChevronDown size={14} />
+          </button>
+          {modeMenuOpen && (
+            <div className="wb4-save__menu glass--strong" role="menu" aria-label="生成模式">
+              {[
+                { value: 'text', label: '文生图' },
+                { value: 'image', label: '图片生成（图生图 / 参考图）' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={state.mode === option.value}
+                  className="wb4-save__item"
+                  onClick={() => {
+                    setWorkbenchMode(option.value as typeof state.mode)
+                    setModeMenuOpen(false)
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="wb4-bar__context" title={sourceLabel ?? '当前工作台'}>
         {sourceLabel ?? '当前工作台'}
