@@ -95,7 +95,7 @@ describe('分页竞态：切筛选后 stale page 不污染新列表', () => {
     )
 
     // 切到“收藏”Tab → loadFirst 新请求（新 requestSeq）
-    fireEvent.click(screen.getByRole('tab', { name: '收藏' }))
+    fireEvent.click(screen.getByRole('button', { name: '收藏图片' }))
     await waitFor(() => expect(container.querySelectorAll('.gal-card')).toHaveLength(2))
 
     // 旧 page2 此刻才返回 → 不得 append 到收藏列表
@@ -205,9 +205,8 @@ describe('Job Review：取消 page_size=100 上限，分页拉全', () => {
     fireEvent.click(screen.getByRole('button', { name: '按任务查看' }))
     await screen.findByText(/未审核 200/)
 
-    // 点击该 Job 的“开始审核”（工具栏也有一个同名按钮，取分组内的）
-    const reviewButtons = screen.getAllByRole('button', { name: '开始审核' })
-    fireEvent.click(reviewButtons[reviewButtons.length - 1])
+    // 进入该 Job 的审核。
+    fireEvent.click(screen.getByRole('button', { name: '开始审核' }))
     // 进入 Review Session（按 job_id），首屏一页
     await screen.findByText(/1 \/ 250/)
     // 前进到接近末尾 → 预取下一页（证明取消了 page_size=100 上限，分页拉全）

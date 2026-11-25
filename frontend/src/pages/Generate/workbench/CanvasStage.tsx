@@ -196,7 +196,7 @@ export function CanvasStage() {
   }, [images, shown, lightboxOpen])
 
   return (
-    <div className="wb4-stage">
+    <div className="wb4-stage" aria-label="创作画布">
       <div className="wb4-stage__topbar">
         {job ? (
           <>

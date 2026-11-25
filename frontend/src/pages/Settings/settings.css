@@ -137,3 +137,84 @@
 .st-dot--ok {
   color: var(--ok);
 }
+
+/* ===== Studio 设置融合：左侧分组导航 + 右侧真实设置面板 ===== */
+.st-settings {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+  max-width: 1120px;
+}
+
+.st-nav {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.st-nav__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px 10px 15px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-nav__item::before {
+  content: '';
+  position: absolute;
+  inset: 9px auto 9px 4px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+
+.st-nav__item:hover,
+.st-nav__item.is-active {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.st-nav__item.is-active::before {
+  background: var(--accent);
+}
+
+.st-nav__item small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.st-body {
+  min-width: 0;
+}
+
+.st-body .st-panel {
+  margin: 0 0 12px;
+}
+
+@media (max-width: 760px) {
+  .st-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .st-nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .st-nav__item {
+    flex: 0 0 auto;
+    min-width: 132px;
+  }
+}

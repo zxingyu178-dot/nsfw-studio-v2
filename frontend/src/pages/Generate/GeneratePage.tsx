@@ -77,7 +77,7 @@ export default function GeneratePage() {
   const layout = useWorkbenchLayout()
 
   return (
-    <div className={`generate wb4 generate--tab-${activeTab}`} aria-label="生成工作台">
+    <div className={`generate wb4 generate--studio-fusion generate--tab-${activeTab}`} aria-label="生成工作台">
       <WorkbenchBar />
 
       <Tabs
@@ -90,6 +90,7 @@ export default function GeneratePage() {
 
       <div
         className="wb4-columns"
+        aria-label="创作工作区"
         style={{
           '--left-w': layout.leftCollapsed ? `${COLLAPSED_WIDTH}px` : `${layout.leftWidth}px`,
           '--right-w': layout.rightCollapsed ? `${COLLAPSED_WIDTH}px` : `${layout.rightWidth}px`,

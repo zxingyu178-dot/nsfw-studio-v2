@@ -88,10 +88,10 @@ describe('Gallery UX 2.0：两层 Toolbar', () => {
   it('第一层浏览 tabs 与第二层筛选控件同时存在', () => {
     renderPage()
     // 第一层：浏览模式 tabs
-    expect(screen.getByText('全部')).toBeInTheDocument()
-    expect(screen.getByText('待审核')).toBeInTheDocument()
-    expect(screen.getByText('收藏')).toBeInTheDocument()
-    expect(screen.getByText('归档')).toBeInTheDocument()
+    expect(screen.getByText('全部图片')).toBeInTheDocument()
+    expect(screen.getByText('待审图片')).toBeInTheDocument()
+    expect(screen.getByText('收藏图片')).toBeInTheDocument()
+    expect(screen.getByText('已归档')).toBeInTheDocument()
     // 第二层：筛选 selects
     expect(screen.getByLabelText('网格密度')).toBeInTheDocument()
     expect(screen.getByLabelText('排序')).toBeInTheDocument()

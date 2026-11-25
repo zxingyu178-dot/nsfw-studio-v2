@@ -596,6 +596,7 @@ const PromptCard = memo(function PromptCard({
   }, [prompt.preview_image_id])
 
   const hasPreview = Boolean(prompt.preview_image_id) && !previewFailed
+  const hasMedia = hasPreview || visibleImages.length > 0
 
   async function handleCopy(): Promise<void> {
     const text = prompt.current_version?.positive_prompt ?? ''
@@ -682,7 +683,7 @@ const PromptCard = memo(function PromptCard({
   }
 
   return (
-    <article className="pp-card">
+    <article className={`pp-card pp-card--compact${hasMedia ? ' pp-card--with-media' : ''}`}>
       <header className="pp-card__head">
         <h3 className="pp-card__title">
           {prompt.favorite && <span title="已收藏">★ </span>}
@@ -756,70 +757,72 @@ const PromptCard = memo(function PromptCard({
 
       <p className="pp-card__excerpt">{promptSummary(prompt)}</p>
 
-      {/* 封面预览保留在摘要下方；生成图继续使用独立缩略行。 */}
-      {hasPreview && prompt.preview_image_id && (
-        <button
-          type="button"
-          className="pp-card__preview"
-          onClick={() => setPreviewOpen(true)}
-          title="点击预览封面"
-          aria-label={`预览 ${prompt.name} 的封面`}
-        >
-          <img
-            src={imageThumbUrl(prompt.preview_image_id)}
-            loading="lazy"
-            decoding="async"
-            alt=""
-            onError={() => {
-              // 后端清了文件但元数据仍在 / rendition 损坏：移除媒体区。
-              setPreviewFailed(true)
-            }}
-          />
-        </button>
-      )}
-
-      {visibleImages.length > 0 && (
-        <div
-          className="pp-card__gallery"
-          aria-label={`该提示词生成过的图片，共 ${totalImages} 张`}
-        >
-          {visibleImages.map((image) => (
-            <button
-              key={image.id}
-              type="button"
-              className="pp-card__gallery-thumb"
-              onClick={() => setGalleryImage(image)}
-              title={image.module_id ? `由 ${image.module_id} 生成` : '查看大图'}
-              aria-label={`查看生成图 ${image.id}`}
-            >
-              <img src={image.thumbnail_url} loading="lazy" decoding="async" alt="" />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {(visibleImages.length > 0 || expandState === 'error') && (
-        <div className="pp-card__gallery-tools">
-          {hasHiddenImages && (
+      {(hasPreview || visibleImages.length > 0 || expandState === 'error') && (
+        <div className="pp-card__media">
+          {/* 保留日用封面、内联全部图片和筛选能力，仅收敛到紧凑卡片的媒体列。 */}
+          {hasPreview && prompt.preview_image_id && (
             <button
               type="button"
-              className="pp-card__gallery-expand"
-              disabled={expandState === 'loading'}
-              onClick={() => void expandAllImages()}
+              className="pp-card__preview"
+              onClick={() => setPreviewOpen(true)}
+              title="点击预览封面"
+              aria-label={`预览 ${prompt.name} 的封面`}
             >
-              {expandState === 'loading' ? '加载中…' : `展开全部 ${totalImages} 张`}
+              <img
+                src={imageThumbUrl(prompt.preview_image_id)}
+                loading="lazy"
+                decoding="async"
+                alt=""
+                onError={() => {
+                  // 后端清了文件但元数据仍在 / rendition 损坏：移除封面。
+                  setPreviewFailed(true)
+                }}
+              />
             </button>
           )}
-          {expandState === 'error' && <span className="muted">加载失败，可重试</span>}
-          {extraImages.length > 0 && (
-            <button type="button" className="pp-card__gallery-expand" onClick={() => setExtraImages([])}>
-              收起
-            </button>
+          {visibleImages.length > 0 && (
+            <div
+              className="pp-card__gallery"
+              aria-label={`该提示词生成过的图片，共 ${totalImages} 张`}
+            >
+              {visibleImages.map((image) => (
+                <button
+                  key={image.id}
+                  type="button"
+                  className="pp-card__gallery-thumb"
+                  onClick={() => setGalleryImage(image)}
+                  title={image.module_id ? `由 ${image.module_id} 生成` : '查看大图'}
+                  aria-label={`查看生成图 ${image.id}`}
+                >
+                  <img src={image.thumbnail_url} loading="lazy" decoding="async" alt="" />
+                </button>
+              ))}
+            </div>
           )}
-          {totalImages > 0 && (
-            <button type="button" className="pp-card__gallery-expand" onClick={() => setImagesOpen(true)}>
-              按类型/状态筛选
-            </button>
+          {(visibleImages.length > 0 || expandState === 'error') && (
+            <div className="pp-card__gallery-tools">
+              {hasHiddenImages && (
+                <button
+                  type="button"
+                  className="pp-card__gallery-expand"
+                  disabled={expandState === 'loading'}
+                  onClick={() => void expandAllImages()}
+                >
+                  {expandState === 'loading' ? '加载中…' : `展开全部 ${totalImages} 张`}
+                </button>
+              )}
+              {expandState === 'error' && <span className="muted">加载失败，可重试</span>}
+              {extraImages.length > 0 && (
+                <button type="button" className="pp-card__gallery-expand" onClick={() => setExtraImages([])}>
+                  收起
+                </button>
+              )}
+              {totalImages > 0 && (
+                <button type="button" className="pp-card__gallery-expand" onClick={() => setImagesOpen(true)}>
+                  按类型/状态筛选
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

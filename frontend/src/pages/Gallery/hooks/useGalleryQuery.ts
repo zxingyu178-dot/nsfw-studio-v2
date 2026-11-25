@@ -40,9 +40,9 @@ export function useGalleryQuery(
   sourceFilter: GallerySource = '',
   categoryFilter: GalleryCategory = '',
   seriesFilter: GallerySeries = '',
+  tab: TabKey = 'ALL',
+  subStatus: '' | ImageReviewStatus = '',
 ) {
-  const [tab, setTab] = useState<TabKey>('ALL')
-  const [subStatus, setSubStatus] = useState<'' | ImageReviewStatus>('')
   const [sort, setSort] = useState<ImageSort>('created_desc')
 
   // —— 分页状态 ——
@@ -258,8 +258,6 @@ export function useGalleryQuery(
 
   return {
     // 过滤状态
-    tab, setTab,
-    subStatus, setSubStatus,
     sort, setSort,
     // 列表
     items, setItems,

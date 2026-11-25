@@ -147,7 +147,7 @@
   --leading-relaxed: 1.75;
 
   /* ---- App Shell ---- */
-  --topnav-height: 56px;
+  --topnav-height: 48px;
   /* 页内 sticky（Generate modebar 等）：必须低于 --z-nav，禁止盖一级导航 */
   --z-page-sticky: 50;
 }
@@ -386,7 +386,6 @@
   --shadow: none;
   --font-family-base: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --topnav-height: 52px;
 }
 
 [data-theme='light'] {
@@ -408,4 +407,56 @@
   --control-active: #e3e8f2;
   --control-border: #cfd6e4;
   --panel-divider: rgba(22, 24, 29, 0.08);
+}
+
+/* 2026-11-23 用户设计：近黑底、青色主操作、双主题语义不变。 */
+:root {
+  --bg: #0a0b0d;
+  --bg-soft: #12141a;
+  --panel: #12141a;
+  --surface-1: var(--bg);
+  --surface-2: var(--panel);
+  --surface-3: #191c23;
+  --border: #24282f;
+  --fg: #f2f4f7;
+  --fg-muted: #a3acb8;
+  --text-tertiary: #828d9c;
+  --accent: #4cd7c0;
+  --accent-strong: #6be4d0;
+  --accent-bg: rgba(76, 215, 192, 0.12);
+  --on-accent: #05201d;
+  --action-gradient-start: #5be3cb;
+  --action-gradient-end: #35c7b2;
+  --glow-accent: rgba(76, 215, 192, 0.18);
+  --image-stage: #050506;
+  --control-bg: #1c1f24;
+  --control-hover: #24282f;
+  --control-active: #24282f;
+  --control-border: #39414b;
+  --warn: #e3b341;
+  --navigation-width: 72px;
+}
+
+[data-theme='light'] {
+  --bg: #f6f7f9;
+  --bg-soft: #ffffff;
+  --panel: #ffffff;
+  --surface-3: #f1f3f5;
+  --border: #e3e7ec;
+  --fg: #12151a;
+  --fg-muted: #4f5865;
+  --text-tertiary: #5f6b7a;
+  --accent: #08776e;
+  --accent-strong: #08675f;
+  --accent-bg: rgba(14, 158, 146, 0.1);
+  --on-accent: #ffffff;
+  --action-gradient-start: #08776e;
+  --action-gradient-end: #08675f;
+  --glow-accent: rgba(8, 119, 110, 0.18);
+  --image-stage: #e9ecf0;
+  --control-bg: #f1f3f5;
+  --control-hover: #e9ecf0;
+  --control-active: #e4e8ec;
+  --control-border: #c9d1da;
+  --warn: #8e6000;
 }

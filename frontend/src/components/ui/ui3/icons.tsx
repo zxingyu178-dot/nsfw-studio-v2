@@ -263,3 +263,28 @@ export const IconChevronDown = (p: IconProps) => (
     <polyline points="6.5 9.5 12 15 17.5 9.5" />
   </svg>
 )
+
+/* 2026-11-23 导航图标，以用户原型图形为基准。 */
+export const IconHome = (p: IconProps) => (
+  <svg {...base(p)}><path d="M3 10.6 12 3.5l9 7.1V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>
+)
+
+export const IconSpark = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8m-7.2 7.2-2.8 2.8" />
+  </svg>
+)
+
+export const IconQuote = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 7a4 4 0 0 0-4 4.2c0 2 1.3 3.4 3.1 3.4a2.4 2.4 0 0 0 0-4.8h-.8C7.5 8.8 8.4 8 9.5 8z" />
+    <path d="M19 7a4 4 0 0 0-4 4.2c0 2 1.3 3.4 3.1 3.4a2.4 2.4 0 0 0 0-4.8h-.8c.2-1 1.1-1.8 2.2-1.8z" />
+  </svg>
+)
+
+export const IconSettings = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="m10 3-.7 2.5-2 .9-2.4-.8-2 3.4 1.9 1.8v2.4L3 15l2 3.4 2.4-.7 2 .9.7 2.4h4l.7-2.4 2-.9 2.4.7 2-3.4-1.9-1.8v-2.4l1.9-1.8-2-3.4-2.4.8-2-.9L14 3z" />
+  </svg>
+)

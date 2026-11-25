@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { MainLayout } from '../layouts/MainLayout'
 import { PageContainer } from '../components/layout/Page'
+import HomePage from '../pages/Home/HomePage'
 import GeneratePage from '../pages/Generate/GeneratePage'
 import GalleryPage from '../pages/Gallery/GalleryPage'
 import PromptPage from '../pages/Prompt/PromptPage'
@@ -16,7 +17,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<MainLayout />}>
-        <Route path="/" element={<Navigate to="/generate" replace />} />
+        <Route path="/" element={<RoutedPage width="wide"><HomePage /></RoutedPage>} />
         <Route path="/generate" element={<RoutedPage width="wide" fill><GeneratePage /></RoutedPage>} />
         <Route path="/gallery" element={<RoutedPage width="wide"><GalleryPage /></RoutedPage>} />
         <Route path="/prompts" element={<RoutedPage width="wide"><PromptPage /></RoutedPage>} />

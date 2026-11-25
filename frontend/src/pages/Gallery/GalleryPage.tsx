@@ -24,6 +24,7 @@ import { GalleryGroupView } from './components/GalleryGroupView'
 import { GalleryDetailDrawer } from './components/GalleryDetailDrawer'
 import { CleanupRejectedDialog } from './components/CleanupRejectedDialog'
 import { ResumeReviewDialog } from './components/ResumeReviewDialog'
+import { GallerySidebar, type GallerySidebarKey } from './components/GallerySidebar'
 import './gallery.css'
 
 /**
@@ -63,6 +64,7 @@ export default function GalleryPage() {
   const sourceParam = searchParams.get('source')
   const categoryParam = searchParams.get('category')
   const seriesParam = searchParams.get('series')
+  const statusParam = searchParams.get('status')
   const sourceFilter: GallerySource =
     sourceParam === 'comfyui' || sourceParam === 'import' ? sourceParam : ''
   const categoryFilter: GalleryCategory =
@@ -75,6 +77,9 @@ export default function GalleryPage() {
   const [seriesOptions, setSeriesOptions] = useState<{ series: string; count: number }[]>([])
 
   useEffect(() => {
+    // 兼容尚未提供系列清单端点的旧前端 API / 测试桩；系列只是增强筛选，
+    // 缺失时保持空候选，不应阻断图库主体。
+    if (typeof imageApi.series !== 'function') return
     let alive = true
     imageApi.series()
       .then((res) => { if (alive) setSeriesOptions(res.items ?? []) })
@@ -82,7 +87,10 @@ export default function GalleryPage() {
     return () => { alive = false }
   }, [])
 
-  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter, seriesFilter)
+  const tab = statusParam === 'NEW' || statusParam === 'ARCHIVED' || statusParam === 'FAVORITE' ? statusParam : 'ALL'
+  const subStatus = statusParam === 'KEEP' || statusParam === 'REJECT' ? statusParam : ''
+  const activeSidebar: GallerySidebarKey = subStatus || tab
+  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter, seriesFilter, tab, subStatus)
   const selection = useGallerySelection()
   const prefs = useGalleryPrefs()
 
@@ -108,6 +116,7 @@ export default function GalleryPage() {
     total?: number
     statsParams?: ImageStatsParams
   } | null>(null)
+  const autoReviewTriggeredRef = useRef(false)
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
   const [cleanupImageIds, setCleanupImageIds] = useState<string[] | null>(null)
   // v0.37.2：「删除淘汰图」点击后立即开弹窗并显示"统计中"，避免后台统计耗时期间毫无反馈
@@ -165,6 +174,13 @@ export default function GalleryPage() {
     if (series) next.set('series', series)
     else next.delete('series')
     setSearchParams(next)
+  }
+
+  function applyStatusFilter(key: GallerySidebarKey): void {
+    const next = new URLSearchParams(searchParams)
+    if (key === 'ALL') next.delete('status')
+    else next.set('status', key)
+    if (next.toString() !== searchParams.toString()) setSearchParams(next)
   }
 
   function handleUpdated(updated: ImageDTO): void {
@@ -446,6 +462,27 @@ export default function GalleryPage() {
     openReviewSession({})
   }
 
+  // 首页“继续审核”只读深链：打开审核容器后由适配器只读查询 latest；
+  // 没有可恢复批次时显示空/结束态，不自动创建或放弃会话。
+  useEffect(() => {
+    if (searchParams.get('review') !== '1') {
+      autoReviewTriggeredRef.current = false
+      return
+    }
+    if (autoReviewTriggeredRef.current) return
+    autoReviewTriggeredRef.current = true
+    const adapter = createReviewSessionAdapter({ status: 'NEW', sort: 'created_desc' })
+    setReviewSession({
+      title: '图库审核',
+      statsParams: { status: 'NEW' },
+      adapter,
+      loader: { loadPage: (page) => adapter.loadPage(page) },
+    })
+    const next = new URLSearchParams(searchParams)
+    next.delete('review')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   /** Phase 0.11.1：按 Job 打开 Review Mode——取消 page_size=100 上限，分页拉全直到 has_next=false */
   function startReviewJob(jobId: string): void {
     setReviewSession({
@@ -576,13 +613,17 @@ export default function GalleryPage() {
 
   return (
     <>
+      <section className="gal-page" aria-labelledby="gallery-title">
+        <header className="gal-page__header">
+          <h1 id="gallery-title">图库</h1>
+          <Button size="sm" variant="primary" onClick={() => void startReview()}>审核</Button>
+        </header>
+        <div className="gal-workspace">
+          <GallerySidebar active={activeSidebar} total={query.total} onChange={applyStatusFilter} />
+          <main className="gal-workspace__main gal-workspace__canvas">
       <GalleryToolbar
-        tab={query.tab}
-        onTabChange={query.setTab}
         view={view}
         onToggleView={() => setView(view === 'group' ? 'flat' : 'group')}
-        subStatus={query.subStatus}
-        onSubStatusChange={query.setSubStatus}
         source={sourceFilter}
         onSourceChange={applySourceFilter}
         category={categoryFilter}
@@ -600,7 +641,6 @@ export default function GalleryPage() {
         onFitChange={prefs.setFit}
         selectMode={selection.selectMode}
         onToggleSelect={selection.toggleSelectMode}
-        onStartReview={() => void startReview()}
         cleanupBusy={cleanupLoading || cleanupDeleting}
         onOpenCleanup={() => void openCleanup()}
         importProgress={importProgress}
@@ -687,6 +727,9 @@ export default function GalleryPage() {
           sentinelRef={query.sentinelRef}
         />
       )}
+          </main>
+        </div>
+      </section>
 
       {detail && (
         <GalleryDetailDrawer

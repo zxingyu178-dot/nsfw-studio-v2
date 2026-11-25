@@ -78,7 +78,7 @@ beforeEach(() => {
 })
 
 describe('Gallery 淘汰图删除入口', () => {
-  it('工具栏显式“删除淘汰图”按钮打开全局清理预览', async () => {
+  it('工具栏显式“清理废片”按钮打开全局清理预览', async () => {
     vi.mocked(imageApi.cleanupRejected).mockResolvedValue({
       candidate_count: 2,
       deletable_count: 2,
@@ -89,7 +89,7 @@ describe('Gallery 淘汰图删除入口', () => {
 
     renderPage()
     await screen.findByText('共 2 张')
-    fireEvent.click(screen.getByRole('button', { name: '删除淘汰图' }))
+    fireEvent.click(screen.getByRole('button', { name: '清理废片' }))
 
     await screen.findByText('实际可删')
     expect(imageApi.cleanupRejected).toHaveBeenCalledWith({ confirm: false })
@@ -103,7 +103,7 @@ describe('Gallery 淘汰图删除入口', () => {
 
     renderPage()
     await screen.findByText('共 2 张')
-    fireEvent.click(screen.getByRole('button', { name: '删除淘汰图' }))
+    fireEvent.click(screen.getByRole('button', { name: '清理废片' }))
 
     // 预览请求尚未返回，弹窗已打开且确认按钮显示“统计中…”
     expect(await screen.findByText('清理废片（REJECT）')).toBeInTheDocument()

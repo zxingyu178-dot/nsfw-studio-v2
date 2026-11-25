@@ -1574,3 +1574,243 @@
 .nsfw-lib__chip[data-tip]:hover::after,
 .nsfw-lib__chip[data-tip]:focus-visible::after { opacity: 1; }
 .nsfw-lib__legend { margin-left: auto; color: var(--text-tertiary); font-size: 10px; }
+
+/* ===== Studio 原型融合：近黑创作台 + 画布焦点 + 高密度真实队列 =====
+   仅改变 Workbench 的表面与节奏；表单、Job、SSE、队列和响应式契约保持原实现。 */
+.generate--studio-fusion {
+  background: var(--bg);
+}
+
+.generate--studio-fusion .wb4-bar {
+  min-height: 48px;
+  padding: 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.generate--studio-fusion .wb4-bar__left {
+  gap: 14px;
+}
+
+.generate--studio-fusion .wb4-bar__title {
+  padding-right: 14px;
+  border-right: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.generate--studio-fusion .wb4-bar__context {
+  text-align: left;
+}
+
+.generate--studio-fusion .wb4-columns {
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+}
+
+.generate--studio-fusion .wb4-pane--left > .wb-pane,
+.generate--studio-fusion .wb4-pane--right > .wb-pane {
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb-pane__header {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-color: var(--border);
+}
+
+.generate--studio-fusion .wb-pane__title {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.generate--studio-fusion .wb-pane__body {
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.generate--studio-fusion .wb-pane__footer {
+  padding: 10px 12px;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb4-center {
+  padding: 0;
+  background: var(--bg);
+}
+
+.generate--studio-fusion .wb4-stage {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--canvas-stage-bg);
+}
+
+.generate--studio-fusion .wb4-stage__topbar {
+  min-height: 40px;
+  padding: 0 12px;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb4-stage__canvas {
+  margin: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--canvas-stage-bg);
+}
+
+.generate--studio-fusion .wb4-stage__dock {
+  min-height: 68px;
+  padding: 8px 10px;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb4-slot {
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+}
+
+.generate--studio-fusion .wb4-slot--active {
+  border-color: var(--control-border);
+  background: var(--surface-3);
+}
+
+.generate--studio-fusion .wb4-slot__label {
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.generate--studio-fusion .wb4-slot__summary {
+  min-height: 22px;
+}
+
+.generate--studio-fusion .wb4-inspector__group,
+.generate--studio-fusion .wb-param {
+  gap: 7px;
+}
+
+.generate--studio-fusion .ui3-tile {
+  min-height: 46px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.generate--studio-fusion .wb4-generate__main,
+.generate--studio-fusion .wb4-generate__next {
+  height: 40px;
+}
+
+.generate--studio-fusion .wb4-dock {
+  margin: 0 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb4-dock__bar {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.generate--studio-fusion .wb4-dock__body {
+  grid-template-columns: minmax(240px, 0.75fr) minmax(360px, 1.5fr);
+  gap: 0;
+  padding: 0;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.generate--studio-fusion .wb4-dock__current,
+.generate--studio-fusion .wb4-dock__queue {
+  padding: 10px 12px;
+}
+
+.generate--studio-fusion .wb4-dock__current {
+  border-right: 1px solid var(--border);
+}
+
+.generate--studio-fusion .wb-job {
+  border: 0;
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.generate--studio-fusion .wb-queue-item {
+  padding: 7px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.generate--studio-fusion .wb-queue-item__title {
+  font-size: 12px;
+}
+
+.generate--studio-fusion .wb-queue-item__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+@media (max-width: 1199px) {
+  .generate--studio-fusion .wb4-columns {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .generate--studio-fusion .wb4-dock {
+    margin: 0 8px 8px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .generate--studio-fusion .wb4-columns {
+    gap: 0;
+    padding: 8px;
+  }
+
+  .generate--studio-fusion .wb4-center {
+    padding: 0;
+  }
+
+  .generate--studio-fusion .wb4-dock__body {
+    grid-template-columns: 1fr;
+  }
+
+  .generate--studio-fusion .wb4-dock__current {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 719px) {
+  .generate--studio-fusion .wb4-bar {
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  .generate--studio-fusion .wb4-bar__title {
+    display: none;
+  }
+
+  .generate--studio-fusion .wb4-dock {
+    margin: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+}

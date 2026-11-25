@@ -2,7 +2,7 @@
  * Phase 0.13 App Shell / Workspace / Responsive 契约测试
  *
  * 硬约束（后续 agent 不得破坏）：
- * 1. --topnav-height 在 tokens.css 中定义（56px）。
+ * 1. --topnav-height 在 tokens.css 中定义（48px）。
  * 2. z-index 契约：--z-nav > --z-page-sticky（页内浮层永远在一级导航之下）。
  * 3. TopNav 使用 sticky top:0。
  * 4. Workbench 4.0 顶栏（.wb4-bar）非 sticky——工作台根级禁止整页滚动，顶栏为 static + flex-shrink:0。
@@ -30,11 +30,11 @@ function tokenValue(css: string, name: string): string | null {
 }
 
 describe('App Shell 契约', () => {
-  it('tokens.css 定义了 --topnav-height（约 56px）', () => {
+  it('tokens.css 定义了 --topnav-height（约 48px）', () => {
     const tokens = readCss('themes/tokens.css')
     const v = tokenValue(tokens, '--topnav-height')
     expect(v, 'tokens.css 缺少 --topnav-height').toBeTruthy()
-    expect(v).toMatch(/56\s*px/)
+    expect(v).toMatch(/48\s*px/)
   })
 
   it('tokens.css 定义了 --z-page-sticky，且数值低于 --z-nav', () => {

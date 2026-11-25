@@ -111,7 +111,7 @@ describe('Gallery 全选当前筛选与分块批量操作', () => {
     vi.mocked(imageApi.ids).mockResolvedValue({ ids: [], total: 0, truncated: false, limit: 10000 })
     renderPage('/gallery?job=job_1&source=import')
 
-    fireEvent.click(screen.getByRole('tab', { name: '归档' }))
+    fireEvent.click(screen.getByRole('button', { name: '已归档' }))
     await selectCurrentFilter()
 
     await waitFor(() => expect(imageApi.ids).toHaveBeenCalledWith({

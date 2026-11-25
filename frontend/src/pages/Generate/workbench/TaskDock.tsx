@@ -26,7 +26,11 @@ export function TaskDock() {
   const busyAction = store.busyJobId === running?.id ? store.busyJobAction : null
 
   return (
-    <div className={`wb4-dock glass${open ? ' wb4-dock--open' : ''}`} data-testid="task-dock">
+    <div
+      className={`wb4-dock glass${open ? ' wb4-dock--open' : ''}`}
+      data-testid="task-dock"
+      aria-label="任务控制台"
+    >
       {/* 收起态条（常驻 36–40px） */}
       <div className="wb4-dock__bar">
         <button type="button" className="wb4-dock__expand" onClick={() => toggleDock()} aria-expanded={open}>

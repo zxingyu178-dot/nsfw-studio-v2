@@ -949,40 +949,93 @@
   }
 }
 
-/* ===== v0.37.5：卡片内联全部生成图 + 渲染性能 ===== */
+/* ===== Studio 词库融合：紧凑整行卡 + 日用交互 ===== */
 /* 长列表只渲染视口附近的卡片，滚动更稳（content-visibility 不改变布局高度估算）。 */
 .pp-card {
   content-visibility: auto;
   contain-intrinsic-size: auto 380px;
 }
 
-/* 图片区由横向滚动条改为自适应网格：一屏能看全，不再需要左右拖。 */
-.pp-card__gallery,
-.pp-grid--single .pp-card__gallery {
+.pp-grid--single .pp-card--compact {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 6px;
-  align-items: stretch;
-  flex-wrap: initial;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  column-gap: 18px;
+  min-height: 138px;
+  padding: 14px 16px;
   overflow: visible;
-  margin: 10px 0 0;
-  padding: 0 18px;
+  background: var(--surface-2);
 }
 
-.pp-card__gallery-thumb,
-.pp-grid--single .pp-card__gallery-thumb {
-  flex: initial;
+.pp-grid--single .pp-card--compact.pp-card--with-media {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 38%);
+}
+
+.pp-grid--single .pp-card--compact .pp-card__head,
+.pp-grid--single .pp-card--compact .pp-card__excerpt,
+.pp-grid--single .pp-card--compact .pp-card__foot {
+  grid-column: 1;
+  padding: 0;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__head {
+  align-items: flex-start;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__excerpt {
+  margin: 7px 0 10px;
+  -webkit-line-clamp: 2;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__media {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  display: grid;
+  grid-template-columns: auto minmax(104px, 1fr);
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__preview {
+  flex: 0 0 104px;
+  width: 104px;
+  height: 104px;
+  margin: 0;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  grid-auto-rows: 48px;
+  align-content: start;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__gallery-thumb,
+.pp-grid--single .pp-card--compact .pp-card__gallery-more {
   width: 100%;
-  height: auto;
+  height: 48px;
+  min-height: 0;
   aspect-ratio: 1 / 1;
 }
 
-.pp-card__gallery-tools {
+.pp-grid--single .pp-card--compact .pp-card__media:not(:has(.pp-card__preview)) .pp-card__gallery {
+  grid-column: 1 / -1;
+}
+
+.pp-grid--single .pp-card--compact .pp-card__gallery-tools {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 18px 0;
+  padding: 0;
 }
 
 .pp-card__gallery-expand {
@@ -1005,6 +1058,12 @@
   cursor: default;
 }
 
+.pp-grid--single .pp-card--compact .pp-card__foot {
+  margin: 0;
+  border: 0;
+  align-self: end;
+}
+
 .pp-editor__foot {
   display: flex;
   align-items: center;
@@ -1013,7 +1072,7 @@
   width: 100%;
 }
 
-/* v0.37.6：卡片内直接改名 / 切换状态 */
+/* v0.37.6：卡片内直接改名 / 切换状态。 */
 .pp-card__title-text {
   padding: 0;
   border: none;
@@ -1038,6 +1097,11 @@
   font: inherit;
 }
 
+.pp-grid--single .pp-card--compact .pp-card__title-input {
+  max-width: 100%;
+  min-width: 0;
+}
+
 .pp-card__status-select {
   appearance: none;
   background: transparent;
@@ -1046,7 +1110,23 @@
   cursor: pointer;
 }
 
+.pp-grid--single .pp-card--compact .pp-card__status-select {
+  max-width: 100%;
+}
+
 .pp-card__status-select:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+@media (max-width: 860px) {
+  .pp-grid--single .pp-card--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pp-grid--single .pp-card--compact .pp-card__media {
+    grid-column: 1;
+    grid-row: auto;
+    margin: 10px 0;
+  }
 }

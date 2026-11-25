@@ -64,7 +64,7 @@
 .ds-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .ds-btn--primary:hover:not(:disabled) {
   background: var(--accent-strong);
@@ -509,7 +509,7 @@
 }
 .ds-segmented__item--active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 500;
 }
 .ds-segmented__item:disabled {
@@ -996,7 +996,7 @@
 .ds-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: none;
 }
 

@@ -96,6 +96,7 @@ describe('Prompt 可视化卡片（整行布局，封面位于摘要下方）', 
     expect(screen.queryByText('暂未生成')).toBeNull()
     expect(screen.queryByText('无封面')).toBeNull()
     expect(container.querySelector('.pp-card__preview')).toBeNull()
+    expect(container.querySelector('.pp-card--with-media')).toBeNull()
     expect(container.querySelector('.pp-card__preview--empty')).toBeNull()
   })
 

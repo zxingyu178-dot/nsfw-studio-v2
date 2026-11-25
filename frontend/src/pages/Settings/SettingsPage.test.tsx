@@ -60,17 +60,25 @@ function renderPage() {
 
 describe('SettingsPage 设置', () => {
   beforeEach(async () => {
-    const { systemApi, imageApi } = await import('../../api/client')
+    const { systemApi, imageApi, mobileReviewApi } = await import('../../api/client')
     vi.mocked(systemApi.status).mockResolvedValue(makeStatus() as never)
     vi.mocked(imageApi.backfillStatus).mockResolvedValue({ running: false, done: 0, total: 0, failed: 0, kind: null } as never)
+    vi.mocked(mobileReviewApi.runtime).mockResolvedValue({
+      state: 'STOPPED', host: '0.0.0.0', port: 8877, owned: true, pid: null,
+      parent_pid: null, started_at: null, detail: '', log_location: null, health: {},
+    } as never)
   })
 
-  it('渲染外观主题选择与关于面板', () => {
+  it('通过分组导航切换设置面板', async () => {
     renderPage()
-    expect(screen.getByText('外观')).toBeInTheDocument()
-    expect(screen.getByText('关于')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '外观' })).toBeInTheDocument()
     expect(screen.getByLabelText('深色')).toBeInTheDocument()
     expect(screen.getByLabelText('浅色')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '关于' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '关于' }))
+    expect(await screen.findByRole('heading', { name: '关于' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('深色')).toBeNull()
   })
 
   it('点击浅色主题可切换选中', () => {
@@ -80,12 +88,36 @@ describe('SettingsPage 设置', () => {
     expect(light.checked).toBe(true)
   })
 
+  it('切换设置分组后保留尚未过期的手机配对码', async () => {
+    const { mobileReviewApi } = await import('../../api/client')
+    vi.mocked(mobileReviewApi.runtime).mockResolvedValue({
+      state: 'RUNNING', host: '0.0.0.0', port: 8877, owned: true, pid: 1234,
+      parent_pid: null, started_at: null, detail: '', log_location: null, health: {},
+    } as never)
+    vi.mocked(mobileReviewApi.createPairingCode).mockResolvedValue({
+      code: '654321', expires_in_seconds: 600,
+    } as never)
+
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '运行与连接' }))
+    fireEvent.click(await screen.findByRole('button', { name: '生成配对码' }))
+    expect(await screen.findByTestId('pairing-code')).toHaveTextContent('654321')
+
+    fireEvent.click(screen.getByRole('button', { name: '关于' }))
+    expect(screen.getByTestId('pairing-code-box')).not.toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '运行与连接' }))
+    expect(screen.getByTestId('pairing-code')).toBeVisible()
+    expect(screen.getByTestId('pairing-code')).toHaveTextContent('654321')
+  })
+
   it('展示系统状态：引擎/缓存计数/存储/版本与 migration', async () => {
     renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '运行与连接' }))
     // 引擎状态与地址
     expect(await screen.findByText('运行中（Studio 托管）')).toBeInTheDocument()
     expect(screen.getByText(/127\.0\.0\.1:8188/)).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: '维护与存储' }))
     // 图片缓存计数
     expect(screen.getByText(/100 \/ 120 张已生成/)).toBeInTheDocument()
     expect(screen.getByText(/80 \/ 120 张已生成/)).toBeInTheDocument()
@@ -93,6 +125,7 @@ describe('SettingsPage 设置', () => {
     // 存储
     expect(screen.getByText('D:\\NSFWStudio\\DataRoot')).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('button', { name: '关于' }))
     // 关于：按 systemApi 返回值如实展示，不硬编码 v0.12
     expect(screen.getByText('v0.11.0')).toBeInTheDocument()
     expect(screen.getByText('0017')).toBeInTheDocument()
@@ -101,6 +134,7 @@ describe('SettingsPage 设置', () => {
   it('运行中（托管）引擎显示停止/重启按钮', async () => {
     const { engineRuntimeApi } = await import('../../api/client')
     renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '运行与连接' }))
     expect(await screen.findByRole('button', { name: '停止引擎' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重启' })).toBeInTheDocument()
 
@@ -114,7 +148,8 @@ describe('SettingsPage 设置', () => {
     vi.mocked(imageApi.stopBackfill).mockResolvedValue({ running: false, done: 100, total: 100, failed: 0, kind: 'thumbnail' } as never)
 
     renderPage()
-    await screen.findByText('运行中（Studio 托管）')
+    fireEvent.click(screen.getByRole('button', { name: '维护与存储' }))
+    await screen.findByText(/100 \/ 120 张已生成/)
 
     fireEvent.click(screen.getByRole('button', { name: '补齐缩略图' }))
     await waitFor(() => expect(imageApi.startBackfill).toHaveBeenCalledWith({ kind: 'thumbnail' }))

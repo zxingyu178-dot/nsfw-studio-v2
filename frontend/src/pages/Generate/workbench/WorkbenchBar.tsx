@@ -139,6 +139,7 @@ export function WorkbenchBar() {
   return (
     <div className="wb4-bar glass">
       <div className="wb4-bar__left">
+        <span className="wb4-bar__title">创作</span>
         <div className="wb4-bar__mode" ref={modeMenuRef}>
           <button
             type="button"

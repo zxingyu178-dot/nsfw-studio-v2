@@ -786,3 +786,7 @@ CI 首轮 3 个既有用例（Phase5 输入校验 / resume-interrupted 父 Job�
   前端 Gallery 4 files / 16 tests + typecheck/build 通过。
 
 
+
+## 2026-11-24 — img-studio 前端融合
+
+采用新版青色双主题和图标导航，新增真实数据首页，调整创作、图库、词库及设置。全量前端单轮 498 项通过，生产构建通过。隔离浏览器 12 个场景及生图进度合同 4 项通过。日用部署和真机验收未执行。详见[前端融合收口](docs/IMG_STUDIO_FUSION.md)。

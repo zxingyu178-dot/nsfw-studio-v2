@@ -54,11 +54,11 @@ beforeEach(() => {
 describe('GalleryPage 图库', () => {
   it('渲染筛选标签与工具按钮', () => {
     renderPage()
-    expect(screen.getByText('全部')).toBeInTheDocument()
-    expect(screen.getByText('待审核')).toBeInTheDocument()
-    expect(screen.getByText('收藏')).toBeInTheDocument()
-    expect(screen.getByText('归档')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '开始审核' })).toBeInTheDocument()
+    expect(screen.getByText('全部图片')).toBeInTheDocument()
+    expect(screen.getByText('待审图片')).toBeInTheDocument()
+    expect(screen.getByText('收藏图片')).toBeInTheDocument()
+    expect(screen.getByText('已归档')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '审核' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '清理废片' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '按任务查看' })).toBeInTheDocument()

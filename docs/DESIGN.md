@@ -1,5 +1,7 @@
 # DESIGN.md —— AI 图库 / 图像生成工作台（深色 · ComfyUI 气质）
 
+> 2026-11-24 前端融合以用户提供的 img-studio 设计为准。新外壳、青色主题和各页落点见 [前端融合收口](IMG_STUDIO_FUSION.md)。
+
 > 本文件为用户提供的设计权威参考（2026-10-20 采纳）。
 > 项目落地说明：
 > - 技术栈固定 React 18 + TS + Vite（不使用 Tailwind，按现有 CSS Token/结构落地）；

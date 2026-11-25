@@ -84,6 +84,8 @@ describe('Prompt 整行布局、软删除与加载骨架', () => {
 
     await screen.findByText('整行 Prompt')
     expect(container.querySelector('.pp-grid--single > .pp-card')).toBeTruthy()
+    expect(container.querySelector('.pp-grid--single > .pp-card--compact')).toBeTruthy()
+    expect(container.querySelector('.pp-grid--single > .pp-card--with-media')).toBeTruthy()
     const gallery = screen.getByLabelText('该提示词生成过的图片，共 2 张')
     expect(gallery.querySelectorAll('.pp-card__gallery-thumb')).toHaveLength(2)
     gallery.querySelectorAll('img').forEach((image) => {

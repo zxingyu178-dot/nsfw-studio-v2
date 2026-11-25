@@ -21,6 +21,15 @@ const ENGINE_STATE_LABEL: Record<EngineRuntimeState, string> = {
   ERROR: '启动失败',
 }
 
+type SettingsSection = 'appearance' | 'runtime' | 'maintenance' | 'about'
+
+const SETTINGS_SECTIONS: Array<{ key: SettingsSection; label: string; hint: string }> = [
+  { key: 'appearance', label: '外观', hint: '主题与界面偏好' },
+  { key: 'runtime', label: '运行与连接', hint: '引擎和手机审核' },
+  { key: 'maintenance', label: '维护与存储', hint: '缓存、磁盘与 DataRoot' },
+  { key: 'about', label: '关于', hint: '版本与数据库信息' },
+]
+
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -40,6 +49,7 @@ function failMessage(e: unknown): string {
  */
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
+  const [activeSection, setActiveSection] = useState<SettingsSection>('appearance')
 
   const [status, setStatus] = useState<SystemStatus | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -113,8 +123,25 @@ export default function SettingsPage() {
   const diskWarning = !diskSevere && diskFree < DISK_WARNING_BYTES
 
   return (
-    <>
-      <section className="st-panel">
+    <div className="st-settings">
+      <nav className="st-nav" aria-label="设置分组">
+        {SETTINGS_SECTIONS.map((section) => (
+          <button
+            key={section.key}
+            type="button"
+            className={`st-nav__item${activeSection === section.key ? ' is-active' : ''}`}
+            aria-label={section.label}
+            aria-pressed={activeSection === section.key}
+            onClick={() => setActiveSection(section.key)}
+          >
+            <span>{section.label}</span>
+            <small>{section.hint}</small>
+          </button>
+        ))}
+      </nav>
+
+      <div className="st-body">
+      {activeSection === 'appearance' && <section className="st-panel">
         <h2 className="st-panel__title">外观</h2>
         <RadioGroup<Theme>
           name="theme"
@@ -126,8 +153,9 @@ export default function SettingsPage() {
             { value: 'light', label: '浅色' },
           ]}
         />
-      </section>
+      </section>}
 
+      <div className="st-section" hidden={activeSection !== 'runtime'}>
       <section className="st-panel">
         <h2 className="st-panel__title">生图引擎</h2>
         {loadError && <p className="ds-notice ds-notice--error">{loadError}</p>}
@@ -168,7 +196,9 @@ export default function SettingsPage() {
 
       {/* Phase 0.13：局域网手机审核桥（独立 8877） */}
       <MobileReviewSection />
+      </div>
 
+      {activeSection === 'maintenance' && <>
       <section className="st-panel">
         <h2 className="st-panel__title">图片缓存</h2>
         {status && (
@@ -221,8 +251,9 @@ export default function SettingsPage() {
           </>
         )}
       </section>
+      </>}
 
-      <section className="st-panel">
+      {activeSection === 'about' && <section className="st-panel">
         <h2 className="st-panel__title">关于</h2>
         <p className="st-panel__text">NSFW Studio V2 · 本地家庭媒体生成与批阅工作台。</p>
         <dl className="st-dl">
@@ -231,7 +262,8 @@ export default function SettingsPage() {
           <dt>当前数据库 Migration</dt>
           <dd className="st-mono">{status?.latest_migration ?? '—'}</dd>
         </dl>
-      </section>
-    </>
+      </section>}
+      </div>
+    </div>
   )
 }

@@ -161,7 +161,7 @@
 .ui3-action-btn--primary {
   background: linear-gradient(180deg, var(--action-gradient-start), var(--action-gradient-end));
   border-color: transparent;
-  color: #fff;
+  color: var(--on-accent);
 }
 .ui3-action-btn--primary:hover:not(:disabled) {
   box-shadow: 0 0 0 1px var(--glow-accent), 0 0 12px var(--glow-accent);

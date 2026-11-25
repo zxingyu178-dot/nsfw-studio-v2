@@ -1,50 +1,89 @@
-import { NavLink } from 'react-router-dom'
-import { ThemeToggle } from '../components/ThemeToggle'
-import { PowerControl } from '../components/PowerMenu'
-import { StatusPill } from '../components/ui/ui3'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { getHealth } from '../api/client'
 import { useJobStore } from '../stores/jobStore'
+import { ThemeToggle } from './ThemeToggle'
+import { PowerControl } from './PowerMenu'
+import { IconGrid, IconImage } from './ui/icons'
+import { IconHome, IconQuote, IconSettings, IconSpark, StatusPill } from './ui/ui3'
 
 const NAV_ITEMS = [
-  { to: '/generate', label: '生成' },
-  { to: '/gallery', label: '图库' },
-  { to: '/prompts', label: '提示词' },
-  { to: '/assets', label: '素材' },
-  { to: '/settings', label: '设置' },
+  { to: '/', label: '首页', Icon: IconHome },
+  { to: '/generate', label: '创作', Icon: IconSpark },
+  { to: '/gallery', label: '图库', Icon: IconGrid },
+  { to: '/prompts', label: '词库', Icon: IconQuote },
+  { to: '/settings', label: '设置', Icon: IconSettings },
+  { to: '/assets', label: '素材', Icon: IconImage },
 ]
 
-/**
- * TopNav 右侧 ComfyUI 状态胶囊（Task16 §二十三：状态图标 + 短词，不开大按钮框）。
- * 仅作 glance 展示；丰富的启停状态与操作在 Power 打开的统一 Runtime 面板里。
- */
-function ComfyStatusPill() {
-  const { engine, engineLoaded } = useJobStore()
-  const online = engineLoaded && Boolean(engine?.online)
+export function NavigationRail() {
+  const { queue } = useJobStore()
+  const activeTasks = queue ? Number(!!queue.running) + queue.queued.length : 0
+
   return (
-    <StatusPill tone={online ? 'online' : 'offline'} pulse={!engineLoaded}>
-      COMFY {online ? '在线' : '离线'}
-    </StatusPill>
+    <nav className="nav-rail" aria-label="主导航">
+      {NAV_ITEMS.map(({ to, label, Icon }) => (
+        <NavLink key={to} to={to} end={to === '/'} className="nav-rail__link">
+          <Icon size={18} />
+          <span>{label}</span>
+          {to === '/generate' && activeTasks > 0 && (
+            <span className="nav-rail__count" aria-label={activeTasks + ' 个运行或排队任务'}>
+              {activeTasks > 99 ? '99+' : activeTasks}
+            </span>
+          )}
+        </NavLink>
+      ))}
+    </nav>
   )
 }
 
 export function TopNav() {
+  const { pathname } = useLocation()
+  const { engine, engineLoaded } = useJobStore()
+  const [studioOnline, setStudioOnline] = useState<boolean | null>(null)
+  const page = NAV_ITEMS.find(({ to }) => pathname === to)?.label
+
+  useEffect(() => {
+    let active = true
+    let checking = false
+
+    const check = async () => {
+      if (!active || checking || document.hidden) return
+      checking = true
+      try {
+        const health = await getHealth()
+        if (active) setStudioOnline(health.status === 'ok')
+      } catch {
+        if (active) setStudioOnline(false)
+      } finally {
+        checking = false
+      }
+    }
+
+    void check()
+    const timer = window.setInterval(check, 15000)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [])
+
   return (
     <header className="topnav">
-      <div className="topnav__brand">NSFW Studio</div>
-      <nav className="topnav__nav">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `topnav__link${isActive ? ' topnav__link--active' : ''}`
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
+      {pathname === '/' ? (
+        <h1 className="topnav__brand">首页</h1>
+      ) : (
+        <span className="topnav__brand">{page ?? 'NSFW Studio'}</span>
+      )}
       <div className="topnav__right">
-        <ComfyStatusPill />
+        <StatusPill tone={studioOnline ? 'online' : 'offline'} pulse={studioOnline === null}>
+          Studio {studioOnline === null ? '检测中' : studioOnline ? '在线' : '离线'}
+        </StatusPill>
+        <StatusPill tone={engine?.online ? 'online' : 'offline'} pulse={!engineLoaded}>
+          ComfyUI {engineLoaded ? (engine?.online ? '在线' : '离线') : '检测中'}
+        </StatusPill>
         <ThemeToggle />
         <PowerControl />
       </div>
