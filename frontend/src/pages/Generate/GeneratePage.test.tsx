@@ -22,16 +22,18 @@ function renderPage() {
 }
 
 describe('GeneratePage 工作台骨架', () => {
-  it('挂载 WorkbenchBar 与三栏（Prompt Console / Canvas / 参数）', async () => {
+  it('挂载 WorkbenchBar 与双栏（Prompt Console / 参数），不重复渲染 Canvas', async () => {
     renderPage()
     // WorkbenchBar 模式切换（默认收纳，点开后才显示图生图选项）
     const modeTrigger = screen.getByRole('button', { name: /文生图/ })
     fireEvent.click(modeTrigger)
     expect(screen.getByRole('menuitemradio', { name: /文生图/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitemradio', { name: /图片生成/ })).toBeInTheDocument()
-    // 左栏 Prompt Console、右栏 Inspector 标题；中栏 Canvas 无标题（Canvas First）
+    // 创作页只承担输入与参数，实时结果统一回首页查看。
     expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看实时预览' })).toHaveAttribute('href', '/')
+    expect(screen.queryByLabelText('生成结果画布')).not.toBeInTheDocument()
     // 底部任务坞存在
     expect(document.querySelector('[data-testid="task-dock"]')).not.toBeNull()
   })
@@ -43,7 +45,7 @@ describe('GeneratePage 工作台骨架', () => {
   })
 })
 
-describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
+describe('GeneratePage：双栏布局偏好兼容', () => {
   it('左栏可收起为竖栏并可再展开', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: 'PROMPT' })).toBeInTheDocument()
@@ -70,7 +72,7 @@ describe('GeneratePage Phase 0.17.1：三栏可收起', () => {
     expect(screen.getByRole('heading', { name: '参数' })).toBeInTheDocument()
   })
 
-  it('收起状态写入 CSS 变量，宽度让给 Canvas（collapse 后 --left-w 为 44px）', () => {
+  it('收起状态继续写入既有 CSS 变量（兼容已发布布局偏好）', () => {
     const { container } = renderPage()
     const columns = container.querySelector('.wb4-columns') as HTMLElement
     // Phase 0.18 对齐 DESIGN.md：左生成控制台默认 280px。

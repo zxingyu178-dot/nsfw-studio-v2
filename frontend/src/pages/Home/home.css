@@ -277,3 +277,38 @@ a.studio-home__metric:hover {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
+
+.studio-home__live {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  height: clamp(350px, calc(100dvh - 148px), 880px);
+}
+
+.studio-home__live .wb4-stage__dock {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 920px) {
+  .studio-home__live {
+    height: min(66dvh, 580px);
+  }
+}
+
+.studio-home__live .wb4-stage__hud {
+  border: 0;
+  background: none;
+}
+
+.studio-home__live .wb4-hud {
+  --text-primary: var(--canvas-stage-fg);
+  --text-secondary: var(--canvas-stage-fg-muted);
+  --text-tertiary: var(--canvas-stage-fg-muted);
+  --control-bg: color-mix(in srgb, var(--canvas-stage-bg) 78%, var(--canvas-stage-fg));
+  border: 1px solid var(--canvas-stage-border);
+  background: var(--canvas-stage-bg);
+  color: var(--canvas-stage-fg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

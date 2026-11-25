@@ -1,15 +1,13 @@
 /**
- * GeneratePage v0.15 —— Workbench Layout 4.0（Canvas First）。
+ * GeneratePage —— 紧凑创作台。
  *
- * 三栏：左 Prompt Console（生成什么）｜中 Canvas（结果，深色哑光、绝不 blur）｜右 Inspector（怎么生成）；
- * 顶 WorkbenchBar（模式/来源/重置/保存）；底 TaskDock（收起态常驻，展开态含当前任务 + 队列全能力）。
- * 数据与业务逻辑（module catalog、location.state 带入配方、job 跟踪、结果动作）与 0.14 一致，仅重构布局。
+ * 双栏：左 Prompt Console（生成什么）｜右 Inspector（怎么生成）；
+ * 实时预览统一在首页，创作页只保留明确入口。顶 WorkbenchBar，底 TaskDock。
  */
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { moduleApi } from '../../api/client'
 import { Tabs } from '../../components/ui'
-import { CanvasStage } from './workbench/CanvasStage'
 import { InspectorPanel } from './workbench/InspectorPanel'
 import { PromptConsole } from './workbench/PromptConsole'
 import { ResizablePane } from './workbench/ResizablePane'
@@ -39,12 +37,11 @@ import {
 import type { WorkbenchNavigationState } from './workbenchNavigation'
 import './generate.css'
 
-type WorkspaceTab = 'prompt' | 'preview' | 'settings'
+type WorkspaceTab = 'prompt' | 'settings'
 
 const TAB_LABELS: Array<{ key: WorkspaceTab; label: string }> = [
   { key: 'prompt', label: 'Prompt' },
-  { key: 'preview', label: '预览' },
-  { key: 'settings', label: '配置' },
+  { key: 'settings', label: '参数' },
 ]
 
 export default function GeneratePage() {
@@ -77,8 +74,12 @@ export default function GeneratePage() {
   const layout = useWorkbenchLayout()
 
   return (
-    <div className={`generate wb4 generate--studio-fusion generate--tab-${activeTab}`} aria-label="生成工作台">
+    <div className={`generate wb4 generate--studio-fusion generate--creation generate--tab-${activeTab}`} aria-label="生成工作台">
       <WorkbenchBar />
+
+      <div className="generate__preview-entry">
+        <Link className="ds-link generate__preview-link" to="/">查看实时预览</Link>
+      </div>
 
       <Tabs
         className="generate__tabs"
@@ -111,10 +112,6 @@ export default function GeneratePage() {
         >
           <PromptConsole onCollapse={toggleLeftCollapsed} />
         </ResizablePane>
-
-        <div className="wb4-pane wb4-center generate__pane generate__pane--preview">
-          <CanvasStage />
-        </div>
 
         <ResizablePane
           side="right"

@@ -6,7 +6,7 @@
  * 2. z-index 契约：--z-nav > --z-page-sticky（页内浮层永远在一级导航之下）。
  * 3. TopNav 使用 sticky top:0。
  * 4. Workbench 4.0 顶栏（.wb4-bar）非 sticky——工作台根级禁止整页滚动，顶栏为 static + flex-shrink:0。
- * 5. 响应式断点（v0.15）：≥1200 可调三栏；1024~1199 固定紧凑三栏（280/270）；<1024 Workspace Tabs。
+ * 5. 响应式断点：≥1200 可调双栏；1024~1199 紧凑双栏；<1024 Prompt / 参数 Tabs。
  *    任何宽度都不得回退整页文档滚动（不得再出现 1179px / 1319px 旧堆叠回退）。
  * 6. .app-shell__main--workspace overflow:hidden（Generate 路由根级禁止撑长）。
  * 7. .ds-page--fill 高度锁死 + overflow:hidden。
@@ -66,7 +66,7 @@ describe('App Shell 契约', () => {
     expect(body).toMatch(/flex-shrink\s*:\s*0/)
   })
 
-  it('响应式断点（v0.15）：存在 1199px 紧凑三栏与 1023px Workspace Tabs，且无 1319/1179 旧回退', () => {
+  it('响应式断点：存在 1199px 紧凑双栏与 1023px 双 Tabs，且无 1319/1179 旧回退', () => {
     const genCss = readCss('pages/Generate/generate.css')
     expect(genCss).toMatch(/max-width\s*:\s*1199\s*px/)
     expect(genCss).toMatch(/max-width\s*:\s*1023\s*px/)

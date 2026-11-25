@@ -18,6 +18,7 @@ import {
   imageThumbUrl,
   shortJobId,
   type ImageDTO,
+  type JobDTO,
 } from '../../../types/workbench'
 import { ImageMutationQueue, type ImageMutation } from './imageMutationQueue'
 import { ProgressHUD } from './ProgressHUD'
@@ -38,9 +39,9 @@ async function fetchAllJobImages(jobIds: string[]): Promise<ImageDTO[]> {
   return merged
 }
 
-export function CanvasStage() {
+export function CanvasStage({ job: currentJob }: { job?: JobDTO } = {}) {
   const store = useJobStore()
-  const job = activeJob(store)
+  const job = currentJob ?? activeJob(store)
   const [images, setImages] = useState<ImageDTO[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -196,7 +197,7 @@ export function CanvasStage() {
   }, [images, shown, lightboxOpen])
 
   return (
-    <div className="wb4-stage" aria-label="创作画布">
+    <div className="wb4-stage" aria-label="生成结果画布">
       <div className="wb4-stage__topbar">
         {job ? (
           <>

@@ -1,8 +1,8 @@
 /**
- * Workbench 4.0 响应式断点合同（v0.15）：
- *  ≥1200     可调三栏（像素左/右 + 中间 1fr，手柄可见）
- *  1024–1199 固定紧凑三栏（左 280 / 右 270，隐藏拖拽手柄）
- *  <1024     Workspace Tabs（一次一个 pane，TaskDock 常驻）
+ * 创作页响应式断点合同：
+ *  ≥1200     Prompt 主栏弹性占满 + 参数栏保留既有宽度偏好
+ *  1024–1199 紧凑双栏，隐藏拖拽手柄
+ *  <1024     Prompt / 参数 Tabs（一次一个 pane，TaskDock 常驻）
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -29,29 +29,29 @@ function mediaBlock(css: string, maxWidth: number): string {
   throw new Error(`${maxWidth}px 媒体查询括号不匹配`)
 }
 
-describe('Workbench 4.0 三档断点', () => {
-  it('≥1200 默认：三栏用像素宽 + 中间 1fr（flex 行，非旧 grid），手柄可见', () => {
+describe('创作页双栏三档断点', () => {
+  it('≥1200 默认：Prompt 栏弹性填满、参数栏使用宽度偏好，无预览列', () => {
     const css = readCss('pages/Generate/generate.css')
     expect(css).toMatch(/\.wb4-columns\s*\{[^}]*display:\s*flex/)
-    expect(css).toMatch(/\.wb4-pane--left\s*\{[^}]*flex:\s*0 0 var\(--left-w/)
-    expect(css).toMatch(/\.wb4-center\s*\{[^}]*flex:\s*1 1 auto/)
+    expect(css).toMatch(/\.generate--creation\s+\.wb4-pane--left\s*\{[^}]*flex:\s*1 1 var\(--left-w/)
+    expect(css).toMatch(/\.generate--creation\s+\.wb4-pane--right\s*\{[^}]*flex:\s*0 1 var\(--right-w/)
+    expect(css).not.toMatch(/\.generate--tab-preview\s+\.wb4-center/)
     // 不应再有旧的 5fr 4fr 3fr grid
     expect(css).not.toMatch(/grid-template-columns:\s*5fr\s+4fr\s+3fr/)
   })
 
-  it('1024–1199 紧凑档：固定左 280 / 右 270，隐藏拖拽手柄', () => {
+  it('1024–1199 紧凑档：双栏占满且隐藏拖拽手柄', () => {
     const block = mediaBlock(readCss('pages/Generate/generate.css'), 1199)
-    expect(block).toMatch(/--left-w:\s*280px/)
-    expect(block).toMatch(/--right-w:\s*270px/)
+    expect(block).toMatch(/\.generate--creation\s+\.wb4-pane--left/)
+    expect(block).toMatch(/\.generate--creation\s+\.wb4-pane--right/)
     expect(block).toMatch(/\.wb4-resize-handle\s*\{\s*display:\s*none/)
   })
 
-  it('<1024：Tabs 显示、列纵向堆叠，仅当前 tab 的 pane 可见', () => {
+  it('<1024：双 Tabs 显示、列纵向堆叠，仅当前 tab 的 pane 可见', () => {
     const block = mediaBlock(readCss('pages/Generate/generate.css'), 1023)
     expect(block).toMatch(/\.generate\s+\.generate__tabs\s*\{\s*display:\s*flex/)
     expect(block).toMatch(/flex-direction:\s*column/)
     expect(block).toMatch(/\.generate--tab-prompt\s+\.wb4-pane--left/)
-    expect(block).toMatch(/\.generate--tab-preview\s+\.wb4-center/)
     expect(block).toMatch(/\.generate--tab-settings\s+\.wb4-pane--right/)
   })
 })

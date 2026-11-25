@@ -62,7 +62,7 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
   -H "Content-Type: application/json" `
   -H "Authorization: Bearer $token" `
   -d '{
-    "prompt": "1girl, silver hair, kimono, shrine, masterpiece, best quality",
+    "prompt": "a field botanist, examining a fern, glasshouse, medium shot, soft window light, natural documentary photography",
     "negative_prompt": "low quality, blurry, watermark",
     "width": 768, "height": 1024, "count": 1,
     "client_request_id": "agent-20261031-001"
@@ -104,11 +104,12 @@ CLI 不再提前调用 `/prompts/ensure`。
 
 ## 5. CLI（更推荐给豆包用）
 
-豆包只需给你一行命令，你在本机跑（脚本自动读取 `configs/config.local.yaml` 的 `agent.token`，环境变量 `NSFW_STUDIO_AGENT_TOKEN` 可覆盖）：
+现有参数方式继续兼容。AI 可以给出一行命令，由用户在本机运行（脚本自动读取
+`configs/config.local.yaml` 的 `agent.token`，环境变量 `NSFW_STUDIO_AGENT_TOKEN` 可覆盖）：
 
 ```powershell
 $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
-.venv\Scripts\python scripts\agent_generate.py --prompt "1girl, red dress, night city, neon lights" --out D:\ai_out
+.venv\Scripts\python scripts\agent_generate.py --prompt "a red fox resting beside a woodland stream" --out D:\ai_out
 ```
 
 - 不传 `--module` → 使用服务端默认工作流（CLI 不再默认 anime_generate，也不猜测第一个可用模块）；
@@ -120,7 +121,65 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 未设置 token 时脚本走本机 `/jobs`（向后兼容，仍只在本机 loopback 生效）；
 加 `--legacy` 可显式强制旧路径（仅调试）。
 
-## 5.1 AI 提交规范
+### 5.1 标准 JSON 请求（推荐给 AI）
+
+把请求保存为标准 UTF-8 JSON，例如 `request.json`：
+
+```json
+{
+  "prompt": "a field botanist, examining a fern, glasshouse, medium shot, soft window light, natural documentary photography",
+  "negative_prompt": "blur, watermark, distorted hands",
+  "width": 768,
+  "height": 1024,
+  "count": 1,
+  "seed": 42,
+  "queue_mode": "normal",
+  "client_request_id": "botanist-study-20261125-001"
+}
+```
+
+先做完全离线的校验，再提交：
+
+```powershell
+.venv\Scripts\python scripts\agent_generate.py --request-file request.json --validate-only
+.venv\Scripts\python scripts\agent_generate.py --request-file request.json --out D:\ai_out
+```
+
+`--validate-only` 在读取 token、访问网络或创建输出目录之前结束；成功/失败输出不会回显 Prompt 正文或
+token。`--request-file` 可以和运行参数 `--out`、`--api`、`--timeout-min`、`--token`、`--legacy`
+组合，但不能再混用 `--prompt`、`--negative`、`--module`、`--width`、`--height`、`--count`、
+`--seed`、`--next`，避免出现两个请求事实源。
+
+标准文件字段与 `POST /api/v1/agent/jobs` 对齐：
+
+| 字段 | 规则 |
+| --- | --- |
+| `prompt` | 必填字符串，非空白，最多 10000 字符；脚本不裁剪或改写正文 |
+| `negative_prompt` | 可选字符串，默认 `""`，最多 8000 字符；与正向 Prompt 分开 |
+| `module_id` | 可选字符串，1–64 字符；省略或 `null` 表示服务端默认，不由 CLI 硬编码 |
+| `width` / `height` | 可选整数，64–4096，文件默认均为 1024 |
+| `count` | 可选整数，1–64，默认 1；固定 `seed` 时必须为 1 |
+| `seed` | 可选整数，0–2147483647；省略或 `null` 表示随机 |
+| `queue_mode` | 可选 `normal` / `next`，默认 `normal` |
+| `client_request_id` | **必填**非空字符串，最多 128 字符；同一次请求的重试必须复用 |
+
+文件不能超过 128 KiB。脚本拒绝非 UTF-8、JSON 重复字段、未知字段、错误类型、未配对 surrogate、
+显式纯空白字符串和越界数值。
+
+`client_request_id` 表示一次用户请求，不是 Prompt 内容的哈希：网络失败后重跑同一个请求文件时保留
+原 ID，服务端会幂等返回原 Job；用户有意再次生成相同内容时必须换新 ID。标准请求在临时网络错误或
+HTTP 5xx 时最多自动重试两次，所有尝试复用同一 ID。旧 `--prompt ...` 参数方式仍为每次执行生成随机 ID。
+
+### 5.2 Prompt 编排建议
+
+正向 Prompt 可按“主体 → 动作 → 环境 → 构图与光线 → 风格”组织，例如上面的植物学家示例；
+负向要求只放在 `negative_prompt`。`count`、尺寸、Seed、队列位置是独立参数，不应塞入 Prompt 正文。
+脚本只校验和原样传递正文，不会为了“标准化”而擅自增删、翻译或重排用户语义。
+
+工作流同样不是 Prompt 的一部分：用户明确指定时才传 `module_id`；要求默认时省略它，由服务端当前配置
+决定。不要在 AI 模板里硬编码某个工作流，也不要把当前可用模块误当作永久固定清单。
+
+### 5.3 AI 提交规范
 
 - 用户明确指定工作流 → 直接选择并传入 `module_id`；
 - 用户要求“默认” → 不传 `module_id`；

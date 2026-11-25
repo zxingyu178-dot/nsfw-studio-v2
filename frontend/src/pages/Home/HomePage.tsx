@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { imageApi } from '../../api/client'
 import { ImageLightbox } from '../../components/ImageLightbox'
@@ -6,6 +6,7 @@ import { IconCheck, IconGrid, IconImage, IconQueue } from '../../components/ui/i
 import { IconActualSize, IconNext, IconQuote, IconSpark } from '../../components/ui/ui3'
 import { useJobStore } from '../../stores/jobStore'
 import { imagePreviewUrl, imageThumbUrl, normalizeImageStatus, type ImageDTO, type ImageStatsResponse } from '../../types/workbench'
+import { CanvasStage } from '../Generate/workbench/CanvasStage'
 import './home.css'
 
 const RECENT_LIMIT = 7
@@ -52,11 +53,14 @@ async function readHome(): Promise<HomeData> {
 
 export default function HomePage() {
   const { queue } = useJobStore()
+  const liveJob = queue?.running?.status === 'RUNNING' ? queue.running : null
+  const runningId = liveJob?.id ?? null
+  const previousRunningId = useRef<string | null>(null)
   const [data, setData] = useState<HomeData | null>(null)
   const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
-  const [lightbox, setLightbox] = useState<number | null>(null)
+  const [lightboxId, setLightboxId] = useState<string | null>(null)
   const [badPreview, setBadPreview] = useState<string | null>(null)
 
   useEffect(() => {
@@ -77,6 +81,12 @@ export default function HomePage() {
     return () => { active = false }
   }, [reload])
 
+  useEffect(() => {
+    const previous = previousRunningId.current
+    previousRunningId.current = runningId
+    if (previous && previous !== runningId) setReload(key => key + 1)
+  }, [runningId])
+
   function refresh() {
     setBadPreview(null)
     setFailed(false)
@@ -86,6 +96,9 @@ export default function HomePage() {
 
   const images = data?.images ?? []
   const latest = images[0]
+  const recentOffset = liveJob ? 0 : 1
+  const recentImages = images.slice(recentOffset)
+  const lightboxIndex = images.findIndex(image => image.id === lightboxId)
   const latestTime = latest ? new Date(latest.created_at) : null
   const validTime = latestTime && Number.isFinite(latestTime.valueOf())
   const metrics = [
@@ -103,40 +116,46 @@ export default function HomePage() {
           <button type="button" className="studio-home__button" onClick={refresh}>重试</button>
         </div>
       )}
-      <section className="studio-home__hero" aria-label="最新作品">
-        <div className="studio-home__frame">
-          {latest && badPreview !== latest.id ? (
-            <button className="studio-home__preview" type="button" onClick={() => setLightbox(0)} aria-label="查看最新作品">
-              <img src={imagePreviewUrl(latest.id)} alt="最新作品" onError={() => setBadPreview(latest.id)} />
-            </button>
-          ) : (
-            <div className="studio-home__placeholder">
-              <IconImage size={24} />
-              <strong>{latest ? '预览暂不可用' : loading ? '正在读取最新作品' : failed ? '最新作品暂不可用' : '还没有作品'}</strong>
-              {latest ? (
-                <button className="studio-home__button" type="button" onClick={() => setLightbox(0)}>查看大图</button>
-              ) : !loading && !failed && (
-                <Link className="studio-home__primary" to="/generate">去创作</Link>
-              )}
-            </div>
-          )}
-          {latest && (
-            <div className="studio-home__tags" aria-label="作品信息">
-              <span>{latest.width} × {latest.height}</span>
-              {normalizeImageStatus(latest) === 'NEW' && <span className="studio-home__pending">待审</span>}
-            </div>
-          )}
-        </div>
-        {latest && (
-          <div className="studio-home__meta">
-            {validTime && <time dateTime={latest.created_at}>{TIME_FORMAT.format(latestTime)}</time>}
-            <span>{latest.source === 'import' ? '导入作品' : '生成作品'}</span>
-            <button className="studio-home__button" type="button" onClick={() => setLightbox(0)}>
-              <IconActualSize /> 查看大图
-            </button>
+      {liveJob ? (
+        <section className="studio-home__hero studio-home__live" aria-label="实时生成预览">
+          <CanvasStage key={liveJob.id} job={liveJob} />
+        </section>
+      ) : (
+        <section className="studio-home__hero" aria-label="最新作品">
+          <div className="studio-home__frame">
+            {latest && badPreview !== latest.id ? (
+              <button className="studio-home__preview" type="button" onClick={() => setLightboxId(latest.id)} aria-label="查看最新作品">
+                <img src={imagePreviewUrl(latest.id)} alt="最新作品" onError={() => setBadPreview(latest.id)} />
+              </button>
+            ) : (
+              <div className="studio-home__placeholder">
+                <IconImage size={24} />
+                <strong>{latest ? '预览暂不可用' : loading ? '正在读取最新作品' : failed ? '最新作品暂不可用' : '还没有作品'}</strong>
+                {latest ? (
+                  <button className="studio-home__button" type="button" onClick={() => setLightboxId(latest.id)}>查看大图</button>
+                ) : !loading && !failed && (
+                  <Link className="studio-home__primary" to="/generate">去创作</Link>
+                )}
+              </div>
+            )}
+            {latest && (
+              <div className="studio-home__tags" aria-label="作品信息">
+                <span>{latest.width} × {latest.height}</span>
+                {normalizeImageStatus(latest) === 'NEW' && <span className="studio-home__pending">待审</span>}
+              </div>
+            )}
           </div>
-        )}
-      </section>
+          {latest && (
+            <div className="studio-home__meta">
+              {validTime && <time dateTime={latest.created_at}>{TIME_FORMAT.format(latestTime)}</time>}
+              <span>{latest.source === 'import' ? '导入作品' : '生成作品'}</span>
+              <button className="studio-home__button" type="button" onClick={() => setLightboxId(latest.id)}>
+                <IconActualSize /> 查看大图
+              </button>
+            </div>
+          )}
+        </section>
+      )}
       <aside className="studio-home__side" aria-label="图像与队列概览">
         <div className="studio-home__metrics">
           {metrics.map(({ label, value, to }) => {
@@ -165,10 +184,10 @@ export default function HomePage() {
             <button className="studio-home__button" type="button" onClick={refresh} disabled={loading}>刷新</button>
             <Link to="/gallery">全部</Link>
           </div>
-          {images.length > 1 ? (
+          {recentImages.length > 0 ? (
             <div className="studio-home__recent-grid">
-              {images.slice(1).map((image, index) => (
-                <button type="button" key={image.id} onClick={() => setLightbox(index + 1)} aria-label={'查看最近作品 ' + (index + 1)}>
+              {recentImages.map((image, index) => (
+                <button type="button" key={image.id} onClick={() => setLightboxId(image.id)} aria-label={'查看最近作品 ' + (index + 1)}>
                   <img src={imageThumbUrl(image.id)} alt="" loading="lazy" />
                 </button>
               ))}
@@ -176,8 +195,13 @@ export default function HomePage() {
           ) : <p>{loading ? '正在读取' : failed ? '暂不可用' : '暂无更多作品'}</p>}
         </section>
       </aside>
-      {lightbox !== null && images.length > 0 && (
-        <ImageLightbox images={images} index={lightbox} onClose={() => setLightbox(null)} onNavigate={setLightbox} />
+      {lightboxIndex >= 0 && (
+        <ImageLightbox
+          images={images}
+          index={lightboxIndex}
+          onClose={() => setLightboxId(null)}
+          onNavigate={(index) => setLightboxId(images[index]?.id ?? null)}
+        />
       )}
     </div>
   )

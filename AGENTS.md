@@ -47,6 +47,7 @@
      **不要反复重试**，改用 `POST /api/v1/queue/clear-stale` 归档后再按新工作流重新生成。
 6. **生图**：`.venv\Scripts\python scripts\agent_generate.py --module basic_generate --prompt "…" --out D:\ai_out`
    （`anime_generate` 用于动漫；`agent/jobs` 端点默认关闭，优先用本机 CLI）
+   - AI 代提交优先使用 UTF-8 JSON（--request-file）；先 --validate-only，本次重试复用 client_request_id。格式见 [AI 提交规范](docs/AGENT_SUBMISSION.md)。
    - 提交前脚本不再单独调用 `/prompts/ensure`：Prompt 由服务端在 Job 创建事务内统一关联
      （Agent API 与旧 `/jobs` 的 agent/doubao 路径相同），Job 快照带 `source_prompt_id`，
      生成图在提示词库按提示词可查。

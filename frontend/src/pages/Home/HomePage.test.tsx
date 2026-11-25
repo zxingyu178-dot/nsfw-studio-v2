@@ -1,13 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { imageApi } from '../../api/client'
-import type { ImageDTO } from '../../types/workbench'
+import type { ImageDTO, JobDTO } from '../../types/workbench'
 import HomePage from './HomePage'
 
+const state = vi.hoisted(() => ({ running: null as JobDTO | null }))
+vi.mock('../Generate/workbench/CanvasStage', () => ({
+  CanvasStage: ({ job }: { job: JobDTO }) => <p>实时结果 {job.id}</p>,
+}))
 vi.mock('../../api/client', () => ({ imageApi: { list: vi.fn(), stats: vi.fn() } }))
 vi.mock('../../stores/jobStore', () => ({
-  useJobStore: () => ({ queue: { running: { id: 'running-job' }, queued: [{ id: 'queued-job' }], paused: [], worker: { running: true } } }),
+  useJobStore: () => ({ queue: { running: state.running, queued: [{ id: 'queued-job' }], paused: [], worker: { running: true } } }),
 }))
 
 const image: ImageDTO = {
@@ -19,6 +23,7 @@ const image: ImageDTO = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  state.running = { id: 'running-job' } as JobDTO
   vi.mocked(imageApi.list).mockImplementation(async ({ status } = {}) => ({
     items: status === 'NEW' ? [image] : [], total: status === 'NEW' ? 1 : 0, page: 1, page_size: 7, has_next: false,
   }))
@@ -50,5 +55,28 @@ describe('首页', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试' }))
     expect(await screen.findByText('24')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+
+  it('在首页显示运行任务的实时结果，完成后重新读取最新作品', async () => {
+    state.running = null
+    const view = render(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(await screen.findByAltText('最新作品')).toBeInTheDocument()
+    const initialRequests = vi.mocked(imageApi.stats).mock.calls.length
+
+    state.running = { id: 'live-1', status: 'RUNNING' } as JobDTO
+    view.rerender(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.getByText('实时结果 live-1')).toBeInTheDocument()
+    expect(screen.queryByAltText('最新作品')).not.toBeInTheDocument()
+
+    state.running = { id: 'live-2', status: 'RUNNING' } as JobDTO
+    view.rerender(<MemoryRouter><HomePage /></MemoryRouter>)
+    expect(screen.getByText('实时结果 live-2')).toBeInTheDocument()
+    expect(screen.queryByText('实时结果 live-1')).not.toBeInTheDocument()
+
+    state.running = null
+    view.rerender(<MemoryRouter><HomePage /></MemoryRouter>)
+    await waitFor(() => expect(vi.mocked(imageApi.stats).mock.calls.length).toBeGreaterThan(initialRequests))
+    expect(screen.getByAltText('最新作品')).toBeInTheDocument()
   })
 })
