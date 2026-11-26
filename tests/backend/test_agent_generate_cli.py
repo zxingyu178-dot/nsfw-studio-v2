@@ -77,6 +77,60 @@ def test_list_workflows_only_shows_agent_allowed(cli, monkeypatch, capsys):
     assert "服务端默认" in output
 
 
+def test_list_models_requires_token(cli, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_token", lambda value: "")
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-models"])
+    assert cli.main() == 2
+    assert "需要 Agent token" in capsys.readouterr().out
+
+
+def test_list_models_prints_catalog_and_recommendation(cli, monkeypatch, capsys):
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_get(api, path, token=None):
+        calls.append((path, token))
+        return {
+            "models": ["a.safetensors"],
+            "model_catalog": {
+                "a.safetensors": {
+                    "display_name": "Model A",
+                    "family": "sdxl_anime",
+                    "recommended_sampling": {
+                        "steps": 30, "cfg": 5.0,
+                        "sampler_name": "dpmpp_2m", "scheduler": "karras",
+                    },
+                },
+            },
+            "sampling_profiles": {"a.safetensors": {"steps": 30, "cfg": 5.0}},
+            "default_model": "a.safetensors",
+            "default_sampling_profile": {
+                "steps": 30, "cfg": 5.0, "sampler_name": "dpmpp_2m", "scheduler": "karras",
+            },
+        }
+
+    monkeypatch.setattr(cli, "load_token", lambda value: "tok")
+    monkeypatch.setattr(cli, "get", fake_get)
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-models"])
+    assert cli.main() == 0
+    output = capsys.readouterr().out
+    assert calls == [("/agent/capabilities", "tok")]
+    assert "a.safetensors" in output and "Model A" in output
+    assert "推荐 30 步 / cfg5.0 / dpmpp_2m / karras" in output
+    assert "默认底模：a.safetensors" in output
+
+
+def test_list_models_rejects_request_file(cli, tmp_path, monkeypatch, capsys):
+    request_file = write_request(tmp_path, {
+        "prompt": "safe study",
+        "client_request_id": "list-models-conflict",
+    })
+    monkeypatch.setattr(sys, "argv", [
+        "agent_generate.py", "--list-models", "--request-file", str(request_file),
+    ])
+    assert cli.main() == 2
+    assert "不能与 --request-file 同时使用" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("value", ["", "   "])
 def test_cli_blank_module_fails_before_http(cli, monkeypatch, capsys, value):
     """W1.2.2：显式空/纯空白 --module 必须在任何 HTTP 请求之前失败。"""

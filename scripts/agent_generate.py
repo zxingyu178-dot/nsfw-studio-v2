@@ -356,8 +356,10 @@ def post(
     raise AssertionError("unreachable")
 
 
-def get(api: str, path: str) -> dict:
-    with urllib.request.urlopen(api + path, timeout=60) as response:
+def get(api: str, path: str, token: str | None = None) -> dict:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    request = urllib.request.Request(api + path, headers=headers)
+    with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -406,6 +408,52 @@ def default_module_id(api: str) -> str | None:
     return str(preferred.get("module_id")) if preferred else None
 
 
+def _format_recommended(profile: object) -> str:
+    if not isinstance(profile, dict):
+        return ""
+    parts = []
+    if profile.get("steps") is not None:
+        parts.append(f"{profile['steps']} 步")
+    if profile.get("cfg") is not None:
+        parts.append(f"cfg{profile['cfg']}")
+    if profile.get("sampler_name"):
+        parts.append(str(profile["sampler_name"]))
+    if profile.get("scheduler"):
+        parts.append(str(profile["scheduler"]))
+    return " / ".join(parts)
+
+
+def list_agent_models(api: str, token: str) -> int:
+    """打印已安装底模、注册中心元数据与推荐采样参数（需 Agent token）。"""
+    capabilities = get(api, "/agent/capabilities", token=token)
+    models = capabilities.get("models") or []
+    catalog = capabilities.get("model_catalog") or {}
+    profiles = capabilities.get("sampling_profiles") or {}
+    if not models:
+        print("[!] 当前没有已安装的底模；请先在 ComfyUI /models/checkpoints 安装并重启引擎")
+        return 1
+    print(f"[OK] 已安装底模（{len(models)}）：")
+    for name in models:
+        entry = catalog.get(name) or {}
+        display = str(entry.get("display_name") or "")
+        family = str(entry.get("family") or "")
+        recommended = _format_recommended(entry.get("recommended_sampling") or profiles.get(name))
+        print(f"  - {name}")
+        details = [part for part in (
+            display if display and display != name else "",
+            family,
+            f"推荐 {recommended}" if recommended else "",
+        ) if part]
+        if details:
+            print("    " + " · ".join(details))
+    default_model = capabilities.get("default_model")
+    if default_model:
+        default_profile = capabilities.get("default_sampling_profile") or profiles.get(default_model)
+        recommended = _format_recommended(default_profile)
+        print(f"默认底模：{default_model}" + (f"（推荐 {recommended}）" if recommended else ""))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="本机生图 CLI（AI 助手调用入口）")
     parser.add_argument("--prompt", default="", help="正向提示词（中文/英文标签均可）")
@@ -436,6 +484,8 @@ def main() -> int:
                         help="套用注册中心推荐采样参数；省略 --model 时用 binding 默认底模（仅 Agent 端点）")
     parser.add_argument("--list-workflows", action="store_true",
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
+    parser.add_argument("--list-models", action="store_true",
+                        help="列出已安装底模、注册中心元数据与推荐采样参数（需 Agent token）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
     parser.add_argument("--width", type=int, default=768)
     parser.add_argument("--height", type=int, default=1024)
@@ -451,6 +501,19 @@ def main() -> int:
     parser.add_argument("--legacy", action="store_true",
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
     args = parser.parse_args()
+
+    if args.list_models:
+        if args.list_workflows:
+            print("[FAIL] --list-models 不能与 --list-workflows 同时使用")
+            return 2
+        if args.request_file is not None:
+            print("[FAIL] --list-models 不能与 --request-file 同时使用")
+            return 2
+        token = load_token(args.token)
+        if not token:
+            print("[FAIL] --list-models 需要 Agent token（配置 agent.token 或 --token）")
+            return 2
+        return list_agent_models(args.api, token)
 
     if args.request_file is not None:
         supplied_options = {item.split("=", 1)[0] for item in sys.argv[1:] if item.startswith("--")}

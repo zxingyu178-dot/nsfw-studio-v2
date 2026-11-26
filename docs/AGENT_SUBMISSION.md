@@ -166,6 +166,8 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 - `--use-recommended` → 自动套用注册中心推荐采样参数；省略 `--model` 时使用 binding 默认底模，
   显式采样参数优先（仅 Agent 端点；底模未登记推荐时返回 422 `RECOMMENDED_SAMPLING_NOT_FOUND`）；
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
+- `--list-models` → 读取 `/agent/capabilities`，列出已安装底模、显示名、family 与推荐采样参数
+  （需 Agent token；省略 `--model` 时可直接参考默认底模）；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
 
