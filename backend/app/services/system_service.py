@@ -32,10 +32,14 @@ class BootstrapReport:
     system_info_action: str = "unchanged"
 
 
-def bootstrap(settings: Settings) -> BootstrapReport:
-    """启动引导（幂等）：创建数据目录 → 初始化日志 → 初始化数据库 → 写入 system_info。"""
+def bootstrap(settings: Settings, *, log_profile: str = "main") -> BootstrapReport:
+    """启动引导（幂等）：创建数据目录 → 初始化日志 → 初始化数据库 → 写入 system_info。
+
+    log_profile="mobile"：Mobile Bridge 独立进程写自己的日志目录，避免与主后端
+    共用日志文件导致 Windows 轮转失败（见 app/core/logging.py）。
+    """
     created = ensure_data_root(settings)
-    setup_logging(settings.storage.data_root, console_level=settings.app.log_level)
+    setup_logging(settings.storage.data_root, console_level=settings.app.log_level, profile=log_profile)
     logger.info("启动引导开始 data_root=%s 新建目录=%s", settings.storage.data_root, sorted(created) or "无")
 
     database_path = settings.storage.database_path

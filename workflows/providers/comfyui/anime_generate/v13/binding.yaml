@@ -1,0 +1,70 @@
+# anime_generate v13 — ComfyUI Provider Binding
+#
+# 模型：NoobAI-XL v1.1（eps 版，Laxhar Dream Lab，基于 Illustrious XL 微调，
+# 训练数据为完整 Danbooru + e621，角色识别能力显著强于 Pony 谱系）。
+# 单文件 checkpoint，CLIP 与 VAE 取自 checkpoint 内部。
+#
+# 采样：832×1216 / 30 步 / cfg 5.0 / dpmpp_2m / karras / denoise 1.0
+#   2026-11-25 参数对照实测（同 prompt 同 seed 12 张）：
+#     er_sde + cfg4.5（旧）→ 发灰、平光、皮肤死白、发丝糊，这是"不稳定"的根因
+#     dpmpp_2m + karras + cfg5 → 干净的日系线稿+柔和光影，最贴合可爱向
+#     euler_ancestral + cfg5 → 立体、血色好，但肤色偏红偏写实
+#     euler + cfg5 → 可用；cfg7 对比过强、偏硬
+#   Cat Tower（NoobAI 派生）对 eps 版推荐 DPM++ 2M Karras / Euler a；
+#   NoobAI 官方对 v-pred 才强制 Euler。本机为 eps 版，用 dpmpp_2m+karras 稳定。
+#
+# 提示词写法（与 v2 不同，不要混用）：
+#   正向前缀：masterpiece, best quality, newest, absurdres, highres
+#   风格锚（关键）：artist:xxx —— NoobAI 是"生底模"，不写画师标签出来就是教科书示范图，
+#     平淡、不像成品。实测可用组合：
+#       artist:torino_aqua, artist:kedama_milk  → 可爱、清透、暖光、不出文字（默认推荐）
+#       artist:fuzichoco → 虹彩光斑、风格强，不适合多角色统一
+#       artist:wlop → 厚涂写实、带签名水印，且偏成熟，不用于可爱向
+#   负向：只用官方短版（见 README），别塞 score_*、realistic、3d、blurry 这类词，
+#     过长会伤画面；negative 里的 old/early 是防老画风的关键，不能丢。
+
+binding_version: v13
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+# 固定默认（Module 标准输入不暴露）
+defaults:
+  "7": {steps: 30, cfg: 5.0, sampler_name: dpmpp_2m, scheduler: karras, denoise: 1.0}
+
+# Seed 范围（KSampler 惯例）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  output_size: explicit
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: checkpoints, filename: NoobAI-XL-v1.1.safetensors, sha256: unverified, precision: fp16}
+
+performance:
+  status: measuring
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  notes: "待实测。参考 v2（6.46GB 同级底模）：832×1216 / 30 步热跑 33s/张"

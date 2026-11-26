@@ -485,43 +485,56 @@ export function ReviewMode({ images, loader, total, statsParams, sessionAdapter,
 
   if (list.length === 0 || !current) {
     const ended = batchInfo?.status === 'COMPLETED'
+    // v0.37.4：从未建过会话（或最近会话属于别的审核范围）≠ 图库没有待审图
+    const noSession = !batchInfo
+    const preparing = loadingMore && list.length === 0 && !error
     return (
       <div className="rv-overlay" role="dialog" aria-modal="true" aria-label="审核模式">
         <div className="rv-top">
           <span className="rv-progress">
-            {loadingMore ? '加载中…' : ended ? '上一批审核已结束' : '没有可审核的图片'}
+            {loadingMore ? '加载中…' : ended ? '批次已结束' : noSession ? '尚未开始审核' : '没有可审核的图片'}
           </span>
           <button type="button" onClick={onClose}>关闭</button>
         </div>
         {error && <p className="rv-error">{error}</p>}
         <div className="rv-done">
-          <h2 className="rv-done__title">{ended ? '上一批审核已结束' : '暂无待审核图片'}</h2>
+          <h2 className="rv-done__title">
+            {preparing ? '正在准备审核队列…' : error ? '审核队列加载失败' : ended ? '上一批审核已结束' : noSession ? '尚未开始本批审核' : '暂无待审核图片'}
+          </h2>
           <p className="rv-done__remaining muted">
-            {newCount === null
-              ? '正在检查新图…'
-              : newCount > 0
-                ? `批次之外还有 ${newCount} 张待审核图片`
-                : '当前没有新的待审核图片'}
+            {preparing
+              ? '首次创建批次需要把新图排入队列，请稍候'
+              : noSession
+                ? '点击下方按钮创建本批审核队列（不影响已有审核结果）'
+                : newCount === null
+                  ? '正在检查新图…'
+                  : newCount > 0
+                    ? `批次之外还有 ${newCount} 张待审核图片`
+                    : '当前没有新的待审核图片'}
           </p>
           <div className="rv-done__actions">
-            {newCount !== null && newCount > 0 && (
-              <button
-                type="button" className="rv-btn rv-btn--keep" disabled={switching}
-                onClick={() => void switchBatch('only_new')}
-              >
-                {switching ? '切换中…' : `审新图（${newCount} 张）`}
-              </button>
+            {!preparing && (
+              <>
+                {(noSession || (newCount !== null && newCount > 0)) && (
+                  <button
+                    type="button" className="rv-btn rv-btn--keep" disabled={switching}
+                    onClick={() => void switchBatch('only_new')}
+                  >
+                    {switching ? '切换中…' : newCount !== null && newCount > 0 ? `审新图（${newCount} 张）` : '开始审核新图'}
+                  </button>
+                )}
+                <button
+                  type="button" className="rv-btn rv-btn--secondary" disabled={switching}
+                  onClick={() => void switchBatch('all')}
+                >
+                  审核全部未审核
+                </button>
+                <button type="button" className="rv-btn" disabled={switching} onClick={() => void checkNewCount()}>
+                  检查新图
+                </button>
+                <button type="button" className="rv-btn" onClick={onClose}>返回图库</button>
+              </>
             )}
-            <button
-              type="button" className="rv-btn rv-btn--secondary" disabled={switching}
-              onClick={() => void switchBatch('all')}
-            >
-              审核全部未审核
-            </button>
-            <button type="button" className="rv-btn" disabled={switching} onClick={() => void checkNewCount()}>
-              检查新图
-            </button>
-            <button type="button" className="rv-btn" onClick={onClose}>返回图库</button>
           </div>
         </div>
       </div>

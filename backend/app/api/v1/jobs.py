@@ -24,8 +24,10 @@ from app.schemas.job import (
     QueueReorderRequest,
     QueueResponse,
     job_response,
+    queue_job_summary,
 )
 from app.services import generation_provenance_service, job_service, prompt_service
+from app.services.lora_validation_service import validate_task_loras
 from app.services.runtime_preflight_service import run_preflight
 
 router = APIRouter(tags=["jobs"])
@@ -54,6 +56,16 @@ def check_disk_space(request: Request) -> str:
     return "ok"
 
 
+def queue_response_payload(queue: dict, worker: dict) -> QueueResponse:
+    """队列响应：running 保留完整快照（HUD/进度需要），queued/paused 用轻量摘要。"""
+    return QueueResponse(
+        worker=worker,
+        running=job_response(queue["running"]) if queue["running"] else None,
+        queued=[queue_job_summary(job) for job in queue["queued"]],
+        paused=[queue_job_summary(job) for job in queue["paused"]],
+    )
+
+
 @router.post("/jobs", response_model=JobResponse, status_code=201, summary="创建生成任务（入队）")
 def create_job(
     request: Request, body: JobCreateRequest, session: Session = Depends(get_session)
@@ -64,6 +76,11 @@ def create_job(
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
     # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
     ensure_modules_released(modules)
+    # v5：任务级 LoRA 名称校验（不存在 → 422 LORA_NOT_FOUND）
+    validate_task_loras(
+        request.app.state.adapter,
+        snapshot.get("workflow_modules") or modules,
+    )
     # W2.0：运行环境前置检测（READY 才继续；BLOCKED/UNKNOWN 在 Prompt 关联前拒绝）
     preflight = run_preflight(settings, request.app.state.adapter, modules)
     # W1.2.1：Agent / CLI 旧路径由服务端统一关联提示词；Prompt 与 Job 同事务，
@@ -80,6 +97,8 @@ def create_job(
             workflow_modules=modules,
             job_kind="generate",
             engine_version=str((preflight.get("engine") or {}).get("version") or "") or None,
+            series=body.series,
+            series_ref=body.series_ref,
         )
     except Exception:
         session.rollback()
@@ -175,6 +194,7 @@ def resume_remaining(job_id: str, request: Request, session: Session = Depends(g
     snapshot = json.loads(original.workflow_snapshot_json or "{}")
     modules = snapshot.get("modules") or []
     ensure_modules_released(modules)
+    validate_task_loras(request.app.state.adapter, modules)
     # W2.0：用原 Job 的固定工作流身份执行运行环境检测
     run_preflight(request.app.state.settings, request.app.state.adapter, modules)
     job, _ = job_service.resume_remaining(session, job_id)
@@ -185,12 +205,7 @@ def resume_remaining(job_id: str, request: Request, session: Session = Depends(g
 def get_queue(request: Request, session: Session = Depends(get_session)) -> QueueResponse:
     queue = job_service.get_queue(session)
     worker = request.app.state.worker
-    return QueueResponse(
-        worker=worker.status() if worker else {"running": False},
-        running=job_response(queue["running"]) if queue["running"] else None,
-        queued=[job_response(job) for job in queue["queued"]],
-        paused=[job_response(job) for job in queue["paused"]],
-    )
+    return queue_response_payload(queue, worker.status() if worker else {"running": False})
 
 
 @router.post("/queue/clear-stale", summary="清理陈旧任务/清空排队（用户显式触发）")
@@ -205,12 +220,7 @@ def reorder_queue(
 ) -> QueueResponse:
     job_service.reorder_queue(session, body.ordered_job_ids)
     queue = job_service.get_queue(session)
-    return QueueResponse(
-        worker={"running": True},
-        running=job_response(queue["running"]) if queue["running"] else None,
-        queued=[job_response(job) for job in queue["queued"]],
-        paused=[job_response(job) for job in queue["paused"]],
-    )
+    return queue_response_payload(queue, {"running": True})
 
 
 @router.post("/queue/pause", response_model=QueueResponse, summary="全局暂停队列（当前图安全完成后暂停，后续任务不再开始）")
@@ -225,12 +235,7 @@ def pause_queue(request: Request, session: Session = Depends(get_session)) -> Qu
             except ValidationError:
                 pass  # 暂停瞬间当前张已完成/终态——无需再置 pause_requested
     queue = job_service.get_queue(session)
-    return QueueResponse(
-        worker=worker.status() if worker else {"running": False},
-        running=job_response(queue["running"]) if queue["running"] else None,
-        queued=[job_response(job) for job in queue["queued"]],
-        paused=[job_response(job) for job in queue["paused"]],
-    )
+    return queue_response_payload(queue, worker.status() if worker else {"running": False})
 
 
 @router.post("/queue/resume", response_model=QueueResponse, summary="恢复队列（自动暂停或手动暂停后继续）")
@@ -245,12 +250,7 @@ def resume_queue(request: Request, session: Session = Depends(get_session)) -> Q
         except ValidationError:
             pass  # target 已不在 PAUSED（如已完成/取消）——仅清 flag 即可
     queue = job_service.get_queue(session)
-    return QueueResponse(
-        worker=worker.status() if worker else {"running": False},
-        running=job_response(queue["running"]) if queue["running"] else None,
-        queued=[job_response(job) for job in queue["queued"]],
-        paused=[job_response(job) for job in queue["paused"]],
-    )
+    return queue_response_payload(queue, worker.status() if worker else {"running": False})
 
 
 @router.get("/engine/status", summary="引擎健康状态（真实 Engine，独立于 Studio 状态）")

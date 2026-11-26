@@ -88,6 +88,8 @@ class ImageCleanupPreview(BaseModel):
     protected_count: int
     total_bytes: int
     protected_items: list[ImageCleanupProtectedItem]
+    # v0.37.3：前端按批删除（每批 50 张）以获得可视进度，避免单个长请求
+    deletable_ids: list[str] = []
 
 
 class ImageCleanupResult(BaseModel):
@@ -133,6 +135,10 @@ class ImageResponse(BaseModel):
     file_size: int | None = None
     asset_type: str | None = None
     parent_asset_id: str | None = None
+    # 0024 系列维度（来源 Job）：series 供图库筛选/标识，series_ref 是「第几天·第几段」人类可读标签。
+    # 列表接口按 job 批量回填；其它接口默认 None，不改变既有合同。
+    series: str | None = None
+    series_ref: str | None = None
 
 
 class ImageListResponse(BaseModel):

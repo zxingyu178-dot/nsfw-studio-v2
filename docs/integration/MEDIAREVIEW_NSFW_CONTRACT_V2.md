@@ -42,17 +42,25 @@
 `GET /mobile/system/health`（开放）
 
 ```json
-{"status": "ok", "product": "nsfw-studio", "version": "0.13.0", "api_contract": 2,
+{"status": "ok", "product": "nsfw-studio", "version": "0.14.0", "api_contract": 2,
+ "build_commit": "abc1234", "built_at": "2026-11-26T00:00:00+00:00",
+ "capability_set_hash": "0123456789ab",
  "capabilities": [
    "image_review", "review_session", "favorite", "thumbnail", "preview", "original",
    "image_event_feed", "image_detail", "prompt_version_evaluation",
    "idempotent_mutation", "snapshot_resync",
-   "mobile_feed_v2", "mobile_image_details_v2", "mobile_image_decision_v2",
+   "mobile_feed_v2", "mobile_gallery_query_v1", "mobile_gallery_bidirectional_v1",
+   "mobile_gallery_filters_v1", "mobile_gallery_review_filter_v1",
+   "mobile_gallery_search_v1", "mobile_image_batch_review_v1",
+   "mobile_image_details_v2", "mobile_image_decision_v2",
    "mobile_prompt_review_v2", "mobile_prompt_evaluation_v2"
  ]}
 ```
 
-客户端要求 `api_contract >= 2` 且包含最后 5 项能力；缺一即禁止配对与进入审核。
+客户端要求 `api_contract >= 2` 且包含 `mobile_feed_v2` / `mobile_image_details_v2` /
+`mobile_image_decision_v2` / `mobile_prompt_review_v2` / `mobile_prompt_evaluation_v2`；
+缺一即禁止配对与进入审核。图库、批量审核等能力以 capabilities 声明为准。
+`build_commit` / `built_at` / `capability_set_hash` 用于发布核对：同版本号不同构建必须能区分。
 **绝不**包含 `permanent_delete` / `generation` / `engine_control` / `prompt_edit`。
 
 fixture：`fixtures/health_v2.json`。

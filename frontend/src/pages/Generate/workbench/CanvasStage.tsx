@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi, jobApi } from '../../../api/client'
 import { CanvasViewport } from '../../../components/CanvasViewport/CanvasViewport'
 import { EmptyState, Spinner, StatusBadge } from '../../../components/ui'
-import { ActionDock, IconButton, IconFavorite, IconKeep, IconReject } from '../../../components/ui/ui3'
+import { ActionDock, IconButton, IconFavorite, IconKeep, IconReject, IconZoomIn } from '../../../components/ui/ui3'
 import { ImageLightbox } from '../../../components/ImageLightbox'
 import { activeJob, trackJob, useJobStore } from '../../../stores/jobStore'
 import {
@@ -210,20 +210,16 @@ export function CanvasStage() {
       </div>
 
       <div className="wb4-stage__canvas">
-        {isRunning && job && (
+        {job && (
           <div className="wb4-stage__hud">
-            <ProgressHUD job={job} />
-          </div>
-        )}
-
-        {isQueued && job && (
-          <div className="wb4-stage__queued-banner" role="status">
-            <span className="muted">已加入队列 · 前方 {queueAhead} 个任务 · 等待开始</span>
-            {currentRunningId && currentRunningId !== job.id && (
-              <button type="button" className="ds-link" onClick={() => trackJob(currentRunningId)}>
-                查看当前运行任务
-              </button>
-            )}
+            <ProgressHUD
+              job={job}
+              queueAhead={queueAhead}
+              runningJobId={currentRunningId}
+              onTrackRunning={() => {
+                if (currentRunningId) trackJob(currentRunningId)
+              }}
+            />
           </div>
         )}
 
@@ -251,10 +247,7 @@ export function CanvasStage() {
                 <p className="muted">正在生成，完成后逐张显示…</p>
               </>
             ) : isQueued ? (
-              <>
-                <p className="muted">已加入队列，前方 {queueAhead} 个任务，等待开始…</p>
-                <p className="muted">排队期间不显示采样进度，任务开始后这里会实时显示 Step / Stage。</p>
-              </>
+              <p className="muted">任务开始后，这里会实时显示画面与进度。</p>
             ) : (
               <p className="muted">本任务暂无图片</p>
             )}
@@ -281,8 +274,12 @@ export function CanvasStage() {
                 className={`wb4-filmstrip__item${shown?.id === image.id ? ' wb4-filmstrip__item--active' : ''}`}
                 aria-pressed={shown?.id === image.id}
                 aria-label={`查看第 ${images.indexOf(image) + 1} 张`}
-                title={`Seed ${image.seed ?? '—'}`}
+                title={`Seed ${image.seed ?? '—'} · 双击预览大图`}
                 onClick={() => setSelectedId(image.id)}
+                onDoubleClick={() => {
+                  setSelectedId(image.id)
+                  setLightboxOpen(true)
+                }}
               >
                 <img src={imageThumbUrl(image.id)} alt="" loading="lazy" />
                 <span className="wb4-filmstrip__badge">{images.indexOf(image) + 1}</span>
@@ -291,6 +288,11 @@ export function CanvasStage() {
           </div>
           {shown && (
             <ActionDock label="图片动作">
+              <IconButton
+                icon={<IconZoomIn size={16} />}
+                label="预览大图"
+                onClick={() => setLightboxOpen(true)}
+              />
               <IconButton
                 icon={<IconFavorite size={16} />}
                 label={shown.favorite ? '已收藏' : '收藏'}

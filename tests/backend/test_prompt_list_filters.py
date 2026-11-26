@@ -17,10 +17,10 @@ def _set_status(client, prompt_id: str, status: str):
     assert response.status_code == 200
 
 
-def _evaluate(client, prompt_id: str, score: int = 3):
+def _evaluate(client, prompt_id: str, score: int = 3, dimension_scores: dict | None = None):
     response = client.post(
         f"/api/v1/prompts/{prompt_id}/evaluations",
-        json={"overall_score": score, "dimension_scores": {}},
+        json={"overall_score": score, "dimension_scores": dimension_scores or {}},
     )
     assert response.status_code == 201
 
@@ -130,3 +130,66 @@ def test_score_desc_with_unscored_filter_falls_back_to_updated_desc(client):
     assert [item["id"] for item in body["items"]] == [
         newest["id"], middle["id"], oldest["id"],
     ]
+
+
+def test_min_score_filter_uses_latest_evaluation_only(client):
+    high = _prompt(client, "high")
+    low = _prompt(client, "low")
+    unscored = _prompt(client, "unscored")
+    _evaluate(client, high["id"], score=5)
+    _evaluate(client, low["id"], score=2)
+
+    response = client.get("/api/v1/prompts", params={"min_score": 4})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [item["id"] for item in body["items"]] == [high["id"]]
+
+    # 重新评分后应以“最新一条”为准：high 从 5 分降到 1 分，不再命中 ≥4。
+    _evaluate(client, high["id"], score=1)
+
+    response = client.get("/api/v1/prompts", params={"min_score": 4})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert unscored["id"] not in {item["id"] for item in body["items"]}
+
+
+def test_dimension_min_score_filter_uses_latest_evaluation_dimension(client):
+    strong_scene = _prompt(client, "strong-scene")
+    weak_scene = _prompt(client, "weak-scene")
+    no_dimension = _prompt(client, "no-dimension")
+    _evaluate(client, strong_scene["id"], score=3, dimension_scores={"scene": 5})
+    _evaluate(client, weak_scene["id"], score=5, dimension_scores={"scene": 2})
+    _evaluate(client, no_dimension["id"], score=5)
+
+    response = client.get(
+        "/api/v1/prompts",
+        params={"dimension": "scene", "min_dimension_score": 4},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert [item["id"] for item in body["items"]] == [strong_scene["id"]]
+
+
+def test_dimension_filter_requires_min_dimension_score(client):
+    prompt = _prompt(client, "with-dimension")
+    _evaluate(client, prompt["id"], score=4, dimension_scores={"style": 4})
+
+    response = client.get("/api/v1/prompts", params={"dimension": "style"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "PROMPT_DIMENSION_SCORE_MISSING"
+
+
+def test_invalid_dimension_returns_422(client):
+    response = client.get(
+        "/api/v1/prompts",
+        params={"dimension": "unknown", "min_dimension_score": 3},
+    )
+
+    assert response.status_code == 422

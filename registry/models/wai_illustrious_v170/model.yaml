@@ -1,0 +1,21 @@
+schema_version: '1.0'
+model_id: wai_illustrious_v170
+version: 17.0.0
+display_name: WAI-illustrious-SDXL v17.0
+family: sdxl_illustrious
+model_type: checkpoint
+format: safetensors
+status: released
+files:
+- filename: waiIllustriousSDXL_v170.safetensors
+  folder: checkpoints
+  required: true
+  size_bytes: 6938040682
+  sha256: f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04
+  precision: fp16
+dependencies: []
+compatible_workflows:
+- anime_generate
+notes: Illustrious 系动漫 checkpoint；单文件，CLIP/VAE 内置。来源 ModelScope（HingXuan/WAI-illustrious-SDXL-v17）；ModelScope 页面标注 Apache-2.0，Civitai 原页许可未核。Pony 系 LoRA 不通用。
+created_at: '2026-11-17'
+updated_at: '2026-11-17'

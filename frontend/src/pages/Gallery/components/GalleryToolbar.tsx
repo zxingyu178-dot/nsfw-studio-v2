@@ -1,7 +1,7 @@
 import { useState, type MutableRefObject } from 'react'
 import { Button, Select, Tabs } from '../../../components/ui'
 import type { ImageReviewStatus, ImageSort } from '../../../types/workbench'
-import type { GalleryCategory, GallerySource, TabKey } from '../hooks/useGalleryQuery'
+import type { GalleryCategory, GallerySeries, GallerySource, TabKey } from '../hooks/useGalleryQuery'
 import {
   DENSITY_OPTIONS,
   FIT_OPTIONS,
@@ -62,6 +62,9 @@ interface GalleryToolbarProps {
   onSourceChange: (value: GallerySource) => void
   category: GalleryCategory
   onCategoryChange: (value: GalleryCategory) => void
+  series: GallerySeries
+  onSeriesChange: (value: GallerySeries) => void
+  seriesOptions: { series: string; count: number }[]
   sort: ImageSort
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
@@ -84,6 +87,7 @@ export function GalleryToolbar({
   tab, onTabChange, view, onToggleView,
   subStatus, onSubStatusChange, source, onSourceChange, sort, onSortChange,
   category, onCategoryChange,
+  series, onSeriesChange, seriesOptions,
   density, onDensityChange, layout, onLayoutChange, fit, onFitChange,
   selectMode, onToggleSelect, onStartReview,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
@@ -130,6 +134,22 @@ export function GalleryToolbar({
           value={category}
           onChange={(event) => onCategoryChange(event.target.value as GalleryCategory)}
           options={CATEGORY_OPTIONS.map(({ value, label }) => ({ value, label }))}
+        />
+        {/* 0024：系列（如「末世后宫」）；候选项由 /api/v1/images/series 动态提供 */}
+        <Select
+          aria-label="系列"
+          value={series}
+          onChange={(event) => onSeriesChange(event.target.value)}
+          options={[
+            { value: '', label: '系列：全部' },
+            ...seriesOptions.map(({ series: name, count }) => ({
+              value: name,
+              label: `${name}（${count}）`,
+            })),
+            ...(series && !seriesOptions.some((option) => option.series === series)
+              ? [{ value: series, label: series }]
+              : []),
+          ]}
         />
         <Select
           aria-label="来源"

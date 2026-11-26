@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { Field } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconRestart, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import { engineRuntimeApi } from '../../../api/client'
-import type { RuntimePreflightDTO } from '../../../types/workbench'
+import type { RuntimePreflightDTO, RuntimePreflightStatus } from '../../../types/workbench'
 import {
   defaultWorkflowNotice,
   imagePrimaryCandidates,
@@ -28,6 +28,13 @@ import { CollapsibleSection } from '../components/CollapsibleSection'
 import { ModuleParameterField } from '../components/ModuleParameterField'
 import { Pane } from '../Pane'
 import { SplitGenerateAction } from './SplitGenerateAction'
+
+/** W2.0：preflight 状态中文化；括号内保留原始状态码，便于排查。 */
+const PREFLIGHT_LABELS: Record<RuntimePreflightStatus, string> = {
+  READY: '就绪',
+  BLOCKED: '未就绪',
+  UNKNOWN: '未知',
+}
 
 export function InspectorPanel({
   imageGenAvailable,
@@ -133,19 +140,32 @@ export function InspectorPanel({
           )}
         </div>
 
-        <div className="wb4-switch-row">
-          <div className="wb4-switch-row__text">
+        <button
+          type="button"
+          className="wb4-runtime-row"
+          aria-label="检查运行环境"
+          title="检测引擎 / 节点 / 模型"
+          disabled={preflightModuleIds.length === 0 || preflightBusy}
+          onClick={() => { void runPreflight() }}
+        >
+          <span className="wb4-runtime-row__main">
             <span className="wb4-switch-row__label">运行环境</span>
-            <span className="wb4-switch-row__sub">检测引擎 / 节点 / 模型</span>
-          </div>
-          <IconButton
-            icon={<IconRestart size={14} />}
-            label="检查运行环境"
-            loading={preflightBusy}
-            disabled={preflightModuleIds.length === 0}
-            onClick={() => { void runPreflight() }}
+            <span className="wb4-switch-row__sub">
+              {preflightBusy
+                ? '正在检测…'
+                : preflight
+                  ? `${PREFLIGHT_LABELS[preflight.status]}（${preflight.status}）`
+                  : '点击检测引擎 / 节点 / 模型'}
+            </span>
+          </span>
+          <span
+            className={`wb4-runtime-row__dot wb4-runtime-row__dot--${
+              preflightBusy ? 'busy' : (preflight?.status ?? 'idle').toLowerCase()
+            }`}
+            aria-hidden="true"
           />
-        </div>
+          <IconRestart size={14} />
+        </button>
         {preflight && (
           <div>
             <p
@@ -157,7 +177,7 @@ export function InspectorPanel({
               }
               role="status"
             >
-              运行环境：{preflight.status}
+              运行环境：{PREFLIGHT_LABELS[preflight.status]}（{preflight.status}）
               {preflight.engine.version ? `（ComfyUI ${preflight.engine.version}）` : ''}
             </p>
             <ul data-testid="runtime-preflight-details" className="wb-static">

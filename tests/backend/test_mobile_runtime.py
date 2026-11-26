@@ -30,7 +30,7 @@ def test_fixed_port_and_cold_start_budget():
 
 
 def _healthy_probe():
-    return {"product": "nsfw-studio", "status": "ok", "version": "0.13.0"}
+    return {"product": "nsfw-studio", "status": "ok", "version": "0.14.0"}
 
 
 def test_start_success(tmp_path, monkeypatch):

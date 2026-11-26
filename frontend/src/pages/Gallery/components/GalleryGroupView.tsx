@@ -38,6 +38,7 @@ export function GalleryGroupView({
               <div className="gal-group__head">
                 <span className="gal-group__identity">
                   <span className="gal-group__id">{shortJobId(g.job_id)}</span>
+                  {g.series_ref && <span className="gal-group__module">{g.series_ref}</span>}
                   {g.module_id && <span className="gal-group__module">{g.module_id}</span>}
                 </span>
                 <span className="gal-group__time">{formatDateTime(g.created_at)}</span>

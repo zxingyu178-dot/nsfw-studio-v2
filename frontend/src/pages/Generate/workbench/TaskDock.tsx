@@ -37,7 +37,7 @@ export function TaskDock() {
         {running ? (
           <div className="wb4-dock__status">
             <span className="wb4-dock__dot wb4-dock__dot--run" aria-hidden="true" />
-            <span className="wb4-dock__label">{running.status === 'RUNNING' ? 'RUNNING' : 'QUEUED'}</span>
+            <span className="wb4-dock__label">{running.status === 'RUNNING' ? '生成中' : '排队中'}</span>
             {hud?.stageIndex != null && hud.stageCount > 1 && (
               <span className="wb4-dock__stage">
                 阶段 {hud.stageIndex}/{hud.stageCount}
@@ -51,11 +51,13 @@ export function TaskDock() {
               <span className="wb4-dock__step">Step {hud.step}/{hud.maxStep}</span>
             )}
             <span className="wb4-dock__overall">{hud?.overall ?? 0}%</span>
+            {paused && <span className="wb4-dock__paused">已暂停调度</span>}
           </div>
         ) : (
           <div className="wb4-dock__status">
             <span className="wb4-dock__dot" aria-hidden="true" />
             <span className="wb4-dock__label">空闲</span>
+            {paused && <span className="wb4-dock__paused">已暂停调度</span>}
           </div>
         )}
 

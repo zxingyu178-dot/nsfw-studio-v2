@@ -1,0 +1,99 @@
+# anime_generate v4 — ComfyUI Provider Binding（LoRA 版）
+#
+# 在 v3（MiaoMiao v14 + FaceDetailer）基础上插入 LoraLoader：
+#   CheckpointLoaderSimple(model/clip) → LoraLoader → KSampler.model / CLIPTextEncode.clip
+#   FaceDetailer 的 model/clip 同样来自 LoraLoader，保证修脸阶段风格一致。
+#
+# LoRA：Hentai Pussy inspection_Pony_V1.safetensors（Pony 底模，109 MB）
+#   作者 満珍楼 (COSiNE)，Civitai model 570883 / version 636338；
+#   触发词补充解剖形状控制（fat mons / clitoral hood / gaping / clitoris 等）。
+#
+# 与 v3 的差异：
+#   1) 新增 LoraLoader（默认 strength_model = strength_clip = 1.0）；
+#   2) 采样参数沿用 v3 **实际运行值**（binding defaults 生效后的
+#      steps 30 / cfg 4.0 / er_sde / simple），而不是 v3 workflow.json 里
+#      被 defaults 覆盖的 5.5 / dpmpp_2m / karras；
+#   3) 其余节点、FaceDetailer 默认值与 SaveImage 前缀与 v3 完全一致。
+#
+# 已知限制：
+#   - 当前架构 binding 不能按 Job 动态改节点图，FaceDetailer 与 LoRA 均为常开；
+#     需要对照时把 strength_model / strength_clip 设为 0 或临时改本文件（不提交）。
+#   - LoRA 单张额外显存/耗时未单独测；G4 见 release_manifest 记录。
+
+binding_version: v4
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置（LoRA 固定写在本 binding 的 defaults，不暴露给模块契约）
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+# 固定默认（与 v3 实际运行值一致；LoRA 开关在节点 "21"）
+defaults:
+  "21": {strength_model: 1.0, strength_clip: 1.0}
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+  "20":
+    guide_size: 512
+    guide_size_for: true
+    max_size: 1024
+    steps: 30
+    cfg: 4.0
+    sampler_name: er_sde
+    scheduler: simple
+    denoise: 0.5
+    feather: 5
+    noise_mask: true
+    force_inpaint: true
+    bbox_threshold: 0.5
+    bbox_dilation: 10
+    bbox_crop_factor: 3.0
+    drop_size: 10
+    cycle: 1
+    sam_detection_hint: "center-1"
+    sam_dilation: 0
+    sam_bbox_expansion: 0
+    sam_threshold: 0.93
+    sam_mask_hint_threshold: 0.7
+    sam_mask_hint_use_negative: "False"
+
+# Seed 范围（KSampler 惯例）；FaceDetailer 节点 seed 固定于 workflow.json（节点 "20"）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  output_size: explicit
+  auto_face_detailer: true
+  lora: true
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: LoraLoader, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: UltralyticsDetectorProvider, source: comfyui-impact-subpack}
+    - {class_type: FaceDetailer, source: comfyui-impact-pack}
+  models:
+    - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
+    - {type: loras, filename: Hentai Pussy inspection_Pony_V1.safetensors, sha256: dc24ee0135af27b4c3940e06936b8533a153fddd95768e1ca961ceb7d3a373a4, precision: fp16}
+
+performance:
+  status: unverified
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles: []
+  known_limitations:
+    - "LoRA 加载与 FaceDetailer 同时启用时的显存峰值/单张耗时尚未实测"
+    - "FaceDetailer 与 LoRA 为 binding 级常开，不能按 Job 单独关闭"

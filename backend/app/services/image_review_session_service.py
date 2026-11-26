@@ -252,9 +252,14 @@ def queue_page(
         raise ValidationError("page 必须 >= 1", code="PAGE_INVALID")
     if page_size < 1 or page_size > 200:
         raise ValidationError("page_size 取值范围为 1-200", code="PAGE_SIZE_INVALID")
-    row = _must_get_session(session, session_id)
+    _must_get_session(session, session_id)  # 不存在 → 404 REVIEW_SESSION_NOT_FOUND
 
-    total = row.total_count
+    # v0.37.4：以实际 items 数作为 total。图片被清理（其会话成员行同步删除）后，
+    # 会话行上的 total_count 可能领先于真实队列，导致尾部出现"有 hasNext 但取不到图"的空页。
+    total = int(session.execute(
+        select(func.count()).select_from(ImageReviewSessionItem)
+        .where(ImageReviewSessionItem.session_id == session_id)
+    ).scalar_one())
     offset = (page - 1) * page_size
     items = list(session.execute(
         select(ImageReviewSessionItem, Image)

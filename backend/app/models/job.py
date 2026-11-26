@@ -33,6 +33,11 @@ class Job(Base):
     # payload 不同时必须 IDEMPOTENCY_KEY_CONFLICT，而不是静默返回旧 Job。
     client_request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="QUEUED")
+    # 0024：创作系列（自由文本，如「末世后宫」）；NULL = 未归属系列。
+    # 只做图库筛选维度，不参与执行、不进入 prompt 快照。
+    series: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 0024：系列内的人类可读定位标签（如「D05 · p420」），只给图库展示用，不参与执行。
+    series_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     prompt_mode: Mapped[str] = mapped_column(String(16), nullable=False)
     positive_prompt_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")

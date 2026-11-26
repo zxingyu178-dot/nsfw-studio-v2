@@ -139,10 +139,13 @@ def list_prompts(
     include_evaluation: bool = False,
     sort: str = "updated_desc", status: Sequence[str] | None = None,
     scored: bool | None = None,
+    min_score: int | None = None, dimension: str | None = None,
+    min_dimension_score: int | None = None,
 ) -> PromptListResponse:
     prompts, total = prompt_service.list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
         sort=sort, status=status, scored=scored,
+        min_score=min_score, dimension=dimension, min_dimension_score=min_dimension_score,
     )
     # 当前版本也批量读取，避免列表已有的逐提示词查询随数量增长。
     version_ids = [prompt.current_version_id for prompt in prompts if prompt.current_version_id]

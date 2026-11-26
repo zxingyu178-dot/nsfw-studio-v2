@@ -23,12 +23,14 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import random
 import time
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.timeutil import utc_now_iso
@@ -43,6 +45,37 @@ logger = logging.getLogger(__name__)
 MAX_SUBMIT_RETRIES = 2  # 仅瞬态网络错误（规范 §三十六）
 SYSTEM_RANDOM = random.SystemRandom()
 DEFAULT_STAGE_TIMEOUT_SECONDS = 1800.0  # §十：本机 6GB 显存冷启动较慢，默认宽松
+# SQLite 写锁冲突的最后一道保险（busy_timeout 之外）：写事务可安全重跑，按指数退避重试
+WRITE_RETRY_ATTEMPTS = 3
+WRITE_RETRY_BASE_DELAY_SECONDS = 0.5
+# 孤儿任务看门狗：Job 停在 RUNNING 但 Worker 已不跟踪它 → 超过宽限期收敛为 INTERRUPTED
+ORPHAN_GRACE_SECONDS = 60.0
+ORPHAN_SWEEP_INTERVAL_SECONDS = 5.0
+
+
+def _is_sqlite_locked(error: BaseException) -> bool:
+    message = str(error).lower()
+    return "database is locked" in message or "database is busy" in message
+
+
+def _retry_on_locked(func):
+    """SQLite 写锁冲突重试（指数退避）。被装饰方法必须自带 session 且可安全重跑。"""
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        delay = WRITE_RETRY_BASE_DELAY_SECONDS
+        for attempt in range(1, WRITE_RETRY_ATTEMPTS + 1):
+            try:
+                return func(self, *args, **kwargs)
+            except OperationalError as error:
+                if not _is_sqlite_locked(error) or attempt >= WRITE_RETRY_ATTEMPTS:
+                    raise
+                logger.warning("%s 写库冲突（%s），%.1fs 后重试（第 %s 次）",
+                               func.__name__, error.orig or error, delay, attempt)
+                time.sleep(delay)
+                delay *= 2
+
+    return wrapper
 
 
 class QueuePaused(RuntimeError):
@@ -105,6 +138,11 @@ class SingleQueueWorker:
         self._current_job_id: str | None = None
         # §十：本次全局暂停（USER_REQUEST）所暂停的那个 RUNNING job id；resume 时用于排首恢复
         self._user_paused_job_id: str | None = None
+        # 孤儿任务看门狗：job_id → 首次观察到"RUNNING 但 Worker 不跟踪"的 monotonic 时间
+        self._orphan_since: dict[str, float] = {}
+        self._last_orphan_sweep = 0.0
+        # 进度落库写锁告警节流（避免每条轮询都刷日志）
+        self._progress_lock_warned_at = 0.0
 
     # ===== 生命周期 =====
     def start(self) -> None:
@@ -125,6 +163,8 @@ class SingleQueueWorker:
         logger.info("单队列 Worker 启动 adapter=%s", self._adapter.name)
         while self._running:
             try:
+                # 孤儿任务看门狗：RUNNING 但没有 Worker 在推进 → 60s 内收敛，避免永久"运行中"
+                self._sweep_orphan_jobs()
                 if self._queue_paused:
                     await asyncio.sleep(self._poll_interval)
                     continue
@@ -175,6 +215,7 @@ class SingleQueueWorker:
         self._queue_paused_reason = reason
         logger.error("队列已自动暂停: %s", reason)
 
+    @_retry_on_locked
     def _pick_next_job(self) -> str | None:
         # §六：queue_position 是唯一执行顺序事实源（priority 不参与排序）
         with self._session_factory() as session:
@@ -190,6 +231,61 @@ class SingleQueueWorker:
                 session.commit()
                 return None
             return job.id
+
+    # ===== 孤儿任务看门狗 =====
+    def _sweep_orphan_jobs(self) -> None:
+        """把"数据库里 RUNNING、但 Worker 已不再跟踪"的 Job 收敛为 INTERRUPTED。
+
+        现场来源：终态写入连续撞锁失败（Job 停在 RUNNING / 队列已暂停）等。
+        宽限期 60s，给可能的正在收尾的写入留余量；收敛后队列暂停，等用户显式恢复。
+        """
+        now = time.monotonic()
+        if now - self._last_orphan_sweep < ORPHAN_SWEEP_INTERVAL_SECONDS:
+            return
+        self._last_orphan_sweep = now
+        with self._session_factory() as session:
+            running_ids = list(
+                session.execute(select(Job.id).where(Job.status == "RUNNING")).scalars()
+            )
+        # 当前正在执行的那个 Job 是唯一合法的 RUNNING；其余 RUNNING 都是孤儿
+        candidates = [job_id for job_id in running_ids if job_id != self._current_job_id]
+        active = set(candidates)
+        for stale_id in list(self._orphan_since):
+            if stale_id not in active:
+                self._orphan_since.pop(stale_id, None)
+        for job_id in candidates:
+            since = self._orphan_since.setdefault(job_id, now)
+            if now - since < ORPHAN_GRACE_SECONDS:
+                continue
+            self._orphan_since.pop(job_id, None)
+            self._mark_job_orphaned(job_id)
+
+    @_retry_on_locked
+    def _mark_job_orphaned(self, job_id: str) -> None:
+        message = f"执行器已不再跟踪该任务（超过 {int(ORPHAN_GRACE_SECONDS)} 秒无推进），判定为孤儿任务"
+        with self._session_factory() as session:
+            job = session.get(Job, job_id)
+            if job is None or job.status != "RUNNING":
+                return
+            job.status = "INTERRUPTED"
+            job.error_type = "JOB_ORPHANED"
+            job.error_message = message
+            for stage in session.execute(
+                select(JobStage).where(JobStage.job_id == job.id, JobStage.status == "RUNNING")
+            ).scalars():
+                stage.status = "INTERRUPTED"
+            for stage_item in session.execute(
+                select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+                .where(JobStage.job_id == job.id, JobStageItem.status == "RUNNING")
+            ).scalars():
+                stage_item.status = "INTERRUPTED"
+            for item in job.items:
+                if item.status == "RUNNING":
+                    item.status = "INTERRUPTED"
+            job_service.record_event(session, job.id, "JOB_ORPHANED", payload={"message": message})
+            session.commit()
+        logger.error("孤儿任务已收敛为 INTERRUPTED: %s", job_id)
+        self._pause_queue(f"JOB_ORPHANED: {message}")
 
     # ===== 单 Job 处理 =====
     async def process_job(self, job_id: str) -> None:
@@ -230,7 +326,7 @@ class SingleQueueWorker:
                 if job is None or stage is None:
                     return "FAILED"
                 if job.cancel_requested:
-                    self._cancel_remaining(session, job)
+                    self._cancel_remaining(job.id)
                     return "CANCELLED"
                 if job.pause_requested:
                     job.status = "PAUSED"
@@ -296,7 +392,7 @@ class SingleQueueWorker:
                         failed_any = True
                     continue  # 已完成/已取消的 StageItem 绝不重跑（§八）
                 if job.cancel_requested:
-                    self._cancel_remaining(session, job)
+                    self._cancel_remaining(job.id)
                     return "CANCELLED"
                 if job.pause_requested:
                     job.status = "PAUSED"
@@ -313,7 +409,7 @@ class SingleQueueWorker:
                 with self._session_factory() as session:
                     job = session.get(Job, job_id)
                     if job is not None:
-                        self._cancel_remaining(session, job)
+                        self._cancel_remaining(job_id)
                 return "CANCELLED"
             if result == "FAILED":
                 # 非系统性失败：继续本 Stage 剩余项（Phase 2 语义），但绝不进入下一 Stage
@@ -321,6 +417,7 @@ class SingleQueueWorker:
 
         return self._settle_stage(job_id, stage_id, failed_any)
 
+    @_retry_on_locked
     def _settle_stage(self, job_id: str, stage_id: str, failed_any: bool) -> str:
         """Stage 收尾：全部 COMPLETED → COMPLETED；任一 FAILED → FAILED（§六）。"""
         with self._session_factory() as session:
@@ -627,6 +724,7 @@ class SingleQueueWorker:
             raise EngineError("STORAGE_ERROR", f"输入图片不存在: {image_id}")
         return image
 
+    @_retry_on_locked
     def _bind_engine_job(self, job_id: str, stage_item_id: str, engine_job_id: str) -> None:
         with self._session_factory() as session:
             stage_item = session.get(JobStageItem, stage_item_id)
@@ -704,16 +802,28 @@ class SingleQueueWorker:
                 and (now - state["last_write"]) < self._progress_persist_interval:
             return  # 节流：暂不落库（实时层已广播，下次轮询再补；stage 切换立即写）
 
-        with self._session_factory() as session:
-            stage_item = session.get(JobStageItem, stage_item_id)
-            if stage_item is None:
-                return
-            if progress is not None:
-                stage_item.progress = progress
-            job_item = session.get(JobItem, stage_item.job_item_id)
-            if job_item is not None and progress is not None:
-                job_item.progress = progress
-            session.commit()
+        # 进度只是展示数据：写锁冲突时跳过本次落库，绝不因进度写失败把任务打成 INTERRUPTED
+        try:
+            with self._session_factory() as session:
+                # no_autoflush：避免读取 JobItem 时提前 flush 尚未完成的 UPDATE，让写合并到 commit
+                with session.no_autoflush:
+                    stage_item = session.get(JobStageItem, stage_item_id)
+                    if stage_item is None:
+                        return
+                    if progress is not None:
+                        stage_item.progress = progress
+                    job_item = session.get(JobItem, stage_item.job_item_id)
+                    if job_item is not None and progress is not None:
+                        job_item.progress = progress
+                session.commit()
+        except OperationalError as error:
+            if not _is_sqlite_locked(error):
+                raise
+            if self._progress_lock_warned_at == 0.0 \
+                    or (now - self._progress_lock_warned_at) >= 60.0:
+                self._progress_lock_warned_at = now
+                logger.warning("进度落库遇 SQLite 写锁，本次跳过（任务继续执行）: %s", error)
+            return  # 不更新签名，下次轮询自然补写
         state["db_signature"] = db_signature
         state["last_write"] = now
 
@@ -721,6 +831,7 @@ class SingleQueueWorker:
         """StageItem 终态后清理节流状态。"""
         self._progress_state.pop(stage_item_id, None)
 
+    @_retry_on_locked
     def _stage_item_completed(self, job_id: str, stage_item_id: str, image_ids: list[str]) -> None:
         """StageItem 完成：output_image_id 落库；槽位处于最后一个 Stage 时 JobItem 才 COMPLETED。"""
         with self._session_factory() as session:
@@ -766,6 +877,7 @@ class SingleQueueWorker:
         ).scalars().first()
         return stage.stage_index == max_index
 
+    @_retry_on_locked
     def _stage_item_cancelled(self, job_id: str, stage_item_id: str) -> None:
         with self._session_factory() as session:
             stage_item = session.get(JobStageItem, stage_item_id)
@@ -778,6 +890,7 @@ class SingleQueueWorker:
                                      payload={"stage_item_id": stage_item_id})
             session.commit()
 
+    @_retry_on_locked
     def _stage_item_failed(self, job_id: str, stage_item_id: str, error_type: str, message: str) -> str:
         with self._session_factory() as session:
             stage_item = session.get(JobStageItem, stage_item_id)
@@ -803,6 +916,7 @@ class SingleQueueWorker:
             session.commit()
         return "FAILED"
 
+    @_retry_on_locked
     def _systemic_failure(
         self, job_id: str, stage_item_id: str, error: EngineError, *, pause_queue: bool = True
     ) -> str:
@@ -853,32 +967,38 @@ class SingleQueueWorker:
             self._pause_queue(f"{error.error_type}: {error.message}")
         return "SYSTEMIC"
 
-    def _cancel_remaining(self, session: Session, job: Job) -> None:
+    @_retry_on_locked
+    def _cancel_remaining(self, job_id: str) -> None:
         """取消：已生成的图片全部保留，只取消未完成部分（§七）。"""
         now = utc_now_iso()
-        job.status = "CANCELLED"
-        job.finished_at = now
-        for stage in session.execute(select(JobStage).where(
-            JobStage.job_id == job.id,
-            JobStage.status.in_(("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED")),
-        )).scalars():
-            stage.status = "CANCELLED"
-            stage.finished_at = now
-        for stage_item in session.execute(
-            select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
-            .where(JobStage.job_id == job.id,
-                   JobStageItem.status.in_(("QUEUED", "RUNNING", "INTERRUPTED")))
-        ).scalars():
-            stage_item.status = "CANCELLED"
-            stage_item.finished_at = now
-        for item in job.items:
-            if item.status in ("QUEUED", "RUNNING", "INTERRUPTED"):
-                item.status = "CANCELLED"
-                item.finished_at = now
-        job.completed_count = sum(1 for item in job.items if item.status == "COMPLETED")
-        job_service.record_event(session, job.id, "JOB_CANCELLED")
-        session.commit()
+        with self._session_factory() as session:
+            job = session.get(Job, job_id)
+            if job is None:
+                return
+            job.status = "CANCELLED"
+            job.finished_at = now
+            for stage in session.execute(select(JobStage).where(
+                JobStage.job_id == job.id,
+                JobStage.status.in_(("QUEUED", "RUNNING", "PAUSED", "INTERRUPTED")),
+            )).scalars():
+                stage.status = "CANCELLED"
+                stage.finished_at = now
+            for stage_item in session.execute(
+                select(JobStageItem).join(JobStage, JobStage.id == JobStageItem.job_stage_id)
+                .where(JobStage.job_id == job.id,
+                       JobStageItem.status.in_(("QUEUED", "RUNNING", "INTERRUPTED")))
+            ).scalars():
+                stage_item.status = "CANCELLED"
+                stage_item.finished_at = now
+            for item in job.items:
+                if item.status in ("QUEUED", "RUNNING", "INTERRUPTED"):
+                    item.status = "CANCELLED"
+                    item.finished_at = now
+            job.completed_count = sum(1 for item in job.items if item.status == "COMPLETED")
+            job_service.record_event(session, job.id, "JOB_CANCELLED")
+            session.commit()
 
+    @_retry_on_locked
     def _finish_job(self, job_id: str, outcome: str) -> None:
         with self._session_factory() as session:
             job = session.get(Job, job_id)
@@ -924,6 +1044,7 @@ class SingleQueueWorker:
             return list(self._output_importer(job, stage_item, outputs) or [])
 
     # ===== §0.1 Worker 内部异常 =====
+    @_retry_on_locked
     def _worker_internal_error(self, job_id: str, error: Exception) -> None:
         """代码级意外异常：当前 Job/Stage INTERRUPTED（保留恢复信息）+ 队列暂停（§0.1）。"""
         message = f"{type(error).__name__}: {error}"[:500]

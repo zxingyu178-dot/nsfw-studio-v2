@@ -525,6 +525,8 @@ def create_job(
     input_image_ids: list[str] | None = None,
     stage_configs: list[dict[str, Any]] | None = None,
     engine_version: str | None = None,
+    series: str | None = None,
+    series_ref: str | None = None,
 ) -> tuple[Job, bool]:
     """创建 Job + N 个 JobItem + 物化 JobStage/JobStageItem（单事务，Phase 3 §五）。
 
@@ -663,6 +665,8 @@ def create_job(
     job = Job(
         id=new_id(JOB),
         source=source,
+        series=series,
+        series_ref=series_ref,
         client_request_id=client_request_id,
         # Phase 7 Task7：请求指纹只对携带幂等键的请求有意义
         client_request_fingerprint=fingerprint if client_request_id else None,
@@ -925,6 +929,9 @@ def resume_remaining(session: Session, original_job_id: str) -> tuple[Job, bool]
     job = Job(
         id=new_id(JOB),
         source="resume",
+        # 0024：续跑子 Job 继承父 Job 的系列归属，避免图库按系列筛时漏掉续跑产物
+        series=original.series,
+        series_ref=original.series_ref,
         status="QUEUED",
         job_kind=original.job_kind,
         prompt_mode=original.prompt_mode,

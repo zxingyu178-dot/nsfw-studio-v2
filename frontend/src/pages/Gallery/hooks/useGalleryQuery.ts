@@ -18,6 +18,8 @@ import type {
 export type TabKey = 'ALL' | 'NEW' | 'FAVORITE' | 'ARCHIVED'
 export type GallerySource = '' | 'comfyui' | 'import'
 export type GalleryCategory = '' | 'anime' | 'imported'
+/** 0024：创作系列（Job.series 的自由文本；'' = 全部） */
+export type GallerySeries = '' | '__none__' | (string & {})
 
 export const PAGE_SIZE = 40
 
@@ -30,12 +32,14 @@ export interface GalleryListQuery {
   favorite?: boolean
   source?: Exclude<GallerySource, ''>
   category?: Exclude<GalleryCategory, ''>
+  series?: string
 }
 
 export function useGalleryQuery(
   jobFilter: string | null | undefined,
   sourceFilter: GallerySource = '',
   categoryFilter: GalleryCategory = '',
+  seriesFilter: GallerySeries = '',
 ) {
   const [tab, setTab] = useState<TabKey>('ALL')
   const [subStatus, setSubStatus] = useState<'' | ImageReviewStatus>('')
@@ -76,6 +80,7 @@ export function useGalleryQuery(
     else if (tab === 'FAVORITE') query.favorite = true
     if (sourceFilter) query.source = sourceFilter
     if (categoryFilter) query.category = categoryFilter
+    if (seriesFilter) query.series = seriesFilter
     return query
   }
 
@@ -98,7 +103,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
 
   useEffect(() => {
     loadFirst()
@@ -116,21 +121,22 @@ export function useGalleryQuery(
       .list(listQuery())
       .then((page) => {
         if (seq !== requestSeq.current) return
-        const known = new Set(itemsRef.current.map((img) => img.id))
-        const fresh = page.items.filter((img) => !known.has(img.id))
+        // v0.37.4：手机端审核过的图会把 status/favorite 写回同一数据库；
+        // 这里除并入新增图外，还要用第一页的权威数据**原地更新已加载项**，
+        // 否则切回电脑端看到的仍是旧的审核角标。
+        const freshById = new Map(page.items.map((img) => [img.id, img]))
+        const prev = itemsRef.current
+        const updated = prev.map((img) => freshById.get(img.id) ?? img)
+        const known = new Set(updated.map((img) => img.id))
+        const added = page.items.filter((img) => !known.has(img.id))
+        const atTop = updated.length === 0 || (window.scrollY ?? 0) < 240
+        setItems(added.length > 0 && atTop ? [...added, ...updated] : updated)
         setTotal(page.total)
-        if (fresh.length === 0) {
-          setNewCount(0)
-          return
-        }
-        // 已在顶部（或列表为空）时直接并入，用户感知不到位置变化；否则只提示数量。
-        const atTop = itemsRef.current.length === 0 || (window.scrollY ?? 0) < 240
-        if (atTop) {
-          setItems((prev) => [...fresh, ...prev])
-          setHasNext(page.has_next || itemsRef.current.length + fresh.length < page.total)
+        if (added.length > 0 && atTop) {
+          setHasNext(page.has_next || updated.length + added.length < page.total)
           setNewCount(0)
         } else {
-          setNewCount(fresh.length)
+          setNewCount(added.length)
         }
       })
       .catch(() => {})
@@ -139,7 +145,7 @@ export function useGalleryQuery(
       .then((s) => setServerStats(s))
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
 
   /** 用户显式点击「有新图」提示：拉取第一页并只并入新增项，保留已加载多页。 */
   const applyNewImages = useCallback(() => {
@@ -160,7 +166,7 @@ export function useGalleryQuery(
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '刷新新图失败'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -197,7 +203,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoadingMore(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter])
+  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
 
   // 哨兵进入视口 → 加载下一页
   useEffect(() => {
@@ -216,7 +222,7 @@ export function useGalleryQuery(
   const loadGroups = useCallback((page: number) => {
     setGroupsLoading(true)
     imageApi
-      .jobGroups({ page, page_size: 20 })
+      .jobGroups({ page, page_size: 20, ...(seriesFilter ? { series: seriesFilter } : {}) })
       .then((result) => {
         setGroups((prev) => (page === 1 ? result.items : [...prev, ...result.items]))
         setGroupsPage(page)
@@ -224,7 +230,7 @@ export function useGalleryQuery(
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组'))
       .finally(() => setGroupsLoading(false))
-  }, [])
+  }, [seriesFilter])
 
   const resetGroups = useCallback(() => setGroups([]), [])
 
@@ -237,6 +243,7 @@ export function useGalleryQuery(
     else if (tab === 'FAVORITE') params.favorite = true
     if (sourceFilter) params.source = sourceFilter
     if (categoryFilter) params.category = categoryFilter
+    if (seriesFilter) params.series = seriesFilter
     return params
   }
 

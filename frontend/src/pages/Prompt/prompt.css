@@ -948,3 +948,105 @@
     justify-content: flex-start;
   }
 }
+
+/* ===== v0.37.5：卡片内联全部生成图 + 渲染性能 ===== */
+/* 长列表只渲染视口附近的卡片，滚动更稳（content-visibility 不改变布局高度估算）。 */
+.pp-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+}
+
+/* 图片区由横向滚动条改为自适应网格：一屏能看全，不再需要左右拖。 */
+.pp-card__gallery,
+.pp-grid--single .pp-card__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  align-items: stretch;
+  flex-wrap: initial;
+  overflow: visible;
+  margin: 10px 0 0;
+  padding: 0 18px;
+}
+
+.pp-card__gallery-thumb,
+.pp-grid--single .pp-card__gallery-thumb {
+  flex: initial;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.pp-card__gallery-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 18px 0;
+}
+
+.pp-card__gallery-expand {
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pp-card__gallery-expand:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.pp-card__gallery-expand:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pp-editor__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+/* v0.37.6：卡片内直接改名 / 切换状态 */
+.pp-card__title-text {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.pp-card__title-text:hover {
+  color: var(--accent);
+}
+
+.pp-card__title-input {
+  min-width: 14ch;
+  padding: 2px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.pp-card__status-select {
+  appearance: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.pp-card__status-select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

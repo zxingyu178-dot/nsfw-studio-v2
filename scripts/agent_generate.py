@@ -6,7 +6,7 @@
 前置：后端已启动（默认为 http://127.0.0.1:8000）。
 
 用法（项目根目录）：
-    .venv/Scripts/python scripts/agent_generate.py --prompt "1girl, silver hair, kimono, shrine" \
+    .venv/Scripts/python scripts/agent_generate.py --prompt "a botanist examining a fern in a glasshouse" \
         [--module <workflow_id>] [--list-workflows] \
         [--negative "..."] [--width 768] [--height 1024] [--count 1] [--seed 42] \
         [--next] [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
@@ -18,7 +18,7 @@ W1.2 工作流规则：
 - 输出打印**实际执行**的 module_id（不是 CLI 输入参数）。
 
 示例（豆包只需改提示词）：
-    .venv/Scripts/python scripts/agent_generate.py --prompt "1girl, red dress, night city, neon lights" --out D:\\ai_out
+    .venv/Scripts/python scripts/agent_generate.py --prompt "a red fox resting beside a woodland stream" --out D:\\ai_out
 
 安全（推荐）：在 configs/config.local.yaml 配置 agent.token 后，
 脚本会自动读取该文件（也可用环境变量 NSFW_STUDIO_AGENT_TOKEN 覆盖），并走受保护的
@@ -37,7 +37,154 @@ import uuid
 from pathlib import Path
 
 
-def post(api: str, path: str, payload: dict, token: str | None = None):
+REQUEST_FIELDS = {
+    "prompt", "negative_prompt", "module_id", "width", "height", "count", "seed",
+    "queue_mode", "client_request_id",
+}
+REQUEST_FILE_MAX_BYTES = 128 * 1024
+REQUEST_SEMANTIC_OPTIONS = {
+    "--prompt", "--module", "--negative", "--width", "--height", "--count", "--seed", "--next",
+}
+
+
+class RequestValidationError(ValueError):
+    """标准请求文件不符合 /agent/jobs 输入契约。"""
+
+
+def _reject_duplicate_fields(pairs: list[tuple[str, object]]) -> dict:
+    result: dict = {}
+    for key, value in pairs:
+        if key in result:
+            raise RequestValidationError(f"JSON 包含重复字段: {key}")
+        result[key] = value
+    return result
+
+
+def _require_int(payload: dict, field: str, minimum: int, maximum: int) -> int:
+    value = payload[field]
+    if type(value) is not int:  # bool 是 int 子类，但不应被 JSON 合同接受。
+        raise RequestValidationError(f"{field} 必须是整数")
+    if not minimum <= value <= maximum:
+        raise RequestValidationError(f"{field} 必须在 {minimum}..{maximum} 之间")
+    return value
+
+
+def _require_utf8_text(value: str, field: str) -> None:
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise RequestValidationError(f"{field} 包含不能编码为 UTF-8 的字符") from error
+
+
+def validate_request(payload: object, *, require_client_request_id: bool = False) -> dict:
+    """严格校验并补齐 Agent API 默认值；绝不改写 Prompt 正文。"""
+    if not isinstance(payload, dict):
+        raise RequestValidationError("JSON 顶层必须是对象")
+    unknown = sorted(set(payload) - REQUEST_FIELDS)
+    if unknown:
+        raise RequestValidationError(f"未知字段: {', '.join(unknown)}")
+
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str):
+        raise RequestValidationError("prompt 必须是字符串")
+    if not prompt.strip():
+        raise RequestValidationError("prompt 不能为空或纯空白")
+    if len(prompt) > 10000:
+        raise RequestValidationError("prompt 最多 10000 个字符")
+    _require_utf8_text(prompt, "prompt")
+
+    negative = payload.get("negative_prompt", "")
+    if not isinstance(negative, str):
+        raise RequestValidationError("negative_prompt 必须是字符串")
+    if negative and not negative.strip():
+        raise RequestValidationError("negative_prompt 显式提供时不能是纯空白")
+    if len(negative) > 8000:
+        raise RequestValidationError("negative_prompt 最多 8000 个字符")
+    _require_utf8_text(negative, "negative_prompt")
+
+    module_id = payload.get("module_id")
+    if module_id is not None:
+        if not isinstance(module_id, str):
+            raise RequestValidationError("module_id 必须是字符串或 null")
+        if not module_id.strip():
+            raise RequestValidationError("module_id 不能为空或纯空白")
+        if len(module_id) > 64:
+            raise RequestValidationError("module_id 最多 64 个字符")
+        _require_utf8_text(module_id, "module_id")
+
+    normalized = {
+        "prompt": prompt,
+        "negative_prompt": negative,
+        "width": payload.get("width", 1024),
+        "height": payload.get("height", 1024),
+        "count": payload.get("count", 1),
+        "seed": payload.get("seed"),
+        "queue_mode": payload.get("queue_mode", "normal"),
+    }
+    if module_id is not None:
+        normalized["module_id"] = module_id.strip()
+
+    _require_int(normalized, "width", 64, 4096)
+    _require_int(normalized, "height", 64, 4096)
+    count = _require_int(normalized, "count", 1, 64)
+    seed = normalized["seed"]
+    if seed is not None:
+        if type(seed) is not int or not 0 <= seed <= 2147483647:
+            raise RequestValidationError("seed 必须是 null 或 0..2147483647 的整数")
+        if count != 1:
+            raise RequestValidationError("固定 seed 时 count 必须为 1")
+    if normalized["queue_mode"] not in ("normal", "next"):
+        raise RequestValidationError("queue_mode 只支持 normal 或 next")
+
+    request_id = payload.get("client_request_id")
+    if request_id is None and require_client_request_id:
+        raise RequestValidationError("client_request_id 是标准请求文件的必填字段")
+    if request_id is not None:
+        if not isinstance(request_id, str):
+            raise RequestValidationError("client_request_id 必须是字符串或 null")
+        if not request_id.strip():
+            raise RequestValidationError("client_request_id 不能为空或纯空白")
+        if len(request_id) > 128:
+            raise RequestValidationError("client_request_id 最多 128 个字符")
+        _require_utf8_text(request_id, "client_request_id")
+        normalized["client_request_id"] = request_id.strip()
+    else:
+        normalized["client_request_id"] = f"cli_{uuid.uuid4().hex[:12]}"
+    return normalized
+
+
+def load_request_file(path: Path) -> dict:
+    """读取标准 UTF-8 JSON 请求；限制大小并拒绝重复字段。"""
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(REQUEST_FILE_MAX_BYTES + 1)
+    except OSError as error:
+        raise RequestValidationError(f"无法读取请求文件: {error}") from error
+    if len(raw) > REQUEST_FILE_MAX_BYTES:
+        raise RequestValidationError(f"请求文件不能超过 {REQUEST_FILE_MAX_BYTES} bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise RequestValidationError("请求文件必须是标准 UTF-8 编码") from error
+    try:
+        payload = json.loads(text, object_pairs_hook=_reject_duplicate_fields)
+    except RequestValidationError:
+        raise
+    except json.JSONDecodeError as error:
+        raise RequestValidationError(
+            f"JSON 语法错误（第 {error.lineno} 行，第 {error.colno} 列）",
+        ) from error
+    return validate_request(payload, require_client_request_id=True)
+
+
+def post(
+    api: str,
+    path: str,
+    payload: dict,
+    token: str | None = None,
+    retries: int = 0,
+    suppress_error_body: bool = False,
+):
     """POST JSON（失败直接退出；不存在可降级提交路径）。"""
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # 中文安全：UTF-8 字节
     headers = {"Content-Type": "application/json; charset=utf-8"}
@@ -46,12 +193,20 @@ def post(api: str, path: str, payload: dict, token: str | None = None):
     request = urllib.request.Request(
         api + path, data=data, method="POST", headers=headers,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        body = error.read().decode("utf-8", errors="replace")
-        raise SystemExit(f"[FAIL] HTTP {error.code}: {body[:600]}") from error
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace")
+            if error.code < 500 or attempt == retries:
+                suffix = "（响应正文已省略）" if suppress_error_body else f": {body[:600]}"
+                raise SystemExit(f"[FAIL] HTTP {error.code}{suffix}") from error
+        except urllib.error.URLError as error:
+            if attempt == retries:
+                raise SystemExit(f"[FAIL] 提交失败: {error.reason}") from error
+        time.sleep(1)
+    raise AssertionError("unreachable")
 
 
 def get(api: str, path: str) -> dict:
@@ -65,6 +220,9 @@ def load_token(cli_value: str = "", config_path: Path | None = None) -> str:
     只返回字符串，绝不打印 token 本身；文件不存在/解析失败时回退为空（走旧路径）。
     """
     token = (cli_value or "").strip()
+    if token:
+        return token
+    token = os.environ.get("NSFW_STUDIO_AGENT_TOKEN", "").strip()
     if token:
         return token
     path = config_path or (Path(__file__).resolve().parents[1] / "configs" / "config.local.yaml")
@@ -104,6 +262,10 @@ def default_module_id(api: str) -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="本机生图 CLI（AI 助手调用入口）")
     parser.add_argument("--prompt", default="", help="正向提示词（中文/英文标签均可）")
+    parser.add_argument("--request-file", type=Path,
+                        help="标准 UTF-8 JSON 请求（字段与 POST /agent/jobs 一致）")
+    parser.add_argument("--validate-only", action="store_true",
+                        help="仅离线校验请求；不加载凭据、不联网、不创建输出目录")
     parser.add_argument("--module", default=None,
                         help="工作流模块 id；不传使用服务端默认。可用性由服务端校验")
     parser.add_argument("--list-workflows", action="store_true",
@@ -118,11 +280,48 @@ def main() -> int:
     parser.add_argument("--out", default=".", help="输出目录（默认当前目录）")
     parser.add_argument("--api", default="http://127.0.0.1:8000/api/v1")
     parser.add_argument("--timeout-min", type=int, default=120, help="单任务超时（分钟）")
-    parser.add_argument("--token", default=os.environ.get("NSFW_STUDIO_AGENT_TOKEN", ""),
+    parser.add_argument("--token", default="",
                         help="Agent token（默认读 NSFW_STUDIO_AGENT_TOKEN；配置后走受保护的 /agent/jobs）")
     parser.add_argument("--legacy", action="store_true",
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
     args = parser.parse_args()
+
+    if args.request_file is not None:
+        supplied_options = {item.split("=", 1)[0] for item in sys.argv[1:] if item.startswith("--")}
+        explicit_semantic = sorted(REQUEST_SEMANTIC_OPTIONS.intersection(supplied_options))
+        if explicit_semantic:
+            print("[FAIL] --request-file 不能同时使用请求语义参数: " + ", ".join(explicit_semantic))
+            return 2
+        if args.list_workflows:
+            print("[FAIL] --request-file 不能与 --list-workflows 同时使用")
+            return 2
+        try:
+            request_payload = load_request_file(args.request_file)
+        except RequestValidationError as error:
+            print(f"[FAIL] 请求文件校验失败: {error}")
+            return 2
+    else:
+        if args.validate_only and args.list_workflows:
+            print("[FAIL] --validate-only 不能与 --list-workflows 同时使用")
+            return 2
+        direct_payload = {
+            "prompt": args.prompt,
+            "negative_prompt": args.negative,
+            "width": args.width,
+            "height": args.height,
+            "count": args.count,
+            "seed": args.seed,
+            "queue_mode": "next" if args.queue_next else "normal",
+            "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
+            **({"module_id": args.module} if args.module is not None else {}),
+        }
+        try:
+            request_payload = validate_request(direct_payload)
+        except RequestValidationError as error:
+            if not args.list_workflows:
+                print(f"[FAIL] 参数校验失败: {error}")
+                return 2
+            request_payload = {}
 
     if args.list_workflows:
         modules = list_agent_workflows(args.api)
@@ -135,19 +334,16 @@ def main() -> int:
             print(f"  - {module['module_id']}{mark}  {module.get('title') or ''}")
         return 0
 
-    if not args.prompt.strip():
-        parser.error("--prompt 必填（--list-workflows 除外）")
-
-    # W1.2.2：严格区分 None 与显式空字符串；空白模块 ID 必须在任何 HTTP 请求前失败。
-    if args.module is not None and not args.module.strip():
-        print("[FAIL] --module 不能为空字符串或纯空白；使用服务端默认请完全省略 --module")
-        return 2
+    if args.validate_only:
+        print("[OK] 请求校验通过（未加载凭据、未联网、未创建输出目录）")
+        return 0
 
     # Agent 加固路径把 module_id 省略交给服务端解析（不在 CLI 里写默认）；
     # 旧 /jobs 路径需要先解析实际 Primary。
-    use_agent_endpoint = bool(load_token(args.token)) and not args.legacy
-    if args.module is not None:
-        primary_id: str | None = args.module.strip()
+    token = load_token(args.token)
+    use_agent_endpoint = bool(token) and not args.legacy
+    if "module_id" in request_payload:
+        primary_id: str | None = request_payload["module_id"]
     elif use_agent_endpoint:
         primary_id = None
     else:
@@ -160,40 +356,33 @@ def main() -> int:
 
     # W1.2.1：Prompt 由服务端在 Job 创建事务内统一关联（不再提前调 /prompts/ensure）；
     # 未放行/非法请求不会提前产生 Prompt。
-    token = load_token(args.token)
     if token and not args.legacy:
         # 加固路径：专用 Agent 端点，Bearer token + 服务端限速 + 幂等键。
-        job = post(args.api, "/agent/jobs", {
-            "prompt": args.prompt,
-            "negative_prompt": args.negative,
-            # 不传 module_id = 服务端默认；显式传入由服务端做能力/放行校验
-            **({"module_id": args.module.strip()} if args.module is not None else {}),
-            "width": args.width,
-            "height": args.height,
-            "count": args.count,
-            "seed": args.seed,
-            "queue_mode": "next" if args.queue_next else "normal",
-            "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
-        }, token=token)
+        job = post(
+            args.api, "/agent/jobs", request_payload, token=token,
+            retries=2 if args.request_file is not None else 0,
+            suppress_error_body=args.request_file is not None,
+        )
     else:
         # 旧路径：本机 loopback UI 同款 /jobs（未配置 token 时保持向后兼容）。
         job = post(args.api, "/jobs", {
             "source": "doubao",
-            "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
-            "queue_mode": "next" if args.queue_next else "normal",
+            "client_request_id": request_payload["client_request_id"],
+            "queue_mode": request_payload["queue_mode"],
             "snapshot": {
                 "prompt_mode": "full",
-                "full_prompt": args.prompt,
-                "negative_prompt": args.negative,
-                "count": args.count,
-                "width": args.width,
-                "height": args.height,
-                "seed_mode": "fixed" if args.seed is not None else "random",
-                "seed": args.seed,
+                "full_prompt": request_payload["prompt"],
+                "negative_prompt": request_payload["negative_prompt"],
+                "count": request_payload["count"],
+                "width": request_payload["width"],
+                "height": request_payload["height"],
+                "seed_mode": "fixed" if request_payload["seed"] is not None else "random",
+                "seed": request_payload["seed"],
                 "workflow_modules": modules,
                 "input_images": [],
             },
-        })
+        }, retries=2 if args.request_file is not None else 0,
+           suppress_error_body=args.request_file is not None)
     job_id = job["id"]
     actual_modules = [
         item.get("module_id") for item in (job.get("workflow_snapshot") or {}).get("modules") or []

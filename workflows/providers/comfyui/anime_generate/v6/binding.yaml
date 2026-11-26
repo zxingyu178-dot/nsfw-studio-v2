@@ -1,0 +1,51 @@
+# anime_generate v6 — 教学基础版（对应用户 ComfyUI 里的“动漫基础-教学版”）
+#
+# 与 v5 的差别：移除 FaceDetailer + UltralyticsDetectorProvider + LoraLoader，
+# 回到 7 类型节点的纯 txt2img；新增 CLIPSetLastLayer(-2)（教学版 clip skip）。
+# 采样：832x1216 / 30 步 / cfg 4.0 / er_sde / simple / denoise 1.0。
+# 实测代价：无面部重绘，脸崩率比 v5 高，但速度约 30-35s/张（v5 约 100s/张）。
+
+binding_version: v6
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  output_size: explicit
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPSetLastLayer, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: estimated
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, batch_size: 1, sampling_seconds: 33, source: "对齐 v2 实测 + 用户教学版 ComfyUI 直跑 30s/张"}
+  notes: "教学版无 FaceDetailer/LoRA，按用户实测约 30s/张"

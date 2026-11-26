@@ -10,6 +10,8 @@ export interface PromptSlotRowProps {
   label: string
   value: string
   active: boolean
+  /** 展开时是否自动聚焦输入框；批量展开全部字段时关闭，避免抢焦点。 */
+  autoFocus?: boolean
   /** 自定义展开态输入框占位（默认「输入 {label}描述…」）。 */
   placeholder?: string
   /** 已选素材名称（用于 chip 展示），无则 null。 */
@@ -24,6 +26,7 @@ export function PromptSlotRow({
   label,
   value,
   active,
+  autoFocus = true,
   placeholder,
   assetName,
   assetAction,
@@ -59,7 +62,7 @@ export function PromptSlotRow({
           className="wb4-slot__textarea"
           rows={3}
           value={value}
-          autoFocus
+          autoFocus={autoFocus}
           placeholder={placeholder ?? `输入${label}描述…`}
           onChange={(event) => onChange(event.target.value)}
         />

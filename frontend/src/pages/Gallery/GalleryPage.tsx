@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiRequestError, imageApi, type ImageStatsParams } from '../../api/client'
+import { ApiRequestError, imageApi, reviewSessionApi, type ImageStatsParams, type ReviewSessionSummaryDTO } from '../../api/client'
 import { emptyWorkbenchSnapshot } from '../../stores/workbenchStore'
 import { Badge, Button, ConfirmModal } from '../../components/ui'
 import {
@@ -13,16 +13,17 @@ import {
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
-import { useGalleryQuery, type GalleryCategory, type GallerySource } from './hooks/useGalleryQuery'
+import { useGalleryQuery, type GalleryCategory, type GallerySeries, type GallerySource } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
 import { useGalleryPrefs } from './hooks/useGalleryPrefs'
-import { createReviewSessionAdapter, type ReviewSessionAdapter } from './hooks/useReviewSession'
+import { createReviewSessionAdapter, sameReviewScope, type ReviewSessionAdapter } from './hooks/useReviewSession'
 import { GalleryToolbar } from './components/GalleryToolbar'
 import { GalleryGrid } from './components/GalleryGrid'
 import { GallerySelectionBar } from './components/GallerySelectionBar'
 import { GalleryGroupView } from './components/GalleryGroupView'
 import { GalleryDetailDrawer } from './components/GalleryDetailDrawer'
 import { CleanupRejectedDialog } from './components/CleanupRejectedDialog'
+import { ResumeReviewDialog } from './components/ResumeReviewDialog'
 import './gallery.css'
 
 /**
@@ -46,6 +47,8 @@ interface PendingBatchReview {
 }
 
 const BATCH_STATUS_LIMIT = 500
+/** v0.37.3：废片删除每批张数——批量小才能持续刷新进度，单个请求也不会超时 */
+const CLEANUP_BATCH_SIZE = 50
 
 function batchActionLabel(status: BatchReviewStatus): string {
   if (status === 'KEEP') return '保留'
@@ -59,14 +62,27 @@ export default function GalleryPage() {
   const jobFilter = searchParams.get('job')
   const sourceParam = searchParams.get('source')
   const categoryParam = searchParams.get('category')
+  const seriesParam = searchParams.get('series')
   const sourceFilter: GallerySource =
     sourceParam === 'comfyui' || sourceParam === 'import' ? sourceParam : ''
   const categoryFilter: GalleryCategory =
     categoryParam === 'anime' || categoryParam === 'imported' ? categoryParam : ''
+  // 0024：系列过滤走 URL（?series=末世后宫），刷新/分享链接后筛选仍然有效
+  const seriesFilter: GallerySeries = seriesParam ?? ''
 
   const [view, setView] = useState<'flat' | 'group'>('flat')
+  // 0024：系列下拉的候选（来自 /api/v1/images/series，随新任务产生自动更新）
+  const [seriesOptions, setSeriesOptions] = useState<{ series: string; count: number }[]>([])
 
-  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter)
+  useEffect(() => {
+    let alive = true
+    imageApi.series()
+      .then((res) => { if (alive) setSeriesOptions(res.items ?? []) })
+      .catch(() => { /* 后端未迁移/无系列时保持空列表，不影响图库主体 */ })
+    return () => { alive = false }
+  }, [])
+
+  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter, seriesFilter)
   const selection = useGallerySelection()
   const prefs = useGalleryPrefs()
 
@@ -83,7 +99,8 @@ export default function GalleryPage() {
   const undoStack = useRef<UndoEntry[]>([])
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  // Phase 0.11.1：Review Session（分页 loader，全历史审核）
+  // v0.37.4：点击「开始审核」若发现未完成批次，先让用户选「继续上次 / 新建一批」
+  const [resumePrompt, setResumePrompt] = useState<ReviewSessionSummaryDTO | null>(null)
   const [reviewSession, setReviewSession] = useState<{
     loader: ReviewPageLoader
     adapter?: ReviewSessionAdapter
@@ -93,7 +110,12 @@ export default function GalleryPage() {
   } | null>(null)
   const [cleanupPreview, setCleanupPreview] = useState<CleanupRejectedResult | null>(null)
   const [cleanupImageIds, setCleanupImageIds] = useState<string[] | null>(null)
-  const [cleanupBusy, setCleanupBusy] = useState(false)
+  // v0.37.2：「删除淘汰图」点击后立即开弹窗并显示"统计中"，避免后台统计耗时期间毫无反馈
+  const [cleanupLoading, setCleanupLoading] = useState(false)
+  const [cleanupDeleting, setCleanupDeleting] = useState(false)
+  // v0.37.3：按批删除的可视进度（done/total），避免单个长请求让用户以为卡死
+  const [cleanupProgress, setCleanupProgress] = useState<{ done: number; total: number } | null>(null)
+  const cleanupRequestRef = useRef(0)
 
   useEffect(() => {
     if (sourceParam === null || sourceFilter !== '') return
@@ -135,6 +157,13 @@ export default function GalleryPage() {
     const next = new URLSearchParams(searchParams)
     if (category) next.set('category', category)
     else next.delete('category')
+    setSearchParams(next)
+  }
+
+  function applySeriesFilter(series: GallerySeries): void {
+    const next = new URLSearchParams(searchParams)
+    if (series) next.set('series', series)
+    else next.delete('series')
     setSearchParams(next)
   }
 
@@ -379,10 +408,17 @@ export default function GalleryPage() {
     navigate('/generate', { state: { workbench: snapshot, replace: false } })
   }
 
-  /** Phase 0.13：开始审核 → 冻结式审核会话（/api/v1/review/*，与手机桥共用 ImageReviewSessionService）。
-   *  绝对 index 队列替代 status=NEW 动态 offset 翻页；GET sessions/latest 断点续看。 */
-  function startReview(): void {
-    const adapter = createReviewSessionAdapter({ status: 'NEW', sort: 'created_desc' })
+  /** 打开审核模式：resume=指定会话断点续看；否则按 only_new 新建批次。 */
+  function openReviewSession(options: {
+    resume?: ReviewSessionSummaryDTO | null
+    abandonSessionId?: string | null
+  }): void {
+    const adapter = createReviewSessionAdapter(
+      { status: 'NEW', sort: 'created_desc' },
+      options.resume
+        ? { resume: options.resume }
+        : { newBatch: { mode: 'only_new', abandonSessionId: options.abandonSessionId ?? null } },
+    )
     setReviewSession({
       title: '图库审核',
       statsParams: { status: 'NEW' },
@@ -391,6 +427,23 @@ export default function GalleryPage() {
         loadPage: (page) => adapter.loadPage(page),
       },
     })
+  }
+
+  /** Phase 0.13：开始审核 → 冻结式审核会话（/api/v1/review/*，与手机桥共用 ImageReviewSessionService）。
+   *  v0.37.4：先查最近 ACTIVE 批次；有未完成进度则弹窗让用户决定继续还是新建，避免"点开却是空白/旧批次"。 */
+  async function startReview(): Promise<void> {
+    const filter = { status: 'NEW', sort: 'created_desc' }
+    try {
+      const latest = await reviewSessionApi.latestSession()
+      const remaining = latest.total_count - latest.seen_count
+      if (latest.status === 'ACTIVE' && remaining > 0 && sameReviewScope(latest.filter, filter)) {
+        setResumePrompt(latest)
+        return
+      }
+    } catch {
+      // 404=从未建过会话；其他错误（如后端重启）也不阻断开始审核，直接开新批
+    }
+    openReviewSession({})
   }
 
   /** Phase 0.11.1：按 Job 打开 Review Mode——取消 page_size=100 上限，分页拉全直到 has_next=false */
@@ -410,52 +463,114 @@ export default function GalleryPage() {
   /** 废片清理——全局入口不传 image_ids，多选入口冻结当前选择并复用同一确认对话框。 */
   async function openCleanup(imageIds?: string[]): Promise<void> {
     const targetIds = imageIds ? [...imageIds] : null
-    setCleanupBusy(true)
+    const requestId = ++cleanupRequestRef.current
+    setCleanupImageIds(targetIds)
+    setCleanupPreview(null)
+    setCleanupLoading(true)  // 立即反馈：弹窗先出现，统计完成后再填充数字
     query.setError(null)
     try {
       const result = await imageApi.cleanupRejected({
         ...(targetIds ? { image_ids: targetIds } : {}),
         confirm: false,
       })
-      setCleanupImageIds(targetIds)
-      setCleanupPreview(result)
+      if (cleanupRequestRef.current === requestId) setCleanupPreview(result)
     } catch (err) {
-      query.setError(err instanceof ApiRequestError ? err.message : '无法预览废片清理')
+      if (cleanupRequestRef.current === requestId) {
+        setCleanupImageIds(null)
+        query.setError(err instanceof ApiRequestError ? err.message : '无法预览废片清理')
+      }
     } finally {
-      setCleanupBusy(false)
+      if (cleanupRequestRef.current === requestId) setCleanupLoading(false)
     }
   }
 
+  function cancelCleanup(): void {
+    cleanupRequestRef.current += 1  // 取消后忽略仍在途的预览结果，避免弹窗又弹出
+    setCleanupPreview(null)
+    setCleanupImageIds(null)
+    setCleanupLoading(false)
+    setCleanupDeleting(false)
+    setCleanupProgress(null)
+  }
+
   async function confirmCleanup(): Promise<void> {
-    setCleanupBusy(true)
+    if (!cleanupPreview) return
+    const hadSelection = cleanupImageIds !== null
+    const deletableIds = cleanupPreview.deletable_ids ?? []
+    let deleted = 0
+    let bytes = 0
+    let protectedCount = cleanupPreview.protected_count ?? 0
+    let failedCount = 0
+    let firstFailure: string | null = null
+    let failure: string | null = null
+    setCleanupDeleting(true)
+    setCleanupProgress(deletableIds.length > 0 ? { done: 0, total: deletableIds.length } : null)
     query.setError(null)
     try {
-      const result = await imageApi.cleanupRejected({
-        ...(cleanupImageIds ? { image_ids: cleanupImageIds } : {}),
-        confirm: true,
-      })
-      // eslint-disable-next-line no-console
-      const bytes = result.deleted_bytes ?? 0
-      const released = bytes < 1024 ? `${bytes} B`
-        : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB`
-        : bytes < 1024 * 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-        : `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-      setNotice({
-        text: `清理完成：已删除 ${result.deleted_count ?? 0} 张，释放 ${released}；受保护未删 ${result.protected_count ?? 0} 张`,
-      })
-      setCleanupPreview(null)
-      setCleanupImageIds(null)
-      query.loadFirst()
-      if (cleanupImageIds) selection.exitSelect()
-      try {
-        await imageApi.stats(query.buildStatsParams())
-      } catch (err) {
-        query.setError(err instanceof ApiRequestError ? err.message : '统计刷新失败')
+      if (deletableIds.length === 0) {
+        // 旧后端未返回 deletable_ids：回退为一次性确认（行为与改造前一致）
+        const result = await imageApi.cleanupRejected({
+          ...(cleanupImageIds ? { image_ids: cleanupImageIds } : {}),
+          confirm: true,
+        })
+        deleted = result.deleted_count ?? 0
+        bytes = result.deleted_bytes ?? 0
+        protectedCount = Math.max(protectedCount, result.protected_count ?? 0)
+        failedCount = result.failed?.length ?? 0
+        firstFailure = result.failed?.[0]?.message ?? result.failed?.[0]?.error ?? null
+      } else {
+        // 每批 50 张顺序提交：后端始终快速返回，前端能显示真实进度
+        for (let start = 0; start < deletableIds.length; start += CLEANUP_BATCH_SIZE) {
+          const chunk = deletableIds.slice(start, start + CLEANUP_BATCH_SIZE)
+          // eslint-disable-next-line no-await-in-loop
+          const result = await imageApi.cleanupRejected({ image_ids: chunk, confirm: true })
+          deleted += result.deleted_count ?? 0
+          bytes += result.deleted_bytes ?? 0
+          protectedCount += result.protected_count ?? 0
+          failedCount += result.failed?.length ?? 0
+          if (!firstFailure) {
+            firstFailure = result.failed?.[0]?.message ?? result.failed?.[0]?.error ?? null
+          }
+          setCleanupProgress({
+            done: Math.min(start + chunk.length, deletableIds.length),
+            total: deletableIds.length,
+          })
+        }
       }
     } catch (err) {
-      query.setError(err instanceof ApiRequestError ? err.message : '清理失败')
-    } finally {
-      setCleanupBusy(false)
+      failure = err instanceof ApiRequestError ? err.message : '清理失败'
+    }
+    setCleanupDeleting(false)
+    setCleanupProgress(null)
+    setCleanupPreview(null)
+    setCleanupImageIds(null)
+    const released = bytes < 1024 ? `${bytes} B`
+      : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB`
+      : bytes < 1024 * 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+    if (deleted === 0 && failedCount > 0) {
+      // 全失败必须显式报错：只显示“清理完成：已删除 0 张”会让用户误以为已经删完
+      setNotice({ text: `清理未完成：0 张删除，${failedCount} 张失败` })
+      query.setError(`删除失败：${firstFailure ?? '未知原因'}`)
+    } else {
+      setNotice({
+        text: `清理完成：已删除 ${deleted} 张，释放 ${released}；受保护未删 ${protectedCount} 张${
+          failedCount > 0 ? `；失败 ${failedCount} 张` : ''
+        }`,
+      })
+      if (failure) {
+        // 已完成的批次已落库：明确提示可重试剩余，避免用户误以为全部失败
+        query.setError(`清理中断：${failure}（已删除 ${deleted} 张，可再次清理剩余）`)
+      } else if (failedCount > 0) {
+        query.setError(`部分删除失败（${failedCount} 张）：${firstFailure ?? '未知原因'}`)
+      }
+    }
+    query.loadFirst()
+    if (hadSelection) selection.exitSelect()
+    try {
+      await imageApi.stats(query.buildStatsParams())
+    } catch (err) {
+      query.setError(err instanceof ApiRequestError ? err.message : '统计刷新失败')
     }
   }
 
@@ -472,6 +587,9 @@ export default function GalleryPage() {
         onSourceChange={applySourceFilter}
         category={categoryFilter}
         onCategoryChange={applyCategoryFilter}
+        series={seriesFilter}
+        onSeriesChange={applySeriesFilter}
+        seriesOptions={seriesOptions}
         sort={query.sort}
         onSortChange={query.setSort}
         density={prefs.density}
@@ -482,8 +600,8 @@ export default function GalleryPage() {
         onFitChange={prefs.setFit}
         selectMode={selection.selectMode}
         onToggleSelect={selection.toggleSelectMode}
-        onStartReview={startReview}
-        cleanupBusy={cleanupBusy}
+        onStartReview={() => void startReview()}
+        cleanupBusy={cleanupLoading || cleanupDeleting}
         onOpenCleanup={() => void openCleanup()}
         importProgress={importProgress}
         importInputRef={importInputRef}
@@ -621,10 +739,27 @@ export default function GalleryPage() {
         />
       )}
 
+      <ResumeReviewDialog
+        session={resumePrompt}
+        onResume={() => {
+          const latest = resumePrompt
+          setResumePrompt(null)
+          if (latest) openReviewSession({ resume: latest })
+        }}
+        onStartNew={() => {
+          const latest = resumePrompt
+          setResumePrompt(null)
+          openReviewSession({ abandonSessionId: latest?.id ?? null })
+        }}
+        onCancel={() => setResumePrompt(null)}
+      />
+
       <CleanupRejectedDialog
         preview={cleanupPreview}
-        busy={cleanupBusy}
-        onCancel={() => { setCleanupPreview(null); setCleanupImageIds(null) }}
+        busy={cleanupDeleting}
+        loading={cleanupLoading}
+        progress={cleanupProgress}
+        onCancel={cancelCleanup}
         onConfirm={() => void confirmCleanup()}
       />
 

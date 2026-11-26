@@ -1,0 +1,81 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {"ckpt_name": "miaomiaoHarem_v14.safetensors"}
+  },
+  "4": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {"width": 832, "height": 1216, "batch_size": 1}
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {"clip": ["1", 1], "text": ""}
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {"clip": ["1", 1], "text": ""}
+  },
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["1", 0],
+      "seed": 0,
+      "steps": 30,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["4", 0],
+      "denoise": 1.0
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {"samples": ["7", 0], "vae": ["1", 2]}
+  },
+  "18": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": {"model_name": "bbox/face_yolov8m.pt"}
+  },
+  "20": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": ["8", 0],
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "vae": ["1", 2],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 1024,
+      "seed": 0,
+      "steps": 30,
+      "cfg": 4.0,
+      "sampler_name": "er_sde",
+      "scheduler": "simple",
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "denoise": 0.5,
+      "feather": 5,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3.0,
+      "bbox_detector": ["18", 0],
+      "drop_size": 10,
+      "wildcard": "",
+      "cycle": 1,
+      "sam_detection_hint": "center-1",
+      "sam_dilation": 0,
+      "sam_bbox_expansion": 0,
+      "sam_threshold": 0.93,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False"
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {"images": ["20", 0], "filename_prefix": "NSFWStudio"}
+  }
+}

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NSFW Studio Mobile Review Bridge",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "description": "MediaReview Mobile API V2（W3.1 主线，固定端口 8877）。所有 /mobile/* JSON 响应统一 envelope：{success,data,error:{code,message,details},request_id}。客户合同事实源为 MediaReview 1212c30 的 NSFW_MOBILE_API_CONTRACT_V2.md。"
   },
   "paths": {

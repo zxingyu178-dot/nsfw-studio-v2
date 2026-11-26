@@ -472,6 +472,26 @@ button.gal-group__main {
   pointer-events: none;
 }
 
+/* 0024：系列定位标签（左下角，如「D05 · p420」） */
+.gal-card__series {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffd8a8;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
 .gal-card__overlay {
   display: flex;
   align-items: flex-end;

@@ -58,6 +58,7 @@ def list_images(
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
+    series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=40, ge=1, le=100),
@@ -82,13 +83,29 @@ def list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=eff_limit, offset=eff_offset,
-        category=category,
+        category=category, series=series,
     )
     has_next = (eff_offset + len(items)) < total
+    responses = [image_response(image) for image in items]
+    # 0024：回填系列与「第几天·第几段」标签（一次 IN 查询，不减既有分页性能量级）
+    series_map = image_service.job_series_map(
+        session, [item.job_id for item in responses if item.job_id]
+    )
+    for item in responses:
+        info = series_map.get(item.job_id or "")
+        if info:
+            item.series = info["series"]
+            item.series_ref = info["series_ref"]
     return ImageListResponse(
-        items=[image_response(image) for image in items], total=total,
+        items=responses, total=total,
         page=eff_page, page_size=eff_page_size, has_next=has_next,
     )
+
+
+@router.get("/series", summary="列出全部创作系列及其图片数（图库「系列」下拉）")
+def list_series(session: Session = Depends(get_session)) -> dict[str, object]:
+    """0024：返回 [{series, count}]，按图片数倒序；未归属系列的图片不在其中。"""
+    return {"items": image_service.list_series(session)}
 
 
 @router.get("/ids", summary="按图库筛选返回全部匹配图片 ID（上限 10000）")
@@ -103,6 +120,7 @@ def list_image_ids(
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
+    series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
@@ -111,7 +129,7 @@ def list_image_ids(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=limit,
-        category=category,
+        category=category, series=series,
     )
     return {"ids": ids, "total": total, "truncated": total > limit, "limit": limit}
 
@@ -182,6 +200,7 @@ def backfill_thumbnails_stop(request: Request) -> ImageBackfillStatus:
 def list_job_groups(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
     session: Session = Depends(get_session),
 ) -> dict:
     """只含 completed/有产出图的 Job；按 Job created_at 倒序。
@@ -190,7 +209,9 @@ def list_job_groups(
     favorites, preview_image_ids}；预览图按 created_at/id 倒序，计数口径与
     by-job/{job_id}/summary 完全一致。
     """
-    groups, total = image_service.list_job_groups(session, page=page, page_size=page_size)
+    groups, total = image_service.list_job_groups(
+        session, page=page, page_size=page_size, series=series
+    )
     return {
         "items": groups, "total": total, "page": page, "page_size": page_size,
         "has_next": (page - 1) * page_size + len(groups) < total,
@@ -210,6 +231,7 @@ def image_stats(
     date_to: str | None = Query(default=None),
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
+    series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
     session: Session = Depends(get_session),
 ) -> ImageStatsResponse:
     """返回命中过滤条件后的**全局**计数 {total, new, keep, reject, archived, favorites}。
@@ -221,7 +243,7 @@ def image_stats(
     return ImageStatsResponse(**image_service.image_stats(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
-        status=status, category=category,
+        status=status, category=category, series=series,
     ))
 
 

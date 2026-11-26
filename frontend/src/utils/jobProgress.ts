@@ -50,5 +50,11 @@ export function jobErrorText(errorType: string | null, errorMessage: string | nu
   if (errorType === 'ENGINE_STALLED') {
     return '引擎长时间无进度，已自动停止并释放队列头，可重试该任务。'
   }
+  if (errorType === 'JOB_ORPHANED') {
+    return '任务与执行器失去联系，已自动中断；可点「继续剩余图片」接着生成。'
+  }
+  if (errorType === 'WORKER_INTERNAL_ERROR') {
+    return `后台执行器异常导致任务中断，可点「继续剩余图片」接着生成${errorMessage ? `（${errorMessage}）` : ''}`
+  }
   return `${errorType ?? '失败'}：${errorMessage ?? ''}`
 }

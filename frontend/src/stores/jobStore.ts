@@ -217,16 +217,13 @@ export async function refreshJobs(): Promise<void> {
     let tracked = state.trackedJob
     if (tracked && !TERMINAL.has(tracked.status)) {
       const trackedId = tracked.id
-      const inQueue =
-        (queue.running?.id === trackedId && queue.running) ||
-        queue.queued.find((job) => job.id === trackedId) ||
-        queue.paused.find((job) => job.id === trackedId) ||
-        null
-      tracked = inQueue ?? (await jobApi.get(trackedId))
+      // queued/paused 现在是轻量摘要（无 items/stages），不能用来覆盖完整 trackedJob；
+      // running 仍是完整快照，可直接替换。
+      tracked = queue.running?.id === trackedId ? queue.running : await jobApi.get(trackedId)
     }
     setState({ queue, engine, engineLoaded: true, trackedJob: tracked })
-    // 瞬态进度收敛：持久 DTO 已终态的 item 不再保留 live
-    pruneLiveProgress([queue.running, ...queue.queued, ...queue.paused, tracked].filter(
+    // 瞬态进度收敛：持久 DTO 已终态的 item 不再保留 live（queued/paused 摘要不含逐项状态）
+    pruneLiveProgress([queue.running, tracked].filter(
       (j): j is JobDTO => j !== null && j !== undefined,
     ))
   } catch (error) {
@@ -373,6 +370,19 @@ export async function clearStaleJobs(): Promise<number> {
     return res.cancelled
   } catch (error) {
     setState({ lastError: error instanceof ApiRequestError ? error.message : '清理陈旧任务失败' })
+    return 0
+  }
+}
+
+/** 恢复被中断任务（JOB_ORPHANED / Worker 异常收敛后由用户显式触发）。返回恢复数量。 */
+export async function resumeInterruptedJobs(): Promise<number> {
+  setState({ lastError: null })
+  try {
+    const result = await jobApi.resumeInterrupted()
+    await refreshJobs()
+    return result.requeued_count + result.resumed_count
+  } catch (error) {
+    setState({ lastError: error instanceof ApiRequestError ? error.message : '恢复中断任务失败' })
     return 0
   }
 }

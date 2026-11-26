@@ -55,11 +55,17 @@ def list_prompts(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     include_images: bool = Query(default=False),
-    images_limit: int = Query(default=3, ge=1, le=10),
+    images_limit: int = Query(default=3, ge=1, le=24),
     include_evaluation: bool = Query(default=False),
     sort: Literal["updated_desc", "score_desc", "score_asc"] = Query(default="updated_desc"),
     status: list[Literal["keep", "candidate", "eliminated"]] | None = Query(default=None),
     scored: bool | None = Query(default=None),
+    # v0.37.6：按「最新一条评分」筛选；维度最低分必须与 dimension 成对出现。
+    min_score: int | None = Query(default=None, ge=1, le=5),
+    dimension: Literal[
+        "subject", "clothing", "scene", "composition", "lighting", "style", "quality",
+    ] | None = Query(default=None),
+    min_dimension_score: int | None = Query(default=None, ge=1, le=5),
     session: Session = Depends(get_session),
 ) -> PromptListResponse:
     # 列表选项显式透传到 service（禁止用 Session.info 之类隐式状态桥）。
@@ -67,6 +73,7 @@ def list_prompts(
         session, search=search, favorite=favorite, archived=archived, limit=limit, offset=offset,
         include_images=include_images, images_limit=images_limit,
         include_evaluation=include_evaluation, sort=sort, status=status, scored=scored,
+        min_score=min_score, dimension=dimension, min_dimension_score=min_dimension_score,
     )
 
 

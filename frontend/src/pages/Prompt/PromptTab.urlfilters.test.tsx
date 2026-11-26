@@ -106,4 +106,47 @@ describe('Prompt URL 筛选', () => {
 
     await waitFor(() => expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=mine'))
   })
+
+  it('选择综合最低分后请求带 min_score 并写入 URL', async () => {
+    const promptApi = await setup()
+    vi.mocked(promptApi.list).mockClear()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '综合最低分' }), {
+      target: { value: '4' },
+    })
+
+    await waitFor(() =>
+      expect(promptApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ min_score: 4, offset: 0 }),
+      ),
+    )
+    expect(screen.getByTestId('location-search')).toHaveTextContent('min_score=4')
+  })
+
+  it('选择评分维度时自动带默认维度下限，清空维度后一并移除', async () => {
+    const promptApi = await setup()
+    vi.mocked(promptApi.list).mockClear()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '评分维度' }), {
+      target: { value: 'scene' },
+    })
+
+    await waitFor(() =>
+      expect(promptApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ dimension: 'scene', min_dimension_score: 3 }),
+      ),
+    )
+    expect(screen.getByTestId('location-search')).toHaveTextContent('dimension=scene')
+    expect(screen.getByTestId('location-search')).toHaveTextContent('min_dimension=3')
+
+    fireEvent.change(screen.getByRole('combobox', { name: '评分维度' }), {
+      target: { value: '' },
+    })
+
+    await waitFor(() => {
+      const params = vi.mocked(promptApi.list).mock.calls.at(-1)?.[0]
+      expect(params).not.toHaveProperty('dimension')
+      expect(params).not.toHaveProperty('min_dimension_score')
+    })
+  })
 })

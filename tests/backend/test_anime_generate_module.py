@@ -84,7 +84,8 @@ def test_anime_capabilities_mirror_basic_contract_with_anime_identity():
     assert anime.can_start_from_image is False
     assert anime.is_generative is True
     assert [spec.name for spec in anime.parameters] == [
-        spec.name for spec in basic.parameters
+        *[spec.name for spec in basic.parameters],
+        "loras",
     ]
 
 
@@ -193,3 +194,37 @@ def test_modules_api_exposes_anime_generate(client):
     assert anime["is_generative"] is True
     assert anime["input_slots"] == []
     assert anime["title"] == "动漫生图（MiaoMiao）"
+# ===== v5：任务级 LoRA 配置校验 =====
+
+from app.core.errors import UnprocessableError  # noqa: E402
+
+
+def test_lora_config_accepts_two_and_normalizes_strengths():
+    module = AnimeGenerateModule()
+    validation = module.validate_config({
+        "loras": [
+            {"name": "a.safetensors"},
+            {"name": "b.safetensors", "strength_model": -1.5, "strength_clip": 0.5},
+        ]
+    })
+    assert validation.ok is True
+
+
+@pytest.mark.parametrize(
+    "config, code",
+    [
+        ({"loras": "a.safetensors"}, "LORA_PARAM_INVALID"),
+        ({"loras": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}, "LORA_LIMIT_EXCEEDED"),
+        ({"loras": [{"name": ""}]}, "LORA_PARAM_INVALID"),
+        ({"loras": [{"name": "a", "strength_model": "1"}]}, "LORA_PARAM_INVALID"),
+        ({"loras": [{"name": "a", "strength_clip": 2.5}]}, "LORA_STRENGTH_OUT_OF_RANGE"),
+        ({"loras": [{"name": "a", "unknown": 1}]}, "LORA_PARAM_INVALID"),
+        ({"loras": [{"name": "dir/a.safetensors"}]}, "LORA_PARAM_INVALID"),
+    ],
+)
+def test_lora_config_rejects_invalid_values(config, code):
+    module = AnimeGenerateModule()
+    with pytest.raises(UnprocessableError) as error:
+        module.validate_config(config)
+    assert error.value.code == code
+    assert error.value.status_code == 422

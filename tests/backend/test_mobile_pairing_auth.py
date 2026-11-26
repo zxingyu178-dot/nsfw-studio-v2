@@ -15,8 +15,11 @@ def test_health_open_and_contract(mobile_client):
     assert body["success"] is True
     data = body["data"]
     assert data["product"] == "nsfw-studio"
-    assert data["version"] == "0.13.0"
+    assert data["version"] == "0.14.0"
     assert data["api_contract"] == 2
+    assert data["build_commit"]
+    assert data["built_at"]
+    assert len(data["capability_set_hash"]) == 12
     for cap in ("image_review", "review_session", "favorite", "thumbnail", "preview", "original"):
         assert cap in data["capabilities"]
     for cap in ("image_event_feed", "image_detail", "prompt_version_evaluation",
@@ -81,6 +84,44 @@ def test_pairing_code_one_time_and_token_flow(mobile_client, session_factory):
     })
     assert r3.status_code == 400
     assert r3.json()["error"]["code"] == "PAIRING_CODE_INVALID"
+
+
+def test_last_seen_at_is_throttled_for_authenticated_requests(mobile_client, session_factory):
+    """60 秒窗口内多次鉴权只读校验，不重复写 last_seen_at / 抢写锁。"""
+    from sqlalchemy import select
+
+    from app.models.mobile_review import MobileReviewDevice
+    from app.services import mobile_pairing_service
+
+    with session_factory() as session:
+        code = mobile_pairing_service.generate_pairing_code(session)
+    response = mobile_client.post("/mobile/pairing/verify", json={
+        "installation_id": "dev-throttle", "device_name": "throttle", "code": code,
+    })
+    token = response.json()["data"]["token"]
+
+    old_value = "2000-01-01T00:00:00.000Z"
+    with session_factory() as session:
+        device = session.execute(
+            select(MobileReviewDevice).where(MobileReviewDevice.installation_id == "dev-throttle")
+        ).scalars().first()
+        device_id = device.id
+        device.last_seen_at = old_value
+        session.commit()
+
+    headers = {"Authorization": f"Bearer {token}"}
+    mobile_pairing_service._last_seen_written[device_id] = time.monotonic()
+    for _ in range(3):
+        assert mobile_client.get("/mobile/review/sessions/latest", headers=headers).status_code == 404
+    with session_factory() as session:
+        assert session.get(MobileReviewDevice, device_id).last_seen_at == old_value
+
+    mobile_pairing_service._last_seen_written[device_id] = (
+        time.monotonic() - mobile_pairing_service.LAST_SEEN_WRITE_INTERVAL_SECONDS - 1
+    )
+    assert mobile_client.get("/mobile/review/sessions/latest", headers=headers).status_code == 404
+    with session_factory() as session:
+        assert session.get(MobileReviewDevice, device_id).last_seen_at != old_value
 
 
 def test_device_revoked_returns_401(mobile_client, session_factory):

@@ -687,6 +687,7 @@ def _apply_image_filters(
     date_to: str | None = None,
     status: str | None = None,
     category: str | None = None,
+    series: str | None = None,
 ):
     """把图库过滤条件统一叠加到 select(Image) 查询上（list_images 与 image_stats 共用，
     保证列表与统计的过滤口径完全一致——禁止为统计另写一套不一致的过滤）。"""
@@ -728,6 +729,13 @@ def _apply_image_filters(
         query = query.where(Image.source == "import")
     elif category is not None and category != "":
         raise ValidationError(f"非法图库分类: {category}", code="IMAGE_CATEGORY_INVALID")
+    if series:
+        # 0024：系列过滤——按 Job.series 精确匹配；空串视为"未归属系列"。
+        # 与 category=anime 的 outerjoin 共存安全（SQLAlchemy 会复用同一 join）。
+        if series == "__none__":
+            query = query.outerjoin(Job, Job.id == Image.job_id).where(Job.series.is_(None))
+        else:
+            query = query.outerjoin(Job, Job.id == Image.job_id).where(Job.series == series)
     return query
 
 
@@ -757,6 +765,7 @@ def list_images(
     date_to: str | None = None,
     status: str | None = None,
     category: str | None = None,
+    series: str | None = None,
     sort: str = "created_desc",
     limit: int = 100,
     offset: int = 0,
@@ -772,7 +781,7 @@ def list_images(
         select(Image),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category,
+        category=category, series=series,
     )
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
@@ -803,6 +812,7 @@ def list_image_ids(
     date_to: str | None = None,
     status: str | None = None,
     category: str | None = None,
+    series: str | None = None,
     sort: str = "created_desc",
     limit: int = IMAGE_IDS_LIMIT,
 ) -> tuple[list[str], int]:
@@ -815,7 +825,7 @@ def list_image_ids(
         select(Image.id),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category,
+        category=category, series=series,
     )
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     ids = list(session.execute(query.order_by(*order_by).limit(limit)).scalars())
@@ -835,6 +845,7 @@ def image_stats(
     date_to: str | None = None,
     status: str | None = None,
     category: str | None = None,
+    series: str | None = None,
 ) -> dict[str, int]:
     """全局图库统计（Phase 0.12 Task5/ReviewMode）：与 list_images 完全相同的过滤口径。
 
@@ -861,7 +872,7 @@ def image_stats(
         agg,
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category,
+        category=category, series=series,
     )
     row = session.execute(agg).one()
     return {
@@ -872,6 +883,36 @@ def image_stats(
         "archived": int(row.archived),
         "favorites": int(row.favorites),
     }
+
+
+def job_series_map(session: Session, job_ids: list[str]) -> dict[str, dict[str, str | None]]:
+    """0024：批量取 Job 的 series / series_ref，供图库列表回填（一次 IN 查询，避免 N+1）。"""
+    ids = [jid for jid in job_ids if jid]
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(Job.id, Job.series, Job.series_ref).where(Job.id.in_(ids))
+    ).all()
+    return {
+        row[0]: {"series": row[1], "series_ref": row[2]}
+        for row in rows
+    }
+
+
+def list_series(session: Session) -> list[dict[str, object]]:
+    """0024：列出全部创作系列及其图片数（供图库「系列」下拉动态填充）。
+
+    只统计有系列归属的 Job 产物；未归属系列的图片不计入任何一项（前端用「全部」看全库）。
+    """
+    rows = session.execute(
+        select(Job.series, func.count(Image.id))
+        .select_from(Image)
+        .join(Job, Job.id == Image.job_id)
+        .where(Job.series.isnot(None), Job.series != "")
+        .group_by(Job.series)
+        .order_by(func.count(Image.id).desc())
+    ).all()
+    return [{"series": series, "count": int(count)} for series, count in rows]
 
 
 def _monotonic_updated_at(previous: str | None) -> str:
@@ -1029,7 +1070,7 @@ def job_gallery_summary(session: Session, job_id: str) -> dict:
 
 
 def list_job_groups(
-    session: Session, *, page: int = 1, page_size: int = 20,
+    session: Session, *, page: int = 1, page_size: int = 20, series: str | None = None,
 ) -> tuple[list[dict], int]:
     """Phase 0.11.1 P1-2：按 Job 聚合图库统计并批量加载预览图。
 
@@ -1063,10 +1104,18 @@ def list_job_groups(
             agg.c.kept,
             agg.c.rejected,
             agg.c.favorites,
+            Job.series.label("series"),
+            Job.series_ref.label("series_ref"),
         )
         .join(Job, Job.id == agg.c.job_id)
         .where(Job.status == "COMPLETED")
     )
+    if series:
+        # 0024：分组视图与列表同一口径（__none__ = 未归属系列）
+        if series == "__none__":
+            query = query.where(Job.series.is_(None))
+        else:
+            query = query.where(Job.series == series)
     total = int(session.execute(select(func.count()).select_from(query.subquery())).scalar_one())
     rows = session.execute(
         query.order_by(Job.created_at.desc(), Job.id.desc())
@@ -1105,6 +1154,8 @@ def list_job_groups(
             "rejected": int(row.rejected),
             "favorites": int(row.favorites),
             "preview_image_ids": preview_image_ids[row.job_id],
+            "series": row.series,
+            "series_ref": row.series_ref,
         }
         for row in rows
     ]

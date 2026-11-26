@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import Integer, case, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,8 @@ from app.services.prompt_composer import compose_structured, dumps_structured
 
 PROMPT_MODES = ("structured", "full")
 LIST_SORTS = ("updated_desc", "score_desc", "score_asc")
+# 与前端 PROMPT_EVALUATION_DIMENSIONS 一致：7 个人工评分维度。
+EVALUATION_DIMENSIONS = ("subject", "clothing", "scene", "composition", "lighting", "style", "quality")
 
 
 def get_prompt(session: Session, prompt_id: str) -> Prompt:
@@ -317,6 +319,24 @@ def get_version(session: Session, prompt_id: str, version_id: str) -> PromptVers
     return version
 
 
+def _latest_evaluation_subquery():
+    """每个 Prompt 的最新一条评分；排序与评分筛选共用同一口径（否则分页会漂移）。"""
+    ranked = select(
+        PromptEvaluation.prompt_id.label("prompt_id"),
+        PromptEvaluation.overall_score.label("overall_score"),
+        PromptEvaluation.dimension_scores_json.label("dimension_scores_json"),
+        func.row_number().over(
+            partition_by=PromptEvaluation.prompt_id,
+            order_by=(PromptEvaluation.created_at.desc(), PromptEvaluation.id.desc()),
+        ).label("position"),
+    ).subquery()
+    return select(
+        ranked.c.prompt_id,
+        ranked.c.overall_score,
+        ranked.c.dimension_scores_json,
+    ).where(ranked.c.position == 1).subquery()
+
+
 def list_prompts(
     session: Session,
     *,
@@ -328,6 +348,9 @@ def list_prompts(
     sort: str = "updated_desc",
     status: Sequence[str] | None = None,
     scored: bool | None = None,
+    min_score: int | None = None,
+    dimension: str | None = None,
+    min_dimension_score: int | None = None,
 ) -> tuple[list[Prompt], int]:
     """列表统一筛选、排序与分页（规范 §三十五）。"""
     if limit < 1 or limit > 200:
@@ -336,6 +359,16 @@ def list_prompts(
         raise ValidationError("offset 不能为负")
     if sort not in LIST_SORTS:
         raise ValidationError("sort 仅支持 updated_desc / score_desc / score_asc")
+    if min_score is not None and not 1 <= min_score <= 5:
+        raise ValidationError("min_score 取值范围为 1-5")
+    if dimension is not None and dimension not in EVALUATION_DIMENSIONS:
+        raise ValidationError(f"非法评分维度: {dimension}", code="PROMPT_DIMENSION_INVALID")
+    if min_dimension_score is not None and not 1 <= min_dimension_score <= 5:
+        raise ValidationError("min_dimension_score 取值范围为 1-5")
+    if dimension is not None and min_dimension_score is None:
+        raise ValidationError(
+            "指定评分维度时必须同时提供 min_dimension_score", code="PROMPT_DIMENSION_SCORE_MISSING",
+        )
 
     filters = []
     if archived is not None:
@@ -349,6 +382,19 @@ def list_prompts(
             PromptEvaluation.prompt_id == Prompt.id,
         ).exists()
         filters.append(evaluation_exists if scored else ~evaluation_exists)
+    # 评分筛选：只看每条 Prompt 的最新一次评分，与 score_desc/asc 的排序口径一致。
+    if min_score is not None or (dimension is not None and min_dimension_score is not None):
+        latest = _latest_evaluation_subquery()
+        conditions = []
+        if min_score is not None:
+            conditions.append(latest.c.overall_score >= min_score)
+        if dimension is not None and min_dimension_score is not None:
+            dimension_value = cast(
+                func.json_extract(latest.c.dimension_scores_json, f"$.{dimension}"),
+                Integer,
+            )
+            conditions.append(dimension_value >= min_dimension_score)
+        filters.append(Prompt.id.in_(select(latest.c.prompt_id).where(*conditions)))
     if search:
         like = f"%{search.strip()}%"
         # 必须选 prompt_id：与 Prompt.id 比较（此前误选 PromptVersion.id，导致内容搜索永不命中）
@@ -363,17 +409,7 @@ def list_prompts(
     ).scalar_one()
     query = select(Prompt).where(*filters)
     if sort in ("score_desc", "score_asc"):
-        ranked = select(
-            PromptEvaluation.prompt_id.label("prompt_id"),
-            PromptEvaluation.overall_score.label("overall_score"),
-            func.row_number().over(
-                partition_by=PromptEvaluation.prompt_id,
-                order_by=(PromptEvaluation.created_at.desc(), PromptEvaluation.id.desc()),
-            ).label("position"),
-        ).subquery()
-        latest = select(
-            ranked.c.prompt_id, ranked.c.overall_score,
-        ).where(ranked.c.position == 1).subquery()
+        latest = _latest_evaluation_subquery()
         score_order = (
             latest.c.overall_score.desc()
             if sort == "score_desc"
