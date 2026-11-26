@@ -11,9 +11,6 @@ from collections.abc import Iterable
 from app.engine.base import EngineError
 from app.workflows.base import WorkflowModule
 from app.workflows.anime_generate import AnimeGenerateModule
-from app.workflows.basic_generate import BasicGenerateModule
-from app.workflows.img2img import Img2ImgModule
-from app.workflows.reference_generate import ReferenceGenerateModule
 
 
 class ModuleRegistry:
@@ -52,11 +49,12 @@ class ModuleRegistry:
 
 
 def default_registry() -> ModuleRegistry:
-    """产品默认注册表：基础生图 + 动漫生图 + 图生图 + 参考图生成。
+    """产品默认注册表（2026-11-16 起只保留动漫一条线）。
 
-    顺序 = 产品展示顺序（Phase 5.1 / Phase 7 / Phase 0.16 Anima 上线）。
+    Qwen-Image 2.1 的 basic_generate / img2img / reference_generate 已按用户要求
+    连同模型注册与权重下线；这里不再注册，模块清单与提交入口只剩 anime_generate。
+    历史 Job 仍带 workflow_snapshot，可按快照读取，但不再可提交新任务。
     """
     return ModuleRegistry([
-        BasicGenerateModule(), AnimeGenerateModule(), Img2ImgModule(),
-        ReferenceGenerateModule(),
+        AnimeGenerateModule(),
     ])

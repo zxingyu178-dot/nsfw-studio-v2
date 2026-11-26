@@ -1031,11 +1031,36 @@
 
 .pp-grid--single .pp-card--compact .pp-card__gallery-tools {
   grid-column: 1 / -1;
+  padding: 0;
+}
+
+/* 图片区由横向滚动条改为自适应网格：一屏能看全，不再需要左右拖。 */
+.pp-card__gallery,
+.pp-grid--single .pp-card__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  align-items: stretch;
+  flex-wrap: initial;
+  overflow: visible;
+  margin: 10px 0 0;
+  padding: 0 18px;
+}
+
+.pp-card__gallery-thumb,
+.pp-grid--single .pp-card__gallery-thumb {
+  flex: initial;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.pp-card__gallery-tools {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0;
+  padding: 8px 18px 0;
 }
 
 .pp-card__gallery-expand {

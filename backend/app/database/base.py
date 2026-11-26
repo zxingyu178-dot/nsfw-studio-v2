@@ -2,7 +2,9 @@
 
 make_engine() 统一配置 SQLite 基础规范：
 - ``journal_mode=WAL``：读写并发友好；
-- ``busy_timeout=5000``：写锁等待 5 秒，缓解偶发 database is locked；
+- ``busy_timeout=30000``：写锁等待 30 秒。主后端 / Mobile Bridge / Worker 多写入方共用
+  同一 SQLite 文件，5 秒在长事务（缩略图回填、批量状态更新）下不够，会把写操作直接
+  打成 ``database is locked``；
 - ``foreign_keys=ON``：启用外键约束（SQLite 默认关闭）。
 """
 from __future__ import annotations
@@ -15,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.database.migrations import Migration, apply_pending_migrations
 
-SQLITE_BUSY_TIMEOUT_MS = 5000
+SQLITE_BUSY_TIMEOUT_MS = 30000
 
 
 class Base(DeclarativeBase):
@@ -43,6 +45,10 @@ def make_engine(database_path: Path) -> Engine:
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            # WAL + NORMAL：事务提交不再每次 fsync（本机 HDD 上单次 commit ~80ms，
+            # 批量删除/审核/进度写入会被放大到分钟级）。崩溃不丢已提交数据，
+            # 仅断电/系统崩溃可能丢失最后若干事务，对本机图片应用可接受。
+            cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.execute("PRAGMA foreign_keys=ON")
         finally:
             cursor.close()

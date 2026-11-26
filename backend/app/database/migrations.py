@@ -758,6 +758,18 @@ MIGRATIONS: tuple[Migration, ...] = (
         ),
         statements=(ensure_mobile_events_w41,),
     ),
+    Migration(
+        migration_id="0024_job_series",
+        version="1.5.0",
+        description=(
+            "图库系列维度：jobs 增加 series 列（可空，自由文本），用于按创作系列"
+            "（如「末世后宫」）筛选图库；不改任何既有列/索引，不删除数据。"
+        ),
+        statements=(
+            "ALTER TABLE jobs ADD COLUMN series TEXT",
+            "ALTER TABLE jobs ADD COLUMN series_ref TEXT",
+        ),
+    ),
 )
 
 

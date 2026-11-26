@@ -8,6 +8,10 @@
 
 格式为 JSON Lines：``{"time","level","module","message"}``，异常时附 ``exc`` 字段。
 文件按 5MB 轮转，保留 5 份。
+
+``profile="mobile"`` 时写入独立目录 ``logs/mobile/``：Mobile Bridge 是独立进程，
+与主后端共用同一日志文件会让 Windows 上的轮转 rename 失败（PermissionError），
+失败后的每条日志都会把完整 traceback 刷进 stdout。
 """
 from __future__ import annotations
 
@@ -22,6 +26,10 @@ JOBS_LOGGER_NAME = "studio.jobs"
 
 _MAX_BYTES = 5 * 1024 * 1024
 _BACKUP_COUNT = 5
+_LOG_PROFILES = {
+    "main": ("app", "errors", "jobs"),
+    "mobile": ("mobile", "mobile", None),
+}
 
 
 class JsonFormatter(logging.Formatter):
@@ -37,16 +45,48 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+class _SafeRotatingFileHandler(RotatingFileHandler):
+    """轮转/写盘失败不致命，且只提示一次。
+
+    Windows 上日志文件被其它进程占用时，``doRollover`` 的 rename 会抛 OSError；
+    标准库 ``handleError`` 会对每条日志打印一次完整 traceback，导致调用方的
+    stdout 重定向文件（runtime/logs/app.log）爆炸式增长。这里统一静默为一次提示。
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("delay", True)  # 延迟到首条日志再打开文件，减少启动期句柄冲突
+        self._error_reported = False
+        super().__init__(*args, **kwargs)
+
+    def doRollover(self) -> None:
+        try:
+            super().doRollover()
+        except OSError as error:  # 轮转失败：继续追加当前文件
+            self._report(error)
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        self._report(sys.exc_info()[1])
+
+    def _report(self, error) -> None:
+        if self._error_reported:
+            return
+        self._error_reported = True
+        try:
+            sys.stderr.write(f"[logging] 日志文件写入/轮转失败（后续同类错误不再提示）: {error}\n")
+        except Exception:
+            pass
+
+
 def _make_file_handler(path: Path, level: int) -> RotatingFileHandler:
     path.parent.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8")
+    handler = _SafeRotatingFileHandler(path, maxBytes=_MAX_BYTES, backupCount=_BACKUP_COUNT, encoding="utf-8")
     handler.setLevel(level)
     handler.setFormatter(JsonFormatter())
     return handler
 
 
-def setup_logging(data_root: Path, console_level: str = "INFO") -> None:
-    """初始化全局日志（幂等，可重复调用）。"""
+def setup_logging(data_root: Path, console_level: str = "INFO", *, profile: str = "main") -> None:
+    """初始化全局日志（幂等，可重复调用）；profile 决定日志文件目录。"""
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
 
@@ -60,12 +100,15 @@ def setup_logging(data_root: Path, console_level: str = "INFO") -> None:
     console.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s [%(name)s] %(message)s"))
     root.addHandler(console)
 
-    root.addHandler(_make_file_handler(data_root / "logs" / "app" / "app.log", logging.INFO))
-    root.addHandler(_make_file_handler(data_root / "logs" / "errors" / "error.log", logging.ERROR))
+    app_dir, error_dir, jobs_dir = _LOG_PROFILES.get(profile, _LOG_PROFILES["main"])
+    root.addHandler(_make_file_handler(data_root / "logs" / app_dir / "app.log", logging.INFO))
+    root.addHandler(_make_file_handler(data_root / "logs" / error_dir / "error.log", logging.ERROR))
 
+    if jobs_dir is None:
+        return
     jobs = logging.getLogger(JOBS_LOGGER_NAME)
     for handler in list(jobs.handlers):
         jobs.removeHandler(handler)
         handler.close()
-    jobs.addHandler(_make_file_handler(data_root / "logs" / "jobs" / "jobs.log", logging.INFO))
+    jobs.addHandler(_make_file_handler(data_root / "logs" / jobs_dir / "jobs.log", logging.INFO))
     jobs.propagate = True  # 任务事件同时进入 app 全量日志

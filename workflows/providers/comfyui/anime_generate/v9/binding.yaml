@@ -1,0 +1,54 @@
+# v9 — WAI-NSFW v15 参数对照（cfg5.0 / er_sde）
+# 与 v8 完全同源，仅改 KSampler：cfg=5.0 / sampler=er_sde
+
+# anime_generate v8 — WAI-NSFW-Illustrious v15.0（v7 同链，仅换 NSFW checkpoint）
+#
+# 基于 v6 的纯 txt2img 节点链，仅替换 checkpoint 为 WAI v17.0（Illustrious 系）。
+# 保留 CLIPSetLastLayer(-2)、30 步 / cfg 4.0 / er_sde / simple / denoise 1.0。
+# 2026-11-17 直跑 ComfyUI 实测：832x1216 / 30 步，33.4 秒/张（含加载）。
+# 注意：Pony 系 LoRA 与该 checkpoint 不通用，v7 不启用任务级 LoRA。
+
+binding_version: v9
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  output_size: explicit
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPSetLastLayer, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: checkpoints, filename: waiNSFWIllustrious_v150.safetensors, sha256: f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04, precision: fp16}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, batch_size: 1, sampling_seconds: 33.4, source: "2026-11-17 ComfyUI /prompt 直跑实测（prompt 65b00c6b）"}
+  notes: "WAI v17.0 快速版：无 FaceDetailer/LoRA，单张约 33 秒"

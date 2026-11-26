@@ -1,0 +1,91 @@
+# anime_generate v3 — ComfyUI Provider Binding（W5.0）
+#
+# 在 v2 基础上新增 FaceDetailer 自动修脸链路（R3 实测验证，2026-11-09）：
+#   主采样（同 v2）→ VAEDecode → UltralyticsDetectorProvider(face_yolov8m)
+#   → FaceDetailer（512 guide / denoise 0.5 / er_sde+simple）→ SaveImage。
+#
+# 模型：单文件 SDXL 动漫底模 miaomiaoHarem_v14.safetensors（CheckpointLoaderSimple，
+# CLIP 与 VAE 均取自 checkpoint 内部）。
+#
+# 来源：v2 已验证出图组合（2026-11-01 起 260+ 张）+ R3 A/B（seed 314159，
+# 02_facedetailer_on_baseline：修脸无边界痕迹，检测/重绘链路稳定）。
+#
+# 历史：v1 = Anima 2.9B + Qwen3-0.6B + qwen_image_vae（冻结）；
+#       v2 = 纯底模直出（冻结，仍可用于对照）；
+#       v3 = v2 + FaceDetailer（当前默认）。
+# 注意：本机曾实测 turboANIMA LoRA（发灰）与 SageAttention 1.x（负优化），
+# 均已移除，勿再加入本链路。
+
+binding_version: v3
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+# 输出节点（SaveImage）：产物经 /view 取回并导入 DataRoot
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+# 标准输入 → 节点注入位置
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+
+# 固定默认（本机实测；Module 标准输入不暴露）
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+  "20":
+    guide_size: 512
+    guide_size_for: true
+    max_size: 1024
+    steps: 30
+    cfg: 4.0
+    sampler_name: er_sde
+    scheduler: simple
+    denoise: 0.5
+    feather: 5
+    noise_mask: true
+    force_inpaint: true
+    bbox_threshold: 0.5
+    bbox_dilation: 10
+    bbox_crop_factor: 3.0
+    drop_size: 10
+    cycle: 1
+    sam_detection_hint: "center-1"
+    sam_dilation: 0
+    sam_bbox_expansion: 0
+    sam_threshold: 0.93
+    sam_mask_hint_threshold: 0.7
+    sam_mask_hint_use_negative: "False"
+
+# Seed 范围（KSampler 惯例）；FaceDetailer 节点 seed 固定于 workflow.json（节点 "20"）
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true   # CLIPTextEncode 标准负向提示词
+  output_size: explicit            # 尺寸由工作台显式宽高决定（EmptyLatentImage 注入）
+  auto_face_detailer: true         # v3 新增：出图后自动检测并重绘人脸区域
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: UltralyticsDetectorProvider, source: comfyui-impact-subpack}
+    - {class_type: FaceDetailer, source: comfyui-impact-pack}
+  models:
+    - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, batch_size: 1, sampling_seconds: 33, source: "2026-11-01/02 真实 Studio 批次"}
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, face_detailer: true, batch_size: 1, sampling_seconds: 55, source: "2026-11-09 R3 实测（含检测+512guide 重绘，较 v2 约多 20~30s）"}
+  notes: "v3 单张约 50~60s（模型常驻）：v2 直出 33s + 修脸 20~30s。低显存下 FaceDetailer 与主采样共用 checkpoint，无额外模型加载。"

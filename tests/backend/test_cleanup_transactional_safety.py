@@ -238,3 +238,45 @@ def test_cleanup_stale_staging_removes_old_dirs(session, settings):
     staging_base = storage.resolve_under("images/temp", "delete_staging")
     leftovers = [p for p in staging_base.rglob("*") if p.is_file()] if staging_base.is_dir() else []
     assert leftovers == []
+
+
+def test_mobile_review_references_do_not_block_delete(session, settings):
+    """回归：手机审核队列（FK NO ACTION）与设备已读标记曾让 DELETE images 外键失败。
+
+    真实图库中大量 REJECT 图被冻结进审核会话，若不先清这些引用，
+    每张图都会报 "数据库删除失败（IntegrityError）"，表现为“删了半天一张没删”。
+    """
+    from app.models.mobile_review import (
+        ImageReviewSession, ImageReviewSessionItem, MobileImageSeen, MobileReviewDevice,
+    )
+    from app.storage.manager import StorageManager
+
+    storage = StorageManager(settings)
+    image = _import_real(session, storage)
+    _reject_with_thumb(session, storage, image)
+
+    session.add(MobileReviewDevice(
+        id="dev_1", installation_id="install_1", name="phone", token_hash="x" * 64,
+    ))
+    session.commit()  # 先落设备，避免同批 insert 顺序触发外键
+    session.add(ImageReviewSession(
+        id="sess_1", filter_json="{}", total_count=1, seen_count=0,
+        status="ACTIVE", current_index=0,
+    ))
+    session.add(ImageReviewSessionItem(
+        id="item_1", session_id="sess_1", item_index=0, image_id=image.id, seen=False,
+    ))
+    session.add(MobileImageSeen(device_id="dev_1", image_id=image.id, seen=True))
+    session.commit()
+
+    result = cleanup_service.execute(session, storage, [image.id])
+    assert result["deleted_count"] == 1
+    assert result["failed"] == []
+    with pytest.raises(NotFoundError):
+        image_service.get_image(session, image.id)
+    assert not list(session.execute(
+        select(ImageReviewSessionItem).where(ImageReviewSessionItem.image_id == image.id)
+    ).scalars().all())
+    assert not list(session.execute(
+        select(MobileImageSeen).where(MobileImageSeen.image_id == image.id)
+    ).scalars().all())

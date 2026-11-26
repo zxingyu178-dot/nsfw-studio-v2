@@ -8,20 +8,17 @@
 # 真实 ComfyUI 的地址等机器信息只写在 configs/config.local.yaml（gitignore）：
 #   comfyui:
 #     url: "http://<本机地址>:<端口>"
+#
+# 2026-11-16：按用户要求只保留动漫一条线。basic_generate / img2img / reference_generate
+# 三条千问（Qwen-Image 2.1）工作流与其模型注册、权重已全部下线，默认模块改为 anime_generate。
 workflow:
   engine:
     provider: "comfyui"   # comfyui（默认，地址只进 config.local.yaml）| mock（测试）| unbound
-    module_id: "basic_generate"
+    module_id: "anime_generate"
     module_version: "v1"
     binding_version: "v1"
     options: {}   # 机器差异（URL 等）只进 configs/config.local.yaml 的 comfyui 段
-    # W4.0：四个正式模块的默认 Binding（module_version 与 binding_version 两套身份独立）
+    # 正式模块的默认 Binding（module_version 与 binding_version 两套身份独立）
     modules:
-      basic_generate:
-        binding_version: "v2"
       anime_generate:
-        binding_version: "v2"
-      img2img:
-        binding_version: "v3"
-      reference_generate:
-        binding_version: "v2"
+        binding_version: "v5"

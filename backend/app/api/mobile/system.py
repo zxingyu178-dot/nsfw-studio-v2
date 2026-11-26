@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from app.mobile_version import MOBILE_API_CONTRACT, MOBILE_BRIDGE_VERSION, build_identity
+
 router = APIRouter(prefix="/mobile/system", tags=["mobile-system"])
 
 CAPABILITIES = [
@@ -44,7 +46,8 @@ def health(request: Request) -> dict:
     return {
         "status": "ok",
         "product": "nsfw-studio",
-        "version": "0.13.0",
-        "api_contract": 2,
+        "version": MOBILE_BRIDGE_VERSION,
+        "api_contract": MOBILE_API_CONTRACT,
         "capabilities": list(CAPABILITIES),
+        **build_identity(CAPABILITIES),
     }

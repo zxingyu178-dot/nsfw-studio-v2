@@ -211,10 +211,77 @@ class ComfyUIAdapter(EngineAdapter):
         )
         return str(binding.get("binding_version", binding_version)), workflow_hash, binding_hash
 
+    def _apply_lora_stack(self, prompt: dict, loras: list) -> dict:
+        """v5 动态 LoRA：0 条移除节点、1 条用 21、2 条 21→22 串联。"""
+        if not isinstance(loras, list):
+            raise EngineError("LORA_PARAM_INVALID", "loras 必须为数组")
+        if len(loras) > 2:
+            raise EngineError("LORA_LIMIT_EXCEEDED", "LoRA 最多 2 条")
+        if not loras:
+            for node_id in ("22", "21"):
+                self._redirect_refs(prompt, node_id, "1")
+                prompt.pop(node_id, None)
+            return prompt
+        for index, item in enumerate(loras):
+            node_id = str(21 + index)
+            node = prompt.get(node_id)
+            if node is None:
+                raise EngineError("WORKFLOW_ERROR", f"binding 缺少 LoraLoader 节点 {node_id}")
+            node["inputs"]["lora_name"] = str(item["name"])
+            node["inputs"]["strength_model"] = float(item.get("strength_model", 1.0))
+            node["inputs"]["strength_clip"] = float(item.get("strength_clip", 1.0))
+        if len(loras) == 1:
+            self._redirect_refs(prompt, "22", "21")
+            prompt.pop("22", None)
+        return prompt
+
+    @staticmethod
+    def _redirect_refs(prompt: dict, from_node: str, to_node: str) -> None:
+        for node in prompt.values():
+            inputs = node.get("inputs") or {}
+            for field, value in list(inputs.items()):
+                if (
+                    isinstance(value, list)
+                    and len(value) == 2
+                    and str(value[0]) == from_node
+                ):
+                    inputs[field] = [to_node, value[1]]
+
+    def available_lora_names(self) -> set[str] | None:
+        """ComfyUI /models/loras（60s 缓存）；不可达返回 None，交由执行期兜底。"""
+        now = time.monotonic()
+        cached = getattr(self, "_loras_cache", None)
+        if cached and now - cached[0] < 60:
+            return cached[1]
+        try:
+            with httpx.Client(trust_env=False, timeout=5) as client:
+                response = client.get(f"{self.base_url}/models/loras")
+                response.raise_for_status()
+                names = {str(item) for item in response.json()}
+        except Exception:
+            return None
+        self._loras_cache = (now, names)
+        return names
+
     def _build_prompt(self, request: EngineJobRequest, workflow: dict, binding: dict) -> dict:
         prompt = json.loads(json.dumps(workflow))  # deep copy
         params = request.parameters
-        for name, target in (binding.get("inputs") or {}).items():
+        inputs = binding.get("inputs") or {}
+        lora_stack = any(
+            isinstance(target, dict) and target.get("apply") == "lora_stack"
+            for target in inputs.values()
+        )
+        if lora_stack:
+            loras = params.get("loras") or []
+            prompt = self._apply_lora_stack(prompt, loras)
+            names = [str(item.get("name")) for item in loras if item.get("name")]
+            available = self.available_lora_names() if names else None
+            missing = [name for name in names if available is not None and name not in available]
+            if missing:
+                raise EngineError("LORA_NOT_FOUND", f"LoRA 不存在: {', '.join(missing)}")
+        for name, target in inputs.items():
+            if "node" not in target:
+                continue
             value = params.get(name)
             if value is None:
                 continue

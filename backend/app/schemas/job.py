@@ -18,6 +18,10 @@ class JobCreateRequest(BaseModel):
     # prompt_mode / selected_assets / workflow_modules 结构均由 schema 校验）
     snapshot: WorkbenchSnapshotModel
     client_request_id: str | None = Field(default=None, max_length=128)
+    # 0024：创作系列（图库筛选维度，不参与生图）。None = 不归属任何系列。
+    series: str | None = Field(default=None, max_length=64)
+    # 0024：系列内的人类可读定位标签（如「D05 · 末日夜袭」），仅图库展示。
+    series_ref: str | None = Field(default=None, max_length=128)
     queue_mode: Literal["normal", "next"] = "normal"
     source: Literal["web", "resume", "agent", "doubao"] = "web"
 
@@ -92,6 +96,9 @@ class JobResponse(BaseModel):
     id: str
     source: str
     client_request_id: str | None
+    # 0024：创作系列与系列内定位标签（只做图库筛选/展示，不参与执行）
+    series: str | None = None
+    series_ref: str | None = None
     status: str
     job_kind: str
     prompt_mode: str
@@ -134,11 +141,46 @@ class JobListResponse(BaseModel):
     offset: int
 
 
+class QueueStageSummary(BaseModel):
+    """队列展示所需的 Stage 摘要（不含逐项 StageItem）。"""
+
+    stage_index: int
+    module_id: str
+    status: str
+    total_count: int
+    completed_count: int
+
+
+class QueueJobSummary(BaseModel):
+    """队列条目轻量摘要（P2：114 个排队任务时完整 JobResponse ≈ 1.5MB → 摘要 < 100KB）。
+
+    只含队列 UI 实际使用的字段；任务详情仍走 GET /jobs/{id}。
+    """
+
+    id: str
+    status: str
+    job_kind: str
+    source: str
+    positive_prompt_snapshot: str
+    requested_count: int
+    completed_count: int
+    queue_position: int | None
+    pause_requested: bool
+    cancel_requested: bool
+    error_type: str | None
+    error_message: str | None
+    module_id: str | None
+    created_at: str
+    started_at: str | None
+    updated_at: str
+    stages: list[QueueStageSummary]
+
+
 class QueueResponse(BaseModel):
     worker: dict[str, Any]
     running: JobResponse | None
-    queued: list[JobResponse]
-    paused: list[JobResponse]
+    queued: list[QueueJobSummary]
+    paused: list[QueueJobSummary]
 
 
 # ===== History（Phase 4 Task5/6：历史来源 = jobs，不另建 History 表；两级归组） =====
@@ -203,9 +245,30 @@ def job_stage_response(stage: JobStage) -> JobStageResponse:
     )
 
 
+def queue_job_summary(job: Job) -> QueueJobSummary:
+    return QueueJobSummary(
+        id=job.id, status=job.status, job_kind=job.job_kind, source=job.source,
+        positive_prompt_snapshot=(job.positive_prompt_snapshot or "")[:120],
+        requested_count=job.requested_count, completed_count=job.completed_count,
+        queue_position=job.queue_position,
+        pause_requested=job.pause_requested, cancel_requested=job.cancel_requested,
+        error_type=job.error_type, error_message=job.error_message,
+        module_id=job.module_id, created_at=job.created_at, started_at=job.started_at,
+        updated_at=job.updated_at,
+        stages=[
+            QueueStageSummary(
+                stage_index=stage.stage_index, module_id=stage.module_id, status=stage.status,
+                total_count=stage.total_count, completed_count=stage.completed_count,
+            )
+            for stage in job.stages
+        ],
+    )
+
+
 def job_response(job: Job, items: list[JobItem] | None = None) -> JobResponse:
     return JobResponse(
-        id=job.id, source=job.source, client_request_id=job.client_request_id, status=job.status,
+        id=job.id, source=job.source, client_request_id=job.client_request_id,
+        series=job.series, series_ref=job.series_ref, status=job.status,
         job_kind=job.job_kind,
         prompt_mode=job.prompt_mode,
         positive_prompt_snapshot=job.positive_prompt_snapshot,

@@ -1,0 +1,63 @@
+# v12 — v9 + 动态 LoRA 叠加（0 / 1 / 2 条）
+#
+# 与 v9 完全同源（WAI-NSFW v15.0 / cfg 5.0 / er_sde / 30 步 / CLIPSetLastLayer -2），
+# 唯一改动是插入 LoraLoader 21/22，由 ComfyUIAdapter._apply_lora_stack() 按
+# snapshot.workflow_modules[].config 的 loras 数组动态改写：
+#   - 0 条：21/22 全部删除，下游引用重定向回 checkpoint（等价 v9）
+#   - 1 条：用 21，删除 22
+#   - 2 条：21 → 22 串联
+#
+# 接线注意：21 的 clip 接 CLIPSetLastLayer(2) 而不是 checkpoint，这样 clip skip -2 不会丢。
+# 任务侧写法：
+#   {"loras": [{"name": "cunnyfunky\\cunnyfunky_v5.0_000008.safetensors",
+#               "strength_model": 0.9, "strength_clip": 0.9}]}
+# 上限 2 条；强度 -2 ~ 2；name 必须存在于 ComfyUI /models/loras（子目录用反斜杠）。
+
+binding_version: v12
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+  # 列表型参数：不映射到单个节点字段，由 adapter 重写 21/22 节点
+  loras:           {apply: lora_stack, max_items: 2}
+
+defaults:
+  "7": {steps: 30, cfg: 4.0, sampler_name: er_sde, scheduler: simple, denoise: 1.0}
+
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  supports_lora: true
+  output_size: explicit
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: CLIPSetLastLayer, source: comfyui_core}
+    - {class_type: LoraLoader, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: SaveImage, source: comfyui_core}
+  models:
+    - {type: checkpoints, filename: waiNSFWIllustrious_v150.safetensors, sha256: f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04, precision: fp16}
+
+performance:
+  status: measured
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles:
+    - {width: 832, height: 1216, steps: 30, cfg: 4.0, sampler: er_sde, scheduler: simple, batch_size: 1, sampling_seconds: 33.4, source: "沿用 v9 实测；LoRA 加载开销未单独计量"}
+  notes: "v9 + 任务级 LoRA，无 FaceDetailer"

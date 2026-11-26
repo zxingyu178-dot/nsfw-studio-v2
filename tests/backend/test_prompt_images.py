@@ -126,7 +126,7 @@ def test_prompt_images_invalid_pagination(client, query):
     assert client.get(f"/api/v1/prompts/{prompt['id']}/images", params=query).status_code == 422
 
 
-@pytest.mark.parametrize("limit", [0, 11])
+@pytest.mark.parametrize("limit", [0, 25])
 def test_prompt_list_invalid_images_limit(client, limit):
     assert client.get("/api/v1/prompts", params={"images_limit": limit}).status_code == 422
 

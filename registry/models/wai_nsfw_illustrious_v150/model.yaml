@@ -1,0 +1,21 @@
+schema_version: '1.0'
+model_id: wai_nsfw_illustrious_v150
+version: 15.0.0
+display_name: WAI-NSFW-illustrious-SDXL v15.0
+family: sdxl_illustrious
+model_type: checkpoint
+format: safetensors
+status: released
+files:
+- filename: waiNSFWIllustrious_v150.safetensors
+  folder: checkpoints
+  required: true
+  size_bytes: 6938040682
+  sha256: befc694a296f75e996488ebf9f9db8a1493bd059b6e704b975829e87d5aeb4fa
+  precision: fp16
+dependencies: []
+compatible_workflows:
+- anime_generate
+notes: WAI 谱系的 NSFW 版 checkpoint；与 wai_illustrious_v170 同架构同写法，尺度放得更开。仅给 anime_generate v8 使用，大尺度帧专用；Pony 系 LoRA 同样不通用。SHA256 于 2026-11-20 本机实测。
+created_at: '2026-11-20'
+updated_at: '2026-11-20'

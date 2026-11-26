@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -24,6 +25,9 @@ from app.models.mobile_review import MobileReviewDevice, MobileReviewPairingCode
 PAIRING_CODE_TTL_SECONDS = 600  # 10 分钟
 PAIRING_CODE_DIGITS = 6
 TOKEN_BYTES = 32  # 256-bit token → hex
+# last_seen_at 节流：手机每次请求都会鉴权，逐请求写库会持续抢 SQLite 写锁。
+LAST_SEEN_WRITE_INTERVAL_SECONDS = 60.0
+_last_seen_written: dict[str, float] = {}  # device_id → monotonic
 
 
 def _sha256_hex(value: str) -> str:
@@ -131,6 +135,7 @@ def verify_pairing(session: Session, installation_id: str, device_name: str, cod
     device.last_seen_at = now
     session.commit()
     session.refresh(device)
+    _last_seen_written[device.id] = time.monotonic()
     return PairedDevice(
         device_id=device.id,
         installation_id=device.installation_id,
@@ -141,7 +146,7 @@ def verify_pairing(session: Session, installation_id: str, device_name: str, cod
 
 
 def authenticate_token(session: Session, token: str) -> MobileReviewDevice:
-    """Bearer 鉴权：按 token hash 查未吊销设备，命中则刷新 last_seen_at。"""
+    """Bearer 鉴权：按 token hash 查未吊销设备；last_seen_at 最多每 60s 写一次。"""
     token = (token or "").strip()
     if not token:
         raise MobileUnauthorized()
@@ -162,8 +167,11 @@ def authenticate_token(session: Session, token: str) -> MobileReviewDevice:
         if revoked is not None:
             raise DeviceRevoked()
         raise MobileUnauthorized()
-    device.last_seen_at = utc_now_iso()
-    session.commit()
+    now = time.monotonic()
+    if now - _last_seen_written.get(device.id, 0.0) >= LAST_SEEN_WRITE_INTERVAL_SECONDS:
+        device.last_seen_at = utc_now_iso()
+        session.commit()
+        _last_seen_written[device.id] = now
     return device
 
 

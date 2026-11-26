@@ -183,3 +183,86 @@ def test_one_adapter_serves_all_modules_dynamically():
     # 缓存 key 是 (module_id, binding_version)，不是整个 Adapter 只有一个绑定
     assert ("basic_generate", "v1") in adapter._bindings
     assert ("anime_generate", "v1") in adapter._bindings
+# ===== v5：任务级 LoRA 动态栈 =====
+
+def anime_v5_ref() -> EngineBindingRef:
+    return EngineBindingRef(module_id="anime_generate", provider="comfyui", binding_version="v5")
+
+
+def _v5_prompt(adapter: ComfyUIAdapter, loras: list[dict]):
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(anime_v5_ref())
+    request = EngineJobRequest(
+        binding=anime_v5_ref(),
+        parameters={
+            "positive_prompt": "1girl",
+            "negative_prompt": "blurry",
+            "width": 832,
+            "height": 1216,
+            "seed": 7,
+            "loras": loras,
+        },
+    )
+    return adapter._build_prompt(request, workflow, binding), workflow
+
+
+def test_v5_without_lora_removes_loader_and_uses_checkpoint(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: set())
+    prompt, template = _v5_prompt(adapter, [])
+    assert "21" not in prompt and "22" not in prompt
+    assert prompt["7"]["inputs"]["model"] == ["1", 0]
+    assert prompt["5"]["inputs"]["clip"] == ["1", 1]
+    assert prompt["20"]["inputs"]["model"] == ["1", 0]
+    assert prompt["20"]["inputs"]["clip"] == ["1", 1]
+    # 模板不得被就地修改
+    assert "21" in template and "22" in template
+
+
+def test_v5_single_lora_uses_node_21(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: {"a.safetensors"})
+    prompt, _ = _v5_prompt(adapter, [{"name": "a.safetensors", "strength_model": 0.8, "strength_clip": 0.6}])
+    assert prompt["21"]["inputs"]["lora_name"] == "a.safetensors"
+    assert prompt["21"]["inputs"]["strength_model"] == 0.8
+    assert prompt["21"]["inputs"]["strength_clip"] == 0.6
+    assert "22" not in prompt
+    assert prompt["7"]["inputs"]["model"] == ["21", 0]
+    assert prompt["20"]["inputs"]["clip"] == ["21", 1]
+
+
+def test_v5_two_loras_chain_and_downstream_uses_last(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: {"a", "b"})
+    prompt, _ = _v5_prompt(adapter, [{"name": "a"}, {"name": "b"}])
+    assert prompt["21"]["inputs"]["lora_name"] == "a"
+    assert prompt["22"]["inputs"]["lora_name"] == "b"
+    assert prompt["22"]["inputs"]["model"] == ["21", 0]
+    assert prompt["7"]["inputs"]["model"] == ["22", 0]
+    assert prompt["5"]["inputs"]["clip"] == ["22", 1]
+
+
+def test_v5_missing_lora_raises_lora_not_found(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: {"a"})
+    with pytest.raises(EngineError) as error:
+        _v5_prompt(adapter, [{"name": "missing.safetensors"}])
+    assert error.value.error_type == "LORA_NOT_FOUND"
+
+def test_v4_fixed_lora_binding_is_untouched():
+    adapter = make_adapter()
+    ref = EngineBindingRef(module_id="anime_generate", provider="comfyui", binding_version="v4")
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(ref)
+    request = EngineJobRequest(
+        binding=ref,
+        parameters={
+            "positive_prompt": "1girl",
+            "negative_prompt": "blurry",
+            "width": 832,
+            "height": 1216,
+            "seed": 7,
+        },
+    )
+    prompt = adapter._build_prompt(request, workflow, binding)
+    assert "21" in prompt
+    assert prompt["7"]["inputs"]["model"] == ["21", 0]
+    assert prompt["21"]["inputs"]["strength_model"] == 1.0

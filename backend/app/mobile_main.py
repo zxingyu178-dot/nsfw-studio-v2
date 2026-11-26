@@ -31,6 +31,7 @@ from app.api.mobile import images, pairing, prompts, review, sync, system
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.database.base import make_engine, make_session_factory
+from app.mobile_version import MOBILE_BRIDGE_VERSION, build_identity
 from app.services.system_service import bootstrap
 from app.storage.manager import StorageManager
 
@@ -85,7 +86,7 @@ async def _parent_watch(stop_event: asyncio.Event) -> None:
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     settings: Settings = application.state.settings
-    bootstrap(settings)
+    bootstrap(settings, log_profile="mobile")
 
     engine = make_engine(settings.storage.database_path)
     session_factory = make_session_factory(engine)
@@ -99,7 +100,15 @@ async def lifespan(application: FastAPI):
     application.state._stop_event = stop_event
     application.state._parent_watch = asyncio.create_task(_parent_watch(stop_event))
 
-    logger.info("Mobile Review Bridge 启动 version=0.13.0 port=%s", settings.mobile_review.get("port", 8877))
+    identity = build_identity(system.CAPABILITIES)
+    logger.info(
+        "Mobile Review Bridge 启动 version=%s commit=%s built_at=%s capabilities=%s port=%s",
+        MOBILE_BRIDGE_VERSION,
+        identity["build_commit"],
+        identity["built_at"],
+        identity["capability_set_hash"],
+        settings.mobile_review.get("port", 8877),
+    )
     yield
 
     stop_event.set()
@@ -115,7 +124,7 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
     # 对外合同产物以已提交的 docs/integration/openapi-mobile-review.json 为准。
     application = FastAPI(
         title="NSFW Studio Mobile Review Bridge",
-        version="0.13.0",
+        version=MOBILE_BRIDGE_VERSION,
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,

@@ -1,0 +1,24 @@
+schema_version: '1.0'
+model_id: hentai_pussy_inspection_pony_v1
+version: 1.0.0
+display_name: Hentai Pussy inspection (Pony) v1
+family: sdxl_pony
+model_type: lora
+format: safetensors
+status: released
+files:
+- filename: Hentai Pussy inspection_Pony_V1.safetensors
+  folder: loras
+  required: true
+  size_bytes: 114442348
+  sha256: dc24ee0135af27b4c3940e06936b8533a153fddd95768e1ca961ceb7d3a373a4
+  precision: fp16
+dependencies:
+- model_id: miaomiao_harem_v14
+  required: true
+  note: Pony 系 LoRA，作用于 anime_generate 的 SDXL 动漫底模
+compatible_workflows:
+- anime_generate
+notes: anime v4 专用 LoRA；作者 満珍楼 (COSiNE)，Civitai 570883 / 636338；提供解剖形状触发词。
+created_at: '2026-11-14'
+updated_at: '2026-11-14'

@@ -47,7 +47,7 @@ export function ProgressHUD({ job, queueAhead = 0, runningJobId, onTrackRunning 
           </div>
           <span className="wb4-hud__overall">{isQueued ? '排队中' : `${overall}%`}</span>
         </div>
-        {job.status === 'RUNNING' && hud.startedAt && <ElapsedTimer startedAt={hud.startedAt} />}
+        {job.status === 'RUNNING' && hud.startedAt && <ElapsedTimer startedAt={hud.startedAt} label="已运行" />}
       </div>
 
       {isQueued ? (

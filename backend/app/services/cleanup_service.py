@@ -21,14 +21,17 @@ from __future__ import annotations
 
 import logging
 import shutil
+import stat
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Image, ImageVariant, JobItem, JobStageItem
+from app.models.mobile_review import ImageReviewSession, ImageReviewSessionItem, MobileImageSeen
 from app.services import image_event_service
 from app.services import image_reference_service
 from app.storage.manager import StorageManager
@@ -50,29 +53,20 @@ def _candidates(session: Session, image_ids: list[str] | None) -> list[Image]:
     return list(session.execute(query).scalars().all())
 
 
-def _list_variants(session: Session, image_id: str) -> list[ImageVariant]:
-    return list(session.execute(
-        select(ImageVariant).where(ImageVariant.image_id == image_id)
-    ).scalars().all())
+def _disk_bytes(storage: StorageManager, image: Image, paths: list[str]) -> int:
+    """original + 指定 variants 相对路径的文件字节（缺失/stat 失败按 0 计）。
 
-
-def _image_disk_bytes(session: Session, storage: StorageManager, image: Image,
-                      variants: dict[str, list[str]] | None = None) -> int:
-    """original + 全部 variants 文件字节（文件缺失按 0 计）。
-
-    ``variants`` 由批量预览传入（image_id -> 相对路径列表），避免逐张查询。
+    不触碰 Session：预览时用线程池并发 stat，冷缓存下把统计耗时从秒级压到百毫秒级。
+    单次 stat 同时用于存在性判断（原先 is_file()+stat() 是两次系统调用）。
     """
     total = 0
-    original = storage.absolutize(image.file_path)
-    if original.is_file():
-        total += original.stat().st_size
-    paths = variants.get(image.id, []) if variants is not None else [
-        variant.path for variant in _list_variants(session, image.id)
-    ]
-    for relative in paths:
-        path = storage.absolutize(relative)
-        if path.is_file():
-            total += path.stat().st_size
+    for relative in (image.file_path, *paths):
+        try:
+            info = storage.absolutize(relative).stat()
+        except OSError:
+            continue
+        if stat.S_ISREG(info.st_mode):
+            total += info.st_size
     return total
 
 
@@ -115,8 +109,9 @@ def preview(session: Session, storage: StorageManager,
     if not candidates:
         return {
             "candidate_count": 0, "deletable_count": 0, "protected_count": 0,
-            "total_bytes": 0, "protected_items": [],
+            "total_bytes": 0, "protected_items": [], "deletable_ids": [],
         }
+    started = time.perf_counter()
     # v0.37.1：批量引用检查。原实现逐张 5 次查询，487 张 REJECT 预览需数分钟，
     # 前端「删除淘汰图」长时间停在“准备中…”，实际被误判为删不掉。
     candidate_ids = [image.id for image in candidates]
@@ -127,35 +122,51 @@ def preview(session: Session, storage: StorageManager,
         .where(ImageVariant.image_id.in_(candidate_ids))
     ).all():
         variants.setdefault(image_id, []).append(path)
-    total_bytes = 0
     protected_items: list[dict] = []
+    deletable_images: list[Image] = []
     for image in candidates:
         refs = references.get(image.id) or {"references": {}, "active_job_ids": []}
         reasons = _protected_reasons(refs)
         if reasons:
             protected_items.append({"image_id": image.id, "reasons": reasons})
-            continue
-        total_bytes += _image_disk_bytes(session, storage, image, variants=variants)
+        else:
+            deletable_images.append(image)
+    # 并发 stat：HDD/Defender 冷缓存下逐张串行 stat 可达数秒，是"点击无反应"的主要来源
+    total_bytes = 0
+    if deletable_images:
+        with ThreadPoolExecutor(max_workers=min(8, len(deletable_images))) as pool:
+            total_bytes = sum(pool.map(
+                lambda image: _disk_bytes(storage, image, variants.get(image.id, [])),
+                deletable_images,
+            ))
+    logger.info(
+        "废片清理预览：候选 %s，可删 %s，受保护 %s，合计 %.1f MB，用时 %.0f ms",
+        len(candidates), len(deletable_images), len(protected_items),
+        total_bytes / 1048576, (time.perf_counter() - started) * 1000,
+    )
     return {
         "candidate_count": len(candidates),
         "deletable_count": len(candidates) - len(protected_items),
         "protected_count": len(protected_items),
         "total_bytes": total_bytes,
         "protected_items": protected_items,
+        "deletable_ids": [image.id for image in deletable_images],
     }
 
 
-def _collect_existing_files(session: Session, storage: StorageManager, image: Image) -> list[Path]:
-    """original + 全部 variants 中**真实存在**的文件（缺失文件按不存在计）。"""
-    paths: list[Path] = []
-    original = storage.absolutize(image.file_path)
-    if original.is_file():
-        paths.append(original)
-    for variant in _list_variants(session, image.id):
-        path = storage.absolutize(variant.path)
-        if path.is_file():
-            paths.append(path)
-    return paths
+def _existing_files(storage: StorageManager, image: Image,
+                    variant_paths: list[str]) -> list[tuple[Path, int]]:
+    """original + 指定 variants 中真实存在的文件及字节数（缺失按不存在计）。"""
+    found: list[tuple[Path, int]] = []
+    for relative in (image.file_path, *variant_paths):
+        try:
+            path = storage.absolutize(relative)
+            info = path.stat()
+        except OSError:
+            continue
+        if stat.S_ISREG(info.st_mode):
+            found.append((path, info.st_size))
+    return found
 
 
 def _purge_image_rows(session: Session, image_id: str) -> None:
@@ -173,6 +184,24 @@ def _purge_image_rows(session: Session, image_id: str) -> None:
         update(JobStageItem).where(JobStageItem.output_image_id == image_id)
         .values(output_image_id=None)
     )
+    # 手机审核队列 / 设备已读标记也引用 images.id（前者 NO ACTION 会阻断删除）：
+    # 图片既然已确认永久删除，这些引用必须同步清掉，否则 DELETE images 触发外键约束失败。
+    # 图片被永久删除 → 同步扣减所在审核会话的 total_count，避免会话进度分母虚高
+    affected_sessions = select(ImageReviewSessionItem.session_id).where(
+        ImageReviewSessionItem.image_id == image_id
+    )
+    session.execute(
+        update(ImageReviewSession)
+        .where(ImageReviewSession.id.in_(affected_sessions))
+        .values(total_count=case(
+            (ImageReviewSession.total_count > 0, ImageReviewSession.total_count - 1),
+            else_=0,
+        ))
+    )
+    session.execute(
+        delete(ImageReviewSessionItem).where(ImageReviewSessionItem.image_id == image_id)
+    )
+    session.execute(delete(MobileImageSeen).where(MobileImageSeen.image_id == image_id))
     session.execute(delete(ImageVariant).where(ImageVariant.image_id == image_id))
     session.execute(delete(Image).where(Image.id == image_id))
 
@@ -196,17 +225,17 @@ def _move_back(storage: StorageManager, moved: list[tuple[Path, Path]]) -> None:
                            dst, src, exc_info=True)
 
 
-def _delete_one(session: Session, storage: StorageManager, image: Image, cleanup_id: str) -> int:
+def _delete_one(session: Session, storage: StorageManager, image: Image,
+                existing: list[tuple[Path, int]], staging_dir: Path) -> int:
     """删除单张未受保护图的文件 + DB 记录（trash staging 事务安全），返回释放字节数。
 
     口径（P0-3）：
     - original 与所有 variant 文件都已不存在（历史异常）：引用检查已通过，直接安全删 DB
       行（记录为文件本已缺失），freed=0，避免"DB 指向已丢文件"长期残留；
     - 部分文件存在：先原子移入隔离区，再 DB 事务删行；文件移动失败→已移回、DB 不动；
-      DB commit 失败→rollback 并把隔离区文件原子移回；成功后才 purge 隔离区。
+      DB commit 失败→rollback 并把隔离区文件原子移回；隔离区由 execute 在整批结束后统一清除。
     """
-    existing = _collect_existing_files(session, storage, image)
-    freed = sum(path.stat().st_size for path in existing)
+    freed = sum(size for _, size in existing)
 
     # 文件本就全部缺失 → 直接删 DB 行（freed=0），不留"DB 指向已丢文件"残留
     if not existing:
@@ -214,17 +243,16 @@ def _delete_one(session: Session, storage: StorageManager, image: Image, cleanup
         session.commit()
         return 0
 
-    staging_dir = storage.resolve_under(
-        "images/temp", "delete_staging", cleanup_id, image.id)
     staging_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) 文件 → 隔离区（同卷原子）；任一失败 → 已移回，DB 完全不动
     moved: list[tuple[Path, Path]] = []
     try:
-        for index, src in enumerate(existing):
+        for index, (src, _) in enumerate(existing):
             dst = storage.atomic_move_into(src, staging_dir, f"{index}_{src.name}")
             moved.append((src, dst))
-    except OSError:
+    except OSError as error:
+        logger.warning("图片 %s 移入删除隔离区失败: %r", image.id, error, exc_info=True)
         _move_back(storage, moved)
         raise _DeleteAborted("文件移入删除隔离区失败")
 
@@ -232,42 +260,57 @@ def _delete_one(session: Session, storage: StorageManager, image: Image, cleanup
     try:
         _purge_image_rows(session, image.id)
         session.commit()
-    except Exception:
+    except Exception as error:
         session.rollback()
         _move_back(storage, moved)
-        raise _DeleteAborted("数据库删除失败")
+        logger.warning("删除图片 %s 的数据库记录失败: %r", image.id, error, exc_info=True)
+        raise _DeleteAborted(f"数据库删除失败（{type(error).__name__}）")
 
-    # 3) commit 成功 → 物理清除隔离区（purge 失败只记日志，不影响一致性，留待 stale 清理）
-    storage.safe_delete(staging_dir)
-    for path in existing:
+    for path, _ in existing:
         _remove_empty_image_dir(path.parent, image.id)
     return freed
 
 
 def execute(session: Session, storage: StorageManager,
             image_ids: list[str] | None = None) -> dict:
-    """两阶段之二：真删未受保护的 REJECT 图。"""
+    """两阶段之二：真删未受保护的 REJECT 图。
+
+    v0.37.3 性能优化（原实现 59 张需数分钟）：
+    - variants 一次 IN 查询取回（原实现逐图一次 SQL）；
+    - 隔离区每批只建一次根目录，逐图子目录，成功批次合并清理；
+    - ``absolutize`` 走纯词法归一化、stat 单次调用（原实现每文件 Path.resolve()+2 次系统调用）。
+    仍保留逐图 commit：单张失败只回滚该张、不阻断其余（事务安全语义不变）。
+    """
+    started = time.perf_counter()
     candidates = _candidates(session, image_ids)
     if not candidates:
         return {"deleted_count": 0, "deleted_bytes": 0, "protected_count": 0,
                 "deletable_count": 0, "failed": []}
-    references = image_reference_service.count_references_many(
-        session, [image.id for image in candidates],
-    )
+    candidate_ids = [image.id for image in candidates]
+    references = image_reference_service.count_references_many(session, candidate_ids)
+    variants: dict[str, list[str]] = {image_id: [] for image_id in candidate_ids}
+    for image_id, path in session.execute(
+        select(ImageVariant.image_id, ImageVariant.path)
+        .where(ImageVariant.image_id.in_(candidate_ids))
+    ).all():
+        variants.setdefault(image_id, []).append(path)
+
     cleanup_id = uuid.uuid4().hex  # 每次 execute 一个唯一隔离区批次
+    staging_root = storage.resolve_under("images/temp", "delete_staging", cleanup_id)
     deleted_count = 0
     deleted_bytes = 0
     protected_count = 0
     failed: list[dict] = []
+    committed: list[Path] = []
     for image in candidates:
         refs = references.get(image.id) or {"references": {}, "active_job_ids": []}
         if refs["total"] > 0 or refs["active_job_ids"]:
             protected_count += 1
             continue
+        staging_dir = staging_root / image.id
         try:
-            freed = _delete_one(session, storage, image, cleanup_id)
-            deleted_count += 1
-            deleted_bytes += freed
+            existing = _existing_files(storage, image, variants.get(image.id, []))
+            freed = _delete_one(session, storage, image, existing, staging_dir)
         except Exception as error:  # noqa: BLE001 —— 单张失败不阻断其余
             session.rollback()
             failed.append({
@@ -275,6 +318,23 @@ def execute(session: Session, storage: StorageManager,
                 "error_code": getattr(error, "code", "DELETE_FAILED"),
                 "message": str(error),
             })
+            continue
+        deleted_count += 1
+        deleted_bytes += freed
+        committed.append(staging_dir)
+    # 只清理 DB 已提交的成功批次；失败批次残留留给 stale 清理（移回失败时绝不丢文件）
+    for directory in committed:
+        storage.safe_delete(directory)
+    if committed:
+        try:
+            staging_root.rmdir()
+        except OSError:
+            pass
+    logger.info(
+        "废片清理执行：候选 %s，已删 %s，受保护 %s，失败 %s，释放 %.1f MB，用时 %.0f ms",
+        len(candidates), deleted_count, protected_count, len(failed),
+        deleted_bytes / 1048576, (time.perf_counter() - started) * 1000,
+    )
     return {
         "deleted_count": deleted_count,
         "deleted_bytes": deleted_bytes,

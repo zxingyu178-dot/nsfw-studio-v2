@@ -20,6 +20,9 @@ class StorageManager:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self.data_root = settings.storage.data_root
+        # Path.resolve() 在 Windows 会逐级打开句柄（Defender 下每层数毫秒），
+        # 每次读写图片都调用会拖垮批量操作；根路径只解析一次。
+        self._root = self.data_root.resolve()
 
     def ensure(self) -> set[str]:
         """确保全部登记目录存在（幂等），返回本次新建的相对路径集合。"""
@@ -65,14 +68,19 @@ class StorageManager:
     def relative_to_root(self, path: Path) -> str:
         """把 DataRoot 内的绝对路径转为 POSIX 相对路径（入库格式）。"""
         resolved = path.resolve()
-        if not resolved.is_relative_to(self.data_root.resolve()):
+        if not resolved.is_relative_to(self._root):
             raise ValidationError(f"路径不在 DataRoot 内: {path}")
-        return resolved.relative_to(self.data_root.resolve()).as_posix()
+        return resolved.relative_to(self._root).as_posix()
 
     def absolutize(self, relative: str) -> Path:
-        """把入库的 DataRoot 相对路径还原为绝对路径（拒绝穿越）。"""
-        candidate = (self.data_root / relative).resolve()
-        if not candidate.is_relative_to(self.data_root.resolve()):
+        """把入库的 DataRoot 相对路径还原为绝对路径（拒绝穿越）。
+
+        纯字符串归一化（不触碰文件系统）：入库路径均由本应用生成且位于 DataRoot，
+        词法校验已能阻止 ``..`` / 绝对路径逃逸。Path.resolve() 的成本在批量删除时
+        被放大到十几秒（每个文件逐级打开句柄），因此这里不再逐文件解析。
+        """
+        candidate = Path(os.path.normpath(os.path.join(self._root, relative)))
+        if not candidate.is_relative_to(self._root):
             raise ValidationError(f"路径越界: {relative!r}")
         return candidate
 
