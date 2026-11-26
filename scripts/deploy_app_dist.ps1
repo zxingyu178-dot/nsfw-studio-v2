@@ -164,21 +164,11 @@ try {
         exit 0
     }
 
-    Invoke-CheckedCommand -Command "git" -Arguments @("-C", $AppRoot, "fetch", "origin") -FailureMessage "git fetch origin 失败；请检查网络、凭据和远端配置"
-    $appStatus = Get-GitValue $AppRoot @("status", "-sb") "无法检查 app 工作树状态"
-    Write-Host $appStatus
-    $behindText = Get-GitValue $AppRoot @("rev-list", "--count", "HEAD..origin/main") "无法判断 app HEAD 是否落后 origin/main"
-    $behindCount = 0
-    if (-not [int]::TryParse($behindText, [ref]$behindCount)) {
-        Fail-Deploy "git rev-list 返回了无法解析的落后提交数：$behindText"
+    $appHead = Get-GitValue $AppRoot @("rev-parse", "HEAD") "无法读取 app HEAD"
+    if ($appHead -ne $devHead) {
+        Fail-Deploy "app HEAD ($appHead) 与 dev HEAD ($devHead) 不一致。请先把 app 工作树对齐 dev HEAD，再重新部署 dist。"
     }
-    if ($behindCount -gt 0) {
-        Write-Warning "app 工作树落后 origin/main $behindCount 个提交；即将执行 fast-forward pull。"
-    } else {
-        Write-Host "PASS app 工作树未落后 origin/main。" -ForegroundColor Green
-    }
-    Invoke-CheckedCommand -Command "git" -Arguments @("-C", $AppRoot, "pull", "--ff-only") -FailureMessage "git pull --ff-only 失败；请检查 app 工作树是否有冲突、分支是否分叉"
-    $appHead = Get-GitValue $AppRoot @("rev-parse", "HEAD") "无法读取更新后的 app HEAD"
+    Write-Host "PASS app HEAD 与 dev HEAD 一致：$appHead" -ForegroundColor Green
 
     $buildWatch = [Diagnostics.Stopwatch]::StartNew()
     if ($SkipBuild) {

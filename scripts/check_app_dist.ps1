@@ -96,14 +96,22 @@ try {
 
     try {
         $appHead = Get-GitValue $AppRoot @("rev-parse", "HEAD")
-        $originMain = Get-GitValue $AppRoot @("rev-parse", "origin/main")
-        if ($appHead -eq $originMain) {
-            Write-Pass "app HEAD 与 origin/main 一致：$appHead"
+        $devHead = Get-GitValue $DevRoot @("rev-parse", "HEAD")
+        if ($appHead -eq $devHead) {
+            Write-Pass "app HEAD 与 dev HEAD 一致：$appHead"
         } else {
-            Write-Fail "app HEAD ($appHead) 与 origin/main ($originMain) 不一致。先运行 deploy_app_dist.ps1。"
+            Write-Fail "app HEAD ($appHead) 与 dev HEAD ($devHead) 不一致。先在 app 工作树对齐 dev HEAD。"
+        }
+        try {
+            $originMain = Get-GitValue $DevRoot @("rev-parse", "origin/main")
+            if ($devHead -ne $originMain) {
+                Write-Warn "dev HEAD ($devHead) 与 origin/main ($originMain) 不一致；请确认本地提交是否已推送。"
+            }
+        } catch {
+            Write-Warn "无法读取 origin/main；跳过远端一致性提示。"
         }
     } catch {
-        Write-Fail "无法比较 app HEAD 与 origin/main：$($_.Exception.Message)"
+        Write-Fail "无法比较 app/dev HEAD：$($_.Exception.Message)"
         $appHead = $null
     }
 
