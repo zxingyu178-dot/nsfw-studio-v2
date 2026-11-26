@@ -24,8 +24,9 @@
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
 - 后端全量 `pytest tests/backend -q` 836 项：835 通过、1 跳过；G0 `errors=0`。
+- 前端全量 `npm run test:ci` 104 个文件 524 项全部通过；`tsc` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
-  新图提醒与主页面切换加入淡入缩放动画。
+  新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 
 ## [0.39.0] — 2026-11-27
 
