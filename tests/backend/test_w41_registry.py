@@ -26,6 +26,7 @@ from app.database.mobile_event_repair import MAIN_COLUMNS, ensure_mobile_events_
 from app.services import asset_query_service, registry_validator
 from app.services.model_registry_service import ModelRegistryService
 from app.services.workflow_registry_service import WorkflowRegistryService
+from app.workflows.anime_generate import SAMPLER_NAMES, SCHEDULER_NAMES
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_ROOT = PROJECT_ROOT / "registry"
@@ -66,6 +67,11 @@ def test_model_registry_recommended_sampling_profiles(settings):
     assert (noobai["sampler_name"], noobai["scheduler"]) == ("dpmpp_2m", "karras")
     default = profiles["miaomiaoHarem_v14.safetensors"]
     assert (default["sampler_name"], default["scheduler"]) == ("er_sde", "simple")
+    # 推荐参数必须落在 anime_generate 允许的枚举内，避免“应用推荐”写入无效值
+    for filename, profile in profiles.items():
+        assert profile["sampler_name"] in SAMPLER_NAMES, filename
+        assert profile["scheduler"] in SCHEDULER_NAMES, filename
+        assert 0.0 <= float(profile["denoise"]) <= 1.0, filename
 
 
 def test_workflow_registry_active_versions(settings):
