@@ -120,6 +120,15 @@ icacls "<node.exe 或 java.exe 的绝对路径>" /setintegritylevel Medium
   不写真机安装步骤、不发邮箱。模拟器访问本机桥用 `adb reverse tcp:<port> tcp:<port>`。
 - 交互变更需覆盖：冷启动、断网重连、空队列、审核操作反馈、返回栈、进度从生成中→空闲。
 
+### 最近一次模拟器验收（2026-11-27，Alpha53 / versionCode 60）
+
+- 安装并 AOT 后冷启动，更新说明显示 Alpha53；审图页空闲进度条正常。
+- 生产提交 20 步快速任务，顶栏显示“生成中：第 1 / 1 张 · 剩余 1 段”，新增分段进度条
+  正常渲染且无崩溃；完成后恢复“暂无生成任务”并出现“新图 1”。
+- 真实 Job `job_cbaaaddc-82d4-4412-ad98-d20db5733644` 1 张 COMPLETED。
+- 期间模拟器出现 screencap 失败 / uiautomator null root，`adb reboot` 后恢复；
+  属于模拟器图形面异常，不是应用崩溃。
+
 ### 最近一次模拟器验收（2026-11-27，Alpha52 / versionCode 59）
 
 - 生产 8000/8877（build `fe057f5`）暂停队列后，通过 Agent CLI 提交 20 步快速任务；
