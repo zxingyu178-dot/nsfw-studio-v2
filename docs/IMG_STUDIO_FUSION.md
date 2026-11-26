@@ -35,4 +35,7 @@
 - 分支 `feature/studio-creation-optimization` 合并 main（生产 LoRA v5、移动桥 0.14.0、构建身份），合并提交 `02d5638`。
 - 冲突按“img-studio 视觉 + 生产行为”处理；`feature/img-studio-ui` 无独有 UI，唯一独有文件是 mobile generation progress，已明确不纳入 8877。
 - 版本升到 `0.38.0`；前端 103 个测试文件、520 项通过，TypeScript 与 Vite 构建通过；后端定向回归 93 项通过。
-- 真实 ComfyUI 出图与浏览器人工视觉验收在部署后补跑。
+- 浏览器人工视觉验收：首页、创作、图库、词库、设置五页 PASS，控制台无未捕获异常。
+- 真实 ComfyUI 出图验收：`job_df27e301-931d-421b-99a9-6d6d452df1a3` COMPLETED 1/1；
+  `img_78dc99a0-2f63-424a-b9d0-0e471cb927cb` 832×1216；
+  ComfyUI history 节点 21 `LoraLoader` = `cunnyfunky_v5.0_000008` @0.6/0.6。

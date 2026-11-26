@@ -1,5 +1,12 @@
 # 动漫链路 LoRA 组合预设：一个体位 + 厚涂画风
 
+> **2026-11-26 实机检查**：本机 ComfyUI 当前只安装 `cunnyfunky_v5.0_000008`、
+> `cunnyfunky_noobai_v3.3_000080`、`Hentai Pussy inspection_Pony_V1`、
+> `Spread pussy_Illustrious_v1`。本文 Horn/Faux 两个预设文件在本机不存在，
+> 直接照抄“提交载荷”会因 LoRA 名称不存在而失败。实机 v5 链路验证使用
+> `cunnyfunky_v5.0_000008` @0.6/0.6，任务 `job_df27e301...` 已 COMPLETED。
+> 如需恢复本预设，请先补齐两个 LoRA 文件，再按下方载荷提交。
+
 > 适用模块：`anime_generate` / binding `v5`（LoRA 任务级参数化）
 > 底模：`miaomiaoHarem_v14.safetensors`（Pony 谱系，832×1216，30 步 / cfg 4.0 / er_sde / simple，FaceDetailer 常开）
 > 上限：每个任务最多 2 条 LoRA —— 本预设用满 2 个槽位：**体位 1 条 + 画风 1 条**

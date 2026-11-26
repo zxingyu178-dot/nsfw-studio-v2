@@ -23,7 +23,11 @@
 
 - 前端 TypeScript 通过；前端全量 103 个测试文件、520 项通过；Vite 构建通过。
 - 后端定向回归 93 项通过（agent CLI、移动桥、动漫模块、LoRA 校验）。
-- 未执行真实 ComfyUI 生成与浏览器人工视觉验收，部署后补跑。
+- 浏览器人工视觉验收：首页、创作、图库、词库、设置五页 PASS，控制台无未捕获异常。
+- 真实 ComfyUI 生成验收：`job_df27e301-931d-421b-99a9-6d6d452df1a3` COMPLETED 1/1；
+  图片 `img_78dc99a0-2f63-424a-b9d0-0e471cb927cb` 832×1216；
+  ComfyUI history 节点 21 `LoraLoader` = `cunnyfunky_v5.0_000008` @0.6/0.6，
+  Checkpoint = `miaomiaoHarem_v14.safetensors`。
 
 ## [Unreleased] — 手机双向续审与整页审核接口（2026-11-10）
 
