@@ -22,7 +22,20 @@ vi.mock('../AspectRatioPicker', () => ({
   AspectRatioPicker: () => <div data-testid="ratio-picker" />,
 }))
 vi.mock('../components/ModuleParameterField', () => ({
-  ModuleParameterField: () => null,
+  // 只保留本文件需要的布尔开关；其余参数控件由组件自身测试覆盖。
+  ModuleParameterField: ({ param, value, onChange }: {
+    param: { name: string; type: string; title?: string; default?: unknown }
+    value: unknown
+    onChange: (value: unknown) => void
+  }) =>
+    param.type === 'bool' ? (
+      <input
+        type="checkbox"
+        aria-label={param.title || param.name}
+        checked={Boolean(value ?? param.default)}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    ) : null,
 }))
 vi.mock('./SplitGenerateAction', () => ({
   SplitGenerateAction: () => <div data-testid="split-action" />,
@@ -74,6 +87,7 @@ const anime: ModuleCapabilitiesDTO = {
   parameters: [
     { name: 'model', type: 'string', required: false, default: '', title: '底模', configurable: true },
     { name: 'loras', type: 'lora_list', required: false, default: [], title: 'LoRA 叠加', configurable: false },
+    { name: 'face_detailer', type: 'bool', required: false, default: true, title: '人脸修复（FaceDetailer）', configurable: true },
     { name: 'steps', type: 'int', required: false, default: 30, min: 1, max: 100, title: '采样步数', configurable: true },
   ],
 }
@@ -156,5 +170,15 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
         strength_clip: 1.2,
       }],
     })
+  })
+
+  it('人脸修复默认开启，取消后写入 face_detailer=false', async () => {
+    renderPanel()
+    const checkbox = (await screen.findByRole('checkbox', {
+      name: '人脸修复（FaceDetailer）',
+    })) as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
+    fireEvent.click(checkbox)
+    expect(setPrimaryModuleConfig).toHaveBeenCalledWith({ face_detailer: false })
   })
 })

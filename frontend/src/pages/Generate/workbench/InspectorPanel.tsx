@@ -67,6 +67,10 @@ export function InspectorPanel({
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
   const modelParam = configurableParams.find((param) => param.name === 'model') ?? null
+  const faceDetailerParam = configurableParams.find((param) => param.name === 'face_detailer') ?? null
+  const advancedParams = configurableParams.filter(
+    (param) => param.name !== 'model' && param.name !== 'face_detailer',
+  )
   const supportsLora = (primaryCapabilities?.parameters ?? []).some((param) => param.name === 'loras')
   const primaryConfig = state.workflowModules[0]?.config ?? {}
   const selectedModel = typeof primaryConfig.model === 'string' ? primaryConfig.model : ''
@@ -282,6 +286,15 @@ export function InspectorPanel({
         />
       )}
 
+      {/* ===== 人脸修复（FaceDetailer，性能开关） ===== */}
+      {faceDetailerParam && (
+        <ModuleParameterField
+          param={faceDetailerParam}
+          value={primaryConfig.face_detailer}
+          onChange={(value) => setPrimaryModuleConfig({ face_detailer: value })}
+        />
+      )}
+
       {/* ===== 画面（画幅 / 分辨率 / 自定义） ===== */}
       {followsInputSize ? (
         <Field label="尺寸"><p className="wb-static">跟随输入图（无需设置宽高）</p></Field>
@@ -307,18 +320,16 @@ export function InspectorPanel({
       <SeedRow />
 
       {/* ===== 高级参数（默认折叠） ===== */}
-      {configurableParams.some((param) => param.name !== 'model') && (
+      {advancedParams.length > 0 && (
         <CollapsibleSection id="advanced" title="高级参数" defaultOpen={false}>
-          {configurableParams
-            .filter((param) => param.name !== 'model')
-            .map((param) => (
-              <ModuleParameterField
-                key={param.name}
-                param={param}
-                value={state.workflowModules[0]?.config?.[param.name]}
-                onChange={(value) => setPrimaryModuleConfig({ [param.name]: value })}
-              />
-            ))}
+          {advancedParams.map((param) => (
+            <ModuleParameterField
+              key={param.name}
+              param={param}
+              value={state.workflowModules[0]?.config?.[param.name]}
+              onChange={(value) => setPrimaryModuleConfig({ [param.name]: value })}
+            />
+          ))}
         </CollapsibleSection>
       )}
     </Pane>
