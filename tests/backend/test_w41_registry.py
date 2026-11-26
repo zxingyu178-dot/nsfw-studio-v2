@@ -41,23 +41,26 @@ def test_lf_hash_is_cross_platform_stable():
     assert match_algorithm("0" * 16, raw_hash_bytes(lf), lf_hash_bytes(lf)) is None
 
 
-def test_model_registry_has_six_active_models(settings):
+def test_model_registry_lists_active_models(settings):
     service = ModelRegistryService(settings)
     active = service.list_models(include_archived=False)
     assert {item["model_id"] for item in active} == {
         "qwen_image_2_1", "qwen3vl_8b_w4a8", "texture_fix_vae_qwen_image_2_1",
         "qwen_image_2_1_turbo8_lora", "f23gg_nsfw_qwen21", "miaomiao_harem_v14",
+        "noobai_xl_v1_1", "wai_illustrious_v170", "wai_nsfw_illustrious_v150",
+        "hentai_pussy_inspection_pony_v1",
     }
     assert all(item["status"] == "released" for item in active)
     assert all(item["files"][0]["sha256"] != "unverified" for item in active)
 
 
-def test_workflow_registry_four_active_versions(settings):
+def test_workflow_registry_active_versions(settings):
     service = WorkflowRegistryService(settings)
     active = service.active_workflows()
-    assert {item["workflow_id"]: item["version"] for item in active} == {
-        "basic_generate": "v2", "anime_generate": "v2",
-        "img2img": "v3", "reference_generate": "v2",
+    mapping = {(item["workflow_id"], item["version"]) for item in active}
+    assert mapping == {
+        ("anime_generate", "v2"), ("anime_generate", "v15"),
+        ("basic_generate", "v2"), ("img2img", "v3"), ("reference_generate", "v2"),
     }
     for item in active:
         assert item["binding_valid"] is True
@@ -149,9 +152,10 @@ def test_modules_exposes_registry_projection(client):
     response = client.get("/api/v1/modules")
     assert response.status_code == 200
     modules = {item["module_id"]: item for item in response.json()}
-    manifest = modules["basic_generate"]["registry"]
-    assert manifest["workflow_id"] == "basic_generate"
-    assert manifest["version"] == "v2"
+    # 产品收敛后只保留 anime_generate；registry 投影应指向当前默认 binding v15
+    manifest = modules["anime_generate"]["registry"]
+    assert manifest["workflow_id"] == "anime_generate"
+    assert manifest["version"] == "v15"
     assert manifest["hashes"]["algorithm"] == "lf-normalized-v1"
 
 

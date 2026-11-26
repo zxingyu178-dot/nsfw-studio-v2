@@ -43,7 +43,7 @@ def mock_settings(settings: Settings, **options) -> Settings:
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -242,7 +242,7 @@ def test_recipe_preserves_multiple_slot_roles(mock_client, png_bytes):
 
 # ===== /modules 暴露 input_slots =====
 
-def test_modules_api_exposes_input_slots(client):
+def test_modules_api_exposes_input_slots(client, process_registry):
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     img2img_slots = modules["img2img"]["input_slots"]
     assert img2img_slots == [{

@@ -380,7 +380,7 @@ def test_image_reference_counts_across_all_sources(mock_client, session, png_byt
 
 # ===== §十四：ModuleCapabilities 输入声明（Gate B 判定依据） =====
 
-def test_modules_api_declares_input_capabilities(client):
+def test_modules_api_declares_input_capabilities(client, process_registry):
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     assert modules["basic_generate"]["input_required"] is False
     assert "upscale" not in modules

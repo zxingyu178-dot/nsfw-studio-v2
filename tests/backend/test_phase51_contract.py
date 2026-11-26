@@ -295,7 +295,7 @@ def test_legal_chain_job_completes(mock_client):
 
 # ===== Task7：/modules 真实可用性 =====
 
-def test_modules_api_reports_real_availability(client):
+def test_modules_api_reports_real_availability(client, process_registry):
     """comfyui provider：binding 在磁盘 → available=true；报告 provider/binding_version。"""
     modules = {item["module_id"]: item for item in client.get("/api/v1/modules").json()}
     for module_id in ("basic_generate", "img2img", "reference_generate", "anime_generate"):
@@ -303,12 +303,12 @@ def test_modules_api_reports_real_availability(client):
         assert info["registered"] is True
         assert info["available"] is True, info
         assert info["provider"] == "comfyui"
-        assert info["binding_version"] in ("v1", "v2", "v3")
+        assert info["binding_version"] in ("v1", "v2", "v3", "v15")
         assert info["unavailable_reason"] is None
     assert "upscale" not in modules
 
 
-def test_modules_api_unavailable_when_binding_missing(client, monkeypatch, tmp_path):
+def test_modules_api_unavailable_when_binding_missing(client, monkeypatch, tmp_path, process_registry):
     """registered ≠ available：binding 缺失 → available=false + binding_not_configured。"""
     from app.engine import comfyui as comfyui_module
 
@@ -322,7 +322,7 @@ def test_modules_api_unavailable_when_binding_missing(client, monkeypatch, tmp_p
     assert "upscale" not in modules
 
 
-def test_modules_api_unavailable_without_engine(settings):
+def test_modules_api_unavailable_without_engine(settings, process_registry):
     """unbound provider：模块不可执行 → available=false（绝不因注册了就显示可用）。"""
     from fastapi.testclient import TestClient
 

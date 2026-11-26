@@ -61,30 +61,51 @@ from app.services.system_service import bootstrap
 
 @pytest.fixture()
 def process_registry(monkeypatch: pytest.MonkeyPatch):
-    """测试用注册表：产品默认 4 模块 + 「处理型测试替身」（替代已下线 upscale）。"""
+    """测试用注册表：产品默认模块 + 已下线模块的测试替身 + 处理型测试替身。
+
+    2026-11-16 产品收敛只保留 anime_generate，但 Phase 3–7 的通用管线测试仍需要
+    basic_generate / img2img / reference_generate 作为**测试专用**模块来覆盖
+    Pipeline / Slot / 恢复语义。它们不会出现在生产注册表，也不会被放行到正式入口。
+    """
     from app.engine import release
+    from app.workflows.basic_generate import BasicGenerateModule
+    from app.workflows.img2img import Img2ImgModule
+    from app.workflows.reference_generate import ReferenceGenerateModule
     from app.workflows.registry import ModuleRegistry, default_registry
     from fake_process_module import FakeProcessModule
 
     base = default_registry()
-    registry = ModuleRegistry([base.get(module_id) for module_id in base.ids()] + [FakeProcessModule()])
+    legacy_modules = [BasicGenerateModule(), Img2ImgModule(), ReferenceGenerateModule()]
+    registry = ModuleRegistry(
+        [base.get(module_id) for module_id in base.ids()] + legacy_modules + [FakeProcessModule()]
+    )
 
     def _registry() -> ModuleRegistry:
         return registry
 
-    # 测试替身只存在于测试进程：放行清单同步补一条 ready 条目，避免被正式放行门禁误伤。
+    # 测试替身只存在于测试进程：放行清单同步补 ready 条目，避免被正式放行门禁误伤。
     manifest = dict(release.load_release_manifest())
-    modules = dict(manifest.get("modules") or {})
-    modules["fake_process"] = {
-        "bindings": {
-            "v1": {
-                "dependencies_ready": True,
-                "real_gate_passed": True,
-                "hardware_status": "normal",
-                "default_profile_verified": False,
-            }
+
+    def _ready(hardware: str) -> dict:
+        return {
+            "dependencies_ready": True,
+            "real_gate_passed": True,
+            "hardware_status": hardware,
+            "default_profile_verified": False,
         }
-    }
+
+    modules = dict(manifest.get("modules") or {})
+    modules["fake_process"] = {"bindings": {"v1": _ready("normal")}}
+    # 硬件档位沿用各模块历史放行记录，避免测试替身改变被测语义。
+    for module_id, version, hardware in (
+        ("basic_generate", "v1", "normal"),
+        ("img2img", "v1", "slow"),
+        ("img2img", "v2", "slow"),
+        ("reference_generate", "v1", "slow"),
+    ):
+        bindings = dict((modules.get(module_id) or {}).get("bindings") or {})
+        bindings[version] = _ready(hardware)
+        modules[module_id] = {"bindings": bindings}
     manifest["modules"] = modules
     monkeypatch.setattr("app.engine.release.load_release_manifest", lambda: manifest)
 

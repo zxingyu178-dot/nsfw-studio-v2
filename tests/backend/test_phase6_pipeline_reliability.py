@@ -318,7 +318,7 @@ def test_unregistered_module_version_rejected_at_creation(mock_client):
     assert "版本不存在" in response.json()["error"]["message"]
 
 
-def test_module_availability_keeps_version_domains_separate(settings):
+def test_module_availability_keeps_version_domains_separate(settings, process_registry):
     """binding_version 不得用 module_version 兜底；配置了未注册版本 → available=false。"""
     from app.engine.factory import module_availability
 

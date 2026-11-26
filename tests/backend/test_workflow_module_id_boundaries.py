@@ -57,7 +57,7 @@ def test_empty_module_list_uses_server_default(mock_client):
         "snapshot": snapshot([]),
     })
     assert response.status_code == 201, response.text
-    assert response.json()["module_id"] == "basic_generate"
+    assert response.json()["module_id"] == "anime_generate"
 
 
 @pytest.mark.parametrize("module_id", ["", "   "])
@@ -81,4 +81,4 @@ def test_factory_rejects_blank_module_id_directly(settings):
 
 def test_factory_still_allows_truly_empty_request(settings):
     identity = resolve_workflow_modules(mock_settings(settings), [])[0]
-    assert identity["module_id"] == "basic_generate"
+    assert identity["module_id"] == "anime_generate"

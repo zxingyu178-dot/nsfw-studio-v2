@@ -109,7 +109,7 @@ def test_history_lists_web_and_resume_family_with_filters(mock_client):
     assert family["root"]["positive_prompt_snapshot"]
     # 卡片展示所需字段都在 JobResponse 中（数量/Pipeline/来源/续跑关系）
     assert family["root"]["requested_count"] == 2
-    assert family["root"]["workflow_snapshot"]["modules"][0]["module_id"] == "basic_generate"
+    assert family["root"]["workflow_snapshot"]["modules"][0]["module_id"] == "anime_generate"
 
     # 筛选：族内任一 Job 命中即保留整族
     assert find_family(mock_client, job_a["id"], bucket="failed") is not None
@@ -206,7 +206,7 @@ def test_manual_process_workbench_returns_original_generation_config(mock_client
     payload = mock_client.get(f"/api/v1/images/{upscaled['id']}/workbench").json()
     assert payload["snapshot"]["structured_prompt"]["style"] == "anime", \
         "必须追溯根生成 Job（process Job 的快照是空 Prompt，绝不能返回它）"
-    assert [module["module_id"] for module in payload["snapshot"]["workflow_modules"]] == ["basic_generate"]
+    assert [module["module_id"] for module in payload["snapshot"]["workflow_modules"]] == ["anime_generate"]
     assert payload["seed"] == original["seed"]
 
 

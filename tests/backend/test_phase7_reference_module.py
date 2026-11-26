@@ -192,7 +192,7 @@ def test_reference_then_process_chain(mock_client, session, png_bytes):
 
 # ===== /modules 可用性（comfyui binding 在仓库内） =====
 
-def test_modules_api_exposes_reference_generate(client):
+def test_modules_api_exposes_reference_generate(client, process_registry):
     # 当前产品默认已切到 v2；本用例锁定 v1 冻结版本的历史放行信息。
     engine_cfg = client.app.state.settings.workflow.raw["engine"]
     engine_cfg.setdefault("modules", {})["reference_generate"] = {"binding_version": "v1"}

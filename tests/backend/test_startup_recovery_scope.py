@@ -79,7 +79,7 @@ def _snapshot() -> dict:
         "height": 1024,
         "count": 1,
         "seed_mode": "random",
-        "workflow_modules": [{"module_id": "basic_generate", "config": {}}],
+        "workflow_modules": [{"module_id": "anime_generate", "config": {}}],
         "input_images": [],
     }
 

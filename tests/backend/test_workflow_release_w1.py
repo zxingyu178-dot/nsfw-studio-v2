@@ -45,27 +45,30 @@ def test_img2img_v2_is_new_default_and_has_dependencies():
 
 
 def test_release_status_is_binding_version_aware_and_fail_closed():
-    basic = release_status("basic_generate", "v1", binding_valid=True)
-    assert basic["ready_to_run"] is True and basic["hardware_status"] == "normal"
+    # v2：已验证默认档（normal + 默认档性能已验证）
+    anime_v2 = release_status("anime_generate", "v2", binding_valid=True)
+    assert anime_v2["ready_to_run"] is True
+    assert anime_v2["hardware_status"] == "normal"
+    assert anime_v2["default_profile_verified"] is True
 
-    # 只读审计发现当前 anime binding 有 2 个真实 Studio COMPLETED Job；
-    # W1.1-3 按证据纠正 W0/W1 的“未验收”误记。
-    anime = release_status("anime_generate", "v1", binding_valid=True)
-    assert anime["real_gate_passed"] is True
-    assert anime["ready_to_run"] is True
-    assert anime["hardware_status"] == "slow"
-    assert anime["default_profile_verified"] is False
+    # v1：冻结历史版本，真实证据通过但硬件 slow、默认档未验收
+    anime_v1 = release_status("anime_generate", "v1", binding_valid=True)
+    assert anime_v1["real_gate_passed"] is True
+    assert anime_v1["ready_to_run"] is True
+    assert anime_v1["hardware_status"] == "slow"
+    assert anime_v1["default_profile_verified"] is False
 
-    reference = release_status("reference_generate", "v1", binding_valid=True)
-    assert reference["ready_to_run"] is True
-    assert reference["hardware_status"] == "slow"
-    assert reference["default_profile_verified"] is False
+    # v15：当前默认 binding，真实出图通过但性能超目标，按 experimental 放行
+    anime_v15 = release_status("anime_generate", "v15", binding_valid=True)
+    assert anime_v15["ready_to_run"] is True
+    assert anime_v15["hardware_status"] == "experimental"
+    assert anime_v15["default_profile_verified"] is False
 
     unknown = release_status("img2img", "v9", binding_valid=True)
     assert unknown["ready_to_run"] is False
     assert "未在" in unknown["notes"]
 
-    assert release_status("basic_generate", "v1", binding_valid=False)["ready_to_run"] is False
+    assert release_status("anime_generate", "v2", binding_valid=False)["ready_to_run"] is False
 
 
 def test_g0_validator_passes_current_repository():

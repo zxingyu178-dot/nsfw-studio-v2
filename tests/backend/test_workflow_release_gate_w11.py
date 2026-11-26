@@ -85,7 +85,7 @@ def test_unreleased_anime_rejected_without_job_residue(mock_client, monkeypatch,
     assert job_count(session) == before, "拒绝后不得产生残留 Job"
 
 
-def test_unregistered_binding_rejected(mock_client, monkeypatch, session):
+def test_unregistered_binding_rejected(mock_client, process_registry, monkeypatch, session):
     monkeypatch.setattr(release, "load_release_manifest", lambda: {"modules": {}})
     before = job_count(session)
     response = mock_client.post("/api/v1/jobs", json={
@@ -96,7 +96,7 @@ def test_unregistered_binding_rejected(mock_client, monkeypatch, session):
     assert job_count(session) == before
 
 
-def test_released_basic_generate_accepted(mock_client):
+def test_released_basic_generate_accepted(mock_client, process_registry):
     response = mock_client.post("/api/v1/jobs", json={
         "snapshot": make_snapshot(workflow_modules=[{"module_id": "basic_generate"}]),
     })
@@ -104,7 +104,7 @@ def test_released_basic_generate_accepted(mock_client):
     assert response.json()["workflow_snapshot"]["modules"][0]["binding_version"] == "v1"
 
 
-def test_released_img2img_v2_accepted(mock_client, png_bytes):
+def test_released_img2img_v2_accepted(mock_client, process_registry, png_bytes):
     imported = mock_client.post(
         "/api/v1/images/import", files=[("files", ("w11_img.png", png_bytes, "image/png"))]
     )
@@ -120,7 +120,7 @@ def test_released_img2img_v2_accepted(mock_client, png_bytes):
     assert response.json()["workflow_snapshot"]["modules"][0]["binding_version"] == "v2"
 
 
-def test_history_resume_remaining_is_gated(mock_client, monkeypatch, session):
+def test_history_resume_remaining_is_gated(mock_client, process_registry, monkeypatch, session):
     # 暂停队列，避免 Mock Worker 把测试用 Job 跑掉
     assert mock_client.post("/api/v1/queue/pause").status_code == 200
     fingerprint_modules = [{

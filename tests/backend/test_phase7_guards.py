@@ -290,7 +290,7 @@ def test_workbench_context_still_404_for_pure_import(mock_client, png_bytes):
 
 # ===== Task8-③：非 comfyui/mock 引擎输出不得错标成 import =====
 
-def test_non_comfyui_engine_output_source_is_engine_not_import(session, settings, png_bytes):
+def test_non_comfyui_engine_output_source_is_engine_not_import(session, settings, png_bytes, process_registry):
     from app.core.ids import JOB, JOB_ITEM, JOB_STAGE, JOB_STAGE_ITEM, new_id
     from app.services.image_service import import_adapter_outputs
     from app.storage.manager import StorageManager

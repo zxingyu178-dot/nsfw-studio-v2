@@ -214,7 +214,7 @@ def test_img2img_resume_keeps_identity_and_input(mock_client, session, png_bytes
 
 # ===== /modules：img2img 真实可用（Gate C 依据） =====
 
-def test_modules_api_exposes_img2img_available(client):
+def test_modules_api_exposes_img2img_available(client, process_registry):
     # 当前产品默认已切到 v3；本用例锁定 v2 冻结版本的历史放行信息。
     engine_cfg = client.app.state.settings.workflow.raw["engine"]
     engine_cfg.setdefault("modules", {})["img2img"] = {"binding_version": "v2"}

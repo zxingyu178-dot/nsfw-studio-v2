@@ -89,7 +89,7 @@ def test_basic_only_single_stage(mock_client):
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
     stages = final["stages"]
     assert len(stages) == 1
-    assert stages[0]["module_id"] == "basic_generate"
+    assert stages[0]["module_id"] == "anime_generate"
     assert stages[0]["status"] == "COMPLETED"
     assert (stages[0]["total_count"], stages[0]["completed_count"]) == (3, 3)
     assert all(item["status"] == "COMPLETED" for item in final["items"])

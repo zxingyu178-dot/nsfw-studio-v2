@@ -35,7 +35,7 @@ def test_reference_generate_declares_recommended_7200():
     assert ReferenceGenerateModule().capabilities().recommended_timeout_seconds == 7200.0
 
 
-def test_reference_stage_resolves_to_module_recommended_7200():
+def test_reference_stage_resolves_to_module_recommended_7200(process_registry):
     timeout = _worker()._stage_timeout_for(_stage("reference_generate", "v1"))
     assert timeout == 7200.0
 
@@ -62,7 +62,7 @@ def test_stage_explicit_override_beats_global_fallback():
     assert timeout == 120.0
 
 
-def test_invalid_override_falls_through_to_module_recommended():
+def test_invalid_override_falls_through_to_module_recommended(process_registry):
     # override 存在但非法（非数字）→ 视为无效 override，回落到 module recommended=7200
     timeout = _worker()._stage_timeout_for(
         _stage("reference_generate", "v1", {"execution_timeout": "not-a-number"})

@@ -63,7 +63,7 @@ def make_snapshot(count=1, **overrides):
 
 
 @pytest.fixture()
-def mock_client(settings):
+def mock_client(settings, process_registry):
     from fastapi.testclient import TestClient
 
     app = create_app(mock_settings(settings))
@@ -199,11 +199,11 @@ def test_job_executes_real_module_and_records_snapshot(mock_client):
     job = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot()}).json()
     final = wait_for(mock_client, job["id"], lambda j: j["status"] == "COMPLETED")
     modules = final["workflow_snapshot"]["modules"]
-    assert modules, "实际执行了 basic_generate，workflow_snapshot.modules 不能为空"
-    assert modules[0]["module_id"] == "basic_generate"
+    assert modules, "实际执行了工作流，workflow_snapshot.modules 不能为空"
+    assert modules[0]["module_id"] == "anime_generate"
     assert modules[0]["module_version"] == "v1"
     assert modules[0]["provider"] == "mock"
-    assert final["module_id"] == "basic_generate"
+    assert final["module_id"] == "anime_generate"
 
 
 def test_basic_generate_module_contract():
@@ -236,7 +236,7 @@ def test_basic_generate_module_contract():
     assert excinfo.value.error_type == "WORKFLOW_ERROR"
 
 
-def test_pipeline_executor_full_path_with_mock_engine():
+def test_pipeline_executor_full_path_with_mock_engine(process_registry):
     """PipelineExecutor.execute：模块完整执行（提交→等待→输出引用）走通。"""
     from app.engine.mock import MockEngineAdapter
     from app.models import Job
@@ -262,7 +262,8 @@ def test_registry_rejects_unknown_module():
     with pytest.raises(EngineError) as excinfo:
         default_registry().get("unknown_module", "v1")
     assert excinfo.value.error_type == "WORKFLOW_ERROR"
-    assert default_registry().has("basic_generate", "v1")
+    assert default_registry().has("anime_generate", "v1")
+    assert not default_registry().has("basic_generate", "v1"), "basic_generate 已随产品收敛下线"
     assert not default_registry().has("upscale", "v1"), "upscale 模块已下线，不再注册"
 
 

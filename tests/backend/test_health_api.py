@@ -6,7 +6,11 @@ def test_health_returns_ok(client, settings):
     response = client.get("/api/v1/health")
     assert response.status_code == 200
     body = response.json()
-    assert body == {"status": "ok", "version": settings.app.version}
+    assert body["status"] == "ok"
+    assert body["version"] == settings.app.version
+    # 产品身份用于 ControlHub readiness 探针：允许后续追加字段，但必须非空
+    for key in ("product", "instance_mode", "lifecycle_target"):
+        assert body.get(key), f"health 缺少产品身份字段 {key}"
 
 
 def test_root_info(client):

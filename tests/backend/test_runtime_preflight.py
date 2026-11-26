@@ -261,7 +261,7 @@ def mock_client(settings):
     return TestClient(app)
 
 
-def test_preflight_api_mock_engine_ready(settings):
+def test_preflight_api_mock_engine_ready(settings, process_registry):
     with mock_client(settings) as client:
         response = client.post("/api/v1/engine/preflight", json={"module_ids": ["basic_generate"]})
         assert response.status_code == 200, response.text
@@ -271,7 +271,7 @@ def test_preflight_api_mock_engine_ready(settings):
         assert body["modules"][0]["notes"] == ["mock engine：跳过真实依赖检测"]
 
 
-def test_preflight_api_with_comfyui_adapter(settings, monkeypatch):
+def test_preflight_api_with_comfyui_adapter(settings, process_registry, monkeypatch):
     """服务端重新解析真实身份 → 使用 ComfyUIAdapter → 动态检测（HTTP 全 Mock）。"""
     http, _calls = make_http()
     monkeypatch.setattr(preflight, "_http_get_json", http)
@@ -348,7 +348,7 @@ def test_jobs_gate_blocks_without_prompt_or_job(settings, session, monkeypatch):
         ) == before
 
 
-def test_agent_gate_blocks_without_prompt_or_job(settings, session, monkeypatch):
+def test_agent_gate_blocks_without_prompt_or_job(settings, session, process_registry, monkeypatch):
     monkeypatch.setenv(ENV_AGENT_TOKEN, "w20-token")
     monkeypatch.setattr(
         preflight.RuntimePreflightService, "check_modules",
