@@ -94,11 +94,15 @@ def list_engine_models(request: Request) -> dict:
     checkpoints = getattr(adapter, "available_checkpoint_names", None)
     loras = getattr(adapter, "available_lora_names", None)
     checkpoint_list = sorted(checkpoints() or []) if callable(checkpoints) else []
-    profiles = ModelRegistryService(request.app.state.settings).checkpoint_sampling_profiles()
+    catalog = ModelRegistryService(request.app.state.settings).checkpoint_catalog()
+    model_catalog = {name: catalog[name] for name in checkpoint_list if name in catalog}
     return {
         "checkpoints": checkpoint_list,
         "loras": sorted(loras() or []) if callable(loras) else [],
+        "model_catalog": model_catalog,
         "sampling_profiles": {
-            name: profiles[name] for name in checkpoint_list if name in profiles
+            name: meta["recommended_sampling"]
+            for name, meta in model_catalog.items()
+            if meta.get("recommended_sampling")
         },
     }

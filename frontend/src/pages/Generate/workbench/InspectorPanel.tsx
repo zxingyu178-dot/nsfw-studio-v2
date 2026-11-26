@@ -118,6 +118,8 @@ export function InspectorPanel({
       ) : null}
     </span>
   )
+  const modelDisplayName = (name: string) =>
+    engineModels.model_catalog?.[name]?.display_name || name
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -280,12 +282,14 @@ export function InspectorPanel({
               {
                 value: '',
                 label: modelOptionLabel(defaultModel, '绑定默认'),
-                searchText: '绑定默认',
+                description: defaultModel ? `默认底模：${modelDisplayName(defaultModel)}` : undefined,
+                searchText: `绑定默认 ${defaultModel}`,
               },
               ...engineModels.checkpoints.map((name) => ({
                 value: name,
-                label: modelOptionLabel(name, name),
-                searchText: name,
+                label: modelOptionLabel(name, modelDisplayName(name)),
+                description: modelDisplayName(name) !== name ? name : undefined,
+                searchText: `${modelDisplayName(name)} ${name}`,
               })),
             ]}
           />

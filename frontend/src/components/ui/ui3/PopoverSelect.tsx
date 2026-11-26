@@ -16,6 +16,8 @@ export interface PopoverOption<T extends string = string> {
   label: ReactNode
   /** 行首图标（可选）。 */
   icon?: ReactNode
+  /** 列表内的第二行说明（可选）；触发器只显示 label。 */
+  description?: ReactNode
   disabled?: boolean
   /** typeahead 检索文本；缺省用 label（label 为字符串时）。 */
   searchText?: string
@@ -200,7 +202,12 @@ export function PopoverSelect<T extends string = string>({
               onClick={() => choose(i)}
             >
               {opt.icon && <span className="ui3-select__opt-icon">{opt.icon}</span>}
-              <span className="ui3-select__opt-label">{opt.label}</span>
+              <span className="ui3-select__opt-body">
+                <span className="ui3-select__opt-label">{opt.label}</span>
+                {opt.description && (
+                  <span className="ui3-select__opt-desc">{opt.description}</span>
+                )}
+              </span>
             </li>
           ))}
         </ul>

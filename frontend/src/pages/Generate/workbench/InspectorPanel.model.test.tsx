@@ -46,6 +46,13 @@ vi.mock('../../../api/client', () => ({
     models: vi.fn().mockResolvedValue({
       checkpoints: ['NoobAI-XL-v1.1.safetensors'],
       loras: ['cunnyfunky_v5.0_000008.safetensors'],
+      model_catalog: {
+        'NoobAI-XL-v1.1.safetensors': {
+          model_id: 'noobai_xl_v1_1',
+          display_name: 'NoobAI XL v1.1 (eps)',
+          family: 'sdxl_anime',
+        },
+      },
       sampling_profiles: {
         'NoobAI-XL-v1.1.safetensors': {
           steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
@@ -143,7 +150,7 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
   it('选择“绑定默认”时删除 config.model（发 undefined，不发送空串）', async () => {
     renderPanel({ model: 'NoobAI-XL-v1.1.safetensors' })
     const modelButton = await screen.findByRole('button', { name: '底模' })
-    expect(modelButton.textContent).toContain('NoobAI-XL-v1.1.safetensors')
+    expect(modelButton.textContent).toContain('NoobAI XL v1.1 (eps)')
     chooseOption('底模', '绑定默认')
     expect(setPrimaryModuleConfig).toHaveBeenCalledWith({ model: undefined })
   })
@@ -178,13 +185,16 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
     })
   })
 
-  it('底模下拉为已登记推荐参数的模型显示“推荐”标记', async () => {
+  it('底模下拉为已登记推荐参数的模型显示“推荐”标记与文件名说明', async () => {
     renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: '底模' }))
-    const noobai = screen.getByRole('option', { name: /NoobAI-XL-v1\.1\.safetensors/ })
-    expect(noobai.textContent).toContain('推荐')
-    const defaultOption = screen.getByRole('option', { name: /绑定默认/ })
-    expect(defaultOption.textContent).toContain('推荐')
+    const options = screen.getAllByRole('option')
+    const noobai = options.find((option) => option.textContent?.includes('NoobAI-XL-v1.1.safetensors'))
+    expect(noobai?.textContent).toContain('NoobAI XL v1.1 (eps)')
+    expect(noobai?.textContent).toContain('推荐')
+    const defaultOption = options.find((option) => option.textContent?.includes('绑定默认'))
+    expect(defaultOption?.textContent).toContain('推荐')
+    expect(defaultOption?.textContent).toContain('默认底模：NoobAI XL v1.1 (eps)')
   })
 
   it('选择登记的底模时显示推荐采样参数并可一键应用', async () => {

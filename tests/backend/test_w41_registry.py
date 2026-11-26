@@ -75,6 +75,20 @@ def test_model_registry_recommended_sampling_profiles(settings):
         assert 0.0 <= float(profile["denoise"]) <= 1.0, filename
 
 
+def test_model_registry_checkpoint_catalog(settings):
+    catalog = ModelRegistryService(settings).checkpoint_catalog()
+    assert set(catalog) >= {
+        "miaomiaoHarem_v14.safetensors",
+        "NoobAI-XL-v1.1.safetensors",
+        "waiNSFWIllustrious_v150.safetensors",
+    }
+    noobai = catalog["NoobAI-XL-v1.1.safetensors"]
+    assert noobai["display_name"] == "NoobAI XL v1.1 (eps)"
+    assert noobai["family"] == "sdxl_anime"
+    assert "anime_generate" in noobai["compatible_workflows"]
+    assert noobai["recommended_sampling"]["sampler_name"] == "dpmpp_2m"
+
+
 def test_default_checkpoint_resolved_from_workflow_registry(settings):
     """AI 省略 model 时，默认底模来自工作流注册中心的 default_parameters.model。"""
     assert _resolve_default_checkpoint(

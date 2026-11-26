@@ -34,6 +34,9 @@
   “默认底模推荐：…”并可直接应用，无需先手动切换模型。
 - 桌面工作台：底模下拉列表中，已登记推荐参数的底模（含“绑定默认”）显示“推荐”标记，
   便于发现可一键套用的参数。
+- `/engine/models` 与 `/agent/capabilities` 新增 `model_catalog`：按底模文件名返回
+  `display_name / family / compatible_workflows / notes / recommended_sampling`
+  （仅已安装且已登记）；桌面底模下拉显示友好名称，第二行保留文件名。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；
   `model` 可省略（使用 binding 默认底模），显式 `params` 仍优先；binding 未声明默认底模
   或底模未登记推荐时返回 422，拒绝发生在创建 Job 之前。
@@ -50,7 +53,7 @@
 
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
-- 后端全量 `pytest tests/backend -q` 856 项：855 通过、1 跳过；G0 `errors=0`。
+- 后端全量 `pytest tests/backend -q` 857 项：856 通过、1 跳过；G0 `errors=0`。
 - 快速档真实出图（临时实例 8010，独立 DataRoot）：`job_e81b843b-4381-4e9f-91c2-65d5f994dc87`
   COMPLETED 1/1，832×1216 / 28 步 / cfg4.5 / er_sde simple / `face_detailer=false`，
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链

@@ -131,28 +131,47 @@ class ModelRegistryService:
             items.sort(key=lambda item: (item.archived, self._version_key(item.manifest)))
         return grouped
 
-    def checkpoint_sampling_profiles(self) -> dict[str, dict[str, Any]]:
-        """ComfyUI checkpoint 文件名 → 推荐采样参数（来自已放行的模型 Manifest）。
+    def checkpoint_catalog(self) -> dict[str, dict[str, Any]]:
+        """ComfyUI checkpoint 文件名 → 注册中心元数据（released checkpoint）。
 
-        只返回 ``model_type=checkpoint`` 且登记了 ``recommended_sampling`` 的 released 模型；
-        前端工作台与 Agent 能力发现共用，避免各自维护第二份推荐参数。
+        供 Agent 能力发现与桌面前端选择器共用；包含 display_name / family /
+        compatible_workflows / notes 与可选的 recommended_sampling。
         """
-        profiles: dict[str, dict[str, Any]] = {}
+        catalog: dict[str, dict[str, Any]] = {}
         for model in self.list_models(include_archived=False):
             if str(model.get("status") or "") != "released":
                 continue
             if str(model.get("model_type") or "") != "checkpoint":
                 continue
+            meta: dict[str, Any] = {
+                "model_id": model.get("model_id"),
+                "display_name": model.get("display_name") or model.get("model_id"),
+                "family": model.get("family"),
+                "compatible_workflows": list(model.get("compatible_workflows") or []),
+                "notes": model.get("notes"),
+            }
             profile = model.get("recommended_sampling")
-            if not isinstance(profile, dict) or not profile:
-                continue
+            if isinstance(profile, dict) and profile:
+                meta["recommended_sampling"] = dict(profile)
             for item in model.get("files") or []:
                 if not isinstance(item, dict) or str(item.get("folder") or "") != "checkpoints":
                     continue
                 filename = str(item.get("filename") or "")
                 if filename:
-                    profiles[filename] = dict(profile)
-        return profiles
+                    catalog[filename] = dict(meta)
+        return catalog
+
+    def checkpoint_sampling_profiles(self) -> dict[str, dict[str, Any]]:
+        """ComfyUI checkpoint 文件名 → 推荐采样参数（从 checkpoint_catalog 派生）。
+
+        只返回 ``model_type=checkpoint`` 且登记了 ``recommended_sampling`` 的 released 模型；
+        前端工作台与 Agent 能力发现共用，避免各自维护第二份推荐参数。
+        """
+        return {
+            filename: meta["recommended_sampling"]
+            for filename, meta in self.checkpoint_catalog().items()
+            if meta.get("recommended_sampling")
+        }
 
     def refresh(self) -> None:
         self._cache = None

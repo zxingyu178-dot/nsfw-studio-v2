@@ -132,17 +132,26 @@ def agent_capabilities(request: Request) -> dict:
     if callable(available_loras):
         loras = sorted(available_loras() or [])
     engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
-    profiles = ModelRegistryService(settings).checkpoint_sampling_profiles()
-    installed_profiles = {name: profiles[name] for name in models if name in profiles}
+    catalog = ModelRegistryService(settings).checkpoint_catalog()
+    installed_catalog = {name: catalog[name] for name in models if name in catalog}
     default_module = next((item for item in modules if item.get("is_default") is True), None)
     default_model = _resolve_default_checkpoint(settings, default_module or {})
+    default_profile = (
+        installed_catalog.get(default_model, {}).get("recommended_sampling")
+        if default_model else None
+    )
     return {
         "default_module_id": engine_cfg.get("module_id"),
         "default_model": default_model,
-        "default_sampling_profile": installed_profiles.get(default_model) if default_model else None,
+        "default_sampling_profile": default_profile,
         "modules": modules,
         "models": models,
-        "sampling_profiles": installed_profiles,
+        "model_catalog": installed_catalog,
+        "sampling_profiles": {
+            name: meta["recommended_sampling"]
+            for name, meta in installed_catalog.items()
+            if meta.get("recommended_sampling")
+        },
         "loras": loras,
         "limits": {
             "width": {"min": 64, "max": 4096},

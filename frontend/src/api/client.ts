@@ -345,9 +345,20 @@ export interface EngineSamplingProfileDTO {
   note?: string
 }
 
+export interface EngineModelCatalogEntryDTO {
+  model_id?: string
+  display_name?: string
+  family?: string
+  compatible_workflows?: string[]
+  notes?: string
+  recommended_sampling?: EngineSamplingProfileDTO
+}
+
 export interface EngineModelsDTO {
   checkpoints: string[]
   loras: string[]
+  /** 底模文件名 → 注册中心元数据（仅已安装且已登记时存在）。 */
+  model_catalog?: Record<string, EngineModelCatalogEntryDTO>
   /** 底模文件名 → 模型注册中心的推荐采样参数（未登记时缺省）。 */
   sampling_profiles?: Record<string, EngineSamplingProfileDTO>
 }

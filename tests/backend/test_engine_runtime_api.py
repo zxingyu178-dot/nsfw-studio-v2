@@ -163,6 +163,7 @@ def test_engine_models_returns_sorted_checkpoints_and_loras():
     assert resp.json() == {
         "checkpoints": ["a.safetensors", "b.safetensors"],
         "loras": ["z.safetensors"],
+        "model_catalog": {},
         "sampling_profiles": {},
     }
 
@@ -174,12 +175,19 @@ def test_engine_models_includes_registry_sampling_profiles():
     )
     resp = client.get("/api/v1/engine/models")
     assert resp.status_code == 200
-    profiles = resp.json()["sampling_profiles"]
+    body = resp.json()
+    profiles = body["sampling_profiles"]
     assert set(profiles) == {"NoobAI-XL-v1.1.safetensors"}
     profile = profiles["NoobAI-XL-v1.1.safetensors"]
     assert profile["steps"] == 30 and profile["cfg"] == 5.0
     assert profile["sampler_name"] == "dpmpp_2m" and profile["scheduler"] == "karras"
     assert profile["note"]
+    catalog = body["model_catalog"]
+    assert set(catalog) == {"NoobAI-XL-v1.1.safetensors"}
+    entry = catalog["NoobAI-XL-v1.1.safetensors"]
+    assert entry["display_name"] == "NoobAI XL v1.1 (eps)"
+    assert entry["family"] == "sdxl_anime"
+    assert "anime_generate" in entry["compatible_workflows"]
 
 
 def test_engine_models_offline_returns_empty_lists():
@@ -187,7 +195,9 @@ def test_engine_models_offline_returns_empty_lists():
     client.app.state.adapter = _ModelsAdapter(None, None)
     resp = client.get("/api/v1/engine/models")
     assert resp.status_code == 200
-    assert resp.json() == {"checkpoints": [], "loras": [], "sampling_profiles": {}}
+    assert resp.json() == {
+        "checkpoints": [], "loras": [], "model_catalog": {}, "sampling_profiles": {},
+    }
 
 
 def test_idempotent_start_200():

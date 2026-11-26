@@ -132,6 +132,8 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
   桌面前端“底模”选择下方的“应用推荐”与之同源。
 - `capabilities.default_model` / `default_sampling_profile`：当前默认工作流的默认底模及其推荐参数
   （底模未安装时推荐值为 null）；省略 `model` 时可据此确认实际使用的底模。
+- `capabilities.model_catalog`：按底模文件名返回注册中心元数据（`display_name / family /
+  compatible_workflows / notes / recommended_sampling`），仅包含当前已安装的 checkpoint。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；

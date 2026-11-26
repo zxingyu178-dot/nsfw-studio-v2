@@ -242,6 +242,14 @@
 .ui3-select__option--active { background: var(--control-active); }
 .ui3-select__option--selected { color: var(--icon-active); font-weight: var(--weight-medium); }
 .ui3-select__option--disabled { opacity: 0.4; cursor: not-allowed; }
+.ui3-select__opt-body { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.ui3-select__opt-desc {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal, 400);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---------------- ChoiceTile / ChoiceGrid ---------------- */
 .ui3-grid {
