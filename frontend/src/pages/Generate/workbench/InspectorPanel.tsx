@@ -105,6 +105,8 @@ export function InspectorPanel({
   const selectedModelProfile = selectedModel
     ? engineModels.sampling_profiles?.[selectedModel] ?? null
     : null
+  const profileApplied =
+    selectedModelProfile !== null && samplingProfileMatches(primaryConfig, selectedModelProfile)
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -273,19 +275,23 @@ export function InspectorPanel({
               <span className="wb-param__label" title={selectedModelProfile.note || undefined}>
                 推荐：{formatSamplingProfile(selectedModelProfile)}
               </span>
-              <button
-                type="button"
-                className="ds-btn ds-btn--ghost ds-btn--xs"
-                onClick={() => setPrimaryModuleConfig({
-                  steps: selectedModelProfile.steps,
-                  cfg: selectedModelProfile.cfg,
-                  sampler_name: selectedModelProfile.sampler_name,
-                  scheduler: selectedModelProfile.scheduler,
-                  denoise: selectedModelProfile.denoise,
-                })}
-              >
-                应用推荐
-              </button>
+              {profileApplied ? (
+                <span className="wb-model-profile__applied">已采用推荐</span>
+              ) : (
+                <button
+                  type="button"
+                  className="ds-btn ds-btn--ghost ds-btn--xs"
+                  onClick={() => setPrimaryModuleConfig({
+                    steps: selectedModelProfile.steps,
+                    cfg: selectedModelProfile.cfg,
+                    sampler_name: selectedModelProfile.sampler_name,
+                    scheduler: selectedModelProfile.scheduler,
+                    denoise: selectedModelProfile.denoise,
+                  })}
+                >
+                  应用推荐
+                </button>
+              )}
             </div>
           )}
           {engineModelsState === 'loading' && (
@@ -356,6 +362,20 @@ export function InspectorPanel({
         </CollapsibleSection>
       )}
     </Pane>
+  )
+}
+
+/** 当前 Primary config 是否已与推荐采样参数一致（推荐中缺失的字段不参与比较）。 */
+function samplingProfileMatches(
+  config: Record<string, unknown>,
+  profile: EngineSamplingProfileDTO,
+): boolean {
+  return (
+    (profile.steps == null || config.steps === profile.steps) &&
+    (profile.cfg == null || config.cfg === profile.cfg) &&
+    (profile.sampler_name == null || config.sampler_name === profile.sampler_name) &&
+    (profile.scheduler == null || config.scheduler === profile.scheduler) &&
+    (profile.denoise == null || config.denoise === profile.denoise)
   )
 }
 

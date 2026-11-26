@@ -186,6 +186,32 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
     })
   })
 
+  it('推荐参数已全部生效时显示“已采用推荐”，不再重复提供应用按钮', async () => {
+    renderPanel({
+      model: 'NoobAI-XL-v1.1.safetensors',
+      steps: 30,
+      cfg: 5.0,
+      sampler_name: 'dpmpp_2m',
+      scheduler: 'karras',
+      denoise: 1.0,
+    })
+    expect(await screen.findByText('已采用推荐')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '应用推荐' })).toBeNull()
+  })
+
+  it('任一采样参数偏离推荐时重新显示应用按钮', async () => {
+    renderPanel({
+      model: 'NoobAI-XL-v1.1.safetensors',
+      steps: 30,
+      cfg: 4.5,
+      sampler_name: 'dpmpp_2m',
+      scheduler: 'karras',
+      denoise: 1.0,
+    })
+    expect(await screen.findByRole('button', { name: '应用推荐' })).toBeTruthy()
+    expect(screen.queryByText('已采用推荐')).toBeNull()
+  })
+
   it('人脸修复默认开启，取消后写入 face_detailer=false', async () => {
     renderPanel()
     const checkbox = (await screen.findByRole('checkbox', {

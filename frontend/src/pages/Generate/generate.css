@@ -1358,6 +1358,12 @@
   gap: var(--space-2);
 }
 
+.wb-model-profile__applied {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
 .wb4-runtime-row {
   display: flex;
   align-items: center;

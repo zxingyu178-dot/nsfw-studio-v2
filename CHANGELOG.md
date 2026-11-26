@@ -28,6 +28,8 @@
   （steps / cfg / sampler_name / scheduler / denoise / note）；已登记 4 个底模。
   `/api/v1/engine/models` 与 `/api/v1/agent/capabilities` 同源返回 `sampling_profiles`
   （仅包含当前已安装的 checkpoint），桌面工作台底模下方显示“推荐：…”并可一键应用。
+- 桌面工作台：推荐采样参数全部生效后显示“已采用推荐”，任一参数偏离时恢复
+  “应用推荐”按钮，避免重复点击并明确当前状态。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：按 `model` 自动套用注册中心
   推荐采样参数，显式 `params` 仍优先；未提供 `model` 或底模未登记推荐时返回 422，
   拒绝发生在创建 Job 之前。
@@ -48,7 +50,7 @@
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链
   `CheckpointLoaderSimple → CLIPTextEncode×2 → KSampler → VAEDecode → SaveImage`
   （无 FaceDetailer / 检测器），binding Hash 未变。
-- 前端全量 `npm run test:ci` 104 个文件 526 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 528 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 - Android Alpha52（versionCode 59）：审图页进度区分“已提交 / 生成中 / 已暂停 / 准备下一张”，
