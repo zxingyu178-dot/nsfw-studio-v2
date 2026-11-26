@@ -604,8 +604,10 @@ def create_job(
 
     modules: list[dict[str, Any]] = list(workflow_modules or [])
     if not modules:
+        # 直接调用 JobService 且未解析模块时的兜底：产品当前唯一生成线为 anime_generate。
+        # API 路径始终先经 resolve_workflow_modules，不会走到这里。
         modules = [{
-            "module_id": "basic_generate", "module_version": "v1",
+            "module_id": "anime_generate", "module_version": "v1",
             "provider": "unbound", "binding_version": "v1", "workflow_hash": None,
             "binding_hash": None,
         }]
