@@ -274,18 +274,22 @@ modules:
         evidence:
           comfyui_node_chain:
             status: passed
-            method: "2026-11-27 临时实例 8010（独立 DataRoot）真实 Agent Job：ComfyUI history prompt 411f1544-9149-442c-a9a5-8978165aaae2；CheckpointLoaderSimple=NoobAI-XL-v1.1，KSampler steps=30/cfg=5.0/sampler=dpmpp_2m/scheduler=karras/denoise=1.0，LoraLoader 21=cunnyfunky_noobai_v3.3_000080@0.6，节点 22 已按单 LoRA 移除"
+            method: "2026-11-27 真实 Agent Job：ComfyUI history prompt 411f1544-9149-442c-a9a5-8978165aaae2（NoobAI + LoRA）与 079e4b07-8e73-40ab-bded-e1f706bc7ad1（默认底模 + 采样覆盖）节点值一致"
           studio_production:
             status: passed
             workflow_hash: "99ef6d5af1d51e2c"
             binding_hash: "6bde04bd7f04fb2f"
             reference_jobs:
+              - "job_dea41fb7-e650-4a6e-9861-12f2cfc2dd35"
               - "job_6e35f220-9d60-469a-80c6-2e3713ec0073"
             output_image_ids:
+              - "img_86ef9447-df23-4b83-9ccd-64d8788e212b"
               - "img_d5b6c349-4499-4221-83fe-ff7cbd90d88c"
-            sampling_profile: "832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / seed 20261127 / 1 条 LoRA 0.6 / FaceDetailer on"
-            stage_seconds: 266.5
-            method: "2026-11-27 Agent CLI → /api/v1/agent/jobs（binding v15），临时实例 8010 + 独立 DataRoot；输出 832×1216 / 1425157 bytes"
+            sampling_profiles:
+              - "生产 8000：832×1216 / 28 步 / cfg4.5 / er_sde simple / 默认 miaomiaoHarem / seed 20261128 / 无 LoRA"
+              - "临时 8010：832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / NoobAI-XL + cunnyfunky_noobai 0.6 / seed 20261127"
+            stage_seconds: "186.96（生产默认档）/ 266.5（NoobAI + LoRA 冷启）"
+            method: "2026-11-27 生产实例 8000 Agent CLI（binding v15）+ 临时实例 8010 独立 DataRoot；两张均 COMPLETED 并入库"
           default_profile_performance:
             status: unverified
-            reason: "冷启 266.5s（含 NoobAI 6.6GB 加载 + FaceDetailer），未做热跑与显存峰值采样；v15 非默认档"
+            reason: "生产默认档（miaomiaoHarem + FaceDetailer + 28 步）单张 186.96s，超过 ≤120s 目标；NoobAI 冷启 266.5s；显存峰值未采样；v15 非默认档"

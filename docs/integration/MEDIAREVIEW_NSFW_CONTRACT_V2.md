@@ -219,6 +219,19 @@ fixture：`fixtures/health_v2.json`。
 - `POST /mobile/prompts/{prompt_id}/versions/{version_id}/evaluation`：W3.0 版本评分。
 - 冻结审核会话 `/mobile/review/sessions/*`、配对、图片二进制全部保持 V1 行为。
 
+### 9.1 可选能力 `mobile_generation_progress_v1`
+
+配对设备通过 `GET /mobile/generation/progress` 读取当前生图进度。成功响应沿用 Bridge 信封，
+`data` 只有 `current_image`、`images_in_segment`、`remaining_segments` 三个字段，例如
+`{"current_image":3,"images_in_segment":6,"remaining_segments":20}`；响应带 `Cache-Control: no-store`。
+
+- 只统计生成型 Job；QUEUED / RUNNING / PAUSED 各计一个剩余段，失败/取消/中断不计；
+- 用执行中的 StageItem 定位逻辑槽位：`current_image = item_index + 1`，
+  `images_in_segment = requested_count`；
+- 阶段间隙或只有处理型任务时，两个图片字段为 `null`，`remaining_segments` 仍可大于 0；
+- 设备未配对/已撤销返回 401；桌面队列详情与控制接口仍只在 8000；
+- 客户端未在 health.capabilities 中看到该能力时不得显示进度 UI。
+
 ## 10. 数据与迁移
 
 - `0021_mobile_event_log_mutations`：主干事件表 `mobile_image_events(seq,event_id,...)` +

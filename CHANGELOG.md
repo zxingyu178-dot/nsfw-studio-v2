@@ -32,10 +32,17 @@
 - 后端定向回归 112 项通过（agent、CLI、v15 binding、移动进度、路由守卫、engine runtime）。
 - 前端新增 4 项模型/LoRA 测试；全量 104 个测试文件 524 项中 521 通过，3 项为全量并发下的
   时序抖动，单独重跑 10/10 通过；TypeScript 与 Vite 构建通过。
-- v15 真实出图：临时实例 8010 + 独立 DataRoot，`job_6e35f220-9d60-469a-80c6-2e3713ec0073`
-  COMPLETED 1/1；NoobAI-XL v1.1 + cunnyfunky_noobai 0.6，dpmpp_2m/karras/30/cfg5.0，
-  832×1216；ComfyUI history `411f1544-9149-442c-a9a5-8978165aaae2` 节点值一致。
-- Android：`compileDebugKotlin` 通过；单元测试 811 项（待复跑确认全绿）；模拟器验收见交付说明。
+- 生产 8000 浏览器验收 PASS：底模下拉包含 NoobAI-XL-v1.1 / miaomiaoHarem_v14 /
+  waiNSFWIllustrious_v150；LoRA 1 控件存在；控制台无错误。
+- v15 真实出图（生产 8000）：`job_dea41fb7-e650-4a6e-9861-12f2cfc2dd35` COMPLETED 1/1，
+  默认底模 + 28 步 / cfg4.5 / er_sde simple，832×1216，186.96s；
+  ComfyUI history `079e4b07-8e73-40ab-bded-e1f706bc7ad1` 节点值一致。
+- v15 真实出图（临时 8010）：`job_6e35f220-9d60-469a-80c6-2e3713ec0073` COMPLETED 1/1；
+  NoobAI-XL v1.1 + cunnyfunky_noobai 0.6，dpmpp_2m/karras/30/cfg5.0，832×1216；
+  ComfyUI history `411f1544-9149-442c-a9a5-8978165aaae2` 节点值一致。
+- Android Alpha50：`compileDebugKotlin`、`assembleDebug`、811 项单测通过；模拟器
+  `MediaReview_Test` 配对真实桥后，审图页顶栏完成“暂无生成任务 → 第 3/6 张 · 剩余 1 段
+  → 暂无生成任务”的只读进度验收（夹具已清理）。
 
 ## [0.38.0] — 2026-11-26
 
