@@ -247,8 +247,6 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
     use_recommended = payload.get("use_recommended_sampling", False)
     if not isinstance(use_recommended, bool):
         raise RequestValidationError("use_recommended_sampling 必须是布尔值")
-    if use_recommended and model is None:
-        raise RequestValidationError("use_recommended_sampling=true 时必须指定 model")
 
     normalized = {
         "prompt": prompt,
@@ -435,7 +433,7 @@ def main() -> int:
     parser.add_argument("--no-face-detailer", dest="face_detailer", action="store_false",
                         help="关闭人脸修复以显著提速（仅 Agent 端点）")
     parser.add_argument("--use-recommended", action="store_true",
-                        help="按 --model 套用模型注册中心推荐采样参数（显式采样参数优先；仅 Agent 端点）")
+                        help="套用注册中心推荐采样参数；省略 --model 时用 binding 默认底模（仅 Agent 端点）")
     parser.add_argument("--list-workflows", action="store_true",
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")

@@ -122,8 +122,9 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `loras` 最多 2 条，强度 -2..2；
 - `sampler_name` / `scheduler` 必须来自模块枚举；
 - `params.face_detailer=false` 关闭人脸修复以显著提速（默认开启；仅 v15 等工作流含 FaceDetailer 节点时可用）；
-- `use_recommended_sampling=true` + `model`：自动套用注册中心推荐采样参数，`params` 中的显式字段优先；
-  未登记推荐的底模返回 422 `RECOMMENDED_SAMPLING_NOT_FOUND`，未提供 `model` 返回
+- `use_recommended_sampling=true`：自动套用注册中心推荐采样参数；`model` 可省略（使用当前
+  binding 默认底模），`params` 中的显式字段优先；未登记推荐的底模返回 422
+  `RECOMMENDED_SAMPLING_NOT_FOUND`，binding 未声明默认底模且未传 `model` 返回
   422 `RECOMMENDED_SAMPLING_MODEL_REQUIRED`；
 - 能力发现：`GET /api/v1/agent/capabilities`（Bearer）返回模块、可用底模、可用 LoRA 与参数边界；
 - `capabilities.sampling_profiles` 按底模文件名给出注册中心登记的推荐采样参数
@@ -146,7 +147,10 @@ CLI 不再提前调用 `/prompts/ensure`。
 $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 .venv\Scripts\python scripts\agent_generate.py --prompt "a red fox resting beside a woodland stream" --out D:\ai_out
 
-# 只指定底模：采样参数由注册中心推荐值自动填充，并关闭 FaceDetailer 提速
+# 只给提示词：采样参数按 binding 默认底模的推荐值自动填充，并关闭 FaceDetailer 提速
+.venv\Scripts\python scripts\agent_generate.py --prompt "1girl, silver hair, kimono, shrine, soft light" --use-recommended --no-face-detailer --out D:\ai_out
+
+# 指定底模：套用该底模登记的推荐采样参数
 .venv\Scripts\python scripts\agent_generate.py --prompt "1girl, silver hair, kimono, shrine, soft light" --model NoobAI-XL-v1.1.safetensors --use-recommended --no-face-detailer --out D:\ai_out
 ```
 
@@ -155,8 +159,8 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 - `--binding v15 --model <文件名> --lora <文件名>:0.6 --steps 30 --cfg 5.0 --sampler dpmpp_2m --scheduler karras`
   → 多模型 / LoRA / 采样参数（仅 Agent 端点；未配置 token 时 CLI 直接拒绝）；
 - `--no-face-detailer` → 关闭人脸修复以提速；`--face-detailer` 可显式强制开启；
-- `--use-recommended` → 按 `--model` 自动套用注册中心推荐采样参数，显式采样参数优先
-  （仅 Agent 端点；底模未登记推荐时返回 422 `RECOMMENDED_SAMPLING_NOT_FOUND`）；
+- `--use-recommended` → 自动套用注册中心推荐采样参数；省略 `--model` 时使用 binding 默认底模，
+  显式采样参数优先（仅 Agent 端点；底模未登记推荐时返回 422 `RECOMMENDED_SAMPLING_NOT_FOUND`）；
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
@@ -207,8 +211,9 @@ token。`--request-file` 可以和运行参数 `--out`、`--api`、`--timeout-mi
 | `client_request_id` | **必填**非空字符串，最多 128 字符；同一次请求的重试必须复用 |
 
 高级字段 `model` / `loras` / `params` / `use_recommended_sampling` 也可写入请求文件：
-`use_recommended_sampling=true` 时必须同时提供 `model`，服务端先套用注册中心推荐值，
-再用 `params` 中的显式字段覆盖，未登记推荐的底模返回 422 `RECOMMENDED_SAMPLING_NOT_FOUND`。
+`use_recommended_sampling=true` 时 `model` 可省略（使用 binding 默认底模），服务端先套用
+注册中心推荐值，再用 `params` 中的显式字段覆盖；未登记推荐的底模返回 422
+`RECOMMENDED_SAMPLING_NOT_FOUND`。
 
 文件不能超过 128 KiB。脚本拒绝非 UTF-8、JSON 重复字段、未知字段、错误类型、未配对 surrogate、
 显式纯空白字符串和越界数值。

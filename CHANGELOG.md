@@ -32,9 +32,9 @@
   “应用推荐”按钮，避免重复点击并明确当前状态。
 - 桌面工作台：未显式选择底模（“绑定默认”）时，仍按注册中心投影的默认底模展示
   “默认底模推荐：…”并可直接应用，无需先手动切换模型。
-- Agent `use_recommended_sampling` / CLI `--use-recommended`：按 `model` 自动套用注册中心
-  推荐采样参数，显式 `params` 仍优先；未提供 `model` 或底模未登记推荐时返回 422，
-  拒绝发生在创建 Job 之前。
+- Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；
+  `model` 可省略（使用 binding 默认底模），显式 `params` 仍优先；binding 未声明默认底模
+  或底模未登记推荐时返回 422，拒绝发生在创建 Job 之前。
 
 ### Fixed
 

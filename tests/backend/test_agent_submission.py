@@ -297,10 +297,29 @@ def test_agent_use_recommended_sampling_fills_registry_profile(agent_client, mon
     assert config["denoise"] == 1.0
 
 
+def test_agent_use_recommended_sampling_uses_binding_default_model(agent_client, monkeypatch):
+    """省略 model 时按 binding 默认底模套用推荐参数，模型仍使用绑定默认。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-recommended-default")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-recommended-default"}
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1",
+        binding_version="v15",
+        use_recommended_sampling=True,
+    ), headers=headers)
+    assert response.status_code == 201, response.text
+    config = response.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert "model" not in config, "未显式传 model 时不应写入 config.model"
+    assert config["steps"] == 30
+    assert config["cfg"] == 4.0
+    assert config["sampler_name"] == "er_sde"
+    assert config["scheduler"] == "simple"
+    assert config["denoise"] == 1.0
+
+
 @pytest.mark.parametrize(
     ("overrides", "code"),
     [
-        ({"use_recommended_sampling": True}, "RECOMMENDED_SAMPLING_MODEL_REQUIRED"),
         (
             {"use_recommended_sampling": True, "model": "not-registered.safetensors"},
             "RECOMMENDED_SAMPLING_NOT_FOUND",

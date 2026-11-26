@@ -255,10 +255,21 @@ def test_request_file_preserves_use_recommended_sampling(cli, tmp_path):
     assert normalized["model"] == "NoobAI-XL-v1.1.safetensors"
 
 
+def test_request_file_use_recommended_without_model_uses_binding_default(cli, tmp_path):
+    normalized = cli.load_request_file(write_request(tmp_path, {
+        "prompt": "1girl, shrine, anime style",
+        "client_request_id": "studio-recommended-default-0001",
+        "module_id": "anime_generate",
+        "binding_version": "v15",
+        "use_recommended_sampling": True,
+    }))
+    assert normalized["use_recommended_sampling"] is True
+    assert "model" not in normalized
+
+
 @pytest.mark.parametrize(
     ("patch", "message"),
     [
-        ({"use_recommended_sampling": True}, "必须指定 model"),
         ({"model": "a.safetensors", "use_recommended_sampling": "yes"}, "布尔值"),
     ],
 )

@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
 from app.api.v1.jobs import check_disk_space
-from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN
+from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings
 from app.core.errors import (
     ForbiddenError,
     TooManyRequestsError,
@@ -42,6 +42,7 @@ from app.services import agent_service, job_service, prompt_service
 from app.services.lora_validation_service import validate_task_loras
 from app.services.model_registry_service import ModelRegistryService
 from app.services.runtime_preflight_service import run_preflight
+from app.services.workflow_registry_service import WorkflowRegistryService
 
 router = APIRouter(tags=["agent"])
 
@@ -94,6 +95,21 @@ def _require_token(request: Request) -> str:
                 )
             bucket.append(now)
     return provided
+
+
+def _resolve_default_checkpoint(settings: Settings, primary: dict) -> str | None:
+    """读取当前 binding 的默认底模（工作流注册中心 `default_parameters.model`）。"""
+    try:
+        manifest = WorkflowRegistryService(settings).get_workflow(
+            str(primary.get("module_id") or ""),
+            str(primary.get("binding_version") or ""),
+        )
+    except (KeyError, OSError, ValueError):
+        return None
+    default_model = (manifest.get("default_parameters") or {}).get("model")
+    if isinstance(default_model, str) and default_model.strip():
+        return default_model.strip()
+    return None
 
 
 @router.get(
@@ -168,17 +184,19 @@ def submit_agent_job(
     )
     config: dict = {}
     if body.use_recommended_sampling:
-        if not body.model:
+        # 未显式传 model 时按当前 binding 的默认底模取推荐值，AI 可只给 prompt。
+        profile_model = body.model or _resolve_default_checkpoint(settings, workflow_modules[0])
+        if not profile_model:
             raise UnprocessableError(
-                "use_recommended_sampling=true 时必须同时指定 model",
+                "use_recommended_sampling=true 但当前 binding 未声明默认底模；请显式指定 model",
                 code="RECOMMENDED_SAMPLING_MODEL_REQUIRED",
             )
-        profile = ModelRegistryService(settings).checkpoint_sampling_profiles().get(body.model)
+        profile = ModelRegistryService(settings).checkpoint_sampling_profiles().get(profile_model)
         if not profile:
             raise UnprocessableError(
-                f"底模未登记推荐采样参数: {body.model}",
+                f"底模未登记推荐采样参数: {profile_model}",
                 code="RECOMMENDED_SAMPLING_NOT_FOUND",
-                details={"model": body.model},
+                details={"model": profile_model},
             )
         # 推荐值作为基线，下方显式 params 覆盖，模型/LoRA 原样保留。
         config.update({

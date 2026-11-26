@@ -89,7 +89,7 @@ class AgentJobRequest(BaseModel):
     use_recommended_sampling: bool = Field(
         default=False,
         description=(
-            "为指定 model 自动套用模型注册中心的推荐采样参数；"
+            "自动套用模型注册中心的推荐采样参数；省略 model 时使用 binding 默认底模，"
             "显式 params 优先，未登记推荐的底模返回 422"
         ),
     )
