@@ -21,6 +21,7 @@ import pytest
 import yaml
 from sqlalchemy import create_engine, text
 
+from app.api.v1.agent import _resolve_default_checkpoint
 from app.core.resource_hash import LF_ALGORITHM, RAW_ALGORITHM, lf_hash_bytes, match_algorithm, raw_hash_bytes
 from app.database.mobile_event_repair import MAIN_COLUMNS, ensure_mobile_events_w41
 from app.services import asset_query_service, registry_validator
@@ -72,6 +73,16 @@ def test_model_registry_recommended_sampling_profiles(settings):
         assert profile["sampler_name"] in SAMPLER_NAMES, filename
         assert profile["scheduler"] in SCHEDULER_NAMES, filename
         assert 0.0 <= float(profile["denoise"]) <= 1.0, filename
+
+
+def test_default_checkpoint_resolved_from_workflow_registry(settings):
+    """AI 省略 model 时，默认底模来自工作流注册中心的 default_parameters.model。"""
+    assert _resolve_default_checkpoint(
+        settings, {"module_id": "anime_generate", "binding_version": "v15"}
+    ) == "miaomiaoHarem_v14.safetensors"
+    assert _resolve_default_checkpoint(
+        settings, {"module_id": "missing_workflow", "binding_version": "v1"}
+    ) is None
 
 
 def test_workflow_registry_active_versions(settings):

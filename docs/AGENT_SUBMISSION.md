@@ -130,6 +130,8 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `capabilities.sampling_profiles` 按底模文件名给出注册中心登记的推荐采样参数
   （`steps / cfg / sampler_name / scheduler / denoise / note`），AI 可直接采用推荐值，也可显式覆盖；
   桌面前端“底模”选择下方的“应用推荐”与之同源。
+- `capabilities.default_model` / `default_sampling_profile`：当前默认工作流的默认底模及其推荐参数
+  （底模未安装时推荐值为 null）；省略 `model` 时可据此确认实际使用的底模。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；

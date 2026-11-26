@@ -85,6 +85,18 @@ def test_wrong_bearer_token_rejected(agent_client, monkeypatch):
     assert response.json()["error"]["code"] == "AGENT_TOKEN_INVALID"
 
 
+def test_agent_capabilities_exposes_default_model_fields(agent_client, monkeypatch):
+    """能力发现顶层暴露默认底模与推荐参数，AI 无需解析 modules.registry。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-capabilities")
+    headers = {"Authorization": "Bearer test-token-capabilities"}
+    response = agent_client.get("/api/v1/agent/capabilities", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "default_model" in data
+    assert "default_sampling_profile" in data
+    assert isinstance(data["sampling_profiles"], dict)
+
+
 def test_valid_token_creates_queued_job(agent_client, monkeypatch):
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-3")
     headers = {"Authorization": "Bearer test-token-3"}
