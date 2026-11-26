@@ -89,6 +89,19 @@ def test_model_registry_checkpoint_catalog(settings):
     assert noobai["recommended_sampling"]["sampler_name"] == "dpmpp_2m"
 
 
+def test_model_registry_lora_catalog(settings):
+    catalog = ModelRegistryService(settings).lora_catalog()
+    filename = "Hentai Pussy inspection_Pony_V1.safetensors"
+    assert filename in catalog
+    entry = catalog[filename]
+    assert entry["display_name"] == "Hentai Pussy inspection (Pony) v1"
+    assert entry["family"] == "sdxl_pony"
+    assert entry["base_models"] == ["miaomiao_harem_v14"]
+    assert "anime_generate" in entry["compatible_workflows"]
+    # 只收 lora 类型：底模文件名不得混入
+    assert "NoobAI-XL-v1.1.safetensors" not in catalog
+
+
 def test_default_checkpoint_resolved_from_workflow_registry(settings):
     """AI 省略 model 时，默认底模来自工作流注册中心的 default_parameters.model。"""
     assert _resolve_default_checkpoint(

@@ -20,6 +20,8 @@ W1.2 工作流规则：
 - 不传 --module → 使用服务端当前默认工作流（不在 CLI 硬编码）；
 - 显式 --module → 使用指定模块，但必须由服务端校验已注册 / 可用 / 已放行 / 文生图；
 - --list-workflows → 读取 /modules，只列出 Agent 允许使用的文生图工作流；
+- --list-models / --list-loras → 读取 /agent/capabilities，列出已安装底模或 LoRA 的
+  友好名称、适用工作流与默认推荐；
 - 输出打印**实际执行**的 module_id（不是 CLI 输入参数）。
 
 示例（豆包只需改提示词）：
@@ -454,6 +456,33 @@ def list_agent_models(api: str, token: str) -> int:
     return 0
 
 
+def list_agent_loras(api: str, token: str) -> int:
+    """打印已安装 LoRA、注册中心元数据与适用工作流（需 Agent token）。"""
+    capabilities = get(api, "/agent/capabilities", token=token)
+    loras = capabilities.get("loras") or []
+    catalog = capabilities.get("lora_catalog") or {}
+    if not loras:
+        print("[!] 当前没有已安装的 LoRA；请先在 ComfyUI /models/loras 安装并重启引擎")
+        return 1
+    print(f"[OK] 已安装 LoRA（{len(loras)}）：")
+    for name in loras:
+        entry = catalog.get(name) or {}
+        display = str(entry.get("display_name") or "")
+        family = str(entry.get("family") or "")
+        workflows = "/".join(str(item) for item in entry.get("compatible_workflows") or [])
+        base_models = "、".join(str(item) for item in entry.get("base_models") or [])
+        print(f"  - {name}")
+        details = [part for part in (
+            display if display and display != name else "",
+            family,
+            f"适用 {workflows}" if workflows else "",
+            f"依赖 {base_models}" if base_models else "",
+        ) if part]
+        if details:
+            print("    " + " · ".join(details))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="本机生图 CLI（AI 助手调用入口）")
     parser.add_argument("--prompt", default="", help="正向提示词（中文/英文标签均可）")
@@ -486,6 +515,8 @@ def main() -> int:
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--list-models", action="store_true",
                         help="列出已安装底模、注册中心元数据与推荐采样参数（需 Agent token）")
+    parser.add_argument("--list-loras", action="store_true",
+                        help="列出已安装 LoRA、显示名、family、适用工作流与依赖（需 Agent token）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
     parser.add_argument("--width", type=int, default=768)
     parser.add_argument("--height", type=int, default=1024)
@@ -502,18 +533,22 @@ def main() -> int:
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
     args = parser.parse_args()
 
-    if args.list_models:
+    if args.list_models or args.list_loras:
+        flag = "--list-models" if args.list_models else "--list-loras"
+        if args.list_models and args.list_loras:
+            print("[FAIL] --list-models 不能与 --list-loras 同时使用")
+            return 2
         if args.list_workflows:
-            print("[FAIL] --list-models 不能与 --list-workflows 同时使用")
+            print(f"[FAIL] {flag} 不能与 --list-workflows 同时使用")
             return 2
         if args.request_file is not None:
-            print("[FAIL] --list-models 不能与 --request-file 同时使用")
+            print(f"[FAIL] {flag} 不能与 --request-file 同时使用")
             return 2
         token = load_token(args.token)
         if not token:
-            print("[FAIL] --list-models 需要 Agent token（配置 agent.token 或 --token）")
+            print(f"[FAIL] {flag} 需要 Agent token（配置 agent.token 或 --token）")
             return 2
-        return list_agent_models(args.api, token)
+        return list_agent_models(args.api, token) if args.list_models else list_agent_loras(args.api, token)
 
     if args.request_file is not None:
         supplied_options = {item.split("=", 1)[0] for item in sys.argv[1:] if item.startswith("--")}

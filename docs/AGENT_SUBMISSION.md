@@ -134,6 +134,9 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
   （底模未安装时推荐值为 null）；省略 `model` 时可据此确认实际使用的底模。
 - `capabilities.model_catalog`：按底模文件名返回注册中心元数据（`display_name / family /
   compatible_workflows / notes / recommended_sampling`），仅包含当前已安装的 checkpoint。
+- `capabilities.lora_catalog`：按 LoRA 文件名返回注册中心元数据（`display_name / family /
+  compatible_workflows / base_models / notes`），仅包含当前已安装且已登记的 LoRA；
+  AI 可据此选择与底模匹配的 LoRA，桌面 LoRA 下拉显示同一份友好名称。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；
@@ -168,6 +171,8 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
 - `--list-models` → 读取 `/agent/capabilities`，列出已安装底模、显示名、family 与推荐采样参数
   （需 Agent token；省略 `--model` 时可直接参考默认底模）；
+- `--list-loras` → 读取 `/agent/capabilities`，列出已安装 LoRA、显示名、family、适用工作流与依赖底模
+  （需 Agent token）；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
 

@@ -164,6 +164,7 @@ def test_engine_models_returns_sorted_checkpoints_and_loras():
         "checkpoints": ["a.safetensors", "b.safetensors"],
         "loras": ["z.safetensors"],
         "model_catalog": {},
+        "lora_catalog": {},
         "sampling_profiles": {},
     }
 
@@ -190,13 +191,30 @@ def test_engine_models_includes_registry_sampling_profiles():
     assert "anime_generate" in entry["compatible_workflows"]
 
 
+def test_engine_models_includes_registry_lora_catalog():
+    client = _client(FakeService())
+    client.app.state.adapter = _ModelsAdapter(
+        set(), {"Hentai Pussy inspection_Pony_V1.safetensors", "unknown.safetensors"}
+    )
+    resp = client.get("/api/v1/engine/models")
+    assert resp.status_code == 200
+    catalog = resp.json()["lora_catalog"]
+    assert set(catalog) == {"Hentai Pussy inspection_Pony_V1.safetensors"}
+    entry = catalog["Hentai Pussy inspection_Pony_V1.safetensors"]
+    assert entry["display_name"] == "Hentai Pussy inspection (Pony) v1"
+    assert entry["family"] == "sdxl_pony"
+    assert entry["base_models"] == ["miaomiao_harem_v14"]
+    assert "anime_generate" in entry["compatible_workflows"]
+
+
 def test_engine_models_offline_returns_empty_lists():
     client = _client(FakeService())
     client.app.state.adapter = _ModelsAdapter(None, None)
     resp = client.get("/api/v1/engine/models")
     assert resp.status_code == 200
     assert resp.json() == {
-        "checkpoints": [], "loras": [], "model_catalog": {}, "sampling_profiles": {},
+        "checkpoints": [], "loras": [], "model_catalog": {}, "lora_catalog": {},
+        "sampling_profiles": {},
     }
 
 

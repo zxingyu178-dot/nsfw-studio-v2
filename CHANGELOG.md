@@ -37,6 +37,10 @@
 - `/engine/models` 与 `/agent/capabilities` 新增 `model_catalog`：按底模文件名返回
   `display_name / family / compatible_workflows / notes / recommended_sampling`
   （仅已安装且已登记）；桌面底模下拉显示友好名称，第二行保留文件名。
+- `/engine/models` 与 `/agent/capabilities` 新增 `lora_catalog`：按 LoRA 文件名返回
+  `display_name / family / compatible_workflows / base_models / notes`（仅已安装且已登记）；
+  桌面 LoRA 下拉显示友好名称，第二行保留文件名。
+- CLI 新增 `--list-loras`：列出已安装 LoRA、显示名、family、适用工作流与依赖底模。
 - CLI 新增 `--list-models`：列出已安装底模、显示名、family 与推荐采样参数，并给出默认底模。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；
   `model` 可省略（使用 binding 默认底模），显式 `params` 仍优先；binding 未声明默认底模

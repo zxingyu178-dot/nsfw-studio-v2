@@ -333,7 +333,11 @@ export function InspectorPanel({
       {supportsLora && engineModels.loras.length > 0 && (
         <LoraStackEditor
           loras={selectedLoras}
-          options={engineModels.loras}
+          options={engineModels.loras.map((name) => {
+            const meta = engineModels.lora_catalog?.[name]
+            const label = meta?.display_name?.trim() || name
+            return label === name ? { value: name, label } : { value: name, label, description: name }
+          })}
           onChange={(next) => setPrimaryModuleConfig({ loras: next.length > 0 ? next : undefined })}
         />
       )}

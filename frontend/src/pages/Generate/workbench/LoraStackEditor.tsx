@@ -7,6 +7,13 @@ export interface LoraEntry {
   strength_clip: number
 }
 
+/** LoRA 候选：label 为友好名称，description 保留原始文件名。 */
+export interface LoraOption {
+  value: string
+  label: string
+  description?: string
+}
+
 /** 任务级 LoRA 栈：默认一行，选中后出现第二行（binding 上限 2 条）。 */
 export function LoraStackEditor({
   loras,
@@ -14,7 +21,7 @@ export function LoraStackEditor({
   onChange,
 }: {
   loras: LoraEntry[]
-  options: string[]
+  options: LoraOption[]
   onChange: (next: LoraEntry[]) => void
 }) {
   const rows = loras.length >= 1 ? [0, 1] : [0]
@@ -58,7 +65,7 @@ export function LoraStackEditor({
                   ariaLabel={`LoRA ${index + 1}`}
                   options={[
                     { value: '', label: index === 0 ? '不使用 LoRA' : '不使用第二条' },
-                    ...options.map((name) => ({ value: name, label: name })),
+                    ...options,
                   ]}
                 />
               </div>

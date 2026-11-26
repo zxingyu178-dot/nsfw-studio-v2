@@ -354,11 +354,23 @@ export interface EngineModelCatalogEntryDTO {
   recommended_sampling?: EngineSamplingProfileDTO
 }
 
+export interface EngineLoraCatalogEntryDTO {
+  model_id?: string
+  display_name?: string
+  family?: string
+  compatible_workflows?: string[]
+  /** 依赖的底模 model_id（注册中心 dependencies）。 */
+  base_models?: string[]
+  notes?: string
+}
+
 export interface EngineModelsDTO {
   checkpoints: string[]
   loras: string[]
   /** 底模文件名 → 注册中心元数据（仅已安装且已登记时存在）。 */
   model_catalog?: Record<string, EngineModelCatalogEntryDTO>
+  /** LoRA 文件名 → 注册中心元数据（仅已安装且已登记时存在）。 */
+  lora_catalog?: Record<string, EngineLoraCatalogEntryDTO>
   /** 底模文件名 → 模型注册中心的推荐采样参数（未登记时缺省）。 */
   sampling_profiles?: Record<string, EngineSamplingProfileDTO>
 }

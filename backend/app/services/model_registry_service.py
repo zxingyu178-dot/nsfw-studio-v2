@@ -161,6 +161,38 @@ class ModelRegistryService:
                     catalog[filename] = dict(meta)
         return catalog
 
+    def lora_catalog(self) -> dict[str, dict[str, Any]]:
+        """ComfyUI LoRA 文件名 → 注册中心元数据（released lora）。
+
+        供 Agent 能力发现与桌面 LoRA 选择器共用；包含 display_name / family /
+        compatible_workflows / base_models（依赖底模 model_id）与 notes。
+        """
+        catalog: dict[str, dict[str, Any]] = {}
+        for model in self.list_models(include_archived=False):
+            if str(model.get("status") or "") != "released":
+                continue
+            if str(model.get("model_type") or "") != "lora":
+                continue
+            meta: dict[str, Any] = {
+                "model_id": model.get("model_id"),
+                "display_name": model.get("display_name") or model.get("model_id"),
+                "family": model.get("family"),
+                "compatible_workflows": list(model.get("compatible_workflows") or []),
+                "base_models": [
+                    str(dependency.get("model_id"))
+                    for dependency in model.get("dependencies") or []
+                    if isinstance(dependency, dict) and dependency.get("model_id")
+                ],
+                "notes": model.get("notes"),
+            }
+            for item in model.get("files") or []:
+                if not isinstance(item, dict) or str(item.get("folder") or "") != "loras":
+                    continue
+                filename = str(item.get("filename") or "")
+                if filename:
+                    catalog[filename] = dict(meta)
+        return catalog
+
     def checkpoint_sampling_profiles(self) -> dict[str, dict[str, Any]]:
         """ComfyUI checkpoint 文件名 → 推荐采样参数（从 checkpoint_catalog 派生）。
 

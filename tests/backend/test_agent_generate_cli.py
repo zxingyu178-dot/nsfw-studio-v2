@@ -119,6 +119,41 @@ def test_list_models_prints_catalog_and_recommendation(cli, monkeypatch, capsys)
     assert "默认底模：a.safetensors" in output
 
 
+def test_list_loras_requires_token(cli, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_token", lambda value: "")
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-loras"])
+    assert cli.main() == 2
+    assert "需要 Agent token" in capsys.readouterr().out
+
+
+def test_list_loras_prints_catalog(cli, monkeypatch, capsys):
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_get(api, path, token=None):
+        calls.append((path, token))
+        return {
+            "loras": ["p.safetensors"],
+            "lora_catalog": {
+                "p.safetensors": {
+                    "display_name": "Pony Detail",
+                    "family": "sdxl_pony",
+                    "compatible_workflows": ["anime_generate"],
+                    "base_models": ["miaomiao_harem_v14"],
+                },
+            },
+        }
+
+    monkeypatch.setattr(cli, "load_token", lambda value: "tok")
+    monkeypatch.setattr(cli, "get", fake_get)
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-loras"])
+    assert cli.main() == 0
+    output = capsys.readouterr().out
+    assert calls == [("/agent/capabilities", "tok")]
+    assert "p.safetensors" in output and "Pony Detail" in output
+    assert "适用 anime_generate" in output
+    assert "依赖 miaomiao_harem_v14" in output
+
+
 def test_list_models_rejects_request_file(cli, tmp_path, monkeypatch, capsys):
     request_file = write_request(tmp_path, {
         "prompt": "safe study",

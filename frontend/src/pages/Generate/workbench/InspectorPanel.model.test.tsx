@@ -53,6 +53,15 @@ vi.mock('../../../api/client', () => ({
           family: 'sdxl_anime',
         },
       },
+      lora_catalog: {
+        'cunnyfunky_v5.0_000008.safetensors': {
+          model_id: 'cunnyfunky_style',
+          display_name: 'CunnyFunky Style v5',
+          family: 'sdxl_anime',
+          compatible_workflows: ['anime_generate'],
+          base_models: ['NoobAI-XL-v1.1.safetensors'],
+        },
+      },
       sampling_profiles: {
         'NoobAI-XL-v1.1.safetensors': {
           steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
@@ -166,6 +175,19 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
         strength_clip: 0.8,
       }],
     })
+  })
+
+  it('LoRA 下拉显示注册中心友好名称并保留文件名说明', async () => {
+    renderPanel({
+      loras: [{ name: 'cunnyfunky_v5.0_000008.safetensors', strength_model: 0.8, strength_clip: 0.8 }],
+    })
+    const trigger = await screen.findByRole('button', { name: 'LoRA 1' })
+    expect(trigger.textContent).toContain('CunnyFunky Style v5')
+    fireEvent.click(trigger)
+    const option = screen.getAllByRole('option')
+      .find((item) => item.textContent?.includes('cunnyfunky_v5.0_000008.safetensors'))
+    expect(option?.textContent).toContain('CunnyFunky Style v5')
+    expect(option?.textContent).toContain('cunnyfunky_v5.0_000008.safetensors')
   })
 
   it('已有一条 LoRA 时出现第二行与强度输入', async () => {

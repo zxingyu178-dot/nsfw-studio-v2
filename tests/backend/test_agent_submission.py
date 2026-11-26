@@ -96,6 +96,7 @@ def test_agent_capabilities_exposes_default_model_fields(agent_client, monkeypat
     assert "default_sampling_profile" in data
     assert isinstance(data["sampling_profiles"], dict)
     assert isinstance(data["model_catalog"], dict)
+    assert isinstance(data["lora_catalog"], dict)
 
 
 def test_valid_token_creates_queued_job(agent_client, monkeypatch):
