@@ -193,6 +193,22 @@ def submit_agent_job(
                         code="BINDING_PARAM_UNSUPPORTED",
                         details={"binding_version": primary.get("binding_version"), "parameter": key},
                     )
+            # face_detailer 由 adapter 按节点类型应用（v15 binding Hash 保持冻结），
+            # 这里只校验目标工作流确实包含 FaceDetailer。
+            if "face_detailer" in config:
+                has_face_detailer = any(
+                    isinstance(node, dict) and node.get("class_type") == "FaceDetailer"
+                    for node in (_workflow or {}).values()
+                )
+                if not has_face_detailer:
+                    raise UnprocessableError(
+                        f"当前 binding {primary.get('binding_version')} 不支持任务级参数 face_detailer",
+                        code="BINDING_PARAM_UNSUPPORTED",
+                        details={
+                            "binding_version": primary.get("binding_version"),
+                            "parameter": "face_detailer",
+                        },
+                    )
         if body.model:
             available_models = getattr(adapter, "available_checkpoint_names", None)
             if callable(available_models):

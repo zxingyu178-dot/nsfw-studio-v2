@@ -91,6 +91,7 @@ def test_anime_capabilities_mirror_basic_contract_with_anime_identity():
         "sampler_name",
         "scheduler",
         "denoise",
+        "face_detailer",
         "loras",
     ]
 
@@ -234,3 +235,21 @@ def test_lora_config_rejects_invalid_values(config, code):
         module.validate_config(config)
     assert error.value.code == code
     assert error.value.status_code == 422
+
+
+# ===== v15：FaceDetailer 任务级开关 =====
+
+def test_face_detailer_config_accepts_bool_and_normalizes():
+    module = AnimeGenerateModule()
+    assert module.validate_config({"face_detailer": False}).ok is True
+    normalized = module._normalize_config({"face_detailer": False})
+    assert normalized["face_detailer"] is False
+    assert module._normalize_config({}) == {}
+
+
+@pytest.mark.parametrize("value", ["false", 0, 1, "no"])
+def test_face_detailer_config_rejects_non_bool(value):
+    module = AnimeGenerateModule()
+    with pytest.raises(UnprocessableError) as error:
+        module.validate_config({"face_detailer": value})
+    assert error.value.code == "MODULE_CONFIG_INVALID"

@@ -340,6 +340,41 @@ def test_v15_unknown_checkpoint_rejected(monkeypatch):
     assert error.value.error_type == "MODEL_NOT_FOUND"
 
 
+def test_v15_face_detailer_can_be_disabled(monkeypatch):
+    """face_detailer=false：移除 FaceDetailer/检测器，SaveImage 直连 VAEDecode。"""
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: None)
+    prompt, _ = _v15_prompt(adapter, loras=[], face_detailer=False)
+    assert "20" not in prompt and "18" not in prompt
+    assert prompt["9"]["inputs"]["images"] == ["8", 0]
+    assert prompt["8"]["class_type"] == "VAEDecode"
+
+
+def test_v15_face_detailer_enabled_keeps_chain(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: None)
+    prompt, _ = _v15_prompt(adapter, loras=[], face_detailer=True)
+    assert prompt["20"]["class_type"] == "FaceDetailer"
+    assert prompt["18"]["class_type"] == "UltralyticsDetectorProvider"
+    assert prompt["9"]["inputs"]["images"] == ["20", 0]
+
+
+def test_binding_without_face_detailer_rejects_enable(monkeypatch):
+    adapter = make_adapter()
+    ref = EngineBindingRef(module_id="anime_generate", provider="comfyui", binding_version="v2")
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(ref)
+    with pytest.raises(EngineError) as error:
+        adapter._build_prompt(
+            EngineJobRequest(binding=ref, parameters={"face_detailer": True}), workflow, binding
+        )
+    assert error.value.error_type == "BINDING_PARAM_UNSUPPORTED"
+    # 关闭是幂等的：binding 本来就没有 FaceDetailer 时保持原链
+    prompt = adapter._build_prompt(
+        EngineJobRequest(binding=ref, parameters={"face_detailer": False}), workflow, binding
+    )
+    assert prompt["9"]["inputs"]["images"] == ["8", 0]
+
+
 def test_v5_rejects_task_level_model(monkeypatch):
     adapter = make_adapter()
     monkeypatch.setattr(adapter, "available_lora_names", lambda: None)

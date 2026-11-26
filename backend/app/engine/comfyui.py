@@ -247,6 +247,51 @@ class ComfyUIAdapter(EngineAdapter):
                 ):
                     inputs[field] = [to_node, value[1]]
 
+    def _apply_face_detailer(self, prompt: dict, enabled) -> dict:
+        """任务级 FaceDetailer 开关：false 时移除面部修复并直连上游图像。
+
+        不依赖 binding 声明（v15 的 binding Hash 保持冻结），按节点类型识别；
+        关闭后同时清理只被 FaceDetailer 引用的检测器节点。
+        """
+        if enabled is None:
+            return prompt
+        if not isinstance(enabled, bool):
+            raise EngineError("BINDING_PARAM_UNSUPPORTED", "face_detailer 必须为布尔值")
+        face_nodes = [
+            node_id for node_id, node in prompt.items()
+            if isinstance(node, dict) and node.get("class_type") == "FaceDetailer"
+        ]
+        if not face_nodes:
+            if enabled:
+                raise EngineError(
+                    "BINDING_PARAM_UNSUPPORTED", "当前 binding 不支持 face_detailer"
+                )
+            return prompt
+        if enabled:
+            return prompt
+        for face_node in face_nodes:
+            source = (prompt[face_node].get("inputs") or {}).get("image")
+            if not (isinstance(source, list) and len(source) == 2):
+                raise EngineError(
+                    "WORKFLOW_ERROR", f"FaceDetailer 节点 {face_node} 缺少 image 输入"
+                )
+            self._redirect_refs(prompt, face_node, str(source[0]))
+            prompt.pop(face_node, None)
+        referenced = {
+            str(value[0])
+            for node in prompt.values()
+            for value in (node.get("inputs") or {}).values()
+            if isinstance(value, list) and len(value) == 2
+        }
+        for node_id, node in list(prompt.items()):
+            if (
+                isinstance(node, dict)
+                and node.get("class_type") == "UltralyticsDetectorProvider"
+                and node_id not in referenced
+            ):
+                prompt.pop(node_id, None)
+        return prompt
+
     def available_lora_names(self) -> set[str] | None:
         """ComfyUI /models/loras（60s 缓存）；不可达返回 None，交由执行期兜底。"""
         now = time.monotonic()
@@ -319,6 +364,7 @@ class ComfyUIAdapter(EngineAdapter):
             prompt[str(target["node"])]["inputs"][target["field"]] = value
         for node_id, fields in (binding.get("defaults") or {}).items():
             prompt[str(node_id)]["inputs"].update(fields)
+        prompt = self._apply_face_detailer(prompt, params.get("face_detailer"))
         save_node = str(binding["save_image_node"])
         template = str(binding.get("save_image_prefix", "NSFWStudio"))
         metadata = dict(request.metadata or {})

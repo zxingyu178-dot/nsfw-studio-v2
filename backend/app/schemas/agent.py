@@ -43,6 +43,10 @@ class AgentSamplingParams(BaseModel):
     sampler_name: str | None = Field(default=None, max_length=64)
     scheduler: str | None = Field(default=None, max_length=64)
     denoise: float | None = Field(default=None, ge=0.0, le=1.0)
+    face_detailer: bool | None = Field(
+        default=None,
+        description="人脸修复（FaceDetailer）；False 可显著提速，不传=binding 默认（开启）",
+    )
 
 
 class AgentJobRequest(BaseModel):

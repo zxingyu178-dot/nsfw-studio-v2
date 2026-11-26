@@ -232,7 +232,7 @@ def test_request_file_preserves_model_and_sampling(cli, tmp_path):
         }],
         "params": {
             "steps": 28, "cfg": 5.0, "sampler_name": "dpmpp_2m",
-            "scheduler": "karras", "denoise": 0.9,
+            "scheduler": "karras", "denoise": 0.9, "face_detailer": False,
         },
     }
     normalized = cli.load_request_file(write_request(tmp_path, body))
@@ -251,6 +251,7 @@ def test_request_file_preserves_model_and_sampling(cli, tmp_path):
         ({"module_id": "anime_generate", "loras": [{"name": "a"}, {"name": "b"}, {"name": "c"}]},
          "最多 2 条"),
         ({"module_id": "anime_generate", "params": {"steps": 0}}, "steps"),
+        ({"module_id": "anime_generate", "params": {"face_detailer": "no"}}, "face_detailer"),
         ({"module_id": "anime_generate", "params": {"unknown": 1}}, "未知字段"),
     ],
 )

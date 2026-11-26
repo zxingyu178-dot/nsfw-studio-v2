@@ -51,9 +51,10 @@ REQUEST_FILE_MAX_BYTES = 128 * 1024
 REQUEST_SEMANTIC_OPTIONS = {
     "--prompt", "--module", "--module-version", "--binding", "--model", "--lora",
     "--steps", "--cfg", "--sampler", "--scheduler", "--denoise",
+    "--face-detailer", "--no-face-detailer",
     "--negative", "--width", "--height", "--count", "--seed", "--next",
 }
-SAMPLE_PARAM_KEYS = {"steps", "cfg", "sampler_name", "scheduler", "denoise"}
+SAMPLE_PARAM_KEYS = {"steps", "cfg", "sampler_name", "scheduler", "denoise", "face_detailer"}
 ADVANCED_FIELDS = ("module_version", "binding_version", "model", "loras", "params")
 
 
@@ -150,6 +151,11 @@ def _normalize_params(value: object) -> dict:
             if not isinstance(raw, str) or not raw.strip() or len(raw) > 64:
                 raise RequestValidationError(f"params.{key} 必须是非空字符串（≤64）")
             params[key] = raw.strip()
+    if value.get("face_detailer") is not None:
+        face_detailer = value["face_detailer"]
+        if not isinstance(face_detailer, bool):
+            raise RequestValidationError("params.face_detailer 必须是布尔值")
+        params["face_detailer"] = face_detailer
     return params
 
 
@@ -413,6 +419,10 @@ def main() -> int:
     parser.add_argument("--sampler", default=None, help="采样器名称（仅 Agent 端点）")
     parser.add_argument("--scheduler", default=None, help="调度器名称（仅 Agent 端点）")
     parser.add_argument("--denoise", type=float, default=None, help="降噪强度 0..1（仅 Agent 端点）")
+    parser.add_argument("--face-detailer", dest="face_detailer", action="store_true", default=None,
+                        help="强制开启人脸修复（FaceDetailer）")
+    parser.add_argument("--no-face-detailer", dest="face_detailer", action="store_false",
+                        help="关闭人脸修复以显著提速（仅 Agent 端点）")
     parser.add_argument("--list-workflows", action="store_true",
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
@@ -478,6 +488,7 @@ def main() -> int:
             "sampler_name": args.sampler,
             "scheduler": args.scheduler,
             "denoise": args.denoise,
+            "face_detailer": args.face_detailer,
         }
         params = {key: value for key, value in params.items() if value is not None}
         if params:

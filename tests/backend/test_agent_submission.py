@@ -260,7 +260,7 @@ def test_agent_accepts_v15_model_loras_and_sampling(agent_client, monkeypatch):
         }],
         params={
             "steps": 28, "cfg": 5.0, "sampler_name": "dpmpp_2m",
-            "scheduler": "karras", "denoise": 0.9,
+            "scheduler": "karras", "denoise": 0.9, "face_detailer": False,
         },
     ), headers=headers)
     assert response.status_code == 201, response.text
@@ -272,6 +272,7 @@ def test_agent_accepts_v15_model_loras_and_sampling(agent_client, monkeypatch):
     assert config["steps"] == 28 and config["cfg"] == 5.0
     assert config["sampler_name"] == "dpmpp_2m" and config["scheduler"] == "karras"
     assert config["denoise"] == 0.9
+    assert config["face_detailer"] is False
 
 
 def test_agent_version_requires_module_id(agent_client, monkeypatch):
@@ -295,6 +296,7 @@ def test_agent_version_requires_module_id(agent_client, monkeypatch):
         {"params": {"steps": 0}},
         {"params": {"cfg": 0.5}},
         {"params": {"sampler_name": "not-a-sampler"}},
+        {"params": {"face_detailer": "maybe"}},
     ],
 )
 def test_agent_rejects_invalid_model_and_sampling_params(

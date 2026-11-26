@@ -29,6 +29,7 @@ LORA_STRENGTH_MAX = 2.0
 MODEL_MAX_LENGTH = 255
 MODULE_CONFIG_KEYS = {
     "model", "loras", "steps", "cfg", "sampler_name", "scheduler", "denoise",
+    "face_detailer",
 }
 SAMPLER_NAMES = (
     "euler", "euler_ancestral", "heun", "dpm_2", "dpm_2_ancestral", "lms",
@@ -115,6 +116,14 @@ class AnimeGenerateModule(BasicGenerateModule):
                     step=0.01,
                     title="去噪强度",
                     description="KSampler denoise；不传=绑定默认 1.0",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "face_detailer",
+                    "bool",
+                    default=True,
+                    title="人脸修复（FaceDetailer）",
+                    description="默认开启；关闭可显著提速，适合快速预览与大批量筛选",
                     configurable=True,
                 ),
                 ParameterSpec(
@@ -253,6 +262,13 @@ class AnimeGenerateModule(BasicGenerateModule):
         if model is not None:
             normalized["model"] = model
         normalized.update(self._normalize_sampling(config))
+        if config.get("face_detailer") is not None:
+            face_detailer = config["face_detailer"]
+            if not isinstance(face_detailer, bool):
+                raise UnprocessableError(
+                    "face_detailer 必须是布尔值", code="MODULE_CONFIG_INVALID"
+                )
+            normalized["face_detailer"] = face_detailer
         loras = self._normalize_loras(config.get("loras"))
         if loras:
             normalized["loras"] = loras
