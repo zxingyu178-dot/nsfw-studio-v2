@@ -145,6 +145,9 @@ CLI 不再提前调用 `/prompts/ensure`。
 ```powershell
 $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 .venv\Scripts\python scripts\agent_generate.py --prompt "a red fox resting beside a woodland stream" --out D:\ai_out
+
+# 只指定底模：采样参数由注册中心推荐值自动填充，并关闭 FaceDetailer 提速
+.venv\Scripts\python scripts\agent_generate.py --prompt "1girl, silver hair, kimono, shrine, soft light" --model NoobAI-XL-v1.1.safetensors --use-recommended --no-face-detailer --out D:\ai_out
 ```
 
 - 不传 `--module` → 使用服务端默认工作流（当前 `anime_generate`，binding v15）；

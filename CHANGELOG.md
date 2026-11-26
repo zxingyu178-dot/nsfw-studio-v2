@@ -52,6 +52,11 @@
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链
   `CheckpointLoaderSimple → CLIPTextEncode×2 → KSampler → VAEDecode → SaveImage`
   （无 FaceDetailer / 检测器），binding Hash 未变。
+- 推荐参数真实出图（生产 8000，Agent 直提）：`job_06b35004-67d0-400f-876e-2bc9a16eda00`
+  COMPLETED 1/1，832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / `face_detailer=false`，
+  **71.3s**；ComfyUI history `967a586f-88bd-45f7-a9f7-e88ca3120d73` 的 KSampler 实测值一致、
+  FaceDetailer 节点 0。`use_recommended_sampling=true` 自动填充采样参数，手机端同步显示
+  “第 1 / 1 张 · 剩余 1 段”，完成后显示“暂无生成任务”与“新图 1”。
 - 前端全量 `npm run test:ci` 104 个文件 529 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
@@ -61,6 +66,9 @@
   缩略图条与审核提示平滑展开 / 收起，进度文案淡入淡出。
   模拟器验证：进度“空闲 → 第 1 / 1 张 · 剩余 1 段 → 空闲”无崩溃，真实 Job
   `job_cbaaaddc-82d4-4412-ad98-d20db5733644` COMPLETED。
+- Android Alpha54（versionCode 61）：Bridge 恢复后自动清除“无法连接”横幅，操作类提示不受影响；
+  修复横幅退出动画期间消息列表为空导致的崩溃。模拟器飞行模式断网 / 恢复验收通过，
+  进程存活且 crash buffer 无新崩溃。
 
 ## [0.39.0] — 2026-11-27
 

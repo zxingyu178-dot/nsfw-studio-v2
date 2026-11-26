@@ -62,6 +62,8 @@ cd frontend && npm run test -- --run && npx tsc -b && npm run build
   `width/height/count/seed/queue_mode/client_request_id`。
 - 能力发现：`GET /api/v1/agent/capabilities`（需 token）返回模块、可用底模、可用 LoRA、参数边界，
   以及按底模文件名给出的 `sampling_profiles` 推荐采样参数（与 `/engine/models` 同源）。
+- 推荐采样参数唯一来源：`registry/models/**/model.yaml` 的 `recommended_sampling`；
+  新增底模必须同时登记推荐值（枚举由 `test_w41_registry` 校验），Agent 与前端禁止维护第二份推荐表。
 - 服务端校验链：模块解析 → 放行门禁 → binding 参数声明 → 模型/LoRA 存在性 → 模块 config 校验 → 创建 Job。
 - CLI：`scripts/agent_generate.py`（`--model/--lora/--steps/--cfg/--sampler/--scheduler/--denoise/--no-face-detailer`）；
   高级字段只允许走 Agent 端点（需 token）。
