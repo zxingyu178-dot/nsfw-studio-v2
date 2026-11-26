@@ -57,6 +57,11 @@
   **71.3s**；ComfyUI history `967a586f-88bd-45f7-a9f7-e88ca3120d73` 的 KSampler 实测值一致、
   FaceDetailer 节点 0。`use_recommended_sampling=true` 自动填充采样参数，手机端同步显示
   “第 1 / 1 张 · 剩余 1 段”，完成后显示“暂无生成任务”与“新图 1”。
+- 默认底模推荐链路真实出图（生产 8000）：`job_10d37025-e7a6-4901-83eb-e0a5565a81b8`
+  未传 `model`，服务端按 binding `default_parameters.model` 取 miaomiao 推荐值；
+  COMPLETED 1/1，832×1216 / 30 步 / cfg4.0 / er_sde simple / `face_detailer=false`，
+  **69.3s**；history `06c413c7-ab33-4266-bee7-2ce5ca70c440` 实测
+  `ckpt=miaomiaoHarem_v14.safetensors`、FaceDetailer 节点 0；手机端显示“新图 2”。
 - 前端全量 `npm run test:ci` 104 个文件 529 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
