@@ -2,6 +2,31 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [Unreleased]
+
+> 维护：清理产品收敛后的测试债，补齐 v15 注册中心投影，并继续打磨前端与手机端交互。
+
+### Added
+
+- `registry/workflows/anime_generate/v15/manifest.yaml`：登记当前默认 binding v15（experimental），
+  `/api/v1/modules` 的 registry 投影与真实默认 binding 一致。
+- 桌面工作台：底模候选区分“读取中 / 引擎离线 / 未安装底模”；运行环境检测 READY 后
+  自动刷新底模与 LoRA 候选，无需重开页面。
+
+### Fixed
+
+- 恢复 `anime_generate` v2 历史 binding 的原始采样参数（30 步 / cfg4.0 / er_sde / simple），
+  重新与 registry Hash `db2bd841c260a434` 对齐；修复历史版本被改写导致的 G0 `HASH_MISMATCH`。
+- 产品默认模块统一为 `anime_generate` 后，Phase 3/4 历史用例的快照断言同步更新。
+
+### Changed
+
+- `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
+  basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
+- 后端全量 `pytest tests/backend -q` 836 项：835 通过、1 跳过；G0 `errors=0`。
+- Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
+  新图提醒与主页面切换加入淡入缩放动画。
+
 ## [0.39.0] — 2026-11-27
 
 > Minor：AI 统一提交支持多模型 / LoRA / 采样参数（binding v15）；桌面工作台增加底模与

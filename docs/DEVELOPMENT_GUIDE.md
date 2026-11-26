@@ -89,10 +89,12 @@ cd frontend && npm run test -- --run && npx tsc -b && npm run build
 Hermetic 护栏：后端测试自动设置 `NSFW_STUDIO_HERMETIC=1` 并拦截 8188/8000/8877 连接；
 新增测试不得绕过该护栏。
 
-**已知历史测试债**：`tests/backend/test_phase3/4/5/6/7/21/22/51_*` 等 Phase 旧套件仍按
-2026-11-16 之前的多模块产品编写（basic_generate / img2img / reference_generate），
-这些模块已下线，整文件跑会出现预期失败。当前维护门禁以本文件 §6 的定向文件为准；
-逐步迁移/删除旧套件时，必须把仍然有效的通用管线用例迁到 anime_generate 后再删。
+**历史测试债（2026-11-27 已清理）**：Phase 3–7/21/22/51 旧套件已通过
+`tests/backend/conftest.py::process_registry` 的“测试专用注册表”迁移完成：
+产品注册表仍只暴露 `anime_generate`，测试进程额外挂载 `basic_generate` / `img2img` /
+`reference_generate` / `fake_process`，并在放行清单中同步 ready 替身（硬件档位沿用各模块
+历史记录）。默认模块断言统一为 `anime_generate`。全量 `pytest tests/backend -q`
+（836 项）必须全绿后才可提交。
 
 ### 工具权限（Windows）
 
@@ -115,7 +117,17 @@ icacls "<node.exe 或 java.exe 的绝对路径>" /setintegritylevel Medium
   不写真机安装步骤、不发邮箱。模拟器访问本机桥用 `adb reverse tcp:<port> tcp:<port>`。
 - 交互变更需覆盖：冷启动、断网重连、空队列、审核操作反馈、返回栈、进度从生成中→空闲。
 
-### 最近一次模拟器验收（2026-11-27）
+### 最近一次模拟器验收（2026-11-27，Alpha51 / versionCode 58）
+
+- `assembleDebug` 后安装到 `emulator-5554`；模拟器上首次冷启动需先
+  `adb shell cmd package compile -m speed -f com.mediareview.app`，否则 debug 包可能触发
+  “failed to complete startup” ANR；AOT 后主界面与底部五个 Tab 正常。
+- 首次启动弹出 Alpha51 更新说明（保留/淘汰/收藏触感反馈、收藏弹跳、新图与页面切换动画）；
+  关闭后首页媒体墙、底部 Tab 正常。
+- 生图审核图库显示 21714 张；进入审图页顶部显示“电脑端暂无生成任务”只读进度行。
+- 收藏 → 保留操作后切换到 `2 / 21714` 并显示“已保留”，无崩溃、无新增错误日志。
+
+### 最近一次模拟器验收（2026-11-27，Alpha50 / versionCode 57）
 
 - 安装新 APK 到 `emulator-5554`；配对到临时桥 `127.0.0.1:8878`（独立 DataRoot）。
 - 图库显示 v15 真实出图；审图页顶栏显示“电脑端暂无生成任务”。
