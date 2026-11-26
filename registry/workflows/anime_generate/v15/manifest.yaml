@@ -1,0 +1,58 @@
+schema_version: '1.0'
+workflow_id: anime_generate
+version: v15
+display_name: 动漫生图（MiaoMiao，任务级模型）
+description: v5 节点链 + 任务级 model / LoRA / 采样参数；默认 miaomiaoHarem v14，可切换 ComfyUI 已安装底模；FaceDetailer 常开。
+provider: comfyui
+workflow_file: workflows/providers/comfyui/anime_generate/v15/workflow.json
+binding_file: workflows/providers/comfyui/anime_generate/v15/binding.yaml
+model_dependencies:
+- model_id: miaomiao_harem_v14
+  role: checkpoint
+  required: false
+input_schema:
+  mode: text
+  slots: []
+output_schema:
+  kind: image
+  asset_type: original
+  parent_policy: none
+  cardinality: 1..n
+default_parameters:
+  width: 832
+  height: 1216
+  steps: 30
+  cfg: 4.0
+  sampler: er_sde
+  scheduler: simple
+  denoise: 1.0
+  batch_size: 1
+  model: miaomiaoHarem_v14.safetensors
+parameter_constraints:
+  width:
+  - 512
+  - 2040
+  height:
+  - 512
+  - 2040
+  seed:
+  - 0
+  - 2147483647
+  steps:
+  - 1
+  - 150
+  cfg:
+  - 1.0
+  - 30.0
+hashes:
+  algorithm: lf-normalized-v1
+  workflow_hash: 99ef6d5af1d51e2c
+  binding_hash: 6bde04bd7f04fb2f
+release_status: experimental
+validation_report:
+  status: passed
+  checked_at: '2026-11-27'
+  method: 生产 8000 Agent job_dea41fb7 与临时 8010 job_6e35f220 均 COMPLETED
+  notes: 默认档 186.96s 超过 ≤120s 目标；默认底模与采样参数可被任务覆盖
+created_at: '2026-11-27'
+updated_at: '2026-11-27'
