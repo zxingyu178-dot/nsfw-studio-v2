@@ -39,6 +39,8 @@ CAPABILITIES = [
     "mobile_prompt_evaluation_v2",
     # 只读生图进度（不提供生成控制）
     "mobile_generation_progress_v1",
+    # 进度快照新增只读队列状态：active_status / queued_jobs / paused_jobs
+    "mobile_generation_queue_status_v1",
 ]
 
 

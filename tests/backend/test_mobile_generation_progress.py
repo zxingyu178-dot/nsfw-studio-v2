@@ -71,7 +71,10 @@ def _start_slot(session, job: Job, index: int) -> JobStageItem:
     return slot
 
 
-def _assert_progress(mobile_client, headers, current, total, remaining):
+def _assert_progress(
+    mobile_client, headers, current, total, remaining,
+    status="none", queued=0, paused=0,
+):
     response = mobile_client.get(PROGRESS_PATH, headers=headers)
     assert response.status_code == 200
     assert "no-store" in response.headers["Cache-Control"].lower()
@@ -81,6 +84,9 @@ def _assert_progress(mobile_client, headers, current, total, remaining):
         "current_image": current,
         "images_in_segment": total,
         "remaining_segments": remaining,
+        "active_status": status,
+        "queued_jobs": queued,
+        "paused_jobs": paused,
     }
 
 
@@ -89,7 +95,9 @@ def test_bridge_advertises_progress_and_keeps_desktop_queue_private(
 ):
     response = mobile_client.get("/mobile/system/health")
     assert response.status_code == 200
-    assert "mobile_generation_progress_v1" in response.json()["data"]["capabilities"]
+    capabilities = response.json()["data"]["capabilities"]
+    assert "mobile_generation_progress_v1" in capabilities
+    assert "mobile_generation_queue_status_v1" in capabilities
     headers, _ = auth(mobile_client, session_factory)
     assert mobile_client.get("/api/v1/queue", headers=headers).status_code == 404
 
@@ -114,24 +122,24 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
         assert current.completed_count == 0
         session.commit()
 
-        _assert_progress(mobile_client, headers, 3, 6, 20)
+        _assert_progress(mobile_client, headers, 3, 6, 20, "running", 18, 1)
 
         third.status = "COMPLETED"
         session.commit()
-        # 已完成的 StageItem 不再代表当前执行槽位
+        # 已完成的 StageItem 不再代表当前执行槽位；Job 仍 RUNNING（阶段间隙）
         assert third.job_item.status == "RUNNING"
-        _assert_progress(mobile_client, headers, None, None, 20)
+        _assert_progress(mobile_client, headers, None, None, 20, "running", 18, 1)
 
         fourth = _start_slot(session, current, 3)
         session.commit()
-        _assert_progress(mobile_client, headers, 4, 6, 20)
+        _assert_progress(mobile_client, headers, 4, 6, 20, "running", 18, 1)
 
         fourth.status = "COMPLETED"
         current.status = "COMPLETED"
         queued[0].status = "RUNNING"
         first = _start_slot(session, queued[0], 0)
         session.commit()
-        _assert_progress(mobile_client, headers, 1, 6, 19)
+        _assert_progress(mobile_client, headers, 1, 6, 19, "running", 17, 1)
 
         first.status = "COMPLETED"
         for job in queued:
@@ -140,11 +148,11 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
         processing.status = "RUNNING"
         _start_slot(session, processing, 4)
         session.commit()
-        _assert_progress(mobile_client, headers, None, None, 1)
+        _assert_progress(mobile_client, headers, None, None, 1, "paused", 0, 1)
 
         paused.status = "CANCELLED"
         session.commit()
-        _assert_progress(mobile_client, headers, None, None, 0)
+        _assert_progress(mobile_client, headers, None, None, 0, "none", 0, 0)
 
 
 def test_progress_rejects_unpaired_invalid_and_revoked_devices(
@@ -155,7 +163,7 @@ def test_progress_rejects_unpaired_invalid_and_revoked_devices(
     assert mobile_client.get(PROGRESS_PATH, headers=invalid).status_code == 401
 
     headers, device_id = auth(mobile_client, session_factory)
-    _assert_progress(mobile_client, headers, None, None, 0)
+    _assert_progress(mobile_client, headers, None, None, 0, "none", 0, 0)
     with session_factory() as session:
         mobile_pairing_service.revoke_device(session, device_id)
     response = mobile_client.get(PROGRESS_PATH, headers=headers)
@@ -184,7 +192,7 @@ def test_bridge_reads_real_worker_transitions_with_mock_engine(
         assert desktop.post("/api/v1/queue/pause").status_code == 200
         for count in (2, 1):
             assert desktop.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=count)}).status_code == 201
-        _assert_progress(mobile_client, headers, None, None, 2)
+        _assert_progress(mobile_client, headers, None, None, 2, "queued", 2, 0)
         assert desktop.post("/api/v1/queue/resume").status_code == 200
 
         observed = []
@@ -197,12 +205,16 @@ def test_bridge_reads_real_worker_transitions_with_mock_engine(
                 progress["current_image"],
                 progress["images_in_segment"],
                 progress["remaining_segments"],
+                progress["active_status"],
             )
             if not observed or sample != observed[-1]:
                 observed.append(sample)
-            if sample == (None, None, 0):
+            if sample[:3] == (None, None, 0):
                 break
             time.sleep(0.04)
 
-        expected = [(1, 2, 2), (2, 2, 2), (1, 1, 1), (None, None, 0)]
+        expected = [
+            (1, 2, 2, "running"), (2, 2, 2, "running"),
+            (1, 1, 1, "running"), (None, None, 0, "none"),
+        ]
         assert [sample for sample in observed if sample[0] is not None or sample[2] == 0] == expected, observed
