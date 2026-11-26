@@ -59,6 +59,14 @@
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
 - 后端全量 `pytest tests/backend -q` 860 项：859 通过、1 跳过；G0 `errors=0`。
+- 后端全量（LoRA catalog 后）`pytest tests/backend -q` 864 项：863 通过、1 跳过；G0 `errors=0`。
+- 生产部署（app worktree `deploy/app-instance` FF 到 `c3a2f03`，重启任务 `\AIHome\NSFWStudioV2`）：
+  `/engine/models` 的 `lora_catalog` 仅返回已登记 LoRA，未登记文件不编造元数据；
+  CLI `--list-loras` 实际列出 4 个已安装 LoRA；生产首页已加载新构建 `index-CGEbUoA_.js`。
+- LoRA 真实出图（生产 8000，Agent 直提）：`job_71398f1b-b5b9-4f99-a74d-b3033255653b`
+  COMPLETED 1/1，768×1024 / 20 步 / LoRA `Hentai Pussy inspection_Pony_V1` 强度 0.6 /
+  `face_detailer=false`，**94.2s**；binding v15 Hash `99ef6d5af1d51e2c / 6bde04bd7f04fb2f`
+  未变化。
 - 快速档真实出图（临时实例 8010，独立 DataRoot）：`job_e81b843b-4381-4e9f-91c2-65d5f994dc87`
   COMPLETED 1/1，832×1216 / 28 步 / cfg4.5 / er_sde simple / `face_detailer=false`，
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链
@@ -74,7 +82,8 @@
   COMPLETED 1/1，832×1216 / 30 步 / cfg4.0 / er_sde simple / `face_detailer=false`，
   **69.3s**；history `06c413c7-ab33-4266-bee7-2ce5ca70c440` 实测
   `ckpt=miaomiaoHarem_v14.safetensors`、FaceDetailer 节点 0；手机端显示“新图 2”。
-- 前端全量 `npm run test:ci` 104 个文件 530 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 531 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+  （首轮 AssetPickerDrawer 分页用例在满载下偶发超时，单独运行与整轮复跑均通过。）
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 - Android Alpha52（versionCode 59）：审图页进度区分“已提交 / 生成中 / 已暂停 / 准备下一张”，
