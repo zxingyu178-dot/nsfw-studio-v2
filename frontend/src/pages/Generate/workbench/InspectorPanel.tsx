@@ -78,15 +78,26 @@ export function InspectorPanel({
 
   // 模型 / LoRA 候选：引擎离线时为空数组，不影响其他参数编辑。
   const [engineModels, setEngineModels] = useState<EngineModelsDTO>({ checkpoints: [], loras: [] })
+  const [engineModelsState, setEngineModelsState] = useState<'loading' | 'ready' | 'offline'>('loading')
+  const [modelsRefreshKey, setModelsRefreshKey] = useState(0)
   useEffect(() => {
     const models = (engineRuntimeApi as { models?: () => Promise<EngineModelsDTO> }).models
-    if (typeof models !== 'function') return
+    if (typeof models !== 'function') { setEngineModelsState('offline'); return }
     let cancelled = false
+    setEngineModelsState('loading')
     models()
-      .then((result) => { if (!cancelled) setEngineModels(result) })
-      .catch(() => { if (!cancelled) setEngineModels({ checkpoints: [], loras: [] }) })
+      .then((result) => {
+        if (cancelled) return
+        setEngineModels(result)
+        setEngineModelsState('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setEngineModels({ checkpoints: [], loras: [] })
+        setEngineModelsState('offline')
+      })
     return () => { cancelled = true }
-  }, [])
+  }, [modelsRefreshKey])
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -102,7 +113,10 @@ export function InspectorPanel({
     if (preflightModuleIds.length === 0) return
     setPreflightBusy(true)
     try {
-      setPreflight(await engineRuntimeApi.preflight(preflightModuleIds))
+      const result = await engineRuntimeApi.preflight(preflightModuleIds)
+      setPreflight(result)
+      // 引擎刚恢复在线时刷新底模/LoRA 候选，避免用户重开页面才能选模型。
+      if (result.status === 'READY') setModelsRefreshKey((key) => key + 1)
     } catch (error) {
       setPreflight({
         status: 'UNKNOWN',
@@ -247,8 +261,14 @@ export function InspectorPanel({
               ...engineModels.checkpoints.map((name) => ({ value: name, label: name })),
             ]}
           />
-          {engineModels.checkpoints.length === 0 && (
+          {engineModelsState === 'loading' && (
+            <span className="wb-param__label">正在读取引擎底模…</span>
+          )}
+          {engineModelsState === 'offline' && (
             <span className="wb-param__label">引擎离线：仅可使用绑定默认底模</span>
+          )}
+          {engineModelsState === 'ready' && engineModels.checkpoints.length === 0 && (
+            <span className="wb-param__label">引擎未安装可用底模：仅可使用绑定默认底模</span>
           )}
         </div>
       )}
