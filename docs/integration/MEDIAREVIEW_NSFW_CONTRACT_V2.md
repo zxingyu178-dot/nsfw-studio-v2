@@ -222,15 +222,21 @@ fixture：`fixtures/health_v2.json`。
 ### 9.1 可选能力 `mobile_generation_progress_v1`
 
 配对设备通过 `GET /mobile/generation/progress` 读取当前生图进度。成功响应沿用 Bridge 信封，
-`data` 只有 `current_image`、`images_in_segment`、`remaining_segments` 三个字段，例如
-`{"current_image":3,"images_in_segment":6,"remaining_segments":20}`；响应带 `Cache-Control: no-store`。
+`data` 只包含只读计数字段（不包含 Prompt / Job ID / 控制信息），例如
+`{"current_image":3,"images_in_segment":6,"remaining_segments":20,"active_status":"running","queued_jobs":18,"paused_jobs":1}`；
+响应带 `Cache-Control: no-store`。
 
 - 只统计生成型 Job；QUEUED / RUNNING / PAUSED 各计一个剩余段，失败/取消/中断不计；
 - 用执行中的 StageItem 定位逻辑槽位：`current_image = item_index + 1`，
   `images_in_segment = requested_count`；
-- 阶段间隙或只有处理型任务时，两个图片字段为 `null`，`remaining_segments` 仍可大于 0；
+- `active_status`：任一 RUNNING → `running`；否则任一 PAUSED → `paused`；否则任一 QUEUED →
+  `queued`；都没有 → `none`（旧桥无该字段，客户端按原计数展示）；
+- `queued_jobs` / `paused_jobs` 分别统计 QUEUED / PAUSED 生成型 Job；
+- 阶段间隙（Job RUNNING 但无 RUNNING StageItem）时两个图片字段为 `null`，`active_status`
+  仍为 `running`，`remaining_segments` 仍可大于 0；
 - 设备未配对/已撤销返回 401；桌面队列详情与控制接口仍只在 8000；
-- 客户端未在 health.capabilities 中看到该能力时不得显示进度 UI。
+- 客户端未在 health.capabilities 中看到 `mobile_generation_progress_v1` 时不得显示进度 UI；
+  `mobile_generation_queue_status_v1` 表示新增状态字段可用（字段本身向后兼容）。
 
 ## 10. 数据与迁移
 

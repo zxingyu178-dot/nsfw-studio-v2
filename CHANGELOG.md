@@ -9,9 +9,12 @@
 
 ### Added
 
-- 任务级 `face_detailer` 开关（模块 / Agent / CLI / 前端）：默认开启；`false` 时由
+- 任务级 `face_detailer` 开关（模块 / 引擎 / Agent / CLI / 前端）：默认开启；`false` 时由
   ComfyUI adapter 移除 FaceDetailer 与检测器节点、SaveImage 直连 VAEDecode，
   binding v15 文件与 Hash 保持不变。
+- 手机桥进度快照新增只读队列状态：`active_status`（running/paused/queued/none）、
+  `queued_jobs`、`paused_jobs`，能力 `mobile_generation_queue_status_v1`；审图页顶栏可区分
+  “已提交 / 生成中 / 已暂停 / 准备下一张”，旧桥字段缺失时保持原计数展示。
 - Agent `params.face_detailer`、CLI `--no-face-detailer / --face-detailer`；
   工作台参数栏新增“人脸修复（FaceDetailer）”开关。
 - `registry/workflows/anime_generate/v15/manifest.yaml`：登记当前默认 binding v15（experimental），
@@ -38,6 +41,8 @@
 - 前端全量 `npm run test:ci` 104 个文件 525 项全部通过；`tsc` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
+- Android Alpha52（versionCode 59）：审图页进度区分“已提交 / 生成中 / 已暂停 / 准备下一张”，
+  显示排队任务数；旧桥字段缺失时保持原计数展示。
 
 ## [0.39.0] — 2026-11-27
 

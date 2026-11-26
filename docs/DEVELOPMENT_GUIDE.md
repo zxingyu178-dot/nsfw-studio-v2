@@ -113,8 +113,9 @@ icacls "<node.exe 或 java.exe 的绝对路径>" /setintegritylevel Medium
 
 - 桥 `8877` 只读：审核、进度、事件；不提供生成控制。
 - 生图进度 `GET /mobile/generation/progress`（能力 `mobile_generation_progress_v1`）只返回
-  `current_image / images_in_segment / remaining_segments`，不泄露 Prompt 或控制面；
-  审核页顶栏显示“第 X / Y 张 · 剩余 N 段”并带呼吸动画，老桥无该能力时整行隐藏。
+  `current_image / images_in_segment / remaining_segments`；扩展能力
+  `mobile_generation_queue_status_v1` 追加只读 `active_status / queued_jobs / paused_jobs`；
+  审核页顶栏据此显示“已提交 / 生成中 / 已暂停 / 准备下一张”，老桥无该能力时整行隐藏。
 - 使用 AVD `MediaReview_Test`（`D:\...\projects\mediareview\android`）安装 debug APK 验证；
   不写真机安装步骤、不发邮箱。模拟器访问本机桥用 `adb reverse tcp:<port> tcp:<port>`。
 - 交互变更需覆盖：冷启动、断网重连、空队列、审核操作反馈、返回栈、进度从生成中→空闲。
