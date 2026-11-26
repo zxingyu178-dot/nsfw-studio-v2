@@ -336,9 +336,20 @@ export const engineRuntimeApi = {
   },
 }
 
+export interface EngineSamplingProfileDTO {
+  steps?: number
+  cfg?: number
+  sampler_name?: string
+  scheduler?: string
+  denoise?: number
+  note?: string
+}
+
 export interface EngineModelsDTO {
   checkpoints: string[]
   loras: string[]
+  /** 底模文件名 → 模型注册中心的推荐采样参数（未登记时缺省）。 */
+  sampling_profiles?: Record<string, EngineSamplingProfileDTO>
 }
 
 // ===== History（Phase 4 Task5/6）：来源=jobs；按任务族两级归组 =====

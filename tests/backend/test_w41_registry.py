@@ -54,6 +54,20 @@ def test_model_registry_lists_active_models(settings):
     assert all(item["files"][0]["sha256"] != "unverified" for item in active)
 
 
+def test_model_registry_recommended_sampling_profiles(settings):
+    profiles = ModelRegistryService(settings).checkpoint_sampling_profiles()
+    assert set(profiles) >= {
+        "miaomiaoHarem_v14.safetensors",
+        "NoobAI-XL-v1.1.safetensors",
+        "waiNSFWIllustrious_v150.safetensors",
+    }
+    noobai = profiles["NoobAI-XL-v1.1.safetensors"]
+    assert (noobai["steps"], noobai["cfg"]) == (30, 5.0)
+    assert (noobai["sampler_name"], noobai["scheduler"]) == ("dpmpp_2m", "karras")
+    default = profiles["miaomiaoHarem_v14.safetensors"]
+    assert (default["sampler_name"], default["scheduler"]) == ("er_sde", "simple")
+
+
 def test_workflow_registry_active_versions(settings):
     service = WorkflowRegistryService(settings)
     active = service.active_workflows()

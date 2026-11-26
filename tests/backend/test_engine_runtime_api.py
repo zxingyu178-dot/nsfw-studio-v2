@@ -82,6 +82,9 @@ def _client(svc: FakeService) -> TestClient:
     parent.include_router(engine_runtime.router)
     app.include_router(parent)
     app.state.engine_runtime = svc
+    from app.core.config import load_settings
+
+    app.state.settings = load_settings()
     return TestClient(app)
 
 
@@ -160,7 +163,23 @@ def test_engine_models_returns_sorted_checkpoints_and_loras():
     assert resp.json() == {
         "checkpoints": ["a.safetensors", "b.safetensors"],
         "loras": ["z.safetensors"],
+        "sampling_profiles": {},
     }
+
+
+def test_engine_models_includes_registry_sampling_profiles():
+    client = _client(FakeService())
+    client.app.state.adapter = _ModelsAdapter(
+        {"NoobAI-XL-v1.1.safetensors", "unknown.safetensors"}, set()
+    )
+    resp = client.get("/api/v1/engine/models")
+    assert resp.status_code == 200
+    profiles = resp.json()["sampling_profiles"]
+    assert set(profiles) == {"NoobAI-XL-v1.1.safetensors"}
+    profile = profiles["NoobAI-XL-v1.1.safetensors"]
+    assert profile["steps"] == 30 and profile["cfg"] == 5.0
+    assert profile["sampler_name"] == "dpmpp_2m" and profile["scheduler"] == "karras"
+    assert profile["note"]
 
 
 def test_engine_models_offline_returns_empty_lists():
@@ -168,7 +187,7 @@ def test_engine_models_offline_returns_empty_lists():
     client.app.state.adapter = _ModelsAdapter(None, None)
     resp = client.get("/api/v1/engine/models")
     assert resp.status_code == 200
-    assert resp.json() == {"checkpoints": [], "loras": []}
+    assert resp.json() == {"checkpoints": [], "loras": [], "sampling_profiles": {}}
 
 
 def test_idempotent_start_200():

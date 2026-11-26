@@ -25,6 +25,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.api.v1.jobs import resolve_requested_modules
+from app.services.model_registry_service import ModelRegistryService
 from app.services.runtime_preflight_service import RuntimePreflightService
 
 logger = logging.getLogger(__name__)
@@ -87,11 +88,17 @@ def list_engine_models(request: Request) -> dict:
     """供桌面工作台填充模型/LoRA 选择器；不暴露给手机桥。
 
     引擎离线时返回空数组（不阻塞页面），实际提交仍由服务端校验。
+    ``sampling_profiles`` 来自模型注册中心，仅覆盖当前已安装且登记推荐参数的底模。
     """
     adapter = request.app.state.adapter
     checkpoints = getattr(adapter, "available_checkpoint_names", None)
     loras = getattr(adapter, "available_lora_names", None)
+    checkpoint_list = sorted(checkpoints() or []) if callable(checkpoints) else []
+    profiles = ModelRegistryService(request.app.state.settings).checkpoint_sampling_profiles()
     return {
-        "checkpoints": sorted(checkpoints() or []) if callable(checkpoints) else [],
+        "checkpoints": checkpoint_list,
         "loras": sorted(loras() or []) if callable(loras) else [],
+        "sampling_profiles": {
+            name: profiles[name] for name in checkpoint_list if name in profiles
+        },
     }

@@ -16,6 +16,13 @@ files:
 dependencies: []
 compatible_workflows:
 - anime_generate
+recommended_sampling:
+  steps: 30
+  cfg: 4.0
+  sampler_name: er_sde
+  scheduler: simple
+  denoise: 1.0
+  note: v7 快速档：832×1216 / 30 步 / cfg4.0
 notes: Illustrious 系动漫 checkpoint；单文件，CLIP/VAE 内置。来源 ModelScope（HingXuan/WAI-illustrious-SDXL-v17）；ModelScope 页面标注 Apache-2.0，Civitai 原页许可未核。Pony 系 LoRA 不通用。
 created_at: '2026-11-17'
 updated_at: '2026-11-17'

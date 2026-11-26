@@ -24,6 +24,10 @@
   `/api/v1/modules` 的 registry 投影与真实默认 binding 一致。
 - 桌面工作台：底模候选区分“读取中 / 引擎离线 / 未安装底模”；运行环境检测 READY 后
   自动刷新底模与 LoRA 候选，无需重开页面。
+- 底模推荐采样参数：`registry/models/**/model.yaml` 新增可选 `recommended_sampling`
+  （steps / cfg / sampler_name / scheduler / denoise / note）；已登记 4 个底模。
+  `/api/v1/engine/models` 与 `/api/v1/agent/capabilities` 同源返回 `sampling_profiles`
+  （仅包含当前已安装的 checkpoint），桌面工作台底模下方显示“推荐：…”并可一键应用。
 
 ### Fixed
 
@@ -35,13 +39,13 @@
 
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
-- 后端全量 `pytest tests/backend -q` 846 项：845 通过、1 跳过；G0 `errors=0`。
+- 后端全量 `pytest tests/backend -q` 848 项：847 通过、1 跳过；G0 `errors=0`。
 - 快速档真实出图（临时实例 8010，独立 DataRoot）：`job_e81b843b-4381-4e9f-91c2-65d5f994dc87`
   COMPLETED 1/1，832×1216 / 28 步 / cfg4.5 / er_sde simple / `face_detailer=false`，
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链
   `CheckpointLoaderSimple → CLIPTextEncode×2 → KSampler → VAEDecode → SaveImage`
   （无 FaceDetailer / 检测器），binding Hash 未变。
-- 前端全量 `npm run test:ci` 104 个文件 525 项全部通过；`tsc` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 526 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 - Android Alpha52（versionCode 59）：审图页进度区分“已提交 / 生成中 / 已暂停 / 准备下一张”，

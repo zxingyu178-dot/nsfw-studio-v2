@@ -131,6 +131,29 @@ class ModelRegistryService:
             items.sort(key=lambda item: (item.archived, self._version_key(item.manifest)))
         return grouped
 
+    def checkpoint_sampling_profiles(self) -> dict[str, dict[str, Any]]:
+        """ComfyUI checkpoint 文件名 → 推荐采样参数（来自已放行的模型 Manifest）。
+
+        只返回 ``model_type=checkpoint`` 且登记了 ``recommended_sampling`` 的 released 模型；
+        前端工作台与 Agent 能力发现共用，避免各自维护第二份推荐参数。
+        """
+        profiles: dict[str, dict[str, Any]] = {}
+        for model in self.list_models(include_archived=False):
+            if str(model.get("status") or "") != "released":
+                continue
+            if str(model.get("model_type") or "") != "checkpoint":
+                continue
+            profile = model.get("recommended_sampling")
+            if not isinstance(profile, dict) or not profile:
+                continue
+            for item in model.get("files") or []:
+                if not isinstance(item, dict) or str(item.get("folder") or "") != "checkpoints":
+                    continue
+                filename = str(item.get("filename") or "")
+                if filename:
+                    profiles[filename] = dict(profile)
+        return profiles
+
     def refresh(self) -> None:
         self._cache = None
 

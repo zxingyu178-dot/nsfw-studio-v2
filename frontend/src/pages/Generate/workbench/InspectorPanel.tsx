@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { Field } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconRestart, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import { engineRuntimeApi } from '../../../api/client'
-import type { EngineModelsDTO } from '../../../api/client'
+import type { EngineModelsDTO, EngineSamplingProfileDTO } from '../../../api/client'
 import type { RuntimePreflightDTO, RuntimePreflightStatus } from '../../../types/workbench'
 import {
   defaultWorkflowNotice,
@@ -102,6 +102,9 @@ export function InspectorPanel({
       })
     return () => { cancelled = true }
   }, [modelsRefreshKey])
+  const selectedModelProfile = selectedModel
+    ? engineModels.sampling_profiles?.[selectedModel] ?? null
+    : null
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -265,6 +268,26 @@ export function InspectorPanel({
               ...engineModels.checkpoints.map((name) => ({ value: name, label: name })),
             ]}
           />
+          {selectedModelProfile && (
+            <div className="wb-model-profile">
+              <span className="wb-param__label" title={selectedModelProfile.note || undefined}>
+                推荐：{formatSamplingProfile(selectedModelProfile)}
+              </span>
+              <button
+                type="button"
+                className="ds-btn ds-btn--ghost ds-btn--xs"
+                onClick={() => setPrimaryModuleConfig({
+                  steps: selectedModelProfile.steps,
+                  cfg: selectedModelProfile.cfg,
+                  sampler_name: selectedModelProfile.sampler_name,
+                  scheduler: selectedModelProfile.scheduler,
+                  denoise: selectedModelProfile.denoise,
+                })}
+              >
+                应用推荐
+              </button>
+            </div>
+          )}
           {engineModelsState === 'loading' && (
             <span className="wb-param__label">正在读取引擎底模…</span>
           )}
@@ -334,6 +357,16 @@ export function InspectorPanel({
       )}
     </Pane>
   )
+}
+
+/** 底模推荐采样参数的紧凑文案；缺失字段自动跳过。 */
+function formatSamplingProfile(profile: EngineSamplingProfileDTO): string {
+  const parts: string[] = []
+  if (profile.steps != null) parts.push(`${profile.steps} 步`)
+  if (profile.cfg != null) parts.push(`cfg${profile.cfg}`)
+  if (profile.sampler_name) parts.push(profile.sampler_name)
+  if (profile.scheduler) parts.push(profile.scheduler)
+  return parts.join(' · ')
 }
 
 function SeedRow() {

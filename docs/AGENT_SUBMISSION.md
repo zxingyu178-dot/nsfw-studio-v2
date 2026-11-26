@@ -122,7 +122,10 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `loras` 最多 2 条，强度 -2..2；
 - `sampler_name` / `scheduler` 必须来自模块枚举；
 - `params.face_detailer=false` 关闭人脸修复以显著提速（默认开启；仅 v15 等工作流含 FaceDetailer 节点时可用）；
-- 能力发现：`GET /api/v1/agent/capabilities`（Bearer）返回模块、可用底模、可用 LoRA 与参数边界。
+- 能力发现：`GET /api/v1/agent/capabilities`（Bearer）返回模块、可用底模、可用 LoRA 与参数边界；
+- `capabilities.sampling_profiles` 按底模文件名给出注册中心登记的推荐采样参数
+  （`steps / cfg / sampler_name / scheduler / denoise / note`），AI 可直接采用推荐值，也可显式覆盖；
+  桌面前端“底模”选择下方的“应用推荐”与之同源。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；

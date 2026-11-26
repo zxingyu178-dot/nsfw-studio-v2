@@ -1350,6 +1350,14 @@
   color: var(--text-secondary);
 }
 
+/* 底模推荐采样参数（模型注册中心） */
+.wb-model-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .wb4-runtime-row {
   display: flex;
   align-items: center;

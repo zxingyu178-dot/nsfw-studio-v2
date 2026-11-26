@@ -40,6 +40,7 @@ from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
 from app.services import agent_service, job_service, prompt_service
 from app.services.lora_validation_service import validate_task_loras
+from app.services.model_registry_service import ModelRegistryService
 from app.services.runtime_preflight_service import run_preflight
 
 router = APIRouter(tags=["agent"])
@@ -115,10 +116,14 @@ def agent_capabilities(request: Request) -> dict:
     if callable(available_loras):
         loras = sorted(available_loras() or [])
     engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
+    profiles = ModelRegistryService(settings).checkpoint_sampling_profiles()
     return {
         "default_module_id": engine_cfg.get("module_id"),
         "modules": modules,
         "models": models,
+        "sampling_profiles": {
+            name: profiles[name] for name in models if name in profiles
+        },
         "loras": loras,
         "limits": {
             "width": {"min": 64, "max": 4096},

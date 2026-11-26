@@ -46,6 +46,11 @@ vi.mock('../../../api/client', () => ({
     models: vi.fn().mockResolvedValue({
       checkpoints: ['NoobAI-XL-v1.1.safetensors'],
       loras: ['cunnyfunky_v5.0_000008.safetensors'],
+      sampling_profiles: {
+        'NoobAI-XL-v1.1.safetensors': {
+          steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
+        },
+      },
     }),
   },
 }))
@@ -169,6 +174,15 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
         strength_model: 1.2,
         strength_clip: 1.2,
       }],
+    })
+  })
+
+  it('选择登记的底模时显示推荐采样参数并可一键应用', async () => {
+    renderPanel({ model: 'NoobAI-XL-v1.1.safetensors' })
+    expect(await screen.findByText('推荐：30 步 · cfg5 · dpmpp_2m · karras')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '应用推荐' }))
+    expect(setPrimaryModuleConfig).toHaveBeenCalledWith({
+      steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
     })
   })
 

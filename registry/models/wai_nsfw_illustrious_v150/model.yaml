@@ -16,6 +16,13 @@ files:
 dependencies: []
 compatible_workflows:
 - anime_generate
+recommended_sampling:
+  steps: 30
+  cfg: 5.0
+  sampler_name: er_sde
+  scheduler: simple
+  denoise: 1.0
+  note: v9 参数对照档：cfg5.0 + er_sde
 notes: WAI 谱系的 NSFW 版 checkpoint；与 wai_illustrious_v170 同架构同写法，尺度放得更开。仅给 anime_generate v8 使用，大尺度帧专用；Pony 系 LoRA 同样不通用。SHA256 于 2026-11-20 本机实测。
 created_at: '2026-11-20'
 updated_at: '2026-11-20'
