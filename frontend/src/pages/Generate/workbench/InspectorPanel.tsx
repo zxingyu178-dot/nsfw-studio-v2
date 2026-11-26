@@ -110,6 +110,14 @@ export function InspectorPanel({
     : null
   const profileApplied =
     selectedModelProfile !== null && samplingProfileMatches(primaryConfig, selectedModelProfile)
+  const modelOptionLabel = (modelName: string, text: string) => (
+    <span className="wb-model-option">
+      <span>{text}</span>
+      {modelName && engineModels.sampling_profiles?.[modelName] ? (
+        <span className="wb-model-option__badge">推荐</span>
+      ) : null}
+    </span>
+  )
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -269,8 +277,16 @@ export function InspectorPanel({
             onChange={(value) => setPrimaryModuleConfig({ model: value || undefined })}
             ariaLabel="底模"
             options={[
-              { value: '', label: '绑定默认' },
-              ...engineModels.checkpoints.map((name) => ({ value: name, label: name })),
+              {
+                value: '',
+                label: modelOptionLabel(defaultModel, '绑定默认'),
+                searchText: '绑定默认',
+              },
+              ...engineModels.checkpoints.map((name) => ({
+                value: name,
+                label: modelOptionLabel(name, name),
+                searchText: name,
+              })),
             ]}
           />
           {selectedModelProfile && (

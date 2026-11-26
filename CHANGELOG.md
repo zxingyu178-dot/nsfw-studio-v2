@@ -32,6 +32,8 @@
   “应用推荐”按钮，避免重复点击并明确当前状态。
 - 桌面工作台：未显式选择底模（“绑定默认”）时，仍按注册中心投影的默认底模展示
   “默认底模推荐：…”并可直接应用，无需先手动切换模型。
+- 桌面工作台：底模下拉列表中，已登记推荐参数的底模（含“绑定默认”）显示“推荐”标记，
+  便于发现可一键套用的参数。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；
   `model` 可省略（使用 binding 默认底模），显式 `params` 仍优先；binding 未声明默认底模
   或底模未登记推荐时返回 422，拒绝发生在创建 Job 之前。
@@ -64,7 +66,7 @@
   COMPLETED 1/1，832×1216 / 30 步 / cfg4.0 / er_sde simple / `face_detailer=false`，
   **69.3s**；history `06c413c7-ab33-4266-bee7-2ce5ca70c440` 实测
   `ckpt=miaomiaoHarem_v14.safetensors`、FaceDetailer 节点 0；手机端显示“新图 2”。
-- 前端全量 `npm run test:ci` 104 个文件 529 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 530 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 - Android Alpha52（versionCode 59）：审图页进度区分“已提交 / 生成中 / 已暂停 / 准备下一张”，

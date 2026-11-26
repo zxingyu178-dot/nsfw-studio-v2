@@ -123,7 +123,7 @@ function renderPanel(config: Record<string, unknown> = {}) {
 
 function chooseOption(buttonName: string, optionText: string) {
   fireEvent.click(screen.getByRole('button', { name: buttonName }))
-  fireEvent.click(screen.getByRole('option', { name: optionText }))
+  fireEvent.click(screen.getByRole('option', { name: (name) => name.includes(optionText) }))
 }
 
 beforeEach(() => {
@@ -176,6 +176,15 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
         strength_clip: 1.2,
       }],
     })
+  })
+
+  it('底模下拉为已登记推荐参数的模型显示“推荐”标记', async () => {
+    renderPanel()
+    fireEvent.click(await screen.findByRole('button', { name: '底模' }))
+    const noobai = screen.getByRole('option', { name: /NoobAI-XL-v1\.1\.safetensors/ })
+    expect(noobai.textContent).toContain('推荐')
+    const defaultOption = screen.getByRole('option', { name: /绑定默认/ })
+    expect(defaultOption.textContent).toContain('推荐')
   })
 
   it('选择登记的底模时显示推荐采样参数并可一键应用', async () => {
