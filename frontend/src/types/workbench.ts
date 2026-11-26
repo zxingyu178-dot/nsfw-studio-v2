@@ -362,6 +362,12 @@ export interface ModuleCapabilitiesDTO {
     ready_to_run: boolean
     notes?: string
   } | null
+  /** W4.1 Registry 投影：默认参数（含默认底模文件名）；旧后端可能不返回 */
+  registry?: {
+    default_parameters?: {
+      model?: string
+    }
+  } | null
 }
 
 /** W2.0 Runtime Guard：任务提交前的运行环境检测结果。 */

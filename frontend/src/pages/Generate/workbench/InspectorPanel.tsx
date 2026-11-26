@@ -74,6 +74,9 @@ export function InspectorPanel({
   const supportsLora = (primaryCapabilities?.parameters ?? []).some((param) => param.name === 'loras')
   const primaryConfig = state.workflowModules[0]?.config ?? {}
   const selectedModel = typeof primaryConfig.model === 'string' ? primaryConfig.model : ''
+  // 未显式选底模时，注册中心投影的绑定默认底模仍可展示推荐采样参数。
+  const defaultModel = primaryCapabilities?.registry?.default_parameters?.model ?? ''
+  const effectiveModel = selectedModel || defaultModel
   const selectedLoras: LoraEntry[] = Array.isArray(primaryConfig.loras)
     ? (primaryConfig.loras as LoraEntry[]).filter(
         (item) => item && typeof item.name === 'string' && item.name,
@@ -102,8 +105,8 @@ export function InspectorPanel({
       })
     return () => { cancelled = true }
   }, [modelsRefreshKey])
-  const selectedModelProfile = selectedModel
-    ? engineModels.sampling_profiles?.[selectedModel] ?? null
+  const selectedModelProfile = effectiveModel
+    ? engineModels.sampling_profiles?.[effectiveModel] ?? null
     : null
   const profileApplied =
     selectedModelProfile !== null && samplingProfileMatches(primaryConfig, selectedModelProfile)
@@ -273,7 +276,7 @@ export function InspectorPanel({
           {selectedModelProfile && (
             <div className="wb-model-profile">
               <span className="wb-param__label" title={selectedModelProfile.note || undefined}>
-                推荐：{formatSamplingProfile(selectedModelProfile)}
+                {selectedModel ? '推荐：' : '默认底模推荐：'}{formatSamplingProfile(selectedModelProfile)}
               </span>
               {profileApplied ? (
                 <span className="wb-model-profile__applied">已采用推荐</span>

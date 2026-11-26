@@ -87,6 +87,7 @@ const anime: ModuleCapabilitiesDTO = {
   is_generative: true,
   allowed_job_kinds: ['generate'],
   release_status: release,
+  registry: { default_parameters: { model: 'NoobAI-XL-v1.1.safetensors' } },
   input_slots: [],
   is_default: true,
   parameters: [
@@ -180,6 +181,15 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
   it('选择登记的底模时显示推荐采样参数并可一键应用', async () => {
     renderPanel({ model: 'NoobAI-XL-v1.1.safetensors' })
     expect(await screen.findByText('推荐：30 步 · cfg5 · dpmpp_2m · karras')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '应用推荐' }))
+    expect(setPrimaryModuleConfig).toHaveBeenCalledWith({
+      steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
+    })
+  })
+
+  it('未显式选底模时显示默认底模的推荐参数并可应用', async () => {
+    renderPanel()
+    expect(await screen.findByText('默认底模推荐：30 步 · cfg5 · dpmpp_2m · karras')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '应用推荐' }))
     expect(setPrimaryModuleConfig).toHaveBeenCalledWith({
       steps: 30, cfg: 5.0, sampler_name: 'dpmpp_2m', scheduler: 'karras', denoise: 1.0,
