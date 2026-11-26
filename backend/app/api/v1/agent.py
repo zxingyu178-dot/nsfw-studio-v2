@@ -167,6 +167,25 @@ def submit_agent_job(
         binding_version=body.binding_version,
     )
     config: dict = {}
+    if body.use_recommended_sampling:
+        if not body.model:
+            raise UnprocessableError(
+                "use_recommended_sampling=true 时必须同时指定 model",
+                code="RECOMMENDED_SAMPLING_MODEL_REQUIRED",
+            )
+        profile = ModelRegistryService(settings).checkpoint_sampling_profiles().get(body.model)
+        if not profile:
+            raise UnprocessableError(
+                f"底模未登记推荐采样参数: {body.model}",
+                code="RECOMMENDED_SAMPLING_NOT_FOUND",
+                details={"model": body.model},
+            )
+        # 推荐值作为基线，下方显式 params 覆盖，模型/LoRA 原样保留。
+        config.update({
+            key: profile[key]
+            for key in ("steps", "cfg", "sampler_name", "scheduler", "denoise")
+            if key in profile
+        })
     if body.model:
         config["model"] = body.model
     if body.loras:

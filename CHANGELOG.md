@@ -28,6 +28,9 @@
   （steps / cfg / sampler_name / scheduler / denoise / note）；已登记 4 个底模。
   `/api/v1/engine/models` 与 `/api/v1/agent/capabilities` 同源返回 `sampling_profiles`
   （仅包含当前已安装的 checkpoint），桌面工作台底模下方显示“推荐：…”并可一键应用。
+- Agent `use_recommended_sampling` / CLI `--use-recommended`：按 `model` 自动套用注册中心
+  推荐采样参数，显式 `params` 仍优先；未提供 `model` 或底模未登记推荐时返回 422，
+  拒绝发生在创建 Job 之前。
 
 ### Fixed
 
@@ -39,7 +42,7 @@
 
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
-- 后端全量 `pytest tests/backend -q` 848 项：847 通过、1 跳过；G0 `errors=0`。
+- 后端全量 `pytest tests/backend -q` 854 项：853 通过、1 跳过；G0 `errors=0`。
 - 快速档真实出图（临时实例 8010，独立 DataRoot）：`job_e81b843b-4381-4e9f-91c2-65d5f994dc87`
   COMPLETED 1/1，832×1216 / 28 步 / cfg4.5 / er_sde simple / `face_detailer=false`，
   **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链

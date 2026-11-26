@@ -86,6 +86,13 @@ class AgentJobRequest(BaseModel):
         default=None,
         description="采样参数覆盖：steps/cfg/sampler_name/scheduler/denoise",
     )
+    use_recommended_sampling: bool = Field(
+        default=False,
+        description=(
+            "为指定 model 自动套用模型注册中心的推荐采样参数；"
+            "显式 params 优先，未登记推荐的底模返回 422"
+        ),
+    )
     width: int = Field(default=1024, ge=64, le=4096)
     height: int = Field(default=1024, ge=64, le=4096)
     count: int = Field(default=1, ge=1, le=64)

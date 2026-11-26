@@ -275,6 +275,55 @@ def test_agent_accepts_v15_model_loras_and_sampling(agent_client, monkeypatch):
     assert config["face_detailer"] is False
 
 
+def test_agent_use_recommended_sampling_fills_registry_profile(agent_client, monkeypatch):
+    """use_recommended_sampling=true：推荐值作基线，显式 params 覆盖。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-recommended")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-recommended"}
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1",
+        binding_version="v15",
+        model="NoobAI-XL-v1.1.safetensors",
+        use_recommended_sampling=True,
+        params={"cfg": 4.5},
+    ), headers=headers)
+    assert response.status_code == 201, response.text
+    config = response.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert config["model"] == "NoobAI-XL-v1.1.safetensors"
+    assert config["steps"] == 30
+    assert config["cfg"] == 4.5, "显式 params 必须覆盖推荐值"
+    assert config["sampler_name"] == "dpmpp_2m"
+    assert config["scheduler"] == "karras"
+    assert config["denoise"] == 1.0
+
+
+@pytest.mark.parametrize(
+    ("overrides", "code"),
+    [
+        ({"use_recommended_sampling": True}, "RECOMMENDED_SAMPLING_MODEL_REQUIRED"),
+        (
+            {"use_recommended_sampling": True, "model": "not-registered.safetensors"},
+            "RECOMMENDED_SAMPLING_NOT_FOUND",
+        ),
+    ],
+)
+def test_agent_use_recommended_sampling_rejects_missing_input(
+    agent_client, session, monkeypatch, overrides, code,
+):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-recommended-bad")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-recommended-bad"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(module_version="v1", binding_version="v15", **overrides),
+        headers=headers,
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == code
+    assert db_counts(session) == before
+
+
 def test_agent_version_requires_module_id(agent_client, monkeypatch):
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-version")
     monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")

@@ -242,6 +242,33 @@ def test_request_file_preserves_model_and_sampling(cli, tmp_path):
     assert normalized["params"] == body["params"]
 
 
+def test_request_file_preserves_use_recommended_sampling(cli, tmp_path):
+    normalized = cli.load_request_file(write_request(tmp_path, {
+        "prompt": "1girl, shrine, anime style",
+        "client_request_id": "studio-recommended-0001",
+        "module_id": "anime_generate",
+        "binding_version": "v15",
+        "model": "NoobAI-XL-v1.1.safetensors",
+        "use_recommended_sampling": True,
+    }))
+    assert normalized["use_recommended_sampling"] is True
+    assert normalized["model"] == "NoobAI-XL-v1.1.safetensors"
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"use_recommended_sampling": True}, "必须指定 model"),
+        ({"model": "a.safetensors", "use_recommended_sampling": "yes"}, "布尔值"),
+    ],
+)
+def test_request_file_rejects_invalid_use_recommended_sampling(cli, tmp_path, patch, message):
+    body = {"prompt": "safe study", "client_request_id": "studio-recommended-bad"}
+    body.update(patch)
+    with pytest.raises(cli.RequestValidationError, match=message):
+        cli.load_request_file(write_request(tmp_path, body))
+
+
 @pytest.mark.parametrize(
     ("patch", "message"),
     [

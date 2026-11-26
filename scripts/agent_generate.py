@@ -44,18 +44,21 @@ from pathlib import Path
 
 REQUEST_FIELDS = {
     "prompt", "negative_prompt", "module_id", "module_version", "binding_version",
-    "model", "loras", "params", "width", "height", "count", "seed",
+    "model", "loras", "params", "use_recommended_sampling", "width", "height", "count", "seed",
     "queue_mode", "client_request_id",
 }
 REQUEST_FILE_MAX_BYTES = 128 * 1024
 REQUEST_SEMANTIC_OPTIONS = {
     "--prompt", "--module", "--module-version", "--binding", "--model", "--lora",
     "--steps", "--cfg", "--sampler", "--scheduler", "--denoise",
-    "--face-detailer", "--no-face-detailer",
+    "--face-detailer", "--no-face-detailer", "--use-recommended",
     "--negative", "--width", "--height", "--count", "--seed", "--next",
 }
 SAMPLE_PARAM_KEYS = {"steps", "cfg", "sampler_name", "scheduler", "denoise", "face_detailer"}
-ADVANCED_FIELDS = ("module_version", "binding_version", "model", "loras", "params")
+ADVANCED_FIELDS = (
+    "module_version", "binding_version", "model", "loras", "params",
+    "use_recommended_sampling",
+)
 
 
 class RequestValidationError(ValueError):
@@ -241,6 +244,12 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
         _require_utf8_text(model, "model")
         model = model.strip()
 
+    use_recommended = payload.get("use_recommended_sampling", False)
+    if not isinstance(use_recommended, bool):
+        raise RequestValidationError("use_recommended_sampling 必须是布尔值")
+    if use_recommended and model is None:
+        raise RequestValidationError("use_recommended_sampling=true 时必须指定 model")
+
     normalized = {
         "prompt": prompt,
         "negative_prompt": negative,
@@ -255,6 +264,8 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
     normalized.update(versions)
     if model is not None:
         normalized["model"] = model
+    if use_recommended:
+        normalized["use_recommended_sampling"] = True
     loras = _normalize_loras(payload.get("loras"))
     if loras:
         normalized["loras"] = loras
@@ -423,6 +434,8 @@ def main() -> int:
                         help="强制开启人脸修复（FaceDetailer）")
     parser.add_argument("--no-face-detailer", dest="face_detailer", action="store_false",
                         help="关闭人脸修复以显著提速（仅 Agent 端点）")
+    parser.add_argument("--use-recommended", action="store_true",
+                        help="按 --model 套用模型注册中心推荐采样参数（显式采样参数优先；仅 Agent 端点）")
     parser.add_argument("--list-workflows", action="store_true",
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
@@ -476,6 +489,8 @@ def main() -> int:
             direct_payload["binding_version"] = args.binding
         if args.model is not None:
             direct_payload["model"] = args.model
+        if args.use_recommended:
+            direct_payload["use_recommended_sampling"] = True
         if args.lora:
             try:
                 direct_payload["loras"] = [_parse_lora_option(item) for item in args.lora]
