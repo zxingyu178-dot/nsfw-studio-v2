@@ -15,6 +15,9 @@
 - 手机桥进度快照新增只读队列状态：`active_status`（running/paused/queued/none）、
   `queued_jobs`、`paused_jobs`，能力 `mobile_generation_queue_status_v1`；审图页顶栏可区分
   “已提交 / 生成中 / 已暂停 / 准备下一张”，旧桥字段缺失时保持原计数展示。
+- 模拟器 Alpha52 验收：暂停生产队列后显示“已提交：排队 1 个任务”，恢复后显示
+  “生成中：第 1 / 2 张 · 剩余 1 段”，完成后恢复“暂无生成任务”；真实 Job
+  `job_ca3375cf-ccfd-42da-a2f6-00c45acc51d0` 2 张 COMPLETED，队列已恢复。
 - Agent `params.face_detailer`、CLI `--no-face-detailer / --face-detailer`；
   工作台参数栏新增“人脸修复（FaceDetailer）”开关。
 - `registry/workflows/anime_generate/v15/manifest.yaml`：登记当前默认 binding v15（experimental），

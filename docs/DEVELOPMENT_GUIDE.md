@@ -120,6 +120,15 @@ icacls "<node.exe 或 java.exe 的绝对路径>" /setintegritylevel Medium
   不写真机安装步骤、不发邮箱。模拟器访问本机桥用 `adb reverse tcp:<port> tcp:<port>`。
 - 交互变更需覆盖：冷启动、断网重连、空队列、审核操作反馈、返回栈、进度从生成中→空闲。
 
+### 最近一次模拟器验收（2026-11-27，Alpha52 / versionCode 59）
+
+- 生产 8000/8877（build `fe057f5`）暂停队列后，通过 Agent CLI 提交 20 步快速任务；
+  审图页顶栏显示“电脑端已提交：排队 1 个任务”。
+- 恢复队列后显示“电脑端生成中：第 1 / 2 张 · 剩余 1 段”；完成后恢复
+  “电脑端暂无生成任务”并出现“新图”提醒；队列已恢复，未残留暂停状态。
+- 真实 Job `job_ca3375cf-ccfd-42da-a2f6-00c45acc51d0` 2 张 COMPLETED；
+  未做真机安装。
+
 ### 最近一次模拟器验收（2026-11-27，Alpha51 / versionCode 58）
 
 - `assembleDebug` 后安装到 `emulator-5554`；模拟器上首次冷启动需先
