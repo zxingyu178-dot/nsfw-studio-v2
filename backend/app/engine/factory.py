@@ -93,7 +93,9 @@ def resolve_workflow_modules(settings: Settings, requested: list[dict] | None) -
     engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
     provider = str(engine_cfg.get("provider", "unbound"))
     modules_cfg = engine_cfg.get("modules") or {}
-    default_module = str(engine_cfg.get("module_id", "basic_generate"))
+    # 2026-11-16 起产品只剩动漫一条线；缺省必须落到已注册的 anime_generate，
+    # 不能回落到已下线的 basic_generate（否则只配置 provider 的调用方会全部 4xx）。
+    default_module = str(engine_cfg.get("module_id", "anime_generate"))
 
     entries: dict[str, dict] = {}
     ids: list[str] = []
@@ -229,7 +231,7 @@ def module_availability(settings: Settings) -> list[dict]:
     engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
     provider = str(engine_cfg.get("provider", "unbound"))
     modules_cfg = engine_cfg.get("modules") or {}
-    default_module = str(engine_cfg.get("module_id", "basic_generate"))
+    default_module = str(engine_cfg.get("module_id", "anime_generate"))
     registry = default_registry()
 
     adapter = None

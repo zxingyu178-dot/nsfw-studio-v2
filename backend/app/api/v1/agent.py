@@ -33,6 +33,7 @@ from app.core.errors import (
     UnauthorizedError,
     UnprocessableError,
 )
+from app.engine.base import EngineBindingRef
 from app.engine.release import ensure_modules_released
 from app.schemas.agent import AgentJobRequest
 from app.schemas.job import JobResponse, job_response
@@ -94,6 +95,43 @@ def _require_token(request: Request) -> str:
     return provided
 
 
+@router.get(
+    "/agent/capabilities",
+    summary="Agent/AI 能力发现：模块、底模、LoRA 与参数边界",
+)
+def agent_capabilities(request: Request) -> dict:
+    _require_token(request)
+    from app.api.v1.modules import list_modules
+
+    settings = request.app.state.settings
+    modules = list_modules(request)
+    adapter = request.app.state.adapter
+    models = []
+    loras = []
+    available_models = getattr(adapter, "available_checkpoint_names", None)
+    if callable(available_models):
+        models = sorted(available_models() or [])
+    available_loras = getattr(adapter, "available_lora_names", None)
+    if callable(available_loras):
+        loras = sorted(available_loras() or [])
+    engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
+    return {
+        "default_module_id": engine_cfg.get("module_id"),
+        "modules": modules,
+        "models": models,
+        "loras": loras,
+        "limits": {
+            "width": {"min": 64, "max": 4096},
+            "height": {"min": 64, "max": 4096},
+            "count": {"min": 1, "max": 64},
+            "loras": {"max": 2, "strength_min": -2.0, "strength_max": 2.0},
+            "steps": {"min": 1, "max": 100},
+            "cfg": {"min": 1.0, "max": 20.0},
+            "denoise": {"min": 0.0, "max": 1.0},
+        },
+    }
+
+
 @router.post(
     "/agent/jobs",
     response_model=JobResponse,
@@ -118,8 +156,54 @@ def submit_agent_job(
     # W1.2-B/C：先解析实际工作流（不传 module_id = 服务器默认）→ 正式放行 → 能力校验。
     # 任一检查失败都在 Prompt 关联（commit=False）与 Job 创建之前返回，不产生副作用。
     workflow_modules = agent_service.resolve_agent_workflow_modules(
-        settings, body.module_id
+        settings,
+        body.module_id,
+        module_version=body.module_version,
+        binding_version=body.binding_version,
     )
+    config: dict = {}
+    if body.model:
+        config["model"] = body.model
+    if body.loras:
+        config["loras"] = [item.model_dump() for item in body.loras]
+    if body.params:
+        config.update(body.params.model_dump(exclude_none=True))
+    if config:
+        workflow_modules[0]["config"] = config
+
+    # 任务级参数必须由所选 binding 声明为可注入，否则在创建 Job 前拒绝。
+    if config:
+        primary = workflow_modules[0]
+        adapter = request.app.state.adapter
+        load_binding = getattr(adapter, "load_binding", None)
+        if callable(load_binding):
+            _workflow, binding, _workflow_hash, _binding_hash = load_binding(
+                EngineBindingRef(
+                    module_id=str(primary.get("module_id")),
+                    module_version=str(primary.get("module_version")),
+                    provider=str(primary.get("provider")),
+                    binding_version=str(primary.get("binding_version")),
+                )
+            )
+            inputs = binding.get("inputs") or {}
+            for key in ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise"):
+                if key in config and key not in inputs:
+                    raise UnprocessableError(
+                        f"当前 binding {primary.get('binding_version')} 不支持任务级参数 {key}",
+                        code="BINDING_PARAM_UNSUPPORTED",
+                        details={"binding_version": primary.get("binding_version"), "parameter": key},
+                    )
+        if body.model:
+            available_models = getattr(adapter, "available_checkpoint_names", None)
+            if callable(available_models):
+                names = available_models()
+                if names is not None and body.model not in names:
+                    raise UnprocessableError(
+                        f"底模不存在: {body.model}",
+                        code="MODEL_NOT_FOUND",
+                        details={"model": body.model},
+                    )
+
     ensure_modules_released(workflow_modules)
     validate_task_loras(request.app.state.adapter, workflow_modules)
     agent_service.validate_agent_primary(settings, workflow_modules)
@@ -135,6 +219,7 @@ def submit_agent_job(
             "binding_version": module.get("binding_version"),
             "workflow_hash": module.get("workflow_hash"),
             "binding_hash": module.get("binding_hash"),
+            "config": module.get("config") or {},
         }
         for module in workflow_modules
     ]

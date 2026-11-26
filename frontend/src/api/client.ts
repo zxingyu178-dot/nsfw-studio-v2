@@ -330,6 +330,15 @@ export const engineRuntimeApi = {
   preflight(moduleIds: string[]): Promise<RuntimePreflightDTO> {
     return request('/api/v1/engine/preflight', jsonInit('POST', { module_ids: moduleIds }))
   },
+  /** 桌面工作台模型选择器：ComfyUI 已安装底模与 LoRA（只读；离线时为空数组）。 */
+  models(): Promise<EngineModelsDTO> {
+    return request('/api/v1/engine/models')
+  },
+}
+
+export interface EngineModelsDTO {
+  checkpoints: string[]
+  loras: string[]
 }
 
 // ===== History（Phase 4 Task5/6）：来源=jobs；按任务族两级归组 =====

@@ -1,0 +1,93 @@
+# anime_generate v15 — 任务级模型 + LoRA + 采样参数
+#
+# 在 v5 基础上把“模型/采样参数”也变成任务级变量，服务于多模型统一提交：
+#   - model: CheckpointLoaderSimple.ckpt_name，默认 miaomiaoHarem_v14；
+#   - loras: 0–2 条动态 LoRA（节点 21/22 改写，规则同 v5）；
+#   - steps/cfg/sampler_name/scheduler/denoise: 注入 KSampler(7)；
+#   - 不传时沿用 workflow.json 的默认值（832×1216 / 30 步 / cfg4.0 / er_sde simple）。
+# FaceDetailer 常开，其参数保持 binding 默认，不作为任务变量。
+
+binding_version: v15
+module: anime_generate
+provider: comfyui
+workflow_file: workflow.json
+
+save_image_node: "9"
+save_image_prefix: "NSFWStudio/{job_short}/{stage}/{item_short}"
+
+inputs:
+  positive_prompt: {node: "5", field: "text"}
+  negative_prompt: {node: "6", field: "text"}
+  width:           {node: "4", field: "width"}
+  height:          {node: "4", field: "height"}
+  seed:            {node: "7", field: "seed"}
+  model:           {node: "1", field: "ckpt_name"}
+  steps:           {node: "7", field: "steps"}
+  cfg:             {node: "7", field: "cfg"}
+  sampler_name:    {node: "7", field: "sampler_name"}
+  scheduler:       {node: "7", field: "scheduler"}
+  denoise:         {node: "7", field: "denoise"}
+  # 列表型参数：不映射到单个节点字段，由 adapter 重写 21/22 节点
+  loras:           {apply: lora_stack, max_items: 2}
+
+defaults:
+  "20":
+    guide_size: 512
+    guide_size_for: true
+    max_size: 1024
+    steps: 30
+    cfg: 4.0
+    sampler_name: er_sde
+    scheduler: simple
+    denoise: 0.5
+    feather: 5
+    noise_mask: true
+    force_inpaint: true
+    bbox_threshold: 0.5
+    bbox_dilation: 10
+    bbox_crop_factor: 3.0
+    drop_size: 10
+    cycle: 1
+    sam_detection_hint: "center-1"
+    sam_dilation: 0
+    sam_bbox_expansion: 0
+    sam_threshold: 0.93
+    sam_mask_hint_threshold: 0.7
+    sam_mask_hint_use_negative: "False"
+
+seed_range: {min: 0, max: 2147483647}
+
+capabilities:
+  supports_negative_prompt: true
+  output_size: explicit
+  auto_face_detailer: true
+  lora: true
+  lora_max: 2
+  model_selectable: true
+  sampling_params: true
+
+requirements:
+  comfyui_min_version: "0.37.0"
+  nodes:
+    - {class_type: CheckpointLoaderSimple, source: comfyui_core}
+    - {class_type: LoraLoader, source: comfyui_core}
+    - {class_type: CLIPTextEncode, source: comfyui_core}
+    - {class_type: EmptyLatentImage, source: comfyui_core}
+    - {class_type: KSampler, source: comfyui_core}
+    - {class_type: VAEDecode, source: comfyui_core}
+    - {class_type: UltralyticsDetectorProvider, source: comfyui-impact-subpack}
+    - {class_type: FaceDetailer, source: comfyui-impact-pack}
+  # LoRA 是任务级变量：requirements 不登记占位名；workspace 模板节点使用真实默认名，
+  # 仅用于 preflight 探测 LoraLoader 可用（0 条时节点会被 adapter 移除）。
+  # 默认底模；model 是任务级变量，可替换为 ComfyUI /models/checkpoints 中任意已安装底模。
+  models:
+    - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
+
+performance:
+  status: unverified
+  batch_size: 1
+  tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
+  tested_profiles: []
+  known_limitations:
+    - "2 条 LoRA + FaceDetailer 的显存峰值与耗时未实测"
+    - "FaceDetailer 为 binding 级常开，不能按 Job 关闭"

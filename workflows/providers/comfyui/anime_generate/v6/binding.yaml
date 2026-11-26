@@ -43,7 +43,7 @@ requirements:
     - {type: checkpoints, filename: miaomiaoHarem_v14.safetensors, sha256: unverified, precision: bf16}
 
 performance:
-  status: estimated
+  status: unverified
   batch_size: 1
   tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
   tested_profiles:

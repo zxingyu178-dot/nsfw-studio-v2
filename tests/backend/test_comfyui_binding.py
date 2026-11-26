@@ -266,3 +266,88 @@ def test_v4_fixed_lora_binding_is_untouched():
     assert "21" in prompt
     assert prompt["7"]["inputs"]["model"] == ["21", 0]
     assert prompt["21"]["inputs"]["strength_model"] == 1.0
+
+
+# ===== v15：任务级模型 + 采样参数 =====
+
+def anime_v15_ref() -> EngineBindingRef:
+    return EngineBindingRef(module_id="anime_generate", provider="comfyui", binding_version="v15")
+
+
+def _v15_prompt(adapter: ComfyUIAdapter, **params):
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(anime_v15_ref())
+    request = EngineJobRequest(
+        binding=anime_v15_ref(),
+        parameters={
+            "positive_prompt": "1girl",
+            "negative_prompt": "blurry",
+            "width": 832,
+            "height": 1216,
+            "seed": 7,
+            **params,
+        },
+    )
+    return adapter._build_prompt(request, workflow, binding), workflow
+
+
+def test_v15_injects_model_sampling_and_lora(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(
+        adapter, "available_checkpoint_names", lambda: {"NoobAI-XL-v1.1.safetensors"}
+    )
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: {"a.safetensors"})
+    prompt, template = _v15_prompt(
+        adapter,
+        model="NoobAI-XL-v1.1.safetensors",
+        steps=28,
+        cfg=5.0,
+        sampler_name="dpmpp_2m",
+        scheduler="karras",
+        denoise=0.9,
+        loras=[{"name": "a.safetensors", "strength_model": 0.6, "strength_clip": 0.6}],
+    )
+    assert prompt["1"]["inputs"]["ckpt_name"] == "NoobAI-XL-v1.1.safetensors"
+    assert prompt["7"]["inputs"]["steps"] == 28
+    assert prompt["7"]["inputs"]["cfg"] == 5.0
+    assert prompt["7"]["inputs"]["sampler_name"] == "dpmpp_2m"
+    assert prompt["7"]["inputs"]["scheduler"] == "karras"
+    assert prompt["7"]["inputs"]["denoise"] == 0.9
+    assert prompt["21"]["inputs"]["lora_name"] == "a.safetensors"
+    assert prompt["7"]["inputs"]["model"] == ["21", 0]
+    assert "22" not in prompt
+    # 模板本身不得被修改
+    assert template["1"]["inputs"]["ckpt_name"] != "NoobAI-XL-v1.1.safetensors"
+
+
+def test_v15_defaults_apply_when_params_omitted(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_checkpoint_names", lambda: None)
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: None)
+    prompt, _ = _v15_prompt(adapter, loras=[])
+    assert prompt["1"]["inputs"]["ckpt_name"] == "miaomiaoHarem_v14.safetensors"
+    assert prompt["7"]["inputs"]["steps"] == 30
+    assert prompt["7"]["inputs"]["cfg"] == 4.0
+    assert prompt["7"]["inputs"]["sampler_name"] == "er_sde"
+    assert prompt["7"]["inputs"]["scheduler"] == "simple"
+    assert "21" not in prompt and "22" not in prompt
+
+
+def test_v15_unknown_checkpoint_rejected(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_checkpoint_names", lambda: {"other.safetensors"})
+    with pytest.raises(EngineError) as error:
+        _v15_prompt(adapter, model="NoobAI-XL-v1.1.safetensors")
+    assert error.value.error_type == "MODEL_NOT_FOUND"
+
+
+def test_v5_rejects_task_level_model(monkeypatch):
+    adapter = make_adapter()
+    monkeypatch.setattr(adapter, "available_lora_names", lambda: None)
+    workflow, binding, _hash, _binding_hash = adapter.load_binding(anime_v5_ref())
+    request = EngineJobRequest(
+        binding=anime_v5_ref(),
+        parameters={"model": "NoobAI-XL-v1.1.safetensors"},
+    )
+    with pytest.raises(EngineError) as error:
+        adapter._build_prompt(request, workflow, binding)
+    assert error.value.error_type == "BINDING_PARAM_UNSUPPORTED"

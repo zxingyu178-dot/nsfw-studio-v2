@@ -1,7 +1,7 @@
 # Agent / AI 提交端点（安全加固说明）
 
-> 适用：豆包 / Codex / Claude 等 AI 助手把**优化后的提示词**提交给本机 Studio 生成。
-> 版本：v0.34.0 起。
+> 适用：豆包 / Codex / Claude 等 AI 助手把**优化后的提示词、模型与采样参数**提交给本机 Studio 生成。
+> 版本：v0.34.0 起；v0.39.0 增加多模型 / LoRA / 采样参数（binding v15）。
 
 ## 1. 结论先说
 
@@ -77,23 +77,51 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 
 | 请求 | 行为 |
 | --- | --- |
-| 不传 `module_id` 或传 `null` | 使用**服务端当前配置的默认工作流**（来自 settings `engine.module_id`，没有第二套默认逻辑） |
+| 不传 `module_id` 或传 `null` | 使用**服务端当前配置的默认工作流**（当前为 `anime_generate`，binding v15） |
 | 显式传 `module_id` | 使用指定工作流；服务端校验能力与放行状态 |
 | `module_id=""` / `"   "` | `422` 拒绝（空字符串不能绕过显式选择；只有 None 才走默认） |
+| `module_version` / `binding_version` | 必须同时提供 `module_id`；按显式身份解析并校验指纹 |
 | `workflow_modules=[]`（旧 `/jobs`） | 允许，按服务器默认工作流 |
-| `upscale=true` | 在**实际选定的 Primary** 之后追加 `upscale`（不能把它当 Primary） |
 | 未指定的默认工作流未放行 | **拒绝**（`WORKFLOW_NOT_RELEASED`），不会自动降级到其他模块 |
 | 未知模块 | `400 AGENT_MODULE_UNKNOWN` |
 | 模块存在但 binding 不可用 | `400 AGENT_MODULE_UNAVAILABLE` |
-| 模块不是“无输入图片的文生图” | `400 AGENT_MODULE_NOT_TEXT_GENERATE`（如 img2img / reference_generate / upscale） |
+| 模块不是“无输入图片的文生图” | `400 AGENT_MODULE_NOT_TEXT_GENERATE` |
 | 未通过正式放行 | `400 WORKFLOW_NOT_RELEASED` |
 | 运行环境未就绪（W2.0） | `400 RUNTIME_PREFLIGHT_BLOCKED`（确认缺节点/模型/版本）或 `RUNTIME_PREFLIGHT_UNKNOWN`（引擎离线/无法验证）；不会降级 |
 
-Agent 第一版只开放**单个无输入图片的生成型模块 + 可选 upscale**，不开放任意 Pipeline，
-也不提供 img2img / reference_generate 的输入图片上传链路。
+Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pipeline，也不提供输入图片上传链路。
+当前产品只有 `anime_generate` 一条生成线。
 
-检查顺序：解析实际工作流 → 正式放行门禁 → 模块能力校验 → 写提示词库 → 创建 Job。
+检查顺序：解析实际工作流 → 正式放行门禁 → binding 参数声明 → 模型/LoRA 存在性 →
+模块 config 校验 → 运行环境预检 → 写提示词库 → 创建 Job。
 任一检查失败都不会产生 Prompt / Job / Stage 数据。
+
+### 4.2 多模型 / LoRA / 采样参数（v15）
+
+`anime_generate` 的 binding `v15` 支持任务级覆盖；不传的字段沿用默认
+（miaomiaoHarem v14 / 30 步 / cfg4.0 / er_sde / simple / denoise1.0）。
+
+```json
+{
+  "prompt": "1girl, solo, red kimono, night city, anime style, masterpiece",
+  "negative_prompt": "low quality, blurry",
+  "module_id": "anime_generate",
+  "module_version": "v1",
+  "binding_version": "v15",
+  "model": "NoobAI-XL-v1.1.safetensors",
+  "loras": [
+    {"name": "cunnyfunky_noobai_v3.3_000080.safetensors", "strength_model": 0.6, "strength_clip": 0.6}
+  ],
+  "params": {"steps": 30, "cfg": 5.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0},
+  "width": 832, "height": 1216, "count": 1, "seed": 20261127,
+  "client_request_id": "agent-v15-001"
+}
+```
+
+- `model` 必须是 ComfyUI `/models/checkpoints` 中的文件名（不含路径）；
+- `loras` 最多 2 条，强度 -2..2；
+- `sampler_name` / `scheduler` 必须来自模块枚举；
+- 能力发现：`GET /api/v1/agent/capabilities`（Bearer）返回模块、可用底模、可用 LoRA 与参数边界。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；
@@ -112,8 +140,10 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 .venv\Scripts\python scripts\agent_generate.py --prompt "a red fox resting beside a woodland stream" --out D:\ai_out
 ```
 
-- 不传 `--module` → 使用服务端默认工作流（CLI 不再默认 anime_generate，也不猜测第一个可用模块）；
-- 显式 `--module basic_generate` / `--module anime_generate` → 使用指定模块；
+- 不传 `--module` → 使用服务端默认工作流（当前 `anime_generate`，binding v15）；
+- 显式 `--module anime_generate` → 使用指定模块；
+- `--binding v15 --model <文件名> --lora <文件名>:0.6 --steps 30 --cfg 5.0 --sampler dpmpp_2m --scheduler karras`
+  → 多模型 / LoRA / 采样参数（仅 Agent 端点；未配置 token 时 CLI 直接拒绝）；
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。

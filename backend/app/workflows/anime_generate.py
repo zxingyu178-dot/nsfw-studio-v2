@@ -26,6 +26,20 @@ from app.workflows.basic_generate import BasicGenerateModule
 LORA_MAX = 2
 LORA_STRENGTH_MIN = -2.0
 LORA_STRENGTH_MAX = 2.0
+MODEL_MAX_LENGTH = 255
+MODULE_CONFIG_KEYS = {
+    "model", "loras", "steps", "cfg", "sampler_name", "scheduler", "denoise",
+}
+SAMPLER_NAMES = (
+    "euler", "euler_ancestral", "heun", "dpm_2", "dpm_2_ancestral", "lms",
+    "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral", "dpmpp_sde",
+    "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_3m_sde", "ddpm", "lcm",
+    "uni_pc", "uni_pc_bh2", "er_sde",
+)
+SCHEDULER_NAMES = (
+    "normal", "karras", "exponential", "sgm_uniform", "simple",
+    "ddim_uniform", "beta",
+)
 
 
 class AnimeGenerateModule(BasicGenerateModule):
@@ -38,13 +52,71 @@ class AnimeGenerateModule(BasicGenerateModule):
         return dataclasses.replace(
             super().capabilities(),
             module_id=self.module_id,
-            title="动漫生图（MiaoMiao）",
+            title="动漫生图（多模型 / LoRA）",
             description=(
-                "动漫 / 插画文生图：miaomiaoHarem v14（单文件 SDXL）；"
-                "v5 起支持任务级 LoRA 叠加（0–2 条）"
+                "动漫 / 插画文生图：默认 miaomiaoHarem v14，可通过 binding v15 "
+                "切换 ComfyUI 已安装底模，并叠加 0–2 条 LoRA、覆盖采样参数"
             ),
             parameters=(
                 *super().capabilities().parameters,
+                ParameterSpec(
+                    "model",
+                    "string",
+                    default="",
+                    title="底模",
+                    description="ComfyUI /models/checkpoints 中的文件名；不传=绑定默认",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "steps",
+                    "int",
+                    default=30,
+                    min=1,
+                    max=100,
+                    title="采样步数",
+                    description="KSampler steps；不传=绑定默认 30",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "cfg",
+                    "float",
+                    default=4.0,
+                    min=1.0,
+                    max=20.0,
+                    step=0.1,
+                    title="CFG",
+                    description="KSampler cfg；不传=绑定默认 4.0",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "sampler_name",
+                    "enum",
+                    default="er_sde",
+                    enum_values=SAMPLER_NAMES,
+                    title="采样器",
+                    description="KSampler sampler_name；不传=绑定默认 er_sde",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "scheduler",
+                    "enum",
+                    default="simple",
+                    enum_values=SCHEDULER_NAMES,
+                    title="调度器",
+                    description="KSampler scheduler；不传=绑定默认 simple",
+                    configurable=True,
+                ),
+                ParameterSpec(
+                    "denoise",
+                    "float",
+                    default=1.0,
+                    min=0.0,
+                    max=1.0,
+                    step=0.01,
+                    title="去噪强度",
+                    description="KSampler denoise；不传=绑定默认 1.0",
+                    configurable=True,
+                ),
                 ParameterSpec(
                     "loras",
                     "lora_list",
@@ -114,9 +186,80 @@ class AnimeGenerateModule(BasicGenerateModule):
             normalized.append({"name": name, **strengths})
         return normalized
 
+    @staticmethod
+    def _normalize_model(raw: Any) -> str | None:
+        if raw is None:
+            return None
+        if not isinstance(raw, str) or not raw.strip():
+            raise UnprocessableError(
+                "model 必须是底模文件名或 null", code="MODEL_PARAM_INVALID"
+            )
+        model = raw.strip()
+        if "/" in model or "\\" in model:
+            raise UnprocessableError(
+                "model 不得包含路径，只填 ComfyUI /models/checkpoints 中的文件名",
+                code="MODEL_PARAM_INVALID",
+            )
+        if len(model) > MODEL_MAX_LENGTH:
+            raise UnprocessableError(
+                f"model 最多 {MODEL_MAX_LENGTH} 个字符", code="MODEL_PARAM_INVALID"
+            )
+        return model
+
+    @staticmethod
+    def _normalize_sampling(config: Mapping[str, Any]) -> dict[str, Any]:
+        normalized: dict[str, Any] = {}
+        if "steps" in config and config["steps"] is not None:
+            value = config["steps"]
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 100:
+                raise UnprocessableError(
+                    "steps 必须是 1~100 的整数", code="SAMPLING_PARAM_INVALID"
+                )
+            normalized["steps"] = value
+        if "cfg" in config and config["cfg"] is not None:
+            value = config["cfg"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1.0 <= float(value) <= 20.0:
+                raise UnprocessableError(
+                    "cfg 必须是 1.0~20.0 的数字", code="SAMPLING_PARAM_INVALID"
+                )
+            normalized["cfg"] = float(value)
+        if "denoise" in config and config["denoise"] is not None:
+            value = config["denoise"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.0 <= float(value) <= 1.0:
+                raise UnprocessableError(
+                    "denoise 必须是 0.0~1.0 的数字", code="SAMPLING_PARAM_INVALID"
+                )
+            normalized["denoise"] = float(value)
+        for key, allowed in (("sampler_name", SAMPLER_NAMES), ("scheduler", SCHEDULER_NAMES)):
+            if key not in config or config[key] is None:
+                continue
+            value = config[key]
+            if not isinstance(value, str) or value not in allowed:
+                raise UnprocessableError(
+                    f"{key} 必须为: {', '.join(allowed)}", code="SAMPLING_PARAM_INVALID"
+                )
+            normalized[key] = value
+        return normalized
+
+    def _normalize_config(self, config: Mapping[str, Any]) -> dict[str, Any]:
+        unknown = set(config) - MODULE_CONFIG_KEYS
+        if unknown:
+            raise UnprocessableError(
+                f"anime_generate 不支持的 config 字段: {', '.join(sorted(unknown))}",
+                code="MODULE_CONFIG_UNKNOWN",
+            )
+        normalized: dict[str, Any] = {}
+        model = self._normalize_model(config.get("model"))
+        if model is not None:
+            normalized["model"] = model
+        normalized.update(self._normalize_sampling(config))
+        loras = self._normalize_loras(config.get("loras"))
+        if loras:
+            normalized["loras"] = loras
+        return normalized
+
     def validate_config(self, config: Mapping[str, Any]) -> WorkflowValidation:
-        if config.get("loras") is not None:
-            self._normalize_loras(config.get("loras"))
+        self._normalize_config(config)
         return super().validate_config(config)
 
     def build_engine_request(
@@ -125,9 +268,9 @@ class AnimeGenerateModule(BasicGenerateModule):
         prepared: Mapping[str, Any] | None = None,
     ):
         request = super().build_engine_request(context, prepared)
-        loras = self._normalize_loras((context.module_config or {}).get("loras"))
-        if not loras:
+        normalized = self._normalize_config(context.module_config or {})
+        if not normalized:
             return request
         parameters = dict(request.parameters)
-        parameters["loras"] = loras
+        parameters.update(normalized)
         return dataclasses.replace(request, parameters=parameters)

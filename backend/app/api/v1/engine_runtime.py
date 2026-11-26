@@ -80,3 +80,18 @@ def preflight(request: Request, body: PreflightRequest) -> dict:
     )
     service = RuntimePreflightService(settings, request.app.state.adapter)
     return service.check_modules(modules)
+
+
+@router.get("/engine/models", summary="ComfyUI 可用底模与 LoRA（桌面只读）")
+def list_engine_models(request: Request) -> dict:
+    """供桌面工作台填充模型/LoRA 选择器；不暴露给手机桥。
+
+    引擎离线时返回空数组（不阻塞页面），实际提交仍由服务端校验。
+    """
+    adapter = request.app.state.adapter
+    checkpoints = getattr(adapter, "available_checkpoint_names", None)
+    loras = getattr(adapter, "available_lora_names", None)
+    return {
+        "checkpoints": sorted(checkpoints() or []) if callable(checkpoints) else [],
+        "loras": sorted(loras() or []) if callable(loras) else [],
+    }

@@ -37,12 +37,22 @@ def _translate(error: EngineError, module_id: str | None) -> ValidationError:
 def resolve_agent_workflow_modules(
     settings: Settings,
     module_id: str | None,
+    *,
+    module_version: str | None = None,
+    binding_version: str | None = None,
 ) -> list[dict[str, Any]]:
-    """解析实际工作流身份：显式 module_id 或服务器默认。
+    """解析实际工作流身份：显式 module_id / 版本或服务器默认。
 
-    返回的是服务端解析出的真实身份（含 provider / binding_version / 双指纹），
-    Agent 不传入、也不能伪造这些字段。
+    - 不传版本：沿用服务器默认工作流；
+    - 传 module_version / binding_version：必须同时有 module_id，按显式身份
+      走既有 pinned 解析（仍由服务端校验 binding 指纹与放行状态）；
+    - Agent 不能伪造 provider / workflow_hash / binding_hash。
     """
+    if module_id is None and (module_version is not None or binding_version is not None):
+        raise ValidationError(
+            "指定 module_version / binding_version 时必须同时提供 module_id",
+            code="AGENT_MODULE_UNKNOWN",
+        )
     if module_id is not None and not str(module_id).strip():
         raise ValidationError(
             "module_id 不能为空字符串或纯空白；只有不传/null 才使用服务器默认",
@@ -50,7 +60,40 @@ def resolve_agent_workflow_modules(
             details={"module_id": module_id},
         )
     normalized_id = str(module_id).strip() if module_id is not None else None
-    requested = [{"module_id": normalized_id}] if normalized_id else []
+    if not normalized_id:
+        requested: list[dict[str, Any]] = []
+    elif module_version is None and binding_version is None:
+        requested = [{"module_id": normalized_id}]
+    else:
+        engine_cfg = (settings.workflow.raw or {}).get("engine") or {}
+        provider = str(engine_cfg.get("provider", "unbound"))
+        modules_cfg = engine_cfg.get("modules") or {}
+        info = {
+            item["module_id"]: item for item in module_availability(settings)
+        }.get(normalized_id) or {}
+        resolved_module_version = module_version or info.get("module_version")
+        if not resolved_module_version:
+            try:
+                resolved_module_version = default_registry().get(normalized_id).module_version
+            except EngineError as error:
+                raise _translate(error, normalized_id) from error
+        resolved_binding = (
+            binding_version
+            or info.get("binding_version")
+            or (modules_cfg.get(normalized_id) or {}).get("binding_version")
+        )
+        if not resolved_binding:
+            raise ValidationError(
+                f"模块 {normalized_id} 没有可用的 binding_version",
+                code="AGENT_MODULE_UNAVAILABLE",
+                details={"module_id": normalized_id},
+            )
+        requested = [{
+            "module_id": normalized_id,
+            "module_version": str(resolved_module_version),
+            "provider": provider,
+            "binding_version": str(resolved_binding),
+        }]
     try:
         primary = resolve_workflow_modules(settings, requested)[0]
     except EngineError as error:

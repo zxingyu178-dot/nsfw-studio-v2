@@ -64,7 +64,7 @@ requirements:
     - {type: checkpoints, filename: NoobAI-XL-v1.1.safetensors, sha256: unverified, precision: fp16}
 
 performance:
-  status: measuring
+  status: unverified
   batch_size: 1
   tested_hardware: {gpu: "RTX 3060 Laptop", vram_gb: 6, ram_gb: 16}
   notes: "待实测。参考 v2（6.46GB 同级底模）：832×1216 / 30 步热跑 33s/张"

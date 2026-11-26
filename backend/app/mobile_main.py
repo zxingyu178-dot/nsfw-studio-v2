@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.mobile import images, pairing, prompts, review, sync, system
+from app.api.mobile import generation, images, pairing, prompts, review, sync, system
 from app.core.config import Settings, load_settings
 from app.core.errors import AppError
 from app.database.base import make_engine, make_session_factory
@@ -183,9 +183,11 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
             data = _json.loads(body.decode("utf-8"))
         except Exception:
             data = None
+        cache_control = response.headers.get("Cache-Control")
         return JSONResponse(
             status_code=response.status_code,
             content=_envelope(True, data=data, request_id=request_id),
+            headers={"Cache-Control": cache_control} if cache_control is not None else None,
         )
 
     @application.exception_handler(AppError)
@@ -216,6 +218,7 @@ def create_mobile_app(settings: Settings | None = None) -> FastAPI:
 
     # 只 include 审核相关子域（route table 守卫测试断言无其它模块）
     application.include_router(system.router)
+    application.include_router(generation.router)
     application.include_router(pairing.router)
     application.include_router(images.router)
     application.include_router(review.router)

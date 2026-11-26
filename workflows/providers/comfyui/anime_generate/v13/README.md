@@ -1,8 +1,8 @@
-# anime_generate / v2
+# anime_generate / v13
 
-W4.0 默认动漫 binding。
+NoobAI-XL v1.1 eps（基于 Illustrious XL，Danbooru + e621 全量训练）。
 
-- 模型：miaomiaoHarem_v14.safetensors（单文件 SDXL，CheckpointLoaderSimple，自带 CLIP/VAE）
-- 默认：832×1216 / 30 步 / cfg 4.0 / er_sde simple / denoise 1.0
-- v1（Anima 2.9B + Qwen3-0.6B + qwen_image_vae）已冻结，仅供历史 Job
-- 不再使用已确认损坏的 MiaoMiao v15a GGUF 转换文件
+- 832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras；
+- 正向建议 masterpiece,best quality,newest,absurdres,highres；
+- 30–32s/张（热跑），冷启含 6.6GB 模型加载；
+- 当前推荐使用 v15（多模型/采样参数）。

@@ -55,6 +55,7 @@ def test_mobile_route_table_only_audit():
         "/mobile/prompts/{prompt_id}/images",
         "/mobile/prompts/{prompt_id}/evaluations",
         "/mobile/prompts/evaluations/{client_request_id}",
+        "/mobile/generation/progress",
     }
     for p in expected_present:
         assert p in paths, f"缺少审核端点 {p}"

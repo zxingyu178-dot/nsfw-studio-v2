@@ -128,10 +128,15 @@ def _is_core_type(class_type: str) -> bool:
     return class_type in CORE_NODE_TYPES
 
 
-def _used_models(nodes: dict[str, dict]) -> set[str]:
+def _used_models(nodes: dict[str, dict], *, ignore_loras: bool = False) -> set[str]:
     used: set[str] = set()
     for node in nodes.values():
-        field = MODEL_FIELDS.get(str(node.get("class_type") or ""))
+        class_type = str(node.get("class_type") or "")
+        if ignore_loras and class_type in ("LoraLoader", "LoraLoaderModelOnly"):
+            # 任务级 LoRA（inputs.loras.apply=lora_stack）：模板里的占位文件名
+            # 会在运行时被替换或移除，不属于静态 requirements 依赖。
+            continue
+        field = MODEL_FIELDS.get(class_type)
         if not field:
             continue
         value = (node.get("inputs") or {}).get(field)
@@ -253,8 +258,13 @@ def _validate_node_graph(
         if not any(str(node.get("class_type") or "") == class_type for node in nodes.values()):
             result.error(f"{label}: requirements.nodes 声明了 {class_type}，但工作流中不存在")
 
-    # 模型清单与实际 Loader 文件名必须对应
-    used_models = _used_models(nodes)
+    # 模型清单与实际 Loader 文件名必须对应（任务级 LoRA 占位名不参与静态依赖）
+    input_mappings = binding.get("inputs") or {}
+    lora_stack = any(
+        isinstance(mapping, dict) and mapping.get("apply") == "lora_stack"
+        for mapping in input_mappings.values()
+    )
+    used_models = _used_models(nodes, ignore_loras=lora_stack)
     declared_models: set[str] = set()
     if isinstance(requirements, dict):
         for item in requirements.get("models") or []:
@@ -268,9 +278,15 @@ def _validate_node_graph(
             result.error(f"{label}: requirements.models 声明了未使用的模型: {sorted(extra)}")
 
     # binding 注入点
-    for key, mapping in (binding.get("inputs") or {}).items():
+    for key, mapping in input_mappings.items():
         if not isinstance(mapping, dict):
             result.error(f"{label}: inputs.{key} 必须是对象")
+            continue
+        if mapping.get("apply") == "lora_stack" and "node" not in mapping:
+            # 列表型输入：由 adapter 动态重写 21/22 节点，不映射到单一节点字段。
+            max_items = mapping.get("max_items")
+            if not isinstance(max_items, int) or max_items < 1:
+                result.error(f"{label}: inputs.{key}.max_items 必须是正整数")
             continue
         node_id = str(mapping.get("node"))
         field = mapping.get("field")

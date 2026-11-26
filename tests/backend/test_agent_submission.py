@@ -18,9 +18,15 @@ from app.services import job_service
 def mock_settings(settings: Settings) -> Settings:
     return dataclasses.replace(
         settings,
-        workflow=WorkflowConfig(raw={"engine": {"provider": "mock", "options": {
-            "worker_poll_interval_ms": 30, "engine_poll_ms": 20,
-        }}}),
+        workflow=WorkflowConfig(raw={"engine": {
+            "provider": "mock",
+            "module_id": "anime_generate",
+            "module_version": "v1",
+            "binding_version": "v5",
+            "options": {
+                "worker_poll_interval_ms": 30, "engine_poll_ms": 20,
+            },
+        }}),
         agent={},  # 测试不读取本机 config.local 的 agent 配置
     )
 
@@ -36,7 +42,7 @@ def payload(**overrides):
     body = {
         "prompt": "1girl, silver hair, kimono, shrine, masterpiece",
         "negative_prompt": "low quality",
-        "module_id": "basic_generate",
+        "module_id": "anime_generate",
         "width": 768,
         "height": 1024,
         "count": 1,
@@ -88,7 +94,7 @@ def test_valid_token_creates_queued_job(agent_client, monkeypatch):
     job = response.json()
     assert job["source"] == "agent"
     assert job["status"] in ("QUEUED", "RUNNING")
-    assert job["module_id"] == "basic_generate"
+    assert job["module_id"] == "anime_generate"
     assert job["workbench_snapshot"]["seed_mode"] == "fixed"
     assert job["workbench_snapshot"]["seed"] == 42
 
@@ -158,26 +164,26 @@ def test_module_id_omitted_uses_server_default(agent_client, monkeypatch):
     )
     assert response.status_code == 201, response.text
     job = response.json()
-    assert job["module_id"] == "basic_generate"
-    assert job["workflow_snapshot"]["modules"][0]["module_id"] == "basic_generate"
+    assert job["module_id"] == "anime_generate"
+    assert job["workflow_snapshot"]["modules"][0]["module_id"] == "anime_generate"
     # 快照必须记录实际使用的模块，不能只记录空的默认选择
-    assert job["workbench_snapshot"]["workflow_modules"][0]["module_id"] == "basic_generate"
+    assert job["workbench_snapshot"]["workflow_modules"][0]["module_id"] == "anime_generate"
 
 
-def test_explicit_basic_and_anime_accepted(agent_client, monkeypatch):
+def test_explicit_anime_accepted_and_removed_module_rejected(agent_client, monkeypatch):
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-explicit")
     monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
     headers = {"Authorization": "Bearer test-token-explicit"}
-    basic = agent_client.post(
-        "/api/v1/agent/jobs", json=payload(module_id="basic_generate"), headers=headers,
-    )
     anime = agent_client.post(
         "/api/v1/agent/jobs", json=payload(module_id="anime_generate"), headers=headers,
     )
-    assert basic.status_code == 201, basic.text
     assert anime.status_code == 201, anime.text
-    assert basic.json()["module_id"] == "basic_generate"
     assert anime.json()["module_id"] == "anime_generate"
+    removed = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(module_id="basic_generate"), headers=headers,
+    )
+    assert removed.status_code == 400, removed.text
+    assert removed.json()["error"]["code"] == "AGENT_MODULE_UNKNOWN"
 
 
 def test_unknown_module_rejected_without_side_effects(agent_client, session, monkeypatch):
@@ -207,15 +213,16 @@ def test_default_unreleased_rejected_without_fallback(agent_client, session, mon
     assert db_counts(session) == before, "默认工作流未放行时不得自动切换或写库"
 
 
-def test_non_text_module_rejected_without_side_effects(agent_client, session, monkeypatch):
-    """已放行的图片输入模块（img2img）仍必须被 Agent 文本生成能力门禁拒绝。"""
-    monkeypatch.setattr("app.api.v1.agent.ensure_modules_released", lambda _modules: None)
+def test_non_text_module_rejected_without_side_effects(
+    process_registry, agent_client, session, monkeypatch,
+):
+    """已放行但非文生图能力的模块仍必须被 Agent 文本生成门禁拒绝。"""
     monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-process")
     monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
     headers = {"Authorization": "Bearer test-token-process"}
     before = db_counts(session)
     response = agent_client.post(
-        "/api/v1/agent/jobs", json=payload(module_id="img2img"), headers=headers,
+        "/api/v1/agent/jobs", json=payload(module_id="fake_process"), headers=headers,
     )
     assert response.status_code == 400, response.text
     assert response.json()["error"]["code"] == "AGENT_MODULE_NOT_TEXT_GENERATE"
@@ -234,6 +241,74 @@ def test_upscale_parameter_rejected_with_explicit_code(agent_client, session, mo
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "AGENT_UPSCALE_REMOVED"
     assert db_counts(session) == before, "拒绝请求不得创建 Prompt / Job / Stage"
+
+
+# ===== 多模型 / 采样参数：binding v15 =====
+
+def test_agent_accepts_v15_model_loras_and_sampling(agent_client, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-v15")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-v15"}
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1",
+        binding_version="v15",
+        model="NoobAI-XL-v1.1.safetensors",
+        loras=[{
+            "name": "cunnyfunky_v5.0_000008.safetensors",
+            "strength_model": 0.6,
+            "strength_clip": 0.6,
+        }],
+        params={
+            "steps": 28, "cfg": 5.0, "sampler_name": "dpmpp_2m",
+            "scheduler": "karras", "denoise": 0.9,
+        },
+    ), headers=headers)
+    assert response.status_code == 201, response.text
+    snapshot_modules = response.json()["workbench_snapshot"]["workflow_modules"]
+    assert snapshot_modules[0]["binding_version"] == "v15"
+    config = snapshot_modules[0]["config"]
+    assert config["model"] == "NoobAI-XL-v1.1.safetensors"
+    assert config["loras"][0]["strength_model"] == 0.6
+    assert config["steps"] == 28 and config["cfg"] == 5.0
+    assert config["sampler_name"] == "dpmpp_2m" and config["scheduler"] == "karras"
+    assert config["denoise"] == 0.9
+
+
+def test_agent_version_requires_module_id(agent_client, monkeypatch):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-version")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-version"}
+    response = agent_client.post(
+        "/api/v1/agent/jobs",
+        json=payload(module_id=None, binding_version="v15"),
+        headers=headers,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "AGENT_MODULE_UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"model": "../evil.safetensors"},
+        {"loras": [{"name": "a.safetensors"}, {"name": "b.safetensors"}, {"name": "c.safetensors"}]},
+        {"params": {"steps": 0}},
+        {"params": {"cfg": 0.5}},
+        {"params": {"sampler_name": "not-a-sampler"}},
+    ],
+)
+def test_agent_rejects_invalid_model_and_sampling_params(
+    agent_client, session, monkeypatch, overrides,
+):
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-invalid-param")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-invalid-param"}
+    before = db_counts(session)
+    response = agent_client.post(
+        "/api/v1/agent/jobs", json=payload(**overrides), headers=headers,
+    )
+    assert response.status_code == 422, response.text
+    assert db_counts(session) == before
 
 
 # ===== W1.2.1：事务 / 严格 module_id / CLI 服务端行为 =====

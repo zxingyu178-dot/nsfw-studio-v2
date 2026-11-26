@@ -85,6 +85,12 @@ def test_anime_capabilities_mirror_basic_contract_with_anime_identity():
     assert anime.is_generative is True
     assert [spec.name for spec in anime.parameters] == [
         *[spec.name for spec in basic.parameters],
+        "model",
+        "steps",
+        "cfg",
+        "sampler_name",
+        "scheduler",
+        "denoise",
         "loras",
     ]
 
@@ -193,7 +199,7 @@ def test_modules_api_exposes_anime_generate(client):
     assert anime["release_status"]["default_profile_verified"] is False
     assert anime["is_generative"] is True
     assert anime["input_slots"] == []
-    assert anime["title"] == "动漫生图（MiaoMiao）"
+    assert anime["title"] == "动漫生图（多模型 / LoRA）"
 # ===== v5：任务级 LoRA 配置校验 =====
 
 from app.core.errors import UnprocessableError  # noqa: E402

@@ -2,6 +2,41 @@
 
 格式参考 Keep a Changelog；版本遵循 SemVer。
 
+## [0.39.0] — 2026-11-27
+
+> Minor：AI 统一提交支持多模型 / LoRA / 采样参数（binding v15）；桌面工作台增加底模与
+> LoRA 选择；手机审核页顶栏显示只读生图进度。
+
+### Added
+
+- `anime_generate` binding v15：任务级 `model`、`steps`、`cfg`、`sampler_name`、`scheduler`、
+  `denoise` 与 0–2 条 LoRA；默认底模仍为 miaomiaoHarem v14，不传参数时与 v5 默认档一致。
+- Agent API：`POST /api/v1/agent/jobs` 支持 `module_version`、`binding_version`、`model`、
+  `loras`、`params`；新增 `GET /api/v1/agent/capabilities`（需 Bearer）。
+- CLI：`--module-version/--binding/--model/--lora/--steps/--cfg/--sampler/--scheduler/--denoise`；
+  高级字段仅允许 Agent 端点，旧 `/jobs` 路径显式拒绝。
+- 桌面 `GET /api/v1/engine/models` 返回 ComfyUI 已安装底模与 LoRA；工作台新增底模选择与
+  最多两条 LoRA 强度编辑（含 v15 采样参数）。
+- 手机桥新增只读 `GET /mobile/generation/progress`（`mobile_generation_progress_v1`），
+  审核页顶栏显示“第 X / Y 张 · 剩余 N 段”并带呼吸动画；不提供生成控制。
+- i18n 无新增；移动端仅新增状态文案。
+
+### Changed
+
+- `configs/workflow.yaml` 默认 anime binding 从 v5 升到 v15（v5 继续只读兼容历史 Job）。
+- G0 静态校验器支持 `inputs.*.apply=lora_stack` 的列表型输入与任务级 LoRA 占位名。
+- 版本升到 0.39.0。
+
+### Verification
+
+- 后端定向回归 112 项通过（agent、CLI、v15 binding、移动进度、路由守卫、engine runtime）。
+- 前端新增 4 项模型/LoRA 测试；全量 104 个测试文件 524 项中 521 通过，3 项为全量并发下的
+  时序抖动，单独重跑 10/10 通过；TypeScript 与 Vite 构建通过。
+- v15 真实出图：临时实例 8010 + 独立 DataRoot，`job_6e35f220-9d60-469a-80c6-2e3713ec0073`
+  COMPLETED 1/1；NoobAI-XL v1.1 + cunnyfunky_noobai 0.6，dpmpp_2m/karras/30/cfg5.0，
+  832×1216；ComfyUI history `411f1544-9149-442c-a9a5-8978165aaae2` 节点值一致。
+- Android：`compileDebugKotlin` 通过；单元测试 811 项（待复跑确认全绿）；模拟器验收见交付说明。
+
 ## [0.38.0] — 2026-11-26
 
 > Minor：img-studio 前端融合落地到日用 Studio；创作页专注输入与参数，首页统一展示实时结果；

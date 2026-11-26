@@ -13,6 +13,38 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class AgentLoraSpec(BaseModel):
+    """单条任务级 LoRA；名称必须是 ComfyUI /models/loras 中的文件名。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+    strength_model: float = Field(default=1.0, ge=-2.0, le=2.0)
+    strength_clip: float = Field(default=1.0, ge=-2.0, le=2.0)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("LoRA 文件名不能为空")
+        if "/" in name or "\\" in name:
+            raise ValueError("LoRA 文件名不得包含路径")
+        return name
+
+
+class AgentSamplingParams(BaseModel):
+    """任务级采样参数；不传的字段沿用 binding 默认值。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    steps: int | None = Field(default=None, ge=1, le=100)
+    cfg: float | None = Field(default=None, ge=1.0, le=20.0)
+    sampler_name: str | None = Field(default=None, max_length=64)
+    scheduler: str | None = Field(default=None, max_length=64)
+    denoise: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class AgentJobRequest(BaseModel):
     """AI 助手（豆包/本地 Agent）提交一次生成请求。"""
 
@@ -25,6 +57,30 @@ class AgentJobRequest(BaseModel):
         default=None,
         max_length=64,
         description="工作流模块；不传=服务器当前默认。可用性由服务端校验，禁止客户端枚举",
+    )
+    module_version: str | None = Field(
+        default=None,
+        max_length=32,
+        description="模块代码版本；不传=服务器默认。显式传入时与服务端注册表校验",
+    )
+    binding_version: str | None = Field(
+        default=None,
+        max_length=32,
+        description="Provider binding 版本；不传=服务器默认。例如 anime_generate 的 v15",
+    )
+    model: str | None = Field(
+        default=None,
+        max_length=255,
+        description="ComfyUI /models/checkpoints 中的底模文件名；不传=绑定默认",
+    )
+    loras: list[AgentLoraSpec] = Field(
+        default_factory=list,
+        max_length=2,
+        description="任务级 LoRA，最多 2 条",
+    )
+    params: AgentSamplingParams | None = Field(
+        default=None,
+        description="采样参数覆盖：steps/cfg/sampler_name/scheduler/denoise",
     )
     width: int = Field(default=1024, ge=64, le=4096)
     height: int = Field(default=1024, ge=64, le=4096)
@@ -45,3 +101,25 @@ class AgentJobRequest(BaseModel):
         if not value.strip():
             raise ValueError("module_id 不能为空字符串或纯空白")
         return value.strip()
+
+    @field_validator("module_version", "binding_version")
+    @classmethod
+    def _validate_version(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("版本号不能为空字符串或纯空白")
+        return normalized
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        model = value.strip()
+        if not model:
+            raise ValueError("model 不能为空字符串或纯空白")
+        if "/" in model or "\\" in model:
+            raise ValueError("model 不得包含路径，只填 ComfyUI /models/checkpoints 中的文件名")
+        return model

@@ -263,3 +263,29 @@ modules:
           studio_production:
             status: pending
             method: "待 Studio 侧实拍回填"
+
+      # ---- 2026-11-27 任务级模型 + 采样参数（统一 AI 提交）----
+      v15:
+        dependencies_ready: true
+        real_gate_passed: true
+        hardware_status: experimental
+        default_profile_verified: false
+        notes: "v5 基础 + 任务级 model / steps / cfg / sampler_name / scheduler / denoise；默认 miaomiaoHarem_v14，可切换 ComfyUI 已安装底模；LoRA 0–2 条；FaceDetailer 常开。2026-11-27 首轮真实出图：NoobAI-XL v1.1 + cunnyfunky_noobai 0.6 + dpmpp_2m/karras/30 步/cfg5.0，832×1216，1 张 COMPLETED（冷启 266s）"
+        evidence:
+          comfyui_node_chain:
+            status: passed
+            method: "2026-11-27 临时实例 8010（独立 DataRoot）真实 Agent Job：ComfyUI history prompt 411f1544-9149-442c-a9a5-8978165aaae2；CheckpointLoaderSimple=NoobAI-XL-v1.1，KSampler steps=30/cfg=5.0/sampler=dpmpp_2m/scheduler=karras/denoise=1.0，LoraLoader 21=cunnyfunky_noobai_v3.3_000080@0.6，节点 22 已按单 LoRA 移除"
+          studio_production:
+            status: passed
+            workflow_hash: "99ef6d5af1d51e2c"
+            binding_hash: "6bde04bd7f04fb2f"
+            reference_jobs:
+              - "job_6e35f220-9d60-469a-80c6-2e3713ec0073"
+            output_image_ids:
+              - "img_d5b6c349-4499-4221-83fe-ff7cbd90d88c"
+            sampling_profile: "832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / seed 20261127 / 1 条 LoRA 0.6 / FaceDetailer on"
+            stage_seconds: 266.5
+            method: "2026-11-27 Agent CLI → /api/v1/agent/jobs（binding v15），临时实例 8010 + 独立 DataRoot；输出 832×1216 / 1425157 bytes"
+          default_profile_performance:
+            status: unverified
+            reason: "冷启 266.5s（含 NoobAI 6.6GB 加载 + FaceDetailer），未做热跑与显存峰值采样；v15 非默认档"

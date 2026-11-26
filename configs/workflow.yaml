@@ -19,6 +19,7 @@ workflow:
     binding_version: "v1"
     options: {}   # 机器差异（URL 等）只进 configs/config.local.yaml 的 comfyui 段
     # 正式模块的默认 Binding（module_version 与 binding_version 两套身份独立）
+    # v15 = v5 节点链 + 任务级 model/LoRA/采样参数；不传任务参数时行为与 v5 默认档一致。
     modules:
       anime_generate:
-        binding_version: "v5"
+        binding_version: "v15"

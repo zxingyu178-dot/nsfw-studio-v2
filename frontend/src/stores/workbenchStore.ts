@@ -499,12 +499,17 @@ export function setModuleCatalog(catalog: ModuleCapabilitiesDTO[]): void {
   })
 }
 
-/** 设置 Primary Module 的 config（Task3：模块参数唯一入口，如 img2img 的 denoise） */
+/** 设置 Primary Module 的 config（Task3：模块参数唯一入口，如 img2img 的 denoise）。
+ * 值为 undefined 表示移除该键（例如把底模恢复为“绑定默认”），避免把空串发给后端。 */
 export function setPrimaryModuleConfig(patch: Record<string, unknown>): void {
   const [primary, ...rest] = state.workflowModules
   if (!primary) return
+  const config = { ...(primary.config ?? {}), ...patch }
+  for (const key of Object.keys(patch)) {
+    if (patch[key] === undefined) delete config[key]
+  }
   setState({
-    workflowModules: [{ ...primary, config: { ...(primary.config ?? {}), ...patch } }, ...rest],
+    workflowModules: [{ ...primary, config }, ...rest],
   })
 }
 

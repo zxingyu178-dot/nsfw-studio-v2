@@ -217,6 +217,79 @@ def test_request_file_agent_submit_reuses_validated_request_id(cli, tmp_path, mo
     assert suppress_error_body is True
 
 
+def test_request_file_preserves_model_and_sampling(cli, tmp_path):
+    body = {
+        "prompt": "1girl, night city, anime style",
+        "client_request_id": "studio-v15-0001",
+        "module_id": "anime_generate",
+        "module_version": "v1",
+        "binding_version": "v15",
+        "model": "NoobAI-XL-v1.1.safetensors",
+        "loras": [{
+            "name": "cunnyfunky_v5.0_000008.safetensors",
+            "strength_model": 0.6,
+            "strength_clip": 0.6,
+        }],
+        "params": {
+            "steps": 28, "cfg": 5.0, "sampler_name": "dpmpp_2m",
+            "scheduler": "karras", "denoise": 0.9,
+        },
+    }
+    normalized = cli.load_request_file(write_request(tmp_path, body))
+    assert normalized["module_version"] == "v1" and normalized["binding_version"] == "v15"
+    assert normalized["model"] == "NoobAI-XL-v1.1.safetensors"
+    assert normalized["loras"][0]["strength_model"] == 0.6
+    assert normalized["params"] == body["params"]
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"binding_version": "v15"}, "module_id"),
+        ({"module_id": "anime_generate", "module_version": " "}, "module_version"),
+        ({"binding_version": "v15", "module_id": "anime_generate", "model": "../evil"}, "model"),
+        ({"module_id": "anime_generate", "loras": [{"name": "a"}, {"name": "b"}, {"name": "c"}]},
+         "最多 2 条"),
+        ({"module_id": "anime_generate", "params": {"steps": 0}}, "steps"),
+        ({"module_id": "anime_generate", "params": {"unknown": 1}}, "未知字段"),
+    ],
+)
+def test_request_file_rejects_invalid_model_contract(cli, tmp_path, patch, message):
+    body = {"prompt": "safe study", "client_request_id": "studio-v15-bad"}
+    body.update(patch)
+    with pytest.raises(cli.RequestValidationError, match=message):
+        cli.load_request_file(write_request(tmp_path, body))
+
+
+def test_advanced_fields_require_agent_token(cli, tmp_path, monkeypatch, capsys):
+    request_file = write_request(tmp_path, {
+        "prompt": "safe study",
+        "client_request_id": "studio-v15-legacy",
+        "module_id": "anime_generate",
+        "binding_version": "v15",
+        "model": "NoobAI-XL-v1.1.safetensors",
+    })
+    calls = []
+    monkeypatch.setattr(cli, "load_token", lambda value: "")
+    monkeypatch.setattr(cli, "post", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(cli, "get", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(sys, "argv", [
+        "agent_generate.py", "--request-file", str(request_file), "--out", str(tmp_path / "out"),
+    ])
+    assert cli.main() == 2
+    assert calls == []
+    assert "仅支持 Agent 端点" in capsys.readouterr().out
+
+
+def test_parse_lora_option(cli):
+    assert cli._parse_lora_option("a.safetensors") == {
+        "name": "a.safetensors", "strength_model": 1.0, "strength_clip": 1.0,
+    }
+    assert cli._parse_lora_option("a.safetensors:0.6") == {
+        "name": "a.safetensors", "strength_model": 0.6, "strength_clip": 0.6,
+    }
+
+
 def test_validate_only_has_no_credentials_network_or_directory_side_effects(
     cli, tmp_path, monkeypatch, capsys,
 ):

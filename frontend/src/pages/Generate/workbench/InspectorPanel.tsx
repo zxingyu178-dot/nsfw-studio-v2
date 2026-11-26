@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Field } from '../../../components/ui'
 import { IconButton, IconChevronDown, IconClose, IconRandom, IconRestart, IconSeed, NumberStepper, PopoverSelect } from '../../../components/ui/ui3'
 import { engineRuntimeApi } from '../../../api/client'
+import type { EngineModelsDTO } from '../../../api/client'
 import type { RuntimePreflightDTO, RuntimePreflightStatus } from '../../../types/workbench'
 import {
   defaultWorkflowNotice,
@@ -27,6 +28,8 @@ import { AspectRatioPicker } from '../AspectRatioPicker'
 import { CollapsibleSection } from '../components/CollapsibleSection'
 import { ModuleParameterField } from '../components/ModuleParameterField'
 import { Pane } from '../Pane'
+import { LoraStackEditor } from './LoraStackEditor'
+import type { LoraEntry } from './LoraStackEditor'
 import { SplitGenerateAction } from './SplitGenerateAction'
 
 /** W2.0：preflight 状态中文化；括号内保留原始状态码，便于排查。 */
@@ -63,6 +66,27 @@ export function InspectorPanel({
       : null
   const configurableParams = (primaryCapabilities?.parameters ?? []).filter((param) => param.configurable)
   const followsInputSize = primaryCapabilities?.size_mode === 'input'
+  const modelParam = configurableParams.find((param) => param.name === 'model') ?? null
+  const supportsLora = (primaryCapabilities?.parameters ?? []).some((param) => param.name === 'loras')
+  const primaryConfig = state.workflowModules[0]?.config ?? {}
+  const selectedModel = typeof primaryConfig.model === 'string' ? primaryConfig.model : ''
+  const selectedLoras: LoraEntry[] = Array.isArray(primaryConfig.loras)
+    ? (primaryConfig.loras as LoraEntry[]).filter(
+        (item) => item && typeof item.name === 'string' && item.name,
+      )
+    : []
+
+  // 模型 / LoRA 候选：引擎离线时为空数组，不影响其他参数编辑。
+  const [engineModels, setEngineModels] = useState<EngineModelsDTO>({ checkpoints: [], loras: [] })
+  useEffect(() => {
+    const models = (engineRuntimeApi as { models?: () => Promise<EngineModelsDTO> }).models
+    if (typeof models !== 'function') return
+    let cancelled = false
+    models()
+      .then((result) => { if (!cancelled) setEngineModels(result) })
+      .catch(() => { if (!cancelled) setEngineModels({ checkpoints: [], loras: [] }) })
+    return () => { cancelled = true }
+  }, [])
 
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
@@ -210,6 +234,34 @@ export function InspectorPanel({
         )}
       </div>
 
+      {/* ===== 底模（v15 任务级模型） ===== */}
+      {modelParam && (
+        <div className="wb-param">
+          <span className="wb-param__label">{modelParam.title || '底模'}</span>
+          <PopoverSelect
+            value={selectedModel}
+            onChange={(value) => setPrimaryModuleConfig({ model: value || undefined })}
+            ariaLabel="底模"
+            options={[
+              { value: '', label: '绑定默认' },
+              ...engineModels.checkpoints.map((name) => ({ value: name, label: name })),
+            ]}
+          />
+          {engineModels.checkpoints.length === 0 && (
+            <span className="wb-param__label">引擎离线：仅可使用绑定默认底模</span>
+          )}
+        </div>
+      )}
+
+      {/* ===== LoRA（最多 2 条） ===== */}
+      {supportsLora && engineModels.loras.length > 0 && (
+        <LoraStackEditor
+          loras={selectedLoras}
+          options={engineModels.loras}
+          onChange={(next) => setPrimaryModuleConfig({ loras: next.length > 0 ? next : undefined })}
+        />
+      )}
+
       {/* ===== 画面（画幅 / 分辨率 / 自定义） ===== */}
       {followsInputSize ? (
         <Field label="尺寸"><p className="wb-static">跟随输入图（无需设置宽高）</p></Field>
@@ -235,16 +287,18 @@ export function InspectorPanel({
       <SeedRow />
 
       {/* ===== 高级参数（默认折叠） ===== */}
-      {configurableParams.length > 0 && (
+      {configurableParams.some((param) => param.name !== 'model') && (
         <CollapsibleSection id="advanced" title="高级参数" defaultOpen={false}>
-          {configurableParams.map((param) => (
-            <ModuleParameterField
-              key={param.name}
-              param={param}
-              value={state.workflowModules[0]?.config?.[param.name]}
-              onChange={(value) => setPrimaryModuleConfig({ [param.name]: value })}
-            />
-          ))}
+          {configurableParams
+            .filter((param) => param.name !== 'model')
+            .map((param) => (
+              <ModuleParameterField
+                key={param.name}
+                param={param}
+                value={state.workflowModules[0]?.config?.[param.name]}
+                onChange={(value) => setPrimaryModuleConfig({ [param.name]: value })}
+              />
+            ))}
         </CollapsibleSection>
       )}
     </Pane>

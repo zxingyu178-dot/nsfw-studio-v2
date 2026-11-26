@@ -12,10 +12,13 @@ export function ModuleParameterField({
   param,
   value,
   onChange,
+  options,
 }: {
   param: ModuleParameterDTO
   value: unknown
   onChange: (value: unknown) => void
+  /** string 参数的候选值（如 ComfyUI 已安装底模）；为空时回退文本输入。 */
+  options?: string[]
 }) {
   const resolved = value ?? param.default
   const label = param.title || param.name
@@ -42,6 +45,27 @@ export function ModuleParameterField({
           ariaLabel={label}
           options={(param.enum_values ?? []).map((option) => ({ value: option, label: option }))}
         />
+        {param.description && <p className="muted">{param.description}</p>}
+      </Field>
+    )
+  }
+
+  if (param.type === 'string') {
+    return (
+      <Field label={label}>
+        {options && options.length > 0 ? (
+          <PopoverSelect
+            value={String(resolved ?? '')}
+            onChange={(v) => onChange(v)}
+            ariaLabel={label}
+            options={options.map((option) => ({ value: option, label: option }))}
+          />
+        ) : (
+          <Input
+            value={String(resolved ?? '')}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        )}
         {param.description && <p className="muted">{param.description}</p>}
       </Field>
     )

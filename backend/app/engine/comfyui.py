@@ -263,10 +263,38 @@ class ComfyUIAdapter(EngineAdapter):
         self._loras_cache = (now, names)
         return names
 
+    def available_checkpoint_names(self) -> set[str] | None:
+        """ComfyUI /models/checkpoints（60s 缓存）；不可达返回 None，交由执行期兜底。"""
+        now = time.monotonic()
+        cached = getattr(self, "_checkpoints_cache", None)
+        if cached and now - cached[0] < 60:
+            return cached[1]
+        try:
+            with httpx.Client(trust_env=False, timeout=5) as client:
+                response = client.get(f"{self.base_url}/models/checkpoints")
+                response.raise_for_status()
+                names = {str(item) for item in response.json()}
+        except Exception:
+            return None
+        self._checkpoints_cache = (now, names)
+        return names
+
     def _build_prompt(self, request: EngineJobRequest, workflow: dict, binding: dict) -> dict:
         prompt = json.loads(json.dumps(workflow))  # deep copy
         params = request.parameters
         inputs = binding.get("inputs") or {}
+        task_variable_keys = ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise")
+        for key in task_variable_keys:
+            if key in params and key not in inputs:
+                raise EngineError(
+                    "BINDING_PARAM_UNSUPPORTED",
+                    f"当前 binding 不支持任务级参数 {key}",
+                )
+        model = params.get("model")
+        if model:
+            available = self.available_checkpoint_names()
+            if available is not None and str(model) not in available:
+                raise EngineError("MODEL_NOT_FOUND", f"底模不存在: {model}")
         lora_stack = any(
             isinstance(target, dict) and target.get("apply") == "lora_stack"
             for target in inputs.values()

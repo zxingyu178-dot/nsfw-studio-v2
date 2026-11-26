@@ -140,6 +140,37 @@ def test_port_conflict_start_409():
     assert resp.json()["error"]["code"] == "ENGINE_PORT_CONFLICT"
 
 
+class _ModelsAdapter:
+    def __init__(self, checkpoints, loras):
+        self._checkpoints = checkpoints
+        self._loras = loras
+
+    def available_checkpoint_names(self):
+        return self._checkpoints
+
+    def available_lora_names(self):
+        return self._loras
+
+
+def test_engine_models_returns_sorted_checkpoints_and_loras():
+    client = _client(FakeService())
+    client.app.state.adapter = _ModelsAdapter({"b.safetensors", "a.safetensors"}, {"z.safetensors"})
+    resp = client.get("/api/v1/engine/models")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "checkpoints": ["a.safetensors", "b.safetensors"],
+        "loras": ["z.safetensors"],
+    }
+
+
+def test_engine_models_offline_returns_empty_lists():
+    client = _client(FakeService())
+    client.app.state.adapter = _ModelsAdapter(None, None)
+    resp = client.get("/api/v1/engine/models")
+    assert resp.status_code == 200
+    assert resp.json() == {"checkpoints": [], "loras": []}
+
+
 def test_idempotent_start_200():
     svc = FakeService()
     client = _client(svc)

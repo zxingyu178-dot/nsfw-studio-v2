@@ -6,10 +6,13 @@ from app.storage.manager import StorageManager
 from app.workflows.registry import default_registry
 
 
-def test_default_registry_contains_exactly_four_modules():
+def test_default_registry_contains_only_anime_generate():
+    """2026-11-16 产品收敛：只保留 anime_generate；Qwen 三链与 upscale 均下线。"""
     ids = default_registry().ids()
-    assert ids == ["anime_generate", "basic_generate", "img2img", "reference_generate"]
+    assert ids == ["anime_generate"]
     assert default_registry().has("upscale", "v1") is False
+    for removed in ("basic_generate", "img2img", "reference_generate"):
+        assert default_registry().has(removed) is False
 
 
 def test_upscale_api_endpoint_is_gone(client):

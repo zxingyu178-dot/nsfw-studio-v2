@@ -7,9 +7,14 @@
 
 用法（项目根目录）：
     .venv/Scripts/python scripts/agent_generate.py --prompt "a botanist examining a fern in a glasshouse" \
-        [--module <workflow_id>] [--list-workflows] \
+        [--module <workflow_id>] [--module-version v1] [--binding v15] [--list-workflows] \
+        [--model NoobAI-XL-v1.1.safetensors] [--lora <name>[:<strength>]]... \
+        [--steps 30] [--cfg 4.5] [--sampler er_sde] [--scheduler simple] [--denoise 1.0] \
         [--negative "..."] [--width 768] [--height 1024] [--count 1] [--seed 42] \
         [--next] [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
+
+模型/版本/采样参数（--module-version/--binding/--model/--lora/--steps/--cfg/--sampler/
+--scheduler/--denoise）只支持 Agent 端点，需配置 agent.token。
 
 W1.2 工作流规则：
 - 不传 --module → 使用服务端当前默认工作流（不在 CLI 硬编码）；
@@ -38,13 +43,18 @@ from pathlib import Path
 
 
 REQUEST_FIELDS = {
-    "prompt", "negative_prompt", "module_id", "width", "height", "count", "seed",
+    "prompt", "negative_prompt", "module_id", "module_version", "binding_version",
+    "model", "loras", "params", "width", "height", "count", "seed",
     "queue_mode", "client_request_id",
 }
 REQUEST_FILE_MAX_BYTES = 128 * 1024
 REQUEST_SEMANTIC_OPTIONS = {
-    "--prompt", "--module", "--negative", "--width", "--height", "--count", "--seed", "--next",
+    "--prompt", "--module", "--module-version", "--binding", "--model", "--lora",
+    "--steps", "--cfg", "--sampler", "--scheduler", "--denoise",
+    "--negative", "--width", "--height", "--count", "--seed", "--next",
 }
+SAMPLE_PARAM_KEYS = {"steps", "cfg", "sampler_name", "scheduler", "denoise"}
+ADVANCED_FIELDS = ("module_version", "binding_version", "model", "loras", "params")
 
 
 class RequestValidationError(ValueError):
@@ -74,6 +84,95 @@ def _require_utf8_text(value: str, field: str) -> None:
         value.encode("utf-8")
     except UnicodeEncodeError as error:
         raise RequestValidationError(f"{field} 包含不能编码为 UTF-8 的字符") from error
+
+
+def _normalize_loras(value: object) -> list[dict]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RequestValidationError("loras 必须是数组")
+    if len(value) > 2:
+        raise RequestValidationError("loras 最多 2 条")
+    normalized: list[dict] = []
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, dict):
+            raise RequestValidationError(f"第 {index} 条 LoRA 必须是对象")
+        unknown = set(item) - {"name", "strength_model", "strength_clip"}
+        if unknown:
+            raise RequestValidationError(
+                f"第 {index} 条 LoRA 含未知字段: {', '.join(sorted(unknown))}"
+            )
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise RequestValidationError(f"第 {index} 条 LoRA 缺少文件名")
+        name = name.strip()
+        if "/" in name or "\\" in name:
+            raise RequestValidationError(f"第 {index} 条 LoRA 文件名不得包含路径")
+        strengths: dict[str, float] = {}
+        for key in ("strength_model", "strength_clip"):
+            raw = item.get(key, 1.0)
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                raise RequestValidationError(f"第 {index} 条 LoRA 的 {key} 必须是数字")
+            if not -2.0 <= float(raw) <= 2.0:
+                raise RequestValidationError(f"第 {index} 条 LoRA 的 {key} 必须在 -2..2")
+            strengths[key] = float(raw)
+        normalized.append({"name": name, **strengths})
+    return normalized
+
+
+def _normalize_params(value: object) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise RequestValidationError("params 必须是对象")
+    unknown = set(value) - SAMPLE_PARAM_KEYS
+    if unknown:
+        raise RequestValidationError(f"params 含未知字段: {', '.join(sorted(unknown))}")
+    params: dict = {}
+    if value.get("steps") is not None:
+        steps = value["steps"]
+        if type(steps) is not int or not 1 <= steps <= 100:
+            raise RequestValidationError("params.steps 必须是 1..100 的整数")
+        params["steps"] = steps
+    if value.get("cfg") is not None:
+        cfg = value["cfg"]
+        if isinstance(cfg, bool) or not isinstance(cfg, (int, float)) or not 1.0 <= float(cfg) <= 20.0:
+            raise RequestValidationError("params.cfg 必须是 1.0..20.0 的数字")
+        params["cfg"] = float(cfg)
+    if value.get("denoise") is not None:
+        denoise = value["denoise"]
+        if isinstance(denoise, bool) or not isinstance(denoise, (int, float)) or not 0.0 <= float(denoise) <= 1.0:
+            raise RequestValidationError("params.denoise 必须是 0.0..1.0 的数字")
+        params["denoise"] = float(denoise)
+    for key in ("sampler_name", "scheduler"):
+        if value.get(key) is not None:
+            raw = value[key]
+            if not isinstance(raw, str) or not raw.strip() or len(raw) > 64:
+                raise RequestValidationError(f"params.{key} 必须是非空字符串（≤64）")
+            params[key] = raw.strip()
+    return params
+
+
+def _parse_lora_option(value: str) -> dict:
+    """解析 CLI 的 --lora 写法：`文件名` 或 `文件名:0.6`（默认强度 1.0）。"""
+    raw = value.strip()
+    if not raw:
+        raise RequestValidationError("--lora 不能为空")
+    strength = 1.0
+    name, separator, suffix = raw.rpartition(":")
+    if separator and name:
+        try:
+            strength = float(suffix)
+        except ValueError:
+            name = raw
+            strength = 1.0
+    else:
+        name = raw
+    return {"name": name, "strength_model": strength, "strength_clip": strength}
+
+
+def advanced_request_fields(payload: dict) -> list[str]:
+    return [field for field in ADVANCED_FIELDS if field in payload]
 
 
 def validate_request(payload: object, *, require_client_request_id: bool = False) -> dict:
@@ -112,6 +211,30 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
             raise RequestValidationError("module_id 最多 64 个字符")
         _require_utf8_text(module_id, "module_id")
 
+    versions: dict[str, str] = {}
+    for field in ("module_version", "binding_version"):
+        raw = payload.get(field)
+        if raw is None:
+            continue
+        if module_id is None:
+            raise RequestValidationError(f"指定 {field} 时必须同时提供 module_id")
+        if not isinstance(raw, str) or not raw.strip():
+            raise RequestValidationError(f"{field} 必须是非空字符串或 null")
+        if len(raw) > 32 or "/" in raw or "\\" in raw:
+            raise RequestValidationError(f"{field} 非法（≤32，不得含路径分隔符）")
+        versions[field] = raw.strip()
+
+    model = payload.get("model")
+    if model is not None:
+        if not isinstance(model, str):
+            raise RequestValidationError("model 必须是字符串或 null")
+        if not model.strip():
+            raise RequestValidationError("model 不能为空或纯空白")
+        if len(model) > 255 or "/" in model or "\\" in model:
+            raise RequestValidationError("model 非法（≤255，不得含路径分隔符）")
+        _require_utf8_text(model, "model")
+        model = model.strip()
+
     normalized = {
         "prompt": prompt,
         "negative_prompt": negative,
@@ -123,6 +246,15 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
     }
     if module_id is not None:
         normalized["module_id"] = module_id.strip()
+    normalized.update(versions)
+    if model is not None:
+        normalized["model"] = model
+    loras = _normalize_loras(payload.get("loras"))
+    if loras:
+        normalized["loras"] = loras
+    params = _normalize_params(payload.get("params"))
+    if params:
+        normalized["params"] = params
 
     _require_int(normalized, "width", 64, 4096)
     _require_int(normalized, "height", 64, 4096)
@@ -268,6 +400,19 @@ def main() -> int:
                         help="仅离线校验请求；不加载凭据、不联网、不创建输出目录")
     parser.add_argument("--module", default=None,
                         help="工作流模块 id；不传使用服务端默认。可用性由服务端校验")
+    parser.add_argument("--module-version", default=None,
+                        help="模块代码版本（需配合 --module；仅 Agent 端点）")
+    parser.add_argument("--binding", default=None,
+                        help="binding 版本（如 v15；仅 Agent 端点）")
+    parser.add_argument("--model", default=None,
+                        help="底模文件名（不含路径，例如 NoobAI-XL-v1.1.safetensors；仅 Agent 端点）")
+    parser.add_argument("--lora", action="append", default=None, metavar="NAME[:STRENGTH]",
+                        help="LoRA 文件名（可带强度，最多 2 条；仅 Agent 端点）")
+    parser.add_argument("--steps", type=int, default=None, help="采样步数（仅 Agent 端点）")
+    parser.add_argument("--cfg", type=float, default=None, help="CFG（仅 Agent 端点）")
+    parser.add_argument("--sampler", default=None, help="采样器名称（仅 Agent 端点）")
+    parser.add_argument("--scheduler", default=None, help="调度器名称（仅 Agent 端点）")
+    parser.add_argument("--denoise", type=float, default=None, help="降噪强度 0..1（仅 Agent 端点）")
     parser.add_argument("--list-workflows", action="store_true",
                         help="列出 Agent 允许使用的文生图工作流（不提交任务）")
     parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
@@ -315,6 +460,28 @@ def main() -> int:
             "client_request_id": f"cli_{uuid.uuid4().hex[:12]}",
             **({"module_id": args.module} if args.module is not None else {}),
         }
+        if args.module_version is not None:
+            direct_payload["module_version"] = args.module_version
+        if args.binding is not None:
+            direct_payload["binding_version"] = args.binding
+        if args.model is not None:
+            direct_payload["model"] = args.model
+        if args.lora:
+            try:
+                direct_payload["loras"] = [_parse_lora_option(item) for item in args.lora]
+            except RequestValidationError as error:
+                print(f"[FAIL] 参数校验失败: {error}")
+                return 2
+        params = {
+            "steps": args.steps,
+            "cfg": args.cfg,
+            "sampler_name": args.sampler,
+            "scheduler": args.scheduler,
+            "denoise": args.denoise,
+        }
+        params = {key: value for key, value in params.items() if value is not None}
+        if params:
+            direct_payload["params"] = params
         try:
             request_payload = validate_request(direct_payload)
         except RequestValidationError as error:
@@ -342,6 +509,11 @@ def main() -> int:
     # 旧 /jobs 路径需要先解析实际 Primary。
     token = load_token(args.token)
     use_agent_endpoint = bool(token) and not args.legacy
+    advanced = advanced_request_fields(request_payload)
+    if advanced and not use_agent_endpoint:
+        print("[FAIL] 以下字段仅支持 Agent 端点（需配置 agent.token 或 --token）: "
+              + ", ".join(advanced))
+        return 2
     if "module_id" in request_payload:
         primary_id: str | None = request_payload["module_id"]
     elif use_agent_endpoint:

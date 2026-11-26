@@ -81,7 +81,7 @@ def test_job_lifecycle_serial_completion(mock_client):
     assert response.status_code == 201
     job = response.json()
     assert job["status"] == "QUEUED" and len(job["items"]) == 8
-    assert job["provider"] == "mock" and job["module_id"] == "basic_generate"
+    assert job["provider"] == "mock" and job["module_id"] == "anime_generate"
 
     final = wait_for(mock_client, job["id"], lambda j: j["status"] in ("COMPLETED", "FAILED"), timeout=30)
     assert final["status"] == "COMPLETED"
