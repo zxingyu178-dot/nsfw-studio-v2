@@ -43,6 +43,8 @@ cd frontend && npm run test -- --run && npx tsc -b && npm run build
 - **模块代码版本** `module_version`（如 `anime_generate v1`）与 **provider binding 版本**
   `binding_version`（如 `v15`）是两个域，禁止互相兜底。
 - Binding 一旦发布即不可变；修改 `workflow.json` / `binding.yaml` 必须新建 `vN+1`。
+  仅改变执行行为的任务级开关（如 `face_detailer`）由 adapter 按节点类型实现，
+  不得为此改写已发布 binding 或重算 Hash。
 - 每次任务固化身份：`module_id + module_version + provider + binding_version + workflow_hash + binding_hash`。
 - 放行由 `workflows/release_manifest.yaml` 控制；`dependencies_ready` 与 `real_gate_passed`
   同时为真才允许创建新 Job。未放行 binding 一律拒绝，前端隐藏不是安全边界。
@@ -56,11 +58,11 @@ cd frontend && npm run test -- --run && npx tsc -b && npm run build
 
 - 唯一入口：`POST /api/v1/agent/jobs`（Bearer token，默认 30 次/分钟），旧 `/jobs` 仅本机兼容。
 - 支持字段：`prompt`、`negative_prompt`、`module_id`、`module_version`、`binding_version`、
-  `model`、`loras[]`（≤2，含强度）、`params{steps,cfg,sampler_name,scheduler,denoise}`、
+  `model`、`loras[]`（≤2，含强度）、`params{steps,cfg,sampler_name,scheduler,denoise,face_detailer}`、
   `width/height/count/seed/queue_mode/client_request_id`。
 - 能力发现：`GET /api/v1/agent/capabilities`（需 token）返回模块、可用底模、可用 LoRA 与参数边界。
 - 服务端校验链：模块解析 → 放行门禁 → binding 参数声明 → 模型/LoRA 存在性 → 模块 config 校验 → 创建 Job。
-- CLI：`scripts/agent_generate.py`（`--model/--lora/--steps/--cfg/--sampler/--scheduler/--denoise`）；
+- CLI：`scripts/agent_generate.py`（`--model/--lora/--steps/--cfg/--sampler/--scheduler/--denoise/--no-face-detailer`）；
   高级字段只允许走 Agent 端点（需 token）。
 - 详见 `docs/AGENT_SUBMISSION.md`、`docs/AGENT_SUBMISSION_STANDARD.md`、`docs/WORKFLOW_SUBMISSION_STANDARD.md`。
 
@@ -94,7 +96,7 @@ Hermetic 护栏：后端测试自动设置 `NSFW_STUDIO_HERMETIC=1` 并拦截 81
 产品注册表仍只暴露 `anime_generate`，测试进程额外挂载 `basic_generate` / `img2img` /
 `reference_generate` / `fake_process`，并在放行清单中同步 ready 替身（硬件档位沿用各模块
 历史记录）。默认模块断言统一为 `anime_generate`。全量 `pytest tests/backend -q`
-（836 项）必须全绿后才可提交。
+（846 项）必须全绿后才可提交。
 
 ### 工具权限（Windows）
 

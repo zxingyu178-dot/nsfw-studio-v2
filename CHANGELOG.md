@@ -4,10 +4,16 @@
 
 ## [Unreleased]
 
-> 维护：清理产品收敛后的测试债，补齐 v15 注册中心投影，并继续打磨前端与手机端交互。
+> 维护：清理产品收敛后的测试债，补齐 v15 注册中心投影，并继续打磨前端与手机端交互；
+> 新增任务级 FaceDetailer 开关与 72.7s 快速档。
 
 ### Added
 
+- 任务级 `face_detailer` 开关（模块 / Agent / CLI / 前端）：默认开启；`false` 时由
+  ComfyUI adapter 移除 FaceDetailer 与检测器节点、SaveImage 直连 VAEDecode，
+  binding v15 文件与 Hash 保持不变。
+- Agent `params.face_detailer`、CLI `--no-face-detailer / --face-detailer`；
+  工作台参数栏新增“人脸修复（FaceDetailer）”开关。
 - `registry/workflows/anime_generate/v15/manifest.yaml`：登记当前默认 binding v15（experimental），
   `/api/v1/modules` 的 registry 投影与真实默认 binding 一致。
 - 桌面工作台：底模候选区分“读取中 / 引擎离线 / 未安装底模”；运行环境检测 READY 后
@@ -23,8 +29,13 @@
 
 - `tests/backend/conftest.py::process_registry` 提供测试专用模块注册表与放行替身；
   basic / img2img / reference 的通用管线覆盖保留在测试进程，不进入生产注册表。
-- 后端全量 `pytest tests/backend -q` 836 项：835 通过、1 跳过；G0 `errors=0`。
-- 前端全量 `npm run test:ci` 104 个文件 524 项全部通过；`tsc` 与生产构建通过。
+- 后端全量 `pytest tests/backend -q` 846 项：845 通过、1 跳过；G0 `errors=0`。
+- 快速档真实出图（临时实例 8010，独立 DataRoot）：`job_e81b843b-4381-4e9f-91c2-65d5f994dc87`
+  COMPLETED 1/1，832×1216 / 28 步 / cfg4.5 / er_sde simple / `face_detailer=false`，
+  **72.7s**；ComfyUI history `e791e357-cdb1-4db4-9c74-5647d2e34af1` 节点链
+  `CheckpointLoaderSimple → CLIPTextEncode×2 → KSampler → VAEDecode → SaveImage`
+  （无 FaceDetailer / 检测器），binding Hash 未变。
+- 前端全量 `npm run test:ci` 104 个文件 525 项全部通过；`tsc` 与生产构建通过。
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
 

@@ -270,7 +270,7 @@ modules:
         real_gate_passed: true
         hardware_status: experimental
         default_profile_verified: false
-        notes: "v5 基础 + 任务级 model / steps / cfg / sampler_name / scheduler / denoise；默认 miaomiaoHarem_v14，可切换 ComfyUI 已安装底模；LoRA 0–2 条；FaceDetailer 常开。2026-11-27 首轮真实出图：NoobAI-XL v1.1 + cunnyfunky_noobai 0.6 + dpmpp_2m/karras/30 步/cfg5.0，832×1216，1 张 COMPLETED（冷启 266s）"
+        notes: "v5 基础 + 任务级 model / steps / cfg / sampler_name / scheduler / denoise；默认 miaomiaoHarem_v14，可切换 ComfyUI 已安装底模；LoRA 0–2 条；FaceDetailer 默认开启、可任务级关闭。2026-11-27 首轮真实出图：NoobAI-XL v1.1 + cunnyfunky_noobai 0.6 + dpmpp_2m/karras/30 步/cfg5.0，832×1216，1 张 COMPLETED（冷启 266s）"
         evidence:
           comfyui_node_chain:
             status: passed
@@ -293,3 +293,14 @@ modules:
           default_profile_performance:
             status: unverified
             reason: "生产默认档（miaomiaoHarem + FaceDetailer + 28 步）单张 186.96s，超过 ≤120s 目标；NoobAI 冷启 266.5s；显存峰值未采样；v15 非默认档"
+          face_detailer_fast_profile:
+            status: verified
+            measured_at: "2026-11-27"
+            job_id: "job_e81b843b-4381-4e9f-91c2-65d5f994dc87"
+            image_id: "img_94de478c-11c4-4eb5-881a-d68dbc631262"
+            comfyui_prompt_id: "e791e357-cdb1-4db4-9c74-5647d2e34af1"
+            sampling_profile: "832×1216 / 28 步 / cfg4.5 / er_sde simple / face_detailer=false"
+            stage_seconds: 72.7
+            node_chain: "CheckpointLoaderSimple → CLIPTextEncode×2 → KSampler → VAEDecode → SaveImage（无 FaceDetailer/检测器）"
+            method: "临时实例 8010 独立 DataRoot + Agent CLI --no-face-detailer；binding Hash 99ef6d5af1d51e2c / 6bde04bd7f04fb2f 未变"
+            note: "快速档 72.7s 已达标 ≤120s；默认档仍为 face_detailer=on，default_profile_verified 保持 false"

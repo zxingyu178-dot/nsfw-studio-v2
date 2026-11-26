@@ -112,7 +112,7 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
   "loras": [
     {"name": "cunnyfunky_noobai_v3.3_000080.safetensors", "strength_model": 0.6, "strength_clip": 0.6}
   ],
-  "params": {"steps": 30, "cfg": 5.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0},
+  "params": {"steps": 30, "cfg": 5.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0, "face_detailer": false},
   "width": 832, "height": 1216, "count": 1, "seed": 20261127,
   "client_request_id": "agent-v15-001"
 }
@@ -121,6 +121,7 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `model` 必须是 ComfyUI `/models/checkpoints` 中的文件名（不含路径）；
 - `loras` 最多 2 条，强度 -2..2；
 - `sampler_name` / `scheduler` 必须来自模块枚举；
+- `params.face_detailer=false` 关闭人脸修复以显著提速（默认开启；仅 v15 等工作流含 FaceDetailer 节点时可用）；
 - 能力发现：`GET /api/v1/agent/capabilities`（Bearer）返回模块、可用底模、可用 LoRA 与参数边界。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
@@ -144,6 +145,7 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
 - 显式 `--module anime_generate` → 使用指定模块；
 - `--binding v15 --model <文件名> --lora <文件名>:0.6 --steps 30 --cfg 5.0 --sampler dpmpp_2m --scheduler karras`
   → 多模型 / LoRA / 采样参数（仅 Agent 端点；未配置 token 时 CLI 直接拒绝）；
+- `--no-face-detailer` → 关闭人脸修复以提速；`--face-detailer` 可显式强制开启；
 - `--list-workflows` → 读取 `/modules`，只列出 Agent 允许使用的文生图模块；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。

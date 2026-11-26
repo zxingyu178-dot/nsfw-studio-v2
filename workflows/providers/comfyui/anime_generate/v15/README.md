@@ -9,8 +9,10 @@
 | `model` | CheckpointLoaderSimple(1).ckpt_name | ComfyUI `/models/checkpoints` 文件名 |
 | `loras` | LoraLoader(21/22) | 0–2 条 `{name, strength_model, strength_clip}` |
 | `steps` / `cfg` / `sampler_name` / `scheduler` / `denoise` | KSampler(7) | 不传沿用默认 30 / 4.0 / er_sde / simple / 1.0 |
+| `face_detailer` | FaceDetailer(20) / 检测器(18) | 默认开启；`false` 时由 adapter 移除 20/18，SaveImage 直连 VAEDecode |
 
-FaceDetailer(20) 常开，参数保持 binding 默认，不作为任务变量。
+FaceDetailer(20) 默认开启，参数保持 binding 默认；`face_detailer=false` 可显著提速，
+适合快速预览与大批量筛选（binding 文件与 Hash 不变，off 由执行适配器按节点类型处理）。
 
 ## 默认与验收
 
