@@ -107,7 +107,7 @@ fixture：`fixtures/health_v2.json`。
   "width": 1024, "height": 1024,
   "positive_prompt": "生成时快照", "negative_prompt": "",
   "prompt_id": "prm_...", "prompt_version_id": "prmv_...", "link_state": "EXACT",
-  "job_id": "job_...", "module_id": "basic_generate", "seed": 123,
+  "job_id": "job_...", "module_id": "basic_generate", "job_source": "agent", "seed": 123,
   "model": "miaomiaoHarem_v14.safetensors", "size_bytes": null, "mime": null,
   "updated_at": "...", "revision": "17"
 }
@@ -116,6 +116,8 @@ fixture：`fixtures/health_v2.json`。
 - `positive_prompt / negative_prompt` 是生成时 Job 快照；外部导入或缺 Job → `null`。
 - `model` 是原任务工作流快照的底模文件名（与桌面/队列/进度同源，省略 model 的 AI 任务
   也会由服务端补齐）；无 Job、外部导入或旧快照 → `null`，客户端显示“未知”。
+- `job_source` 是原任务提交来源（`web / resume / agent / doubao`）；无 Job / 外部导入 →
+  `null`。客户端可据此显示“AI 提交 / 网页提交 / 续跑”，未知值按原样或隐藏。
 - `link_state`：
   - `EXACT`：prompt + version 都经显式 ID 校验可靠；
   - `UNRESOLVED`：prompt 可靠、生成版本未知；

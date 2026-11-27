@@ -106,6 +106,7 @@ def _mobile_image_detail(session: Session, image) -> dict:
         "kind": image.kind,
         "source": image.source,
         "job_id": image.job_id,
+        "job_source": job.source if job is not None else None,
         "seed": image.seed,
         "generation_module": provenance.get("module_id"),
         "generation_metadata": {

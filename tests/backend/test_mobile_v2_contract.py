@@ -189,6 +189,7 @@ def test_details_returns_job_snapshot_model(
     headers, _ = auth(mobile_client, session_factory)
     legacy = mobile_client.get(f"/mobile/images/{image.id}/details", headers=headers).json()["data"]
     assert legacy["model"] is None
+    assert legacy["job_source"] is None
 
     now = utc_now_iso()
     with session_factory() as session:
@@ -209,6 +210,7 @@ def test_details_returns_job_snapshot_model(
 
     result = mobile_client.get(f"/mobile/images/{image.id}/details", headers=headers).json()["data"]
     assert result["model"] == "miaomiaoHarem_v14.safetensors"
+    assert result["job_source"] == "agent"
 
 
 def test_feed_first_sync_paginates_without_gap_or_duplicate(
@@ -297,6 +299,7 @@ def test_details_link_states_and_no_fake_prompt(
     assert data["negative_prompt"] == "low quality"
     assert data["link_state"] == "EXACT"
     assert data["prompt_id"] == prompt.id and data["prompt_version_id"] == version.id
+    assert data["job_source"] == "web"
     assert "file_path" not in data and "file_path" not in data["positive_prompt"]
     assert data["revision"].isdecimal()
 

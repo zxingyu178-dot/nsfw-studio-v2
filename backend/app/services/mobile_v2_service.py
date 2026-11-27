@@ -188,6 +188,7 @@ def details(session: Session, image: Image) -> dict[str, Any]:
         "link_state": link_state,
         "job_id": image.job_id,
         "module_id": job.module_id if job is not None else metadata.get("module_id"),
+        "job_source": job.source if job is not None else None,
         "seed": image.seed,
         "model": snapshot_model(job.workflow_snapshot_json) if job is not None else None,
         "size_bytes": size_bytes if type(size_bytes) is int and size_bytes >= 0 else None,
