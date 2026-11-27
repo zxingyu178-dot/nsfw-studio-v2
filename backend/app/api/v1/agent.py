@@ -29,12 +29,14 @@ from app.api.v1.jobs import check_disk_space
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings
 from app.core.errors import (
     ForbiddenError,
+    NotFoundError,
     TooManyRequestsError,
     UnauthorizedError,
     UnprocessableError,
 )
 from app.engine.base import EngineBindingRef
 from app.engine.release import ensure_modules_released
+from app.models import Job
 from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT, AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
@@ -356,3 +358,20 @@ def submit_agent_job(
     response.idempotent_replay = not created
     response.disk_space = disk
     return response
+
+
+@router.get(
+    "/agent/jobs/{job_id}",
+    summary="Agent 查询任务进度（Bearer token；轻量只读）",
+)
+def get_agent_job(
+    request: Request,
+    job_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """AI 轮询专用：比 GET /jobs/{id} 更小、字段稳定，含底模 / 当前张进度 / 已完成图片 ID。"""
+    _require_token(request)
+    job = session.get(Job, job_id)
+    if job is None:
+        raise NotFoundError(f"任务不存在: {job_id}", code="JOB_NOT_FOUND")
+    return agent_service.job_status_payload(job)

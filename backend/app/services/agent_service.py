@@ -15,6 +15,7 @@ from app.core.config import Settings
 from app.core.errors import ValidationError
 from app.engine.base import EngineBindingRef, EngineError
 from app.engine.factory import module_availability, resolve_workflow_modules
+from app.schemas.job import snapshot_model
 from app.services.workflow_registry_service import WorkflowRegistryService
 from app.workflows.registry import default_registry
 
@@ -150,6 +151,50 @@ def fill_default_checkpoint(settings: Settings, adapter: Any, modules: list[dict
         if default_model:
             config["model"] = default_model
             module["config"] = config
+
+
+def job_status_payload(job: Any) -> dict[str, Any]:
+    """Agent 轮询用的轻量任务进度：只读、稳定字段，避免每几秒拉完整 JobResponse。
+
+    - progress = (已完成张数 + 当前张完成度) / 请求张数，保留 3 位小数；
+    - current 仅在确有 RUNNING 张时出现；images 只列已完成且有产出的图；
+    - model 与队列/手机/桌面详情同源（工作流快照，省略 model 的任务已由提交端补齐）。
+    """
+    items = sorted(job.items or [], key=lambda item: item.item_index)
+    running = next((item for item in items if item.status == "RUNNING"), None)
+    partial = float(running.progress) if running is not None and running.progress is not None else 0.0
+    progress = (
+        min(1.0, round((job.completed_count + partial) / job.requested_count, 3))
+        if job.requested_count else None
+    )
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "source": job.source,
+        "module_id": job.module_id,
+        "model": snapshot_model(job.workflow_snapshot_json),
+        "requested_count": job.requested_count,
+        "completed_count": job.completed_count,
+        "failed_count": sum(1 for item in items if item.status == "FAILED"),
+        "progress": progress,
+        "current": {
+            "item_index": running.item_index,
+            "progress": float(running.progress) if running.progress is not None else None,
+            "stage": running.current_stage,
+            "seed": running.seed,
+        } if running is not None else None,
+        "queue_position": job.queue_position if job.status == "QUEUED" else None,
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "finished_at": job.finished_at,
+        "error_type": job.error_type,
+        "error_message": job.error_message,
+        "images": [
+            {"image_id": item.image_id, "seed": item.seed, "item_index": item.item_index}
+            for item in items
+            if item.status == "COMPLETED" and item.image_id
+        ],
+    }
 
 
 def validate_agent_primary(settings: Settings, modules: list[dict[str, Any]]) -> None:

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings, WorkflowConfig
 from app.engine import release
 from app.main import create_app
-from app.models import Job, JobStage, Prompt
+from app.models import Job, JobItem, JobStage, Prompt
 from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT
 from app.services import job_service
 from app.services.model_registry_service import ModelRegistryService
@@ -705,3 +705,54 @@ def test_legacy_fingerprint_job_replays_after_prompt_archive(agent_client, sessi
     assert replay.json()["id"] == job_id
     assert replay.json()["idempotent_replay"] is True
     assert session.query(Prompt).count() == prompt_count
+
+
+def test_agent_job_status_returns_compact_progress(agent_client, session, monkeypatch):
+    """AI 轮询接口：底模 / 当前张进度 / 已完成图片，字段稳定且不返回完整 JobResponse。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-status")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-status"}
+    job = Job(
+        id="job_agent_status", source="agent", status="RUNNING", job_kind="generate",
+        prompt_mode="full", positive_prompt_snapshot="p", negative_prompt_snapshot="",
+        workbench_snapshot_json="{}",
+        workflow_snapshot_json=json.dumps({"modules": [
+            {"module_id": "anime_generate", "config": {"model": "miaomiaoHarem_v14.safetensors"}},
+        ]}),
+        generation_settings_json="{}", requested_count=2, completed_count=1,
+        module_id="anime_generate", created_at="2026-11-27T00:00:00.000Z",
+        started_at="2026-11-27T00:00:01.000Z", updated_at="2026-11-27T00:00:02.000Z",
+    )
+    session.add(job)
+    session.flush()
+    session.add_all([
+        JobItem(id="item_a", job_id=job.id, item_index=0, status="COMPLETED",
+                seed=11, image_id="img_a"),
+        JobItem(id="item_b", job_id=job.id, item_index=1, status="RUNNING",
+                seed=22, progress=0.5, current_stage="anime_generate"),
+    ])
+    session.commit()
+
+    response = agent_client.get("/api/v1/agent/jobs/job_agent_status", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "RUNNING"
+    assert data["model"] == "miaomiaoHarem_v14.safetensors"
+    assert data["progress"] == 0.75, "（已完成 1 + 当前 0.5）/ 2"
+    assert data["current"] == {
+        "item_index": 1, "progress": 0.5, "stage": "anime_generate", "seed": 22,
+    }
+    assert data["images"] == [{"image_id": "img_a", "seed": 11, "item_index": 0}]
+    assert "items" not in data and "workbench_snapshot" not in data
+
+
+def test_agent_job_status_requires_token_and_known_job(agent_client, monkeypatch):
+    """未带 token 一律拒绝；未知任务返回 404 JOB_NOT_FOUND。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-status-2")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    assert agent_client.get("/api/v1/agent/jobs/job_missing").status_code == 401
+
+    headers = {"Authorization": "Bearer test-token-status-2"}
+    response = agent_client.get("/api/v1/agent/jobs/job_missing", headers=headers)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "JOB_NOT_FOUND"

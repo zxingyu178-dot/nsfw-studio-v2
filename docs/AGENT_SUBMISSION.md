@@ -70,8 +70,8 @@ curl.exe -s -X POST http://127.0.0.1:8000/api/v1/agent/jobs `
 ```
 
 响应即 `JobResponse`：`id`、`status=QUEUED`、`queue_position`、`module_id`（实际使用的工作流）、
-`idempotent_replay`。随后轮询 `GET /api/v1/jobs/{id}`，完成后用 `image_id` 取图：
-`GET /api/v1/images/{image_id}/content`。
+`idempotent_replay`。随后轮询 `GET /api/v1/agent/jobs/{id}`（见 4.3，轻量且带 token），
+完成后用 `image_id` 取图：`GET /api/v1/images/{image_id}/content`。
 
 ### 4.1 工作流选择（W1.2）
 
@@ -143,6 +143,30 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `capabilities.lora_catalog`：按 LoRA 文件名返回注册中心元数据（`display_name / family /
   compatible_workflows / base_models / recommended_strength / notes`），仅包含当前已安装且已登记的 LoRA；
   AI 可据此选择与底模匹配的 LoRA 并使用推荐强度，桌面 LoRA 下拉显示同一份友好名称与默认强度。
+
+### 4.3 轮询进度（推荐给 AI）
+
+`GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）返回轻量进度，避免每几秒拉完整 `GET /jobs/{id}`：
+
+```json
+{
+  "job_id": "job_...", "status": "RUNNING", "source": "agent",
+  "module_id": "anime_generate", "model": "miaomiaoHarem_v14.safetensors",
+  "requested_count": 2, "completed_count": 1, "failed_count": 0,
+  "progress": 0.75,
+  "current": {"item_index": 1, "progress": 0.5, "stage": "anime_generate", "seed": 22},
+  "queue_position": null,
+  "created_at": "...", "started_at": "...", "finished_at": null,
+  "error_type": null, "error_message": null,
+  "images": [{"image_id": "img_...", "seed": 11, "item_index": 0}]
+}
+```
+
+- `progress` =（`completed_count` + 当前张完成度）/ `requested_count`，保留 3 位小数；
+- `current` 仅在确有 RUNNING 张时出现；`queue_position` 仅 QUEUED 时非 null；
+- `images` 只列已完成且有产出的图（取图仍走 `GET /api/v1/images/{image_id}/content`）；
+- `model` 来自任务工作流快照，省略 `model` 的 AI 任务也会显示实际默认底模；
+- 未带 token → 401；未知任务 → 404 `JOB_NOT_FOUND`；字段只增不改。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；

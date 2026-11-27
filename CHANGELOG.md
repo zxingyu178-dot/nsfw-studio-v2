@@ -9,6 +9,10 @@
 
 ### Added
 
+- Agent 新增轻量进度接口 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：返回
+  `status / model / requested_count / completed_count / failed_count / progress / current /
+  queue_position / images`，AI 轮询无需拉完整 JobResponse；省略 `model` 的任务同样返回
+  实际默认底模；`progress` 含当前张完成度，字段只增不改。
 - 任务历史卡片（列表态）直接显示底模短名，打开详情前即可区分多模型任务；旧任务/无快照
   不占位。
 - 图库「按任务查看」分组卡片新增底模短名与中文模块名：`GET /images/job-groups` 复用快照
