@@ -809,3 +809,7 @@ AI 直提与桌面选择器统一 LoRA 默认强度：`POST /agent/jobs` 的 `lo
 POST /agent/jobs 的 negative_prompt 改为可省略：省略/null 使用统一默认（与 CLI --negative 一致，capabilities.default_negative_prompt 暴露），显式空字符串才表示不使用负向提示词；CLI 请求文件同样保留省略语义，旧 /jobs 路径仍回退默认。LoRA 增加 binding 前置门禁：未声明 inputs.loras 或超过 max_items 时在创建 Job 前返回 422 BINDING_PARAM_UNSUPPORTED，不再等引擎执行阶段才失败。
 
 后端定向 83 项与全量 869 项通过；生产部署 4aa82e5 后实测：capabilities 默认负向正确，省略时快照为默认、显式空字符串为空，验证 Job 已取消、队列空闲。
+
+## 2026-11-27 — 桌面 LoRA 推荐强度提示
+
+已选 LoRA 下方显示注册中心 recommended_strength；手动调整后显示“当前 X”与“恢复推荐”，一键恢复为推荐值，与 AI 直提的默认强度同源。新增组件测试 3 项；前端全量 539 项与 typecheck 通过；生产构建 index-TlfBcdu8.js（hash 7b152e8b9edb）已部署，服务端资源与本地产物字节一致且包含新文案。
