@@ -200,6 +200,7 @@ for item in detail["items"]:
 | 操作 | 接口 |
 | --- | --- |
 | AI 轮询进度（轻量，Bearer；status/progress/current/images/model） | `GET /api/v1/agent/jobs/{job_id}`（见 `AGENT_SUBMISSION.md` §4.3） |
+| AI 对账最近任务（只列 agent 任务，`status`/`limit` 可选） | `GET /api/v1/agent/jobs?status=&limit=`（见 §4.4；CLI `--list-jobs`） |
 | 任务详情（进度 / 状态 / 每张图的 `image_id`） | `GET /api/v1/jobs/{job_id}` |
 | 图片列表 | `GET /api/v1/images?limit=20` |
 | **下载图片本体** | `GET /api/v1/images/{image_id}/content`（**二进制，保存成文件**） |

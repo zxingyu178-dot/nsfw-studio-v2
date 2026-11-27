@@ -168,6 +168,21 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `model` 来自任务工作流快照，省略 `model` 的 AI 任务也会显示实际默认底模；
 - 未带 token → 401；未知任务 → 404 `JOB_NOT_FOUND`；字段只增不改。
 
+### 4.4 最近任务列表（AI 对账）
+
+`GET /api/v1/agent/jobs?status=&limit=`（Bearer，只读）返回最近的 **Agent 任务**：
+
+```json
+{"items": [{"job_id": "job_...", "status": "RUNNING", "model": "...", "progress": 0.5, "...": "同 4.3"}],
+ "count": 1, "limit": 20, "status": null, "has_more": false}
+```
+
+- 只列 `source=agent` 的任务，按 `created_at desc, id desc` 排序；默认 20 条，`limit` 1..50；
+- `status` 可选（`QUEUED / RUNNING / PAUSED / INTERRUPTED / COMPLETED / FAILED / CANCELLED`），
+  非法值返回 422 `AGENT_JOB_STATUS_INVALID`；`has_more` 表示还有更早的任务；
+- 每项与 4.3 完全同构（含底模、当前张进度、已完成图片 ID），AI 重启后可用它找回任务号；
+- `capabilities.job_queries` 声明 `status / list` 路径与上下限，客户端不必硬编码。
+
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；
 JobService 创建成功时统一提交，失败（校验错误 / 幂等冲突 / 数据库错误）统一 rollback。
@@ -205,6 +220,8 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
   （需 Agent token）；
 - `--status <job_id>` → 读取 `/agent/jobs/{id}`，以 JSON 打印进度（status/progress/current/images），
   不提交、不下载；适合 AI 在两次调用之间查询（需 Agent token）；
+- `--list-jobs [--job-status STATUS] [--limit N]` → 读取 `/agent/jobs`，打印最近 Agent 任务列表
+  （默认 20 条、最多 50），用于重启对账或找回任务号（需 Agent token）；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
 

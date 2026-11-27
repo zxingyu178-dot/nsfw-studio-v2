@@ -21,8 +21,9 @@ import time
 import uuid
 from collections import deque
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_session
 from app.api.v1.jobs import check_disk_space
@@ -37,6 +38,7 @@ from app.core.errors import (
 from app.engine.base import EngineBindingRef
 from app.engine.release import ensure_modules_released
 from app.models import Job
+from app.models.job import JOB_STATUSES
 from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT, AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
@@ -149,6 +151,13 @@ def agent_capabilities(request: Request) -> dict:
         },
         "loras": loras,
         "lora_catalog": installed_lora_catalog,
+        # AI 发现只读查询端点，避免把路径硬编码在提示词里。
+        "job_queries": {
+            "status": "/api/v1/agent/jobs/{job_id}",
+            "list": "/api/v1/agent/jobs",
+            "list_default_limit": 20,
+            "list_max_limit": 50,
+        },
         "limits": {
             "width": {"min": 64, "max": 4096},
             "height": {"min": 64, "max": 4096},
@@ -358,6 +367,44 @@ def submit_agent_job(
     response.idempotent_replay = not created
     response.disk_space = disk
     return response
+
+
+@router.get(
+    "/agent/jobs",
+    summary="Agent 查询最近任务列表（Bearer token；只读）",
+)
+def list_agent_jobs(
+    request: Request,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    session: Session = Depends(get_session),
+) -> dict:
+    """只列 `source=agent` 的最近任务，按创建时间倒序；用于 AI 重启后对账 / 找回任务号。
+
+    返回项与 `GET /agent/jobs/{job_id}` 完全同构；`has_more` 表示还有更早的任务。
+    """
+    _require_token(request)
+    if status is not None and status not in JOB_STATUSES:
+        raise UnprocessableError(
+            f"无效任务状态: {status}",
+            code="AGENT_JOB_STATUS_INVALID",
+            details={"status": status, "allowed": list(JOB_STATUSES)},
+        )
+    statement = select(Job).where(Job.source == "agent").options(selectinload(Job.items))
+    if status is not None:
+        statement = statement.where(Job.status == status)
+    jobs = list(session.scalars(
+        statement.order_by(Job.created_at.desc(), Job.id.desc()).limit(limit + 1)
+    ))
+    has_more = len(jobs) > limit
+    jobs = jobs[:limit]
+    return {
+        "items": [agent_service.job_status_payload(job) for job in jobs],
+        "count": len(jobs),
+        "limit": limit,
+        "status": status,
+        "has_more": has_more,
+    }
 
 
 @router.get(

@@ -22,6 +22,10 @@
   `__none__` = 未记录），新增 `GET /mobile/images/models` 返回底模与图片数；筛选写入游标
   查询清单，换底模沿旧游标返回 422。MediaReview Alpha80 在筛选面板显示带张数的底模菜单，
   顶部摘要同步显示，旧桥未声明能力时自动隐藏。
+- Agent 新增最近任务列表 `GET /api/v1/agent/jobs?status=&limit=`（Bearer，只读）：只列
+  `source=agent` 的任务，按创建时间倒序，默认 20 / 最多 50，返回与轻量进度同构的条目及
+  `has_more`；非法状态 422 `AGENT_JOB_STATUS_INVALID`。`capabilities.job_queries` 声明
+  路径与上下限，CLI 新增 `--list-jobs [--job-status] [--limit]`，AI 重启后可对账找回任务号。
 - Agent 新增轻量进度接口 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：返回
   `status / model / requested_count / completed_count / failed_count / progress / current /
   queue_position / images`，AI 轮询无需拉完整 JobResponse；省略 `model` 的任务同样返回

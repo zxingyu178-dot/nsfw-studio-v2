@@ -99,6 +99,9 @@ def test_agent_capabilities_exposes_default_model_fields(agent_client, monkeypat
     assert isinstance(data["sampling_profiles"], dict)
     assert isinstance(data["model_catalog"], dict)
     assert isinstance(data["lora_catalog"], dict)
+    assert data["job_queries"]["list"] == "/api/v1/agent/jobs"
+    assert data["job_queries"]["status"] == "/api/v1/agent/jobs/{job_id}"
+    assert data["job_queries"]["list_max_limit"] == 50
 
 
 def test_valid_token_creates_queued_job(agent_client, monkeypatch):
@@ -744,6 +747,53 @@ def test_agent_job_status_returns_compact_progress(agent_client, session, monkey
     }
     assert data["images"] == [{"image_id": "img_a", "seed": 11, "item_index": 0}]
     assert "items" not in data and "workbench_snapshot" not in data
+
+
+def test_agent_jobs_list_only_agent_jobs_and_supports_status_limit(agent_client, session, monkeypatch):
+    """列表对账：只返回 agent 任务，按创建时间倒序，支持状态与条数过滤。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-list")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-list"}
+
+    def job(job_id: str, status: str, created_at: str, source: str = "agent") -> Job:
+        return Job(
+            id=job_id, source=source, status=status, job_kind="generate",
+            prompt_mode="full", positive_prompt_snapshot="p", negative_prompt_snapshot="",
+            workbench_snapshot_json="{}", generation_settings_json="{}",
+            requested_count=1, completed_count=1 if status == "COMPLETED" else 0,
+            module_id="anime_generate", created_at=created_at, updated_at=created_at,
+        )
+
+    session.add_all([
+        job("job_agent_running", "RUNNING", "2026-11-27T00:00:03.000Z"),
+        job("job_agent_done", "COMPLETED", "2026-11-27T00:00:01.000Z"),
+        job("job_web_running", "RUNNING", "2026-11-27T00:00:04.000Z", source="web"),
+    ])
+    session.commit()
+
+    response = agent_client.get("/api/v1/agent/jobs", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["count"] == 2 and data["limit"] == 20 and data["status"] is None
+    assert data["has_more"] is False
+    assert [item["job_id"] for item in data["items"]] == ["job_agent_running", "job_agent_done"]
+    assert all(item["source"] == "agent" for item in data["items"])
+    assert set(data["items"][0]) >= {"job_id", "status", "model", "progress", "images"}
+
+    limited = agent_client.get("/api/v1/agent/jobs", headers=headers, params={"limit": 1})
+    assert limited.status_code == 200
+    assert [item["job_id"] for item in limited.json()["items"]] == ["job_agent_running"]
+    assert limited.json()["has_more"] is True
+
+    completed = agent_client.get("/api/v1/agent/jobs", headers=headers, params={"status": "COMPLETED"})
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "COMPLETED"
+    assert [item["job_id"] for item in completed.json()["items"]] == ["job_agent_done"]
+
+    invalid = agent_client.get("/api/v1/agent/jobs", headers=headers, params={"status": "BOGUS"})
+    assert invalid.status_code == 422
+    assert invalid.json()["error"]["code"] == "AGENT_JOB_STATUS_INVALID"
+    assert agent_client.get("/api/v1/agent/jobs").status_code == 401
 
 
 def test_agent_job_status_requires_token_and_known_job(agent_client, monkeypatch):

@@ -11,8 +11,8 @@
         [--model NoobAI-XL-v1.1.safetensors] [--lora <name>[:<strength>]]... \
         [--steps 30] [--cfg 4.5] [--sampler er_sde] [--scheduler simple] [--denoise 1.0] \
         [--negative "..."] [--width 768] [--height 1024] [--count 1] [--seed 42] \
-        [--next] [--status <job_id>] [--out D:\\ai_out] \
-        [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
+        [--next] [--status <job_id>] [--list-jobs [--job-status STATUS] [--limit N]] \
+        [--out D:\\ai_out] [--api http://127.0.0.1:8000/api/v1] [--timeout-min 120]
 
 模型/版本/采样参数（--module-version/--binding/--model/--lora/--steps/--cfg/--sampler/
 --scheduler/--denoise）只支持 Agent 端点，需配置 agent.token。
@@ -43,6 +43,7 @@ import time
 import urllib.request
 import uuid
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 REQUEST_FIELDS = {
@@ -65,6 +66,9 @@ DEFAULT_NEGATIVE_PROMPT = (
 ADVANCED_FIELDS = (
     "module_version", "binding_version", "model", "loras", "params",
     "use_recommended_sampling",
+)
+AGENT_JOB_STATUSES = (
+    "QUEUED", "RUNNING", "PAUSED", "INTERRUPTED", "COMPLETED", "FAILED", "CANCELLED",
 )
 
 
@@ -409,6 +413,18 @@ def allows_agent_module(module: dict) -> bool:
     )
 
 
+def list_agent_jobs(api: str, token: str, status: str | None = None, limit: int = 20) -> int:
+    """列出最近 Agent 任务（只读 JSON），用于 AI 重启后对账或找回任务号。"""
+    params: dict[str, object] = {"limit": limit}
+    if status:
+        params["status"] = status
+    data = get(api, f"/agent/jobs?{urlencode(params)}", token=token)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    suffix = "（还有更早）" if data.get("has_more") else ""
+    print(f"[OK] {data.get('count', 0)} 个任务{suffix}")
+    return 0
+
+
 def list_agent_workflows(api: str) -> list[dict]:
     return [module for module in get(api, "/modules") if allows_agent_module(module)]
 
@@ -531,6 +547,11 @@ def main() -> int:
                         help="列出已安装 LoRA、显示名、family、适用工作流与依赖（需 Agent token）")
     parser.add_argument("--status", default=None, metavar="JOB_ID",
                         help="只读查询任务进度（/agent/jobs/{id}，需 Agent token；不提交、不下载）")
+    parser.add_argument("--list-jobs", action="store_true",
+                        help="列出最近的 Agent 任务（只读，需 Agent token；不提交、不下载）")
+    parser.add_argument("--job-status", default=None, choices=AGENT_JOB_STATUSES,
+                        help="--list-jobs 的状态过滤")
+    parser.add_argument("--limit", type=int, default=20, help="--list-jobs 返回条数（1..50）")
     parser.add_argument("--negative", default=DEFAULT_NEGATIVE_PROMPT,
                         help="负向提示词；不传使用统一默认，传空字符串表示不使用负向提示词")
     parser.add_argument("--width", type=int, default=768)
@@ -547,6 +568,23 @@ def main() -> int:
     parser.add_argument("--legacy", action="store_true",
                         help="强制走旧 /jobs 端点（仅本机调试；不推荐）")
     args = parser.parse_args()
+
+    if args.job_status is not None and not args.list_jobs:
+        print("[FAIL] --job-status 只能与 --list-jobs 一起使用")
+        return 2
+    if args.list_jobs:
+        if (args.status is not None or args.list_workflows or args.list_models
+                or args.list_loras or args.request_file is not None):
+            print("[FAIL] --list-jobs 不能与其他操作同时使用")
+            return 2
+        if not 1 <= args.limit <= 50:
+            print("[FAIL] --limit 必须在 1..50 之间")
+            return 2
+        token = load_token(args.token)
+        if not token:
+            print("[FAIL] --list-jobs 需要 Agent token（配置 agent.token 或 --token）")
+            return 2
+        return list_agent_jobs(args.api, token, status=args.job_status, limit=args.limit)
 
     if args.status is not None:
         if args.list_workflows or args.list_models or args.list_loras or args.request_file is not None:

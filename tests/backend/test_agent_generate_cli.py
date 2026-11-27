@@ -506,3 +506,43 @@ def test_status_prints_agent_progress(cli, monkeypatch, capsys):
 def test_status_rejects_other_operations(cli, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--status", "job_x", "--list-models"])
     assert cli.main() == 2
+
+
+def test_list_jobs_requires_token(cli, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "load_token", lambda value: "")
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-jobs"])
+    assert cli.main() == 2
+    assert "需要 Agent token" in capsys.readouterr().out
+
+
+def test_list_jobs_prints_recent_jobs_with_filters(cli, monkeypatch, capsys):
+    calls = []
+
+    def fake_get(api, path, token=None):
+        calls.append((path, token))
+        return {
+            "items": [{
+                "job_id": "job_x", "status": "RUNNING", "model": "NoobAI-XL-v1.1.safetensors",
+                "progress": 0.5, "images": [],
+            }],
+            "count": 1, "limit": 5, "status": "RUNNING", "has_more": True,
+        }
+
+    monkeypatch.setattr(cli, "load_token", lambda value: "tok")
+    monkeypatch.setattr(cli, "get", fake_get)
+    monkeypatch.setattr(sys, "argv", [
+        "agent_generate.py", "--list-jobs", "--job-status", "RUNNING", "--limit", "5",
+    ])
+    assert cli.main() == 0
+    out = capsys.readouterr().out
+    assert calls == [("/agent/jobs?limit=5&status=RUNNING", "tok")]
+    assert '"job_id": "job_x"' in out
+    assert "NoobAI-XL-v1.1.safetensors" in out
+    assert "[OK] 1 个任务（还有更早）" in out
+
+
+def test_list_jobs_rejects_other_operations(cli, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--list-jobs", "--list-workflows"])
+    assert cli.main() == 2
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--job-status", "RUNNING"])
+    assert cli.main() == 2
