@@ -867,3 +867,13 @@ AI 直提若省略 `model`（`use_recommended_sampling` 或普通提交），执
 新增 3 项后端测试（Agent 省略 model 记录默认底模、binding 不支持 model 时不写、`/jobs` 写回快照），后端全量 873 项通过。生产部署 6fccaee：协作停止事件停 Studio 后由计划任务重启，健康 0.39.0，手机桥 build `6fccaee`（contract 2、能力集含 `mobile_generation_model_v1`），ComfyUI PID 11432 全程未变。
 
 真实验证：用 Agent 提交**完全省略 model** 的 2 张任务 `job_eb70e06b-8e68-4e3c-a07c-e4d6d6fe8266`（832×1216、40 步、关人脸修复），队列 running 快照即记录 `miaomiaoHarem_v14.safetensors`；运行中手机图库顶栏显示“电脑端生成中：第 1 / 2 张 · 剩余 1 段 · 3%”+“底模 miaomiaoHarem_v14”，桌面任务坞显示同一底模与“AI 提交”；2 张全部 COMPLETED（`img_8cc5df2b-45db-4843-98e7-66204db2b2ce` / `img_b90242ce-91c8-439e-ac12-280018f0d379`），完成后手机进度与底模行消失并出现“新图 3”。
+
+## 2026-11-27 — 图库分组显示底模与中文模块名
+
+图库「按任务查看」分组此前只显示原始 `module_id`（`anime_generate`），也没有底模，多模型对比必须先点进详情。现在 `GET /images/job-groups` 每项追加 `model`（与队列/详情同源，复用 `snapshot_model` 解析快照；旧任务/异常快照为 null），分组卡片把模块名换成 `MODULE_LABEL`（未知回退原始 ID），并在其后显示底模短名（去掉权重扩展名，长名单行省略、`title` 保留完整名）。前端补 2 项断言（友好模块名 + 底模短名/title、旧任务回退），后端补 1 项（有/无/损坏快照），目标文件测试通过，typecheck 与生产构建通过。
+
+生产部署 e28344a：前端 `index-gSAO6gRy.js` / `index-BEt3hdqR.css`（`deploy_app_dist.ps1`），后端协作停止后计划任务重启，健康 0.39.0、桥 build `e28344a`，ComfyUI PID 11432 未变。`/images/job-groups` 实测：最新默认底模任务 `job_eb70e06b` 返回 `miaomiaoHarem_v14.safetensors`，`job_a82176c7` 返回 `NoobAI-XL-v1.1.safetensors`，修复前旧任务返回 null。隔离浏览器打开 `/gallery` → 按任务查看：首卡同时显示“动漫生成”“miaomiaoHarem_v14”，旧任务卡只显示“动漫生成”且不占位。
+
+## 2026-11-27 — 任务历史卡片显示底模
+
+任务历史列表此前只有来源、短 ID、时间与张数，分辨不同底模的任务必须逐个打开详情。现在卡片 meta 追加“· 底模 xxx”（`snapshotModelName`，去掉权重扩展名；旧任务/无快照不占位）。新增 1 项卡片断言（两条任务仅一条出现底模），详情用例因卡片与抽屉同时出现底模名改为 `findAllByText`，4 项用例通过，typecheck 与生产构建通过。
