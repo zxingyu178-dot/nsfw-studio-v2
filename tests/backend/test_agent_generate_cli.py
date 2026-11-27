@@ -474,3 +474,35 @@ def test_validate_only_has_no_credentials_network_or_directory_side_effects(
     assert prompt not in output
     assert token not in output
     assert not out_dir.exists()
+
+
+def test_status_requires_token(cli, monkeypatch):
+    monkeypatch.setattr(cli, "load_token", lambda value: "")
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--status", "job_x"])
+    assert cli.main() == 2
+
+
+def test_status_prints_agent_progress(cli, monkeypatch, capsys):
+    calls = []
+
+    def fake_get(api, path, token=None):
+        calls.append((path, token))
+        return {
+            "job_id": "job_x", "status": "RUNNING", "progress": 0.5,
+            "model": "NoobAI-XL-v1.1.safetensors",
+            "completed_count": 1, "requested_count": 2,
+        }
+
+    monkeypatch.setattr(cli, "load_token", lambda value: "tok")
+    monkeypatch.setattr(cli, "get", fake_get)
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--status", "job_x"])
+    assert cli.main() == 0
+    out = capsys.readouterr().out
+    assert calls == [("/agent/jobs/job_x", "tok")]
+    assert '"progress": 0.5' in out
+    assert "NoobAI-XL-v1.1.safetensors" in out
+
+
+def test_status_rejects_other_operations(cli, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["agent_generate.py", "--status", "job_x", "--list-models"])
+    assert cli.main() == 2
