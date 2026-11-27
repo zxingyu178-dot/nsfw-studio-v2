@@ -203,6 +203,8 @@ $env:NSFW_STUDIO_AGENT_TOKEN = "你的 token"
   （需 Agent token；省略 `--model` 时可直接参考默认底模）；
 - `--list-loras` → 读取 `/agent/capabilities`，列出已安装 LoRA、显示名、family、适用工作流与依赖底模
   （需 Agent token）；
+- `--status <job_id>` → 读取 `/agent/jobs/{id}`，以 JSON 打印进度（status/progress/current/images），
+  不提交、不下载；适合 AI 在两次调用之间查询（需 Agent token）；
 - 命令结束会打印**实际执行**的 `module_id`，不是仅回显 CLI 参数；
 - 提示词由服务端在 Job 事务内关联（原 `--no-prompt-library` 已删除，不再有无效选项）。
 
