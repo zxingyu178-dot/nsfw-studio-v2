@@ -826,4 +826,4 @@ Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `fa
 
 Agent / AI 直接提交的任务进入 Generate 队列后与页面提交无法区分。`QueuePanel` 队列行在 PAUSED 徽标旁新增“AI 提交”徽标（仅 `job.source === 'agent'`），排队与暂停列表共用同一行组件，因此两处同时生效。
 
-新增组件测试断言：agent 任务恰好一个“AI 提交”徽标，web 任务不显示；前端 typecheck 通过，全量 Vitest 540 项通过。
+新增组件测试断言：agent 任务恰好一个“AI 提交”徽标，web 任务不显示；前端 typecheck 通过，全量 Vitest 540 项通过。已用 `scripts/deploy_app_dist.ps1` 部署到生产（dev/app HEAD 均为 c334207），生产 `/` 引用 `index-BE9ih8-r.js`，该资源包含“AI 提交”，旧 `index-TlfBcdu8.js` 不再被引用。
