@@ -185,6 +185,9 @@ class ModelRegistryService:
                 ],
                 "notes": model.get("notes"),
             }
+            strength = model.get("recommended_strength")
+            if isinstance(strength, (int, float)):
+                meta["recommended_strength"] = float(strength)
             for item in model.get("files") or []:
                 if not isinstance(item, dict) or str(item.get("folder") or "") != "loras":
                     continue

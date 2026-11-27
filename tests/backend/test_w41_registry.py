@@ -97,6 +97,7 @@ def test_model_registry_lora_catalog(settings):
     assert entry["display_name"] == "Hentai Pussy inspection (Pony) v1"
     assert entry["family"] == "sdxl_pony"
     assert entry["base_models"] == ["miaomiao_harem_v14"]
+    assert entry["recommended_strength"] == 0.6
     assert "anime_generate" in entry["compatible_workflows"]
     # 只收 lora 类型：底模文件名不得混入
     assert "NoobAI-XL-v1.1.safetensors" not in catalog

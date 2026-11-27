@@ -76,6 +76,7 @@
       "type": "array",
       "items": {"type": "string", "pattern": "^[a-z0-9_]+$"}
     },
+    "recommended_strength": {"type": "number", "minimum": 0, "maximum": 2},
     "recommended_sampling": {
       "type": "object",
       "additionalProperties": false,

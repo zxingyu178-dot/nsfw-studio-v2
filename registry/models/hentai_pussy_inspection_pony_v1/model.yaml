@@ -19,6 +19,7 @@ dependencies:
   note: Pony 系 LoRA，作用于 anime_generate 的 SDXL 动漫底模
 compatible_workflows:
 - anime_generate
+recommended_strength: 0.6
 notes: anime v4 专用 LoRA；作者 満珍楼 (COSiNE)，Civitai 570883 / 636338；提供解剖形状触发词。
 created_at: '2026-11-14'
 updated_at: '2026-11-14'

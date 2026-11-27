@@ -336,7 +336,13 @@ export function InspectorPanel({
           options={engineModels.loras.map((name) => {
             const meta = engineModels.lora_catalog?.[name]
             const label = meta?.display_name?.trim() || name
-            return label === name ? { value: name, label } : { value: name, label, description: name }
+            const strength = meta?.recommended_strength
+            return {
+              value: name,
+              label,
+              ...(label === name ? {} : { description: name }),
+              ...(typeof strength === 'number' ? { strength } : {}),
+            }
           })}
           onChange={(next) => setPrimaryModuleConfig({ loras: next.length > 0 ? next : undefined })}
         />

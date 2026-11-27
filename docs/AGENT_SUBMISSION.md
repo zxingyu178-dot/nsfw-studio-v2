@@ -135,8 +135,8 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 - `capabilities.model_catalog`：按底模文件名返回注册中心元数据（`display_name / family /
   compatible_workflows / notes / recommended_sampling`），仅包含当前已安装的 checkpoint。
 - `capabilities.lora_catalog`：按 LoRA 文件名返回注册中心元数据（`display_name / family /
-  compatible_workflows / base_models / notes`），仅包含当前已安装且已登记的 LoRA；
-  AI 可据此选择与底模匹配的 LoRA，桌面 LoRA 下拉显示同一份友好名称。
+  compatible_workflows / base_models / recommended_strength / notes`），仅包含当前已安装且已登记的 LoRA；
+  AI 可据此选择与底模匹配的 LoRA 并使用推荐强度，桌面 LoRA 下拉显示同一份友好名称与默认强度。
 
 **事务（W1.2.1 / W1.2.2）**：Prompt 创建/复用与 Job / JobItem / JobStage 在同一数据库事务中，
 `assign_ai_prompt(commit=False)` 只 flush；`attach_ai_prompt` 不单独提交；

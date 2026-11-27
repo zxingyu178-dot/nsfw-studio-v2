@@ -139,6 +139,7 @@ def test_list_loras_prints_catalog(cli, monkeypatch, capsys):
                     "family": "sdxl_pony",
                     "compatible_workflows": ["anime_generate"],
                     "base_models": ["miaomiao_harem_v14"],
+                    "recommended_strength": 0.6,
                 },
             },
         }
@@ -150,6 +151,7 @@ def test_list_loras_prints_catalog(cli, monkeypatch, capsys):
     output = capsys.readouterr().out
     assert calls == [("/agent/capabilities", "tok")]
     assert "p.safetensors" in output and "Pony Detail" in output
+    assert "推荐强度 0.6" in output
     assert "适用 anime_generate" in output
     assert "依赖 miaomiao_harem_v14" in output
 

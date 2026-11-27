@@ -361,6 +361,8 @@ export interface EngineLoraCatalogEntryDTO {
   compatible_workflows?: string[]
   /** 依赖的底模 model_id（注册中心 dependencies）。 */
   base_models?: string[]
+  /** 注册中心登记的推荐强度（0–2）；未登记时前端使用默认强度。 */
+  recommended_strength?: number
   notes?: string
 }
 

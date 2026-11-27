@@ -45,7 +45,7 @@ vi.mock('../../../api/client', () => ({
     preflight: vi.fn(),
     models: vi.fn().mockResolvedValue({
       checkpoints: ['NoobAI-XL-v1.1.safetensors'],
-      loras: ['cunnyfunky_v5.0_000008.safetensors'],
+      loras: ['cunnyfunky_v5.0_000008.safetensors', 'cunnyfunky_noobai_v3.3_000080.safetensors'],
       model_catalog: {
         'NoobAI-XL-v1.1.safetensors': {
           model_id: 'noobai_xl_v1_1',
@@ -60,6 +60,7 @@ vi.mock('../../../api/client', () => ({
           family: 'sdxl_anime',
           compatible_workflows: ['anime_generate'],
           base_models: ['NoobAI-XL-v1.1.safetensors'],
+          recommended_strength: 0.6,
         },
       },
       sampling_profiles: {
@@ -164,13 +165,26 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
     expect(setPrimaryModuleConfig).toHaveBeenCalledWith({ model: undefined })
   })
 
-  it('LoRA 第一行选择后写入 loras 数组（默认强度 0.8）', async () => {
+  it('LoRA 第一行选择后写入注册中心推荐强度', async () => {
     renderPanel()
     await waitFor(() => expect(screen.getByRole('button', { name: 'LoRA 1' })).toBeTruthy())
     chooseOption('LoRA 1', 'cunnyfunky_v5.0_000008.safetensors')
     expect(setPrimaryModuleConfig).toHaveBeenCalledWith({
       loras: [{
         name: 'cunnyfunky_v5.0_000008.safetensors',
+        strength_model: 0.6,
+        strength_clip: 0.6,
+      }],
+    })
+  })
+
+  it('未登记推荐强度的 LoRA 使用默认强度 0.8', async () => {
+    renderPanel()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'LoRA 1' })).toBeTruthy())
+    chooseOption('LoRA 1', 'cunnyfunky_noobai_v3.3_000080.safetensors')
+    expect(setPrimaryModuleConfig).toHaveBeenCalledWith({
+      loras: [{
+        name: 'cunnyfunky_noobai_v3.3_000080.safetensors',
         strength_model: 0.8,
         strength_clip: 0.8,
       }],

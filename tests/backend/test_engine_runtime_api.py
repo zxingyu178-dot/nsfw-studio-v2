@@ -204,6 +204,7 @@ def test_engine_models_includes_registry_lora_catalog():
     assert entry["display_name"] == "Hentai Pussy inspection (Pony) v1"
     assert entry["family"] == "sdxl_pony"
     assert entry["base_models"] == ["miaomiao_harem_v14"]
+    assert entry["recommended_strength"] == 0.6
     assert "anime_generate" in entry["compatible_workflows"]
 
 

@@ -7,11 +7,12 @@ export interface LoraEntry {
   strength_clip: number
 }
 
-/** LoRA 候选：label 为友好名称，description 保留原始文件名。 */
+/** LoRA 候选：label 为友好名称，description 保留原始文件名，strength 为注册中心推荐强度。 */
 export interface LoraOption {
   value: string
   label: string
   description?: string
+  strength?: number
 }
 
 /** 任务级 LoRA 栈：默认一行，选中后出现第二行（binding 上限 2 条）。 */
@@ -56,10 +57,12 @@ export function LoraStackEditor({
                       update(index, null)
                       return
                     }
+                    const option = options.find((item) => item.value === name)
+                    const strength = option?.strength ?? 0.8
                     update(index, {
                       name,
-                      strength_model: entry?.strength_model ?? 0.8,
-                      strength_clip: entry?.strength_clip ?? 0.8,
+                      strength_model: strength,
+                      strength_clip: strength,
                     })
                   }}
                   ariaLabel={`LoRA ${index + 1}`}

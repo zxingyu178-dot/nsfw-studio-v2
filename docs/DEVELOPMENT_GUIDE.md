@@ -63,8 +63,8 @@ cd frontend && npm run test -- --run && npx tsc -b && npm run build
 - 能力发现：`GET /api/v1/agent/capabilities`（需 token）返回模块、可用底模、可用 LoRA、参数边界，
   以及按底模文件名给出的 `sampling_profiles` 推荐采样参数（与 `/engine/models` 同源）。
 - 模型元数据统一走 `model_catalog`（display_name / family / compatible_workflows / notes），
-  LoRA 元数据统一走 `lora_catalog`（display_name / family / compatible_workflows / base_models / notes），
-  桌面前端与 Agent 共用，禁止各自维护模型展示名或兼容表。
+  LoRA 元数据统一走 `lora_catalog`（display_name / family / compatible_workflows / base_models /
+  recommended_strength / notes），桌面前端与 Agent 共用，禁止各自维护模型展示名或兼容表。
 - 推荐采样参数唯一来源：`registry/models/**/model.yaml` 的 `recommended_sampling`；
   新增底模必须同时登记推荐值（枚举由 `test_w41_registry` 校验），Agent 与前端禁止维护第二份推荐表。
 - 服务端校验链：模块解析 → 放行门禁 → binding 参数声明 → 模型/LoRA 存在性 → 模块 config 校验 → 创建 Job。

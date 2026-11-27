@@ -40,6 +40,8 @@
 - `/engine/models` 与 `/agent/capabilities` 新增 `lora_catalog`：按 LoRA 文件名返回
   `display_name / family / compatible_workflows / base_models / notes`（仅已安装且已登记）；
   桌面 LoRA 下拉显示友好名称，第二行保留文件名。
+- LoRA Manifest 新增可选 `recommended_strength`（0–2）：`lora_catalog` 同步暴露；
+  桌面选择 LoRA 时默认使用推荐强度（未登记回退 0.8），CLI `--list-loras` 打印推荐强度。
 - CLI 新增 `--list-loras`：列出已安装 LoRA、显示名、family、适用工作流与依赖底模。
 - CLI 新增 `--list-models`：列出已安装底模、显示名、family 与推荐采样参数，并给出默认底模。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；

@@ -471,10 +471,12 @@ def list_agent_loras(api: str, token: str) -> int:
         family = str(entry.get("family") or "")
         workflows = "/".join(str(item) for item in entry.get("compatible_workflows") or [])
         base_models = "、".join(str(item) for item in entry.get("base_models") or [])
+        strength = entry.get("recommended_strength")
         print(f"  - {name}")
         details = [part for part in (
             display if display and display != name else "",
             family,
+            f"推荐强度 {strength}" if isinstance(strength, (int, float)) else "",
             f"适用 {workflows}" if workflows else "",
             f"依赖 {base_models}" if base_models else "",
         ) if part]
