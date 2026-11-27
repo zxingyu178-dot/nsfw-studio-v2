@@ -19,8 +19,14 @@ class AgentLoraSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    strength_model: float = Field(default=1.0, ge=-2.0, le=2.0)
-    strength_clip: float = Field(default=1.0, ge=-2.0, le=2.0)
+    strength_model: float | None = Field(
+        default=None, ge=-2.0, le=2.0,
+        description="模型强度；不传=注册中心 recommended_strength（无登记时 0.8）",
+    )
+    strength_clip: float | None = Field(
+        default=None, ge=-2.0, le=2.0,
+        description="CLIP 强度；不传=注册中心 recommended_strength（无登记时 0.8）",
+    )
 
     @field_validator("name")
     @classmethod

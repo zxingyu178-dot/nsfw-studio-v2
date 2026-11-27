@@ -119,7 +119,8 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 ```
 
 - `model` 必须是 ComfyUI `/models/checkpoints` 中的文件名（不含路径）；
-- `loras` 最多 2 条，强度 -2..2；
+- `loras` 最多 2 条，强度 -2..2；省略 `strength_model` / `strength_clip` 时按该 LoRA 的
+  注册中心 `recommended_strength` 补齐（无登记回退 0.8），显式强度优先；
 - `sampler_name` / `scheduler` 必须来自模块枚举；
 - `params.face_detailer=false` 关闭人脸修复以显著提速（默认开启；仅 v15 等工作流含 FaceDetailer 节点时可用）；
 - `use_recommended_sampling=true`：自动套用注册中心推荐采样参数；`model` 可省略（使用当前

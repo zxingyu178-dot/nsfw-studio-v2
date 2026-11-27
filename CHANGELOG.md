@@ -45,6 +45,9 @@
   桌面 LoRA 下拉显示友好名称，第二行保留文件名。
 - LoRA Manifest 新增可选 `recommended_strength`（0–2）：`lora_catalog` 同步暴露；
   桌面选择 LoRA 时默认使用推荐强度（未登记回退 0.8），CLI `--list-loras` 打印推荐强度。
+- Agent `loras[].strength_model / strength_clip` 可省略：服务端按该 LoRA 的注册中心
+  `recommended_strength` 补齐（无登记回退 0.8），显式强度优先；CLI `--lora 文件名`
+  不写强度时同样交给服务端，保证 AI 直提与桌面选择器的默认强度一致。
 - 桌面工作台：已选 LoRA 与当前底模的登记依赖不一致时显示提示（例如 Pony LoRA 搭配其它底模），
   仍允许提交，避免静默产生异常效果。
 - 桌面工作台：LoRA 下拉在底模不匹配时标注“需 <底模>”，选择前即可判断兼容性。

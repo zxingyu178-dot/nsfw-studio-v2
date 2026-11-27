@@ -116,7 +116,10 @@ def _normalize_loras(value: object) -> list[dict]:
             raise RequestValidationError(f"第 {index} 条 LoRA 文件名不得包含路径")
         strengths: dict[str, float] = {}
         for key in ("strength_model", "strength_clip"):
-            raw = item.get(key, 1.0)
+            if item.get(key) is None:
+                # 未显式给强度：保留省略，由服务端套用注册中心推荐强度。
+                continue
+            raw = item[key]
             if isinstance(raw, bool) or not isinstance(raw, (int, float)):
                 raise RequestValidationError(f"第 {index} 条 LoRA 的 {key} 必须是数字")
             if not -2.0 <= float(raw) <= 2.0:
@@ -165,21 +168,22 @@ def _normalize_params(value: object) -> dict:
 
 
 def _parse_lora_option(value: str) -> dict:
-    """解析 CLI 的 --lora 写法：`文件名` 或 `文件名:0.6`（默认强度 1.0）。"""
+    """解析 CLI 的 --lora 写法：`文件名` 或 `文件名:0.6`。
+
+    不写强度时保留省略，由服务端按注册中心 recommended_strength 补齐。
+    """
     raw = value.strip()
     if not raw:
         raise RequestValidationError("--lora 不能为空")
-    strength = 1.0
     name, separator, suffix = raw.rpartition(":")
     if separator and name:
         try:
             strength = float(suffix)
         except ValueError:
             name = raw
-            strength = 1.0
-    else:
-        name = raw
-    return {"name": name, "strength_model": strength, "strength_clip": strength}
+        else:
+            return {"name": name, "strength_model": strength, "strength_clip": strength}
+    return {"name": raw}
 
 
 def advanced_request_fields(payload: dict) -> list[str]:
@@ -501,7 +505,7 @@ def main() -> int:
     parser.add_argument("--model", default=None,
                         help="底模文件名（不含路径，例如 NoobAI-XL-v1.1.safetensors；仅 Agent 端点）")
     parser.add_argument("--lora", action="append", default=None, metavar="NAME[:STRENGTH]",
-                        help="LoRA 文件名（可带强度，最多 2 条；仅 Agent 端点）")
+                        help="LoRA 文件名（可带强度，最多 2 条；不写强度时由服务端套用推荐强度；仅 Agent 端点）")
     parser.add_argument("--steps", type=int, default=None, help="采样步数（仅 Agent 端点）")
     parser.add_argument("--cfg", type=float, default=None, help="CFG（仅 Agent 端点）")
     parser.add_argument("--sampler", default=None, help="采样器名称（仅 Agent 端点）")

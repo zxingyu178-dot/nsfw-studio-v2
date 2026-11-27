@@ -223,7 +223,20 @@ def submit_agent_job(
     if body.model:
         config["model"] = body.model
     if body.loras:
-        config["loras"] = [item.model_dump() for item in body.loras]
+        # 未显式给强度时套用注册中心 recommended_strength；无登记回退 0.8。
+        # 与桌面 LoRA 选择器默认强度一致，避免 AI 直提与 UI 生成出现两套默认。
+        lora_recommended = ModelRegistryService(settings).lora_catalog()
+        resolved_loras = []
+        for item in body.loras:
+            resolved = item.model_dump()
+            recommended = (lora_recommended.get(item.name) or {}).get("recommended_strength")
+            fallback = float(recommended) if isinstance(recommended, (int, float)) else 0.8
+            if resolved["strength_model"] is None:
+                resolved["strength_model"] = fallback
+            if resolved["strength_clip"] is None:
+                resolved["strength_clip"] = fallback
+            resolved_loras.append(resolved)
+        config["loras"] = resolved_loras
     if body.params:
         config.update(body.params.model_dump(exclude_none=True))
     if config:

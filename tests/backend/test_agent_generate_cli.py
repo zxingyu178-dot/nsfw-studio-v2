@@ -412,12 +412,20 @@ def test_advanced_fields_require_agent_token(cli, tmp_path, monkeypatch, capsys)
 
 
 def test_parse_lora_option(cli):
-    assert cli._parse_lora_option("a.safetensors") == {
-        "name": "a.safetensors", "strength_model": 1.0, "strength_clip": 1.0,
-    }
+    # 不写强度：保留省略，交给服务端套用注册中心推荐强度。
+    assert cli._parse_lora_option("a.safetensors") == {"name": "a.safetensors"}
     assert cli._parse_lora_option("a.safetensors:0.6") == {
         "name": "a.safetensors", "strength_model": 0.6, "strength_clip": 0.6,
     }
+    normalized = cli.validate_request({
+        "prompt": "1girl", "client_request_id": "lora-omit",
+        "loras": [{"name": "a.safetensors"}],
+    })
+    assert normalized["loras"] == [{"name": "a.safetensors"}]
+    assert cli.validate_request({
+        "prompt": "1girl", "client_request_id": "lora-explicit",
+        "loras": [{"name": "a.safetensors", "strength_model": 0.55}],
+    })["loras"] == [{"name": "a.safetensors", "strength_model": 0.55}]
 
 
 def test_validate_only_has_no_credentials_network_or_directory_side_effects(

@@ -13,6 +13,7 @@ from app.engine import release
 from app.main import create_app
 from app.models import Job, JobStage, Prompt
 from app.services import job_service
+from app.services.model_registry_service import ModelRegistryService
 
 
 def mock_settings(settings: Settings) -> Settings:
@@ -287,6 +288,43 @@ def test_agent_accepts_v15_model_loras_and_sampling(agent_client, monkeypatch):
     assert config["sampler_name"] == "dpmpp_2m" and config["scheduler"] == "karras"
     assert config["denoise"] == 0.9
     assert config["face_detailer"] is False
+
+
+def test_agent_omitted_lora_strength_uses_registry_recommendation(agent_client, monkeypatch):
+    """AI 只给 LoRA 名称时套用注册中心推荐强度；显式强度不被覆盖。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-lora-default")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-lora-default"}
+    name = "Hentai Pussy inspection_Pony_V1.safetensors"
+    monkeypatch.setattr(
+        ModelRegistryService, "lora_catalog",
+        lambda self: {name: {"recommended_strength": 0.6}},
+    )
+    defaulted = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15", loras=[{"name": name}],
+    ), headers=headers)
+    assert defaulted.status_code == 201, defaulted.text
+    config = defaulted.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert config["loras"][0]["strength_model"] == 0.6
+    assert config["loras"][0]["strength_clip"] == 0.6
+
+    explicit = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+        loras=[{"name": name, "strength_model": -0.4, "strength_clip": 0.9}],
+    ), headers=headers)
+    assert explicit.status_code == 201, explicit.text
+    config = explicit.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert config["loras"][0]["strength_model"] == -0.4
+    assert config["loras"][0]["strength_clip"] == 0.9
+
+    unregistered = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+        loras=[{"name": "unregistered.safetensors"}],
+    ), headers=headers)
+    assert unregistered.status_code == 201, unregistered.text
+    config = unregistered.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert config["loras"][0]["strength_model"] == 0.8
+    assert config["loras"][0]["strength_clip"] == 0.8
 
 
 def test_agent_use_recommended_sampling_fills_registry_profile(agent_client, monkeypatch):
