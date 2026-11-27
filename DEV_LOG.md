@@ -853,3 +853,17 @@ Mobile Review Bridge 的只读生图进度此前只有张数 / 段数 / 百分�
 任务历史详情抽屉同样加载原任务，但字段只有尺寸、Seed、Prompt 与 Workflow。现在“底模”与图库详情同源（`snapshotModelName`，去掉权重扩展名；旧任务/外部导入显示“—”）。为让历史详情用例可渲染，补齐测试 Job 的 `structured_prompt / generation_settings` 字段；历史分页与详情共 3 项用例通过，typecheck 与 Vite 生产构建通过。
 
 生产部署 6eb73b1：`index-BOuGJLK8.js`（SHA256/12 `a70c213c09c1`）。隔离浏览器打开 `/prompts` → 历史 → 最新任务 `JOB-a82176c7`，任务详情抽屉显示“底模 NoobAI-XL-v1.1”；首次用 `/prompt` 路径被通配路由重定向到 `/generate`，改用正确路径 `/prompts` 后验证通过。
+
+## 2026-11-27 — 画布顶栏显示底模与 AI 来源
+
+画布（Canvas）顶栏此前只有“去图库 / 任务短 ID / 状态”，看不到当前任务用了哪款底模，也分不清任务由 AI 还是网页提交。现在顶栏追加实际底模（`snapshotModelName`，来自当前 Job 快照；空快照隐藏）与 `source=agent` 的“AI 提交”徽标，样式用省略号截断并保留 `title`，任务坞 / 当前任务卡 / 画布三处口径一致。`CanvasStage.keyboard.test.tsx` 新增顶栏断言（4 项用例通过），typecheck 与 Vite 生产构建通过。
+
+生产部署 d1c0e6f：`deploy_app_dist.ps1` 构建并同步 `index-ClR8cltl.js` / `index-BhBbjDEb.css`（SHA256/12 `6cd03f044ad1` / `c386490078ad`），生产 `/` 已引用新资源、CSS 含 `.wb4-stage__model`。真实任务 `job_eb70e06b` 运行中由隔离浏览器打开 `/generate`，任务坞显示“底模 miaomiaoHarem_v14”“AI 提交”“JOB-eb70e06b”“动漫生成”，与本轮并发生成一致。
+
+## 2026-11-27 — 省略底模时快照记录 binding 默认底模
+
+AI 直提若省略 `model`（`use_recommended_sampling` 或普通提交），执行走 binding 默认底模，但快照 `config.model` 为空，导致队列、画布、图库、历史与手机桥都显示不出底模；桌面「绑定默认」同理。现在新增 `agent_service.resolve_default_checkpoint / fill_default_checkpoint`：仅当该模块 binding 声明 `model` 注入且注册中心 `default_parameters.model` 有值时，把默认底模写入模块 config；`/jobs` 再通过 `sync_snapshot_module_configs` 写回快照（请求显式 config 不覆盖），`/agent/jobs` 直接以补齐后的模块生成快照。执行值与原默认一致，不改变生成语义。
+
+新增 3 项后端测试（Agent 省略 model 记录默认底模、binding 不支持 model 时不写、`/jobs` 写回快照），后端全量 873 项通过。生产部署 6fccaee：协作停止事件停 Studio 后由计划任务重启，健康 0.39.0，手机桥 build `6fccaee`（contract 2、能力集含 `mobile_generation_model_v1`），ComfyUI PID 11432 全程未变。
+
+真实验证：用 Agent 提交**完全省略 model** 的 2 张任务 `job_eb70e06b-8e68-4e3c-a07c-e4d6d6fe8266`（832×1216、40 步、关人脸修复），队列 running 快照即记录 `miaomiaoHarem_v14.safetensors`；运行中手机图库顶栏显示“电脑端生成中：第 1 / 2 张 · 剩余 1 段 · 3%”+“底模 miaomiaoHarem_v14”，桌面任务坞显示同一底模与“AI 提交”；2 张全部 COMPLETED（`img_8cc5df2b-45db-4843-98e7-66204db2b2ce` / `img_b90242ce-91c8-439e-ac12-280018f0d379`），完成后手机进度与底模行消失并出现“新图 3”。

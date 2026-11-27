@@ -236,6 +236,9 @@ fixture：`fixtures/health_v2.json`。
   阶段间隙或无进度时为 `null`；仅作展示，不得据此判断成功；
 - `model`：运行中生成 Job 的 workflow 快照 `modules[0].config.model`（底模文件名）；
   阶段间隙仍返回同一 Job 的底模，排队 / 空闲 / 旧任务为 `null`；
+- 服务端在创建 Job 时若工作流未显式指定底模（AI 省略 `model` / UI「绑定默认」），会把
+  binding 默认底模写入快照，因此这类任务的 `model` 同样有值；仅在 binding 声明 `model`
+  注入时补齐。
 - 阶段间隙（Job RUNNING 但无 RUNNING StageItem）时两个图片字段与 `current_progress` 为 `null`，
   `active_status` 仍为 `running`，`remaining_segments` 仍可大于 0；
 - 设备未配对/已撤销返回 401；桌面队列详情与控制接口仍只在 8000；
