@@ -50,6 +50,9 @@
 - 手机桥图片详情 `model` 不再恒为 null：读取原任务工作流快照（无 Job / 外部导入 / 旧快照
   为 null）；MediaReview Alpha79 在审图顶栏显示当前图片底模，详情模型名去掉权重扩展名，
   旧图自动隐藏底模行并显示“未知”。
+- 手机桥图片详情新增 `job_source`（`web / resume / agent / doubao`；无 Job / 导入为 null），
+  MediaReview Alpha83 在审图顶栏对 AI 直提显示“AI”徽标，详情“提交来源”显示
+  AI 提交 / 网页提交 / 续跑，旧桥自动隐藏。
 - 队列摘要新增 `model`（来自 Job workflow 快照 `config.model`，旧任务/异常快照为 null）：
   桌面队列行显示底模短名，当前任务卡片与任务坞显示“底模 …”，Agent 任务同时带“AI 提交”
   徽标；`MODULE_LABEL` 补齐 `anime_generate → 动漫生成`，不再显示原始模块 ID。
