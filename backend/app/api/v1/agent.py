@@ -42,7 +42,6 @@ from app.services import agent_service, job_service, prompt_service
 from app.services.lora_validation_service import validate_task_loras
 from app.services.model_registry_service import ModelRegistryService
 from app.services.runtime_preflight_service import run_preflight
-from app.services.workflow_registry_service import WorkflowRegistryService
 
 router = APIRouter(tags=["agent"])
 
@@ -98,18 +97,8 @@ def _require_token(request: Request) -> str:
 
 
 def _resolve_default_checkpoint(settings: Settings, primary: dict) -> str | None:
-    """读取当前 binding 的默认底模（工作流注册中心 `default_parameters.model`）。"""
-    try:
-        manifest = WorkflowRegistryService(settings).get_workflow(
-            str(primary.get("module_id") or ""),
-            str(primary.get("binding_version") or ""),
-        )
-    except (KeyError, OSError, ValueError):
-        return None
-    default_model = (manifest.get("default_parameters") or {}).get("model")
-    if isinstance(default_model, str) and default_model.strip():
-        return default_model.strip()
-    return None
+    """读取当前 binding 的默认底模（统一实现见 agent_service.resolve_default_checkpoint）。"""
+    return agent_service.resolve_default_checkpoint(settings, primary)
 
 
 @router.get(
@@ -243,67 +232,70 @@ def submit_agent_job(
     if config:
         workflow_modules[0]["config"] = config
 
+    # 未显式选底模时记录 binding 默认底模（与 /jobs 同一规则，见 agent_service）。
+    agent_service.fill_default_checkpoint(settings, request.app.state.adapter, workflow_modules)
+    config = workflow_modules[0].get("config") or {}
+
     # 任务级参数必须由所选 binding 声明为可注入，否则在创建 Job 前拒绝。
-    if config:
-        primary = workflow_modules[0]
-        adapter = request.app.state.adapter
-        load_binding = getattr(adapter, "load_binding", None)
-        if callable(load_binding):
-            _workflow, binding, _workflow_hash, _binding_hash = load_binding(
-                EngineBindingRef(
-                    module_id=str(primary.get("module_id")),
-                    module_version=str(primary.get("module_version")),
-                    provider=str(primary.get("provider")),
-                    binding_version=str(primary.get("binding_version")),
-                )
+    primary = workflow_modules[0]
+    adapter = request.app.state.adapter
+    load_binding = getattr(adapter, "load_binding", None)
+    if config and callable(load_binding):
+        _workflow, binding, _workflow_hash, _binding_hash = load_binding(
+            EngineBindingRef(
+                module_id=str(primary.get("module_id")),
+                module_version=str(primary.get("module_version")),
+                provider=str(primary.get("provider")),
+                binding_version=str(primary.get("binding_version")),
             )
-            inputs = binding.get("inputs") or {}
-            for key in ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise", "loras"):
-                if key in config and key not in inputs:
-                    raise UnprocessableError(
-                        f"当前 binding {primary.get('binding_version')} 不支持任务级参数 {key}",
-                        code="BINDING_PARAM_UNSUPPORTED",
-                        details={"binding_version": primary.get("binding_version"), "parameter": key},
-                    )
-            # loras 是列表参数：按 binding 声明的 max_items 在创建 Job 前拒绝超量提交。
-            lora_input = inputs.get("loras")
-            if "loras" in config and isinstance(lora_input, dict):
-                max_items = lora_input.get("max_items")
-                if isinstance(max_items, int) and len(config["loras"]) > max_items:
-                    raise UnprocessableError(
-                        f"当前 binding {primary.get('binding_version')} 最多支持 {max_items} 条 LoRA",
-                        code="BINDING_PARAM_UNSUPPORTED",
-                        details={
-                            "binding_version": primary.get("binding_version"),
-                            "parameter": "loras", "max_items": max_items,
-                        },
-                    )
-            # face_detailer 由 adapter 按节点类型应用（v15 binding Hash 保持冻结），
-            # 这里只校验目标工作流确实包含 FaceDetailer。
-            if "face_detailer" in config:
-                has_face_detailer = any(
-                    isinstance(node, dict) and node.get("class_type") == "FaceDetailer"
-                    for node in (_workflow or {}).values()
+        )
+        inputs = binding.get("inputs") or {}
+        for key in ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise", "loras"):
+            if key in config and key not in inputs:
+                raise UnprocessableError(
+                    f"当前 binding {primary.get('binding_version')} 不支持任务级参数 {key}",
+                    code="BINDING_PARAM_UNSUPPORTED",
+                    details={"binding_version": primary.get("binding_version"), "parameter": key},
                 )
-                if not has_face_detailer:
-                    raise UnprocessableError(
-                        f"当前 binding {primary.get('binding_version')} 不支持任务级参数 face_detailer",
-                        code="BINDING_PARAM_UNSUPPORTED",
-                        details={
-                            "binding_version": primary.get("binding_version"),
-                            "parameter": "face_detailer",
-                        },
-                    )
-        if body.model:
-            available_models = getattr(adapter, "available_checkpoint_names", None)
-            if callable(available_models):
-                names = available_models()
-                if names is not None and body.model not in names:
-                    raise UnprocessableError(
-                        f"底模不存在: {body.model}",
-                        code="MODEL_NOT_FOUND",
-                        details={"model": body.model},
-                    )
+        # loras 是列表参数：按 binding 声明的 max_items 在创建 Job 前拒绝超量提交。
+        lora_input = inputs.get("loras")
+        if "loras" in config and isinstance(lora_input, dict):
+            max_items = lora_input.get("max_items")
+            if isinstance(max_items, int) and len(config["loras"]) > max_items:
+                raise UnprocessableError(
+                    f"当前 binding {primary.get('binding_version')} 最多支持 {max_items} 条 LoRA",
+                    code="BINDING_PARAM_UNSUPPORTED",
+                    details={
+                        "binding_version": primary.get("binding_version"),
+                        "parameter": "loras", "max_items": max_items,
+                    },
+                )
+        # face_detailer 由 adapter 按节点类型应用（v15 binding Hash 保持冻结），
+        # 这里只校验目标工作流确实包含 FaceDetailer。
+        if "face_detailer" in config:
+            has_face_detailer = any(
+                isinstance(node, dict) and node.get("class_type") == "FaceDetailer"
+                for node in (_workflow or {}).values()
+            )
+            if not has_face_detailer:
+                raise UnprocessableError(
+                    f"当前 binding {primary.get('binding_version')} 不支持任务级参数 face_detailer",
+                    code="BINDING_PARAM_UNSUPPORTED",
+                    details={
+                        "binding_version": primary.get("binding_version"),
+                        "parameter": "face_detailer",
+                    },
+                )
+    if config and body.model:
+        available_models = getattr(adapter, "available_checkpoint_names", None)
+        if callable(available_models):
+            names = available_models()
+            if names is not None and body.model not in names:
+                raise UnprocessableError(
+                    f"底模不存在: {body.model}",
+                    code="MODEL_NOT_FOUND",
+                    details={"model": body.model},
+                )
 
     ensure_modules_released(workflow_modules)
     validate_task_loras(request.app.state.adapter, workflow_modules)

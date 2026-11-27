@@ -13,8 +13,9 @@ from typing import Any
 
 from app.core.config import Settings
 from app.core.errors import ValidationError
-from app.engine.base import EngineError
+from app.engine.base import EngineBindingRef, EngineError
 from app.engine.factory import module_availability, resolve_workflow_modules
+from app.services.workflow_registry_service import WorkflowRegistryService
 from app.workflows.registry import default_registry
 
 _BINDING_ERRORS = {
@@ -106,6 +107,49 @@ def resolve_agent_workflow_modules(
             details={"module_id": module_id},
         )
     return [primary]
+
+
+def resolve_default_checkpoint(settings: Settings, module: dict[str, Any]) -> str | None:
+    """读取当前 binding 的默认底模（工作流注册中心 `default_parameters.model`）。"""
+    try:
+        manifest = WorkflowRegistryService(settings).get_workflow(
+            str(module.get("module_id") or ""),
+            str(module.get("binding_version") or ""),
+        )
+    except (KeyError, OSError, ValueError):
+        return None
+    default_model = (manifest.get("default_parameters") or {}).get("model")
+    if isinstance(default_model, str) and default_model.strip():
+        return default_model.strip()
+    return None
+
+
+def fill_default_checkpoint(settings: Settings, adapter: Any, modules: list[dict[str, Any]]) -> None:
+    """模块未显式选底模时，把 binding 默认底模写入 config（统一 /jobs 与 /agent/jobs）。
+
+    只补 provenance，不改执行语义（写入值与 binding 默认一致）：
+    - 仅当该模块 binding 声明了 model 注入时才写，避免不支持的参数进入快照；
+    - 适配器不支持 load_binding（如 mock）时跳过。
+    """
+    load_binding = getattr(adapter, "load_binding", None)
+    if not callable(load_binding):
+        return
+    for module in modules:
+        config = dict(module.get("config") or {})
+        if config.get("model"):
+            continue
+        _workflow, binding, _workflow_hash, _binding_hash = load_binding(EngineBindingRef(
+            module_id=str(module.get("module_id") or ""),
+            module_version=str(module.get("module_version") or ""),
+            provider=str(module.get("provider") or ""),
+            binding_version=str(module.get("binding_version") or ""),
+        ))
+        if "model" not in (binding.get("inputs") or {}):
+            continue
+        default_model = resolve_default_checkpoint(settings, module)
+        if default_model:
+            config["model"] = default_model
+            module["config"] = config
 
 
 def validate_agent_primary(settings: Settings, modules: list[dict[str, Any]]) -> None:

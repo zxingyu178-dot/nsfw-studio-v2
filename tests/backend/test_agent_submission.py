@@ -422,12 +422,50 @@ def test_agent_use_recommended_sampling_uses_binding_default_model(agent_client,
     ), headers=headers)
     assert response.status_code == 201, response.text
     config = response.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
-    assert "model" not in config, "未显式传 model 时不应写入 config.model"
+    assert "model" not in config, "mock adapter 无 load_binding，不注入默认底模"
     assert config["steps"] == 30
     assert config["cfg"] == 4.0
     assert config["sampler_name"] == "er_sde"
     assert config["scheduler"] == "simple"
     assert config["denoise"] == 1.0
+
+
+def test_agent_omitted_model_records_binding_default(agent_client, monkeypatch):
+    """AI 省略 model 时把实际生效的 binding 默认底模写入快照，队列/手机/图库/历史才可见。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-default-model")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-default-model"}
+    adapter = agent_client.app.state.adapter
+    monkeypatch.setattr(
+        adapter, "load_binding",
+        lambda ref: ({}, {"inputs": {"model": {"node": "1", "field": "ckpt_name"}}}, "w", "b"),
+        raising=False,
+    )
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+    ), headers=headers)
+    assert response.status_code == 201, response.text
+    config = response.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert config["model"] == "miaomiaoHarem_v14.safetensors"
+
+
+def test_agent_omitted_model_not_recorded_without_binding_injection(agent_client, monkeypatch):
+    """binding 未声明 model 注入时不写默认底模，避免不支持的参数进入快照。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-default-model-unsupported")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-default-model-unsupported"}
+    adapter = agent_client.app.state.adapter
+    monkeypatch.setattr(
+        adapter, "load_binding",
+        lambda ref: ({}, {"inputs": {}}, "w", "b"),
+        raising=False,
+    )
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+    ), headers=headers)
+    assert response.status_code == 201, response.text
+    config = response.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
+    assert "model" not in config
 
 
 @pytest.mark.parametrize(

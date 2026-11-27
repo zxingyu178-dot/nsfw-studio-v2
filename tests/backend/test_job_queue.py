@@ -104,6 +104,29 @@ def test_queue_summary_includes_snapshot_model():
     assert queue_job_summary(broken).model is None
 
 
+def test_jobs_api_records_binding_default_model_in_snapshot(mock_client, monkeypatch):
+    """UI 选择「绑定默认」时，服务端把 binding 默认底模写回快照（队列/图库/手机可见）。"""
+    from app.services import agent_service
+
+    adapter = mock_client.app.state.adapter
+    monkeypatch.setattr(
+        adapter, "load_binding",
+        lambda ref: ({}, {"inputs": {"model": {"node": "1", "field": "ckpt_name"}}}, "w", "b"),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        agent_service, "resolve_default_checkpoint",
+        lambda settings, module: "miaomiaoHarem_v14.safetensors",
+    )
+    response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(
+        count=1,
+        workflow_modules=[{"module_id": "anime_generate", "config": {}}],
+    )})
+    assert response.status_code == 201, response.text
+    modules = response.json()["workbench_snapshot"]["workflow_modules"]
+    assert modules[0]["config"]["model"] == "miaomiaoHarem_v14.safetensors"
+
+
 def test_job_lifecycle_serial_completion(mock_client):
     """8 张任务正常串行：逐张完成、completed_count 递增、每张 Seed 独立。"""
     response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=8)})

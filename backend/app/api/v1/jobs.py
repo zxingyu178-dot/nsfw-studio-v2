@@ -26,7 +26,7 @@ from app.schemas.job import (
     job_response,
     queue_job_summary,
 )
-from app.services import generation_provenance_service, job_service, prompt_service
+from app.services import agent_service, generation_provenance_service, job_service, prompt_service
 from app.services.lora_validation_service import validate_task_loras
 from app.services.runtime_preflight_service import run_preflight
 
@@ -39,6 +39,30 @@ def resolve_requested_modules(settings: Settings, requested: list[dict]) -> list
         return resolve_workflow_modules(settings, requested)
     except EngineError as error:
         raise ValidationError(error.message, code=error.error_type) from error
+
+
+def sync_snapshot_module_configs(snapshot: dict, modules: list[dict]) -> None:
+    """把服务端补齐的模块 config（如默认底模）写回快照。
+
+    快照是队列摘要 / 图库详情 / 历史详情 / 手机桥读取底模的唯一来源；
+    只补缺失字段，不覆盖客户端显式 config。
+    """
+    entries = snapshot.get("workflow_modules")
+    if not isinstance(entries, list):
+        return
+    resolved = {str(module.get("module_id") or ""): module for module in modules}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        module = resolved.get(str(entry.get("module_id") or ""))
+        filled = module.get("config") if isinstance(module, dict) else None
+        if not isinstance(filled, dict) or not filled.get("model"):
+            continue
+        config = dict(entry.get("config") or {})
+        if config.get("model"):
+            continue
+        config["model"] = filled["model"]
+        entry["config"] = config
 
 
 def check_disk_space(request: Request) -> str:
@@ -74,6 +98,9 @@ def create_job(
     settings: Settings = request.app.state.settings
     snapshot = body.snapshot.model_dump()
     modules = resolve_requested_modules(settings, snapshot.get("workflow_modules") or [])
+    # 未显式选底模时记录 binding 默认底模（与 /agent/jobs 同一规则），保证各处底模可见。
+    agent_service.fill_default_checkpoint(settings, request.app.state.adapter, modules)
+    sync_snapshot_module_configs(snapshot, modules)
     # W1.1-1：正式放行门禁必须在创建 Job 之前；客户端不能绕过。
     ensure_modules_released(modules)
     # v5：任务级 LoRA 名称校验（不存在 → 422 LORA_NOT_FOUND）
