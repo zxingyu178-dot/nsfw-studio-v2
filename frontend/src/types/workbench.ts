@@ -913,8 +913,14 @@ export function modelLabel(model?: string | null): string | null {
   return name.replace(/\.(safetensors|ckpt|pt|pth)$/i, '')
 }
 
+/** 从任务快照取底模原值（文件名，供筛选/接口使用）；空值返回 null。 */
+export function snapshotModelValue(job: Pick<JobDTO, 'workflow_snapshot'>): string | null {
+  const value = job.workflow_snapshot?.modules?.[0]?.config?.model
+  const name = typeof value === 'string' ? value.trim() : ''
+  return name || null
+}
+
 /** 从任务快照取底模短名：与 AI 直提 / 页面提交共用的 config.model 同源。 */
 export function snapshotModelName(job: Pick<JobDTO, 'workflow_snapshot'>): string | null {
-  const value = job.workflow_snapshot?.modules?.[0]?.config?.model
-  return modelLabel(typeof value === 'string' ? value : null)
+  return modelLabel(snapshotModelValue(job))
 }

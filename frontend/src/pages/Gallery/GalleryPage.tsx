@@ -768,6 +768,7 @@ export default function GalleryPage() {
           onReviewStart={(prev) => recordUndo({ imageId: detail.id, status: prev, label: '审核修改' })}
           onFavoriteStart={(prev) => recordUndo({ imageId: detail.id, favorite: prev, label: '收藏修改' })}
           onPreviewLightbox={() => openLightboxAt(detail)}
+          onFilterModel={(model) => { setDetail(null); applyModelFilter(model) }}
           onDeleted={() => { setDetail(null); query.loadFirst() }}
         />
       )}

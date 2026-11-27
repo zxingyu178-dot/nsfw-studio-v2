@@ -19,6 +19,7 @@ import {
   normalizeImageStatus,
   shortJobId,
   snapshotModelName,
+  snapshotModelValue,
   type AssetType,
   type ImageDTO,
   type ImageProvenanceDTO,
@@ -45,11 +46,14 @@ export interface GalleryDetailDrawerProps {
   onFavoriteStart: (previous: boolean) => void
   onPreviewLightbox: () => void
   onDeleted: () => void
+  /** 按当前图片的实际底模筛选图库（原始文件名；缺省时不显示入口）。 */
+  onFilterModel?: (model: string) => void
 }
 
 export function GalleryDetailDrawer({
   image, onClose, onUpdated, onSelectImage,
   onUseAsInput, onReviewStart, onFavoriteStart, onPreviewLightbox, onDeleted,
+  onFilterModel,
 }: GalleryDetailDrawerProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
@@ -266,6 +270,7 @@ export function GalleryDetailDrawer({
   const displayStatus = normalizeImageStatus(image)
   const sourceModule = provenance?.module_id ?? job?.module_id ?? null
   // 底模来自原任务快照：同一张图在换模型后仍能追溯实际使用的 checkpoint。
+  const modelValue = job ? snapshotModelValue(job) : null
   const model = job ? snapshotModelName(job) : null
 
   return (
@@ -307,7 +312,19 @@ export function GalleryDetailDrawer({
             <dt>类型</dt>
             <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
             <dt>底模</dt>
-            <dd className="gal-field-value--mono">{model ?? '—'}</dd>
+            <dd className="gal-field-value--mono">
+              {model ?? '—'}
+              {modelValue && onFilterModel && (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  className="gal-filter-model-btn"
+                  onClick={() => onFilterModel(modelValue)}
+                >
+                  只看此底模
+                </Button>
+              )}
+            </dd>
             <dt>Prompt</dt>
             <dd><pre>{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
             <dt>Negative</dt>

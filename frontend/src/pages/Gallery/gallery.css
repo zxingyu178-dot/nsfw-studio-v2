@@ -349,6 +349,7 @@
 }
 .gal-fields pre { margin: 0; white-space: pre-wrap; font-family: inherit; }
 .gal-field-value--mono { font-family: var(--font-mono); }
+.gal-filter-model-btn { margin-left: var(--space-2); font-family: var(--font-sans, inherit); }
 .gal-detail-source { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 .gal-section-title {

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { imageApi, jobApi } from '../../../api/client'
 import type { ImageDTO } from '../../../types/workbench'
-import { GalleryDetailDrawer } from './GalleryDetailDrawer'
+import { GalleryDetailDrawer, type GalleryDetailDrawerProps } from './GalleryDetailDrawer'
 
 vi.mock('../../../api/client', () => ({
   ApiRequestError: class extends Error {},
@@ -38,7 +38,7 @@ const image: ImageDTO = {
   updated_at: '2026-10-20T08:00:00Z',
 }
 
-function renderDrawer() {
+function renderDrawer(props: Partial<GalleryDetailDrawerProps> = {}) {
   return render(
     <MemoryRouter>
       <GalleryDetailDrawer
@@ -51,6 +51,7 @@ function renderDrawer() {
         onFavoriteStart={vi.fn()}
         onPreviewLightbox={vi.fn()}
         onDeleted={vi.fn()}
+        {...props}
       />
     </MemoryRouter>,
   )
@@ -120,5 +121,20 @@ describe('GalleryDetailDrawer 布局契约', () => {
     renderDrawer()
     expect(await screen.findByText('底模')).toBeInTheDocument()
     expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+  })
+
+  it('底模旁可一键只看此底模，并向筛选传递原始文件名', async () => {
+    vi.mocked(jobApi.get).mockResolvedValue({
+      id: 'job_layout',
+      positive_prompt_snapshot: 'layout prompt',
+      negative_prompt_snapshot: '',
+      workflow_snapshot: {
+        modules: [{ module_id: 'anime_generate', config: { model: ' NoobAI-XL-v1.1.safetensors ' } }],
+      },
+    } as never)
+    const onFilterModel = vi.fn()
+    renderDrawer({ onFilterModel })
+    fireEvent.click(await screen.findByRole('button', { name: '只看此底模' }))
+    expect(onFilterModel).toHaveBeenCalledWith('NoobAI-XL-v1.1.safetensors')
   })
 })

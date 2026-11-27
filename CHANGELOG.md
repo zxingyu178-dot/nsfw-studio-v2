@@ -13,6 +13,8 @@
   统一支持 `model`（任务快照精确匹配；`__none__` = 未记录底模，含导入图），新增
   `GET /images/models` 返回底模及图片数供下拉；桌面工具栏显示底模短名与张数，选择后
   列表 / 统计 / 分组 / 按任务视图同口径，URL `?model=` 可刷新与分享。
+- 图库图片详情的「底模」旁新增“只看此底模”：用任务快照原始文件名一键把图库切换为
+  该底模筛选并关闭抽屉；无快照 / 旧图不显示入口，短名展示不变。
 - 手机桥图库新增「底模」筛选（能力 `mobile_gallery_model_filter_v1`）：
   `GET /mobile/images/gallery?model=` 与桌面同口径（任务快照 `modules[0].config.model`，
   `__none__` = 未记录），新增 `GET /mobile/images/models` 返回底模与图片数；筛选写入游标
