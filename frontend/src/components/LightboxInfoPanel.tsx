@@ -7,6 +7,7 @@ import {
   ASSET_TYPES,
   MODULE_LABEL,
   imageContentUrl,
+  jobSourceDisplayLabel,
   normalizeImageStatus,
   shortJobId,
   snapshotModelName,
@@ -187,6 +188,7 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted, onFilterModel }
     : '—'
   const modelValue = job ? snapshotModelValue(job) : null
   const model = job ? snapshotModelName(job) : null
+  const submitSource = job ? jobSourceDisplayLabel(job.source) : null
 
   return (
     <aside className="lb-side" aria-label="图片信息">
@@ -204,6 +206,8 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted, onFilterModel }
           <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
           <dt>模块</dt>
           <dd>{moduleLabel}</dd>
+          <dt>提交来源</dt>
+          <dd>{submitSource ?? '—'}</dd>
           <dt>底模</dt>
           <dd>
             {model ?? '—'}

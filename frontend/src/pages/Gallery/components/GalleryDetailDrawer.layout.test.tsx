@@ -123,6 +123,18 @@ describe('GalleryDetailDrawer 布局契约', () => {
     expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
   })
 
+  it('概览显示任务提交来源并对 AI 直提加徽标', async () => {
+    vi.mocked(jobApi.get).mockResolvedValue({
+      id: 'job_layout', source: 'agent',
+      positive_prompt_snapshot: 'layout prompt',
+      negative_prompt_snapshot: '',
+    } as never)
+    renderDrawer()
+    expect(await screen.findByText('提交来源')).toBeInTheDocument()
+    expect(await screen.findByText('AI 提交')).toBeInTheDocument()
+    expect(screen.getByText('AI')).toBeInTheDocument()
+  })
+
   it('底模旁可一键只看此底模，并向筛选传递原始文件名', async () => {
     vi.mocked(jobApi.get).mockResolvedValue({
       id: 'job_layout',

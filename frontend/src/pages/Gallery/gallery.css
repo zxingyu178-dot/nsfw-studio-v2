@@ -322,6 +322,16 @@
   border-color: var(--accent);
 }
 
+.gal-ai-badge {
+  padding: 1px 6px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
 .gal-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .gal-actions--primary { align-items: center; }
 .gal-detail__download { text-decoration: none; }

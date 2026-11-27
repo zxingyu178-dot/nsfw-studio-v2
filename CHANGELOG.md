@@ -17,6 +17,8 @@
   该底模筛选并关闭抽屉；无快照 / 旧图不显示入口，短名展示不变。
 - 双击看图（Lightbox）的信息栏补齐“底模”与“只看此底模”，与详情抽屉同源同口径；
   点击后关闭灯箱并按该底模筛选图库。
+- 图库详情抽屉与灯箱新增“提交来源”：显示网页提交 / AI 提交 / 续跑，Agent/豆包任务
+  额外带 AI 徽标；与手机 Alpha83 同口径，便于区分 AI 直提与网页作品。
 - 手机桥图库新增「底模」筛选（能力 `mobile_gallery_model_filter_v1`）：
   `GET /mobile/images/gallery?model=` 与桌面同口径（任务快照 `modules[0].config.model`，
   `__none__` = 未记录），新增 `GET /mobile/images/models` 返回底模与图片数；筛选写入游标

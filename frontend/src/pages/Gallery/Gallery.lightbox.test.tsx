@@ -94,6 +94,7 @@ describe('Gallery 单击抽屉 / 双击 Lightbox 区分', () => {
   it('Lightbox 信息栏显示底模，并可一键只看此底模', async () => {
     vi.mocked(jobApi.get).mockResolvedValue({
       id: 'job_1',
+      source: 'agent',
       positive_prompt_snapshot: 'lightbox prompt',
       negative_prompt_snapshot: '',
       workflow_snapshot: {
@@ -109,6 +110,8 @@ describe('Gallery 单击抽屉 / 双击 Lightbox 区分', () => {
     await screen.findByRole('dialog', { name: '图片预览' })
     expect(await screen.findByText('底模')).toBeInTheDocument()
     expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+    expect(await screen.findByText('提交来源')).toBeInTheDocument()
+    expect(await screen.findByText('AI 提交')).toBeInTheDocument()
 
     fireEvent.click(await screen.findByRole('button', { name: '只看此底模' }))
     await waitFor(() => {

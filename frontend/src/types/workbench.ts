@@ -877,6 +877,16 @@ export const JOB_SOURCE_LABEL: Record<string, string> = {
   doubao: 'Doubao',
 }
 
+/** 任务提交来源的中文说明：图库详情/灯箱与手机端“提交来源”同口径。 */
+export function jobSourceDisplayLabel(source?: string | null): string | null {
+  const value = (source ?? '').trim()
+  if (!value) return null
+  if (value === 'web') return '网页提交'
+  if (value === 'resume') return '续跑'
+  if (value === 'agent' || value === 'doubao') return 'AI 提交'
+  return value
+}
+
 export const HISTORY_BUCKET_LABEL: Record<HistoryBucket, string> = {
   all: '全部',
   active: '进行中',

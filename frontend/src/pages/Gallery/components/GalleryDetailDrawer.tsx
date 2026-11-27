@@ -16,6 +16,7 @@ import {
   IMAGE_STATUS_LABEL,
   MODULE_LABEL,
   imageContentUrl,
+  jobSourceDisplayLabel,
   normalizeImageStatus,
   shortJobId,
   snapshotModelName,
@@ -272,6 +273,7 @@ export function GalleryDetailDrawer({
   // 底模来自原任务快照：同一张图在换模型后仍能追溯实际使用的 checkpoint。
   const modelValue = job ? snapshotModelValue(job) : null
   const model = job ? snapshotModelName(job) : null
+  const submitSource = job ? jobSourceDisplayLabel(job.source) : null
 
   return (
     <Drawer
@@ -311,6 +313,13 @@ export function GalleryDetailDrawer({
             </dd>
             <dt>类型</dt>
             <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
+            <dt>提交来源</dt>
+            <dd className="gal-detail-source">
+              <span>{submitSource ?? '—'}</span>
+              {job?.source === 'agent' || job?.source === 'doubao' ? (
+                <span className="gal-ai-badge">AI</span>
+              ) : null}
+            </dd>
             <dt>底模</dt>
             <dd className="gal-field-value--mono">
               {model ?? '—'}
