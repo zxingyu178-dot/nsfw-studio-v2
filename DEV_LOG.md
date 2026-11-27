@@ -819,3 +819,5 @@ POST /agent/jobs 的 negative_prompt 改为可省略：省略/null 使用统一�
 Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `face_detailer=false` 提交 832×1216 1 张任务：快照套用注册中心推荐采样（30 步 / cfg5.0 / dpmpp_2m / karras / denoise1.0），缺省负向使用统一默认；Job job_bc9adf49-9ab7-4397-a0e3-747b95f5352a 完成（90.9s），产出 img_a8f9bf4b-36b9-4cc9-87b9-ef0240319e21，验证默认底模之外的模型可直接由 AI 提交并完成。该次实跑已登记进 workflows/release_manifest.yaml 的 v15 evidence（reference_jobs / output_image_ids / sampling_profiles / stage_seconds），发布清单与真实任务保持同源；发布清单相关测试 36 项通过。
 
 同日补充第三款底模：Agent `use_recommended_sampling=true` + `model=waiNSFWIllustrious_v150.safetensors`，快照套用 30 步 / cfg5.0 / er_sde / simple / FaceDetailer 默认开，Job job_46712196-25bb-41bb-aa7d-15b4727c06c3 完成（179.3s），产出 img_4dd74b94-6be7-459f-ba32-840cf59766bc。至此 miaomiaoHarem / NoobAI-XL / WAI-NSFW 三款已安装底模均在生产 8000 由 Agent 直接提交并 COMPLETED，证据同步登记到 release_manifest v15。
+
+重启生产实例后复核：`/api/v1/modules` 的 v15 notes 已包含 WAI 推荐采样记录，workflow/binding Hash 仍为 `99ef6d5af1d51e2c / 6bde04bd7f04fb2f`；`/mobile/system/health` 返回 contract 2 且 generation progress 三项能力齐全；手机端增量刷新出现“新图 1”，点按后图库从 21730 增至 21731。
