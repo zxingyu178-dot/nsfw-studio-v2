@@ -45,6 +45,8 @@
   桌面 LoRA 下拉显示友好名称，第二行保留文件名。
 - LoRA Manifest 新增可选 `recommended_strength`（0–2）：`lora_catalog` 同步暴露；
   桌面选择 LoRA 时默认使用推荐强度（未登记回退 0.8），CLI `--list-loras` 打印推荐强度。
+- 桌面工作台：已选 LoRA 下方显示注册中心推荐强度；手动调整后显示“当前 X”与“恢复推荐”，
+  与 AI 直提的默认强度规则保持同一来源。
 - Agent `loras[].strength_model / strength_clip` 可省略：服务端按该 LoRA 的注册中心
   `recommended_strength` 补齐（无登记回退 0.8），显式强度优先；CLI `--lora 文件名`
   不写强度时同样交给服务端，保证 AI 直提与桌面选择器的默认强度一致。

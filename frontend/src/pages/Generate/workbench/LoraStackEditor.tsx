@@ -1,4 +1,4 @@
-import { Input } from '../../../components/ui'
+import { Button, Input } from '../../../components/ui'
 import { PopoverSelect } from '../../../components/ui/ui3'
 
 export interface LoraEntry {
@@ -44,52 +44,83 @@ export function LoraStackEditor({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
         {rows.map((index) => {
           const entry = loras[index]
+          const recommended = entry
+            ? options.find((item) => item.value === entry.name)?.strength
+            : undefined
+          const deviated = Boolean(
+            entry && typeof recommended === 'number' &&
+            Math.abs(entry.strength_model - recommended) > 1e-6,
+          )
           return (
             <div
               key={index}
-              style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <PopoverSelect
-                  value={entry?.name ?? ''}
-                  onChange={(name) => {
-                    if (!name) {
-                      update(index, null)
-                      return
-                    }
-                    const option = options.find((item) => item.value === name)
-                    const strength = option?.strength ?? 0.8
-                    update(index, {
-                      name,
-                      strength_model: strength,
-                      strength_clip: strength,
-                    })
-                  }}
-                  ariaLabel={`LoRA ${index + 1}`}
-                  options={[
-                    { value: '', label: index === 0 ? '不使用 LoRA' : '不使用第二条' },
-                    ...options,
-                  ]}
-                />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <PopoverSelect
+                    value={entry?.name ?? ''}
+                    onChange={(name) => {
+                      if (!name) {
+                        update(index, null)
+                        return
+                      }
+                      const option = options.find((item) => item.value === name)
+                      const strength = option?.strength ?? 0.8
+                      update(index, {
+                        name,
+                        strength_model: strength,
+                        strength_clip: strength,
+                      })
+                    }}
+                    ariaLabel={`LoRA ${index + 1}`}
+                    options={[
+                      { value: '', label: index === 0 ? '不使用 LoRA' : '不使用第二条' },
+                      ...options,
+                    ]}
+                  />
+                </div>
+                {entry && (
+                  <Input
+                    type="number"
+                    min={-2}
+                    max={2}
+                    step={0.05}
+                    value={entry.strength_model}
+                    aria-label={`LoRA ${index + 1} 强度`}
+                    style={{ width: 72 }}
+                    onChange={(event) => {
+                      const strength = Number(event.target.value)
+                      update(index, {
+                        ...entry,
+                        strength_model: strength,
+                        strength_clip: strength,
+                      })
+                    }}
+                  />
+                )}
               </div>
-              {entry && (
-                <Input
-                  type="number"
-                  min={-2}
-                  max={2}
-                  step={0.05}
-                  value={entry.strength_model}
-                  aria-label={`LoRA ${index + 1} 强度`}
-                  style={{ width: 72 }}
-                  onChange={(event) => {
-                    const strength = Number(event.target.value)
-                    update(index, {
-                      ...entry,
-                      strength_model: strength,
-                      strength_clip: strength,
-                    })
-                  }}
-                />
+              {/* 注册中心推荐强度：选中即套用；手动调整后保留提示并可一键恢复。 */}
+              {entry && typeof recommended === 'number' && (
+                <span className="wb-lora-recommend">
+                  推荐强度 {recommended}
+                  {deviated && (
+                    <>
+                      <span> · 当前 {entry.strength_model}</span>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => update(index, {
+                          ...entry,
+                          strength_model: recommended,
+                          strength_clip: recommended,
+                        })}
+                      >
+                        恢复推荐
+                      </Button>
+                    </>
+                  )}
+                </span>
               )}
             </div>
           )
