@@ -675,6 +675,11 @@ def _validate_filter_values(*, review_status: str | None, status: str | None) ->
         raise ValidationError(f"非法图片状态: {status}", code="IMAGE_STATUS_INVALID")
 
 
+def _model_expr():
+    """任务快照底模（SQLite JSON1）：与队列/手机/桌面详情同源。"""
+    return func.trim(func.json_extract(Job.workflow_snapshot_json, "$.modules[0].config.model"))
+
+
 def _apply_image_filters(
     query,
     *,
@@ -689,6 +694,7 @@ def _apply_image_filters(
     status: str | None = None,
     category: str | None = None,
     series: str | None = None,
+    model: str | None = None,
 ):
     """把图库过滤条件统一叠加到 select(Image) 查询上（list_images 与 image_stats 共用，
     保证列表与统计的过滤口径完全一致——禁止为统计另写一套不一致的过滤）。"""
@@ -737,6 +743,15 @@ def _apply_image_filters(
             query = query.outerjoin(Job, Job.id == Image.job_id).where(Job.series.is_(None))
         else:
             query = query.outerjoin(Job, Job.id == Image.job_id).where(Job.series == series)
+    if model:
+        # 底模过滤：按任务快照 modules[0].config.model 精确匹配；__none__ = 未记录（含导入图）。
+        expr = _model_expr()
+        if model == "__none__":
+            query = query.outerjoin(Job, Job.id == Image.job_id).where(
+                or_(expr.is_(None), expr == "")
+            )
+        else:
+            query = query.outerjoin(Job, Job.id == Image.job_id).where(expr == model.strip())
     return query
 
 
@@ -767,6 +782,7 @@ def list_images(
     status: str | None = None,
     category: str | None = None,
     series: str | None = None,
+    model: str | None = None,
     sort: str = "created_desc",
     limit: int = 100,
     offset: int = 0,
@@ -782,7 +798,7 @@ def list_images(
         select(Image),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category, series=series,
+        category=category, series=series, model=model,
     )
 
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
@@ -814,6 +830,7 @@ def list_image_ids(
     status: str | None = None,
     category: str | None = None,
     series: str | None = None,
+    model: str | None = None,
     sort: str = "created_desc",
     limit: int = IMAGE_IDS_LIMIT,
 ) -> tuple[list[str], int]:
@@ -826,7 +843,7 @@ def list_image_ids(
         select(Image.id),
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category, series=series,
+        category=category, series=series, model=model,
     )
     total = session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
     ids = list(session.execute(query.order_by(*order_by).limit(limit)).scalars())
@@ -847,6 +864,7 @@ def image_stats(
     status: str | None = None,
     category: str | None = None,
     series: str | None = None,
+    model: str | None = None,
 ) -> dict[str, int]:
     """全局图库统计（Phase 0.12 Task5/ReviewMode）：与 list_images 完全相同的过滤口径。
 
@@ -873,7 +891,7 @@ def image_stats(
         agg,
         job_id=job_id, review_status=review_status, favorite=favorite, source=source,
         kind=kind, search=search, date_from=date_from, date_to=date_to, status=status,
-        category=category, series=series,
+        category=category, series=series, model=model,
     )
     row = session.execute(agg).one()
     return {
@@ -914,6 +932,23 @@ def list_series(session: Session) -> list[dict[str, object]]:
         .order_by(func.count(Image.id).desc())
     ).all()
     return [{"series": series, "count": int(count)} for series, count in rows]
+
+
+def list_models(session: Session) -> list[dict[str, object]]:
+    """列出任务快照记录过的底模及其图片数（供图库「底模」下拉动态填充）。
+
+    只统计有 Job 且快照记录底模的图片；导入图/旧任务不计入任何一项（前端用「全部」看全库）。
+    """
+    label = _model_expr()
+    rows = session.execute(
+        select(label.label("model"), func.count(Image.id).label("count"))
+        .select_from(Image)
+        .join(Job, Job.id == Image.job_id)
+        .where(label.is_not(None), label != "")
+        .group_by(label)
+        .order_by(func.count(Image.id).desc(), label.asc())
+    ).all()
+    return [{"model": row.model, "count": int(row.count)} for row in rows]
 
 
 def _monotonic_updated_at(previous: str | None) -> str:
@@ -1072,6 +1107,7 @@ def job_gallery_summary(session: Session, job_id: str) -> dict:
 
 def list_job_groups(
     session: Session, *, page: int = 1, page_size: int = 20, series: str | None = None,
+    model: str | None = None,
 ) -> tuple[list[dict], int]:
     """Phase 0.11.1 P1-2：按 Job 聚合图库统计并批量加载预览图。
 
@@ -1118,6 +1154,12 @@ def list_job_groups(
             query = query.where(Job.series.is_(None))
         else:
             query = query.where(Job.series == series)
+    if model:
+        label = _model_expr()
+        if model == "__none__":
+            query = query.where(or_(label.is_(None), label == ""))
+        else:
+            query = query.where(label == model.strip())
     total = int(session.execute(select(func.count()).select_from(query.subquery())).scalar_one())
     rows = session.execute(
         query.order_by(Job.created_at.desc(), Job.id.desc())

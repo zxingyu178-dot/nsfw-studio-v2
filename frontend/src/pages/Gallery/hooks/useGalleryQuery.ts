@@ -20,6 +20,8 @@ export type GallerySource = '' | 'comfyui' | 'import'
 export type GalleryCategory = '' | 'anime' | 'imported'
 /** 0024：创作系列（Job.series 的自由文本；'' = 全部） */
 export type GallerySeries = '' | '__none__' | (string & {})
+/** 底模筛选（任务快照 model；'' = 全部，'__none__' = 未记录底模） */
+export type GalleryModel = '' | '__none__' | (string & {})
 
 export const PAGE_SIZE = 40
 
@@ -33,6 +35,7 @@ export interface GalleryListQuery {
   source?: Exclude<GallerySource, ''>
   category?: Exclude<GalleryCategory, ''>
   series?: string
+  model?: string
 }
 
 export function useGalleryQuery(
@@ -42,6 +45,7 @@ export function useGalleryQuery(
   seriesFilter: GallerySeries = '',
   tab: TabKey = 'ALL',
   subStatus: '' | ImageReviewStatus = '',
+  modelFilter: GalleryModel = '',
 ) {
   const [sort, setSort] = useState<ImageSort>('created_desc')
 
@@ -81,6 +85,7 @@ export function useGalleryQuery(
     if (sourceFilter) query.source = sourceFilter
     if (categoryFilter) query.category = categoryFilter
     if (seriesFilter) query.series = seriesFilter
+    if (modelFilter) query.model = modelFilter
     return query
   }
 
@@ -103,7 +108,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter, modelFilter])
 
   useEffect(() => {
     loadFirst()
@@ -145,7 +150,7 @@ export function useGalleryQuery(
       .then((s) => setServerStats(s))
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter, modelFilter])
 
   /** 用户显式点击「有新图」提示：拉取第一页并只并入新增项，保留已加载多页。 */
   const applyNewImages = useCallback(() => {
@@ -166,7 +171,7 @@ export function useGalleryQuery(
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '刷新新图失败'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
+  }, [tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter, modelFilter])
 
   useEffect(() => {
     const onVisibility = () => {
@@ -203,7 +208,7 @@ export function useGalleryQuery(
         if (seq === requestSeq.current) setLoadingMore(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter])
+  }, [loadingMore, loading, hasNext, items.length, tab, subStatus, sort, jobFilter, sourceFilter, categoryFilter, seriesFilter, modelFilter])
 
   // 哨兵进入视口 → 加载下一页
   useEffect(() => {
@@ -222,7 +227,11 @@ export function useGalleryQuery(
   const loadGroups = useCallback((page: number) => {
     setGroupsLoading(true)
     imageApi
-      .jobGroups({ page, page_size: 20, ...(seriesFilter ? { series: seriesFilter } : {}) })
+      .jobGroups({
+        page, page_size: 20,
+        ...(seriesFilter ? { series: seriesFilter } : {}),
+        ...(modelFilter ? { model: modelFilter } : {}),
+      })
       .then((result) => {
         setGroups((prev) => (page === 1 ? result.items : [...prev, ...result.items]))
         setGroupsPage(page)
@@ -230,7 +239,7 @@ export function useGalleryQuery(
       })
       .catch((err: unknown) => setError(err instanceof ApiRequestError ? err.message : '无法加载任务分组'))
       .finally(() => setGroupsLoading(false))
-  }, [seriesFilter])
+  }, [seriesFilter, modelFilter])
 
   const resetGroups = useCallback(() => setGroups([]), [])
 
@@ -244,6 +253,7 @@ export function useGalleryQuery(
     if (sourceFilter) params.source = sourceFilter
     if (categoryFilter) params.category = categoryFilter
     if (seriesFilter) params.series = seriesFilter
+    if (modelFilter) params.model = modelFilter
     return params
   }
 

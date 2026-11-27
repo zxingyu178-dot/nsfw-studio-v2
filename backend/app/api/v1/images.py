@@ -59,6 +59,7 @@ def list_images(
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
     series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
+    model: str | None = Query(default=None, description="底模文件名（任务快照）；__none__ = 未记录底模"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=40, ge=1, le=100),
@@ -83,7 +84,7 @@ def list_images(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=eff_limit, offset=eff_offset,
-        category=category, series=series,
+        category=category, series=series, model=model,
     )
     has_next = (eff_offset + len(items)) < total
     responses = [image_response(image) for image in items]
@@ -108,6 +109,11 @@ def list_series(session: Session = Depends(get_session)) -> dict[str, object]:
     return {"items": image_service.list_series(session)}
 
 
+@router.get("/models", summary="列出任务快照记录过的底模及其图片数（图库「底模」下拉）")
+def list_models(session: Session = Depends(get_session)) -> dict[str, object]:
+    return {"items": image_service.list_models(session)}
+
+
 @router.get("/ids", summary="按图库筛选返回全部匹配图片 ID（上限 10000）")
 def list_image_ids(
     job_id: str | None = Query(default=None),
@@ -121,6 +127,7 @@ def list_image_ids(
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
     series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
+    model: str | None = Query(default=None, description="底模文件名（任务快照）；__none__ = 未记录底模"),
     sort: str = Query(default="created_desc", description="created_desc/created_asc/favorite/size"),
     session: Session = Depends(get_session),
 ) -> dict[str, object]:
@@ -129,7 +136,7 @@ def list_image_ids(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
         status=status, sort=sort, limit=limit,
-        category=category, series=series,
+        category=category, series=series, model=model,
     )
     return {"ids": ids, "total": total, "truncated": total > limit, "limit": limit}
 
@@ -201,6 +208,7 @@ def list_job_groups(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
+    model: str | None = Query(default=None, description="底模文件名（任务快照）；__none__ = 未记录底模"),
     session: Session = Depends(get_session),
 ) -> dict:
     """只含 completed/有产出图的 Job；按 Job created_at 倒序。
@@ -210,7 +218,7 @@ def list_job_groups(
     by-job/{job_id}/summary 完全一致。
     """
     groups, total = image_service.list_job_groups(
-        session, page=page, page_size=page_size, series=series
+        session, page=page, page_size=page_size, series=series, model=model
     )
     return {
         "items": groups, "total": total, "page": page, "page_size": page_size,
@@ -232,6 +240,7 @@ def image_stats(
     status: str | None = Query(default=None, description="新审核状态过滤：NEW/KEEP/FAVORITE/REJECT/ARCHIVED"),
     category: str | None = Query(default=None, description="图库分类：anime/imported"),
     series: str | None = Query(default=None, description="创作系列（Job.series）；__none__ = 未归属系列"),
+    model: str | None = Query(default=None, description="底模文件名（任务快照）；__none__ = 未记录底模"),
     session: Session = Depends(get_session),
 ) -> ImageStatsResponse:
     """返回命中过滤条件后的**全局**计数 {total, new, keep, reject, archived, favorites}。
@@ -243,7 +252,7 @@ def image_stats(
     return ImageStatsResponse(**image_service.image_stats(
         session, job_id=job_id, review_status=review_status, favorite=favorite,
         source=source, kind=kind, search=search, date_from=date_from, date_to=date_to,
-        status=status, category=category, series=series,
+        status=status, category=category, series=series, model=model,
     ))
 
 

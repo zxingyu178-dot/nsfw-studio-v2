@@ -1,7 +1,7 @@
 import type { MutableRefObject } from 'react'
 import { Button, Select } from '../../../components/ui'
-import type { ImageSort } from '../../../types/workbench'
-import type { GalleryCategory, GallerySeries, GallerySource } from '../hooks/useGalleryQuery'
+import { modelLabel, type ImageSort } from '../../../types/workbench'
+import type { GalleryCategory, GalleryModel, GallerySeries, GallerySource } from '../hooks/useGalleryQuery'
 import {
   DENSITY_OPTIONS,
   FIT_OPTIONS,
@@ -43,6 +43,9 @@ interface GalleryToolbarProps {
   series: GallerySeries
   onSeriesChange: (value: GallerySeries) => void
   seriesOptions: { series: string; count: number }[]
+  model: GalleryModel
+  onModelChange: (value: GalleryModel) => void
+  modelOptions: { model: string; count: number }[]
   sort: ImageSort
   onSortChange: (value: ImageSort) => void
   density: GalleryDensity
@@ -65,6 +68,7 @@ export function GalleryToolbar({
   source, onSourceChange, sort, onSortChange,
   category, onCategoryChange,
   series, onSeriesChange, seriesOptions,
+  model, onModelChange, modelOptions,
   density, onDensityChange, layout, onLayoutChange, fit, onFitChange,
   selectMode, onToggleSelect,
   cleanupBusy, onOpenCleanup, importProgress, importInputRef, onImportChange,
@@ -104,6 +108,23 @@ export function GalleryToolbar({
             })),
             ...(series && !seriesOptions.some((option) => option.series === series)
               ? [{ value: series, label: series }]
+              : []),
+          ]}
+      />
+      {/* 底模：来自任务快照（/api/v1/images/models）；未记录旧图可单独筛选 */}
+      <Select
+          aria-label="底模"
+          value={model}
+          onChange={(event) => onModelChange(event.target.value)}
+          options={[
+            { value: '', label: '底模：全部' },
+            ...modelOptions.map(({ model: name, count }) => ({
+              value: name,
+              label: `${modelLabel(name) ?? name}（${count}）`,
+            })),
+            { value: '__none__', label: '底模：未记录' },
+            ...(model && model !== '__none__' && !modelOptions.some((option) => option.model === model)
+              ? [{ value: model, label: modelLabel(model) ?? model }]
               : []),
           ]}
       />

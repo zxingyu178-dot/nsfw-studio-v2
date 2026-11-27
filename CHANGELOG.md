@@ -9,6 +9,10 @@
 
 ### Added
 
+- 图库新增「底模」筛选：`GET /images`、`/images/ids`、`/images/stats`、`/images/job-groups`
+  统一支持 `model`（任务快照精确匹配；`__none__` = 未记录底模，含导入图），新增
+  `GET /images/models` 返回底模及图片数供下拉；桌面工具栏显示底模短名与张数，选择后
+  列表 / 统计 / 分组 / 按任务视图同口径，URL `?model=` 可刷新与分享。
 - Agent 新增轻量进度接口 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：返回
   `status / model / requested_count / completed_count / failed_count / progress / current /
   queue_position / images`，AI 轮询无需拉完整 JobResponse；省略 `model` 的任务同样返回

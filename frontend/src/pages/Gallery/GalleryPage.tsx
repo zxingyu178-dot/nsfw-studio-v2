@@ -13,7 +13,7 @@ import {
 import { ImageLightbox } from '../../components/ImageLightbox'
 import { LightboxInfoPanel } from '../../components/LightboxInfoPanel'
 import { ReviewMode, type ReviewPageLoader } from './ReviewMode'
-import { useGalleryQuery, type GalleryCategory, type GallerySeries, type GallerySource } from './hooks/useGalleryQuery'
+import { useGalleryQuery, type GalleryCategory, type GalleryModel, type GallerySeries, type GallerySource } from './hooks/useGalleryQuery'
 import { useGallerySelection } from './hooks/useGallerySelection'
 import { useGalleryPrefs } from './hooks/useGalleryPrefs'
 import { createReviewSessionAdapter, sameReviewScope, type ReviewSessionAdapter } from './hooks/useReviewSession'
@@ -64,6 +64,7 @@ export default function GalleryPage() {
   const sourceParam = searchParams.get('source')
   const categoryParam = searchParams.get('category')
   const seriesParam = searchParams.get('series')
+  const modelParam = searchParams.get('model')
   const statusParam = searchParams.get('status')
   const sourceFilter: GallerySource =
     sourceParam === 'comfyui' || sourceParam === 'import' ? sourceParam : ''
@@ -71,10 +72,14 @@ export default function GalleryPage() {
     categoryParam === 'anime' || categoryParam === 'imported' ? categoryParam : ''
   // 0024：系列过滤走 URL（?series=末世后宫），刷新/分享链接后筛选仍然有效
   const seriesFilter: GallerySeries = seriesParam ?? ''
+  // 底模过滤同样走 URL（?model=NoobAI-XL-v1.1.safetensors）
+  const modelFilter: GalleryModel = modelParam ?? ''
 
   const [view, setView] = useState<'flat' | 'group'>('flat')
   // 0024：系列下拉的候选（来自 /api/v1/images/series，随新任务产生自动更新）
   const [seriesOptions, setSeriesOptions] = useState<{ series: string; count: number }[]>([])
+  // 底模下拉候选（来自 /api/v1/images/models，按任务快照统计）
+  const [modelOptions, setModelOptions] = useState<{ model: string; count: number }[]>([])
 
   useEffect(() => {
     // 兼容尚未提供系列清单端点的旧前端 API / 测试桩；系列只是增强筛选，
@@ -87,10 +92,19 @@ export default function GalleryPage() {
     return () => { alive = false }
   }, [])
 
+  useEffect(() => {
+    if (typeof imageApi.models !== 'function') return
+    let alive = true
+    imageApi.models()
+      .then((res) => { if (alive) setModelOptions(res.items ?? []) })
+      .catch(() => { /* 旧后端/无底模记录时保持空候选，不影响图库主体 */ })
+    return () => { alive = false }
+  }, [])
+
   const tab = statusParam === 'NEW' || statusParam === 'ARCHIVED' || statusParam === 'FAVORITE' ? statusParam : 'ALL'
   const subStatus = statusParam === 'KEEP' || statusParam === 'REJECT' ? statusParam : ''
   const activeSidebar: GallerySidebarKey = subStatus || tab
-  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter, seriesFilter, tab, subStatus)
+  const query = useGalleryQuery(jobFilter, sourceFilter, categoryFilter, seriesFilter, tab, subStatus, modelFilter)
   const selection = useGallerySelection()
   const prefs = useGalleryPrefs()
 
@@ -173,6 +187,13 @@ export default function GalleryPage() {
     const next = new URLSearchParams(searchParams)
     if (series) next.set('series', series)
     else next.delete('series')
+    setSearchParams(next)
+  }
+
+  function applyModelFilter(model: GalleryModel): void {
+    const next = new URLSearchParams(searchParams)
+    if (model) next.set('model', model)
+    else next.delete('model')
     setSearchParams(next)
   }
 
@@ -631,6 +652,9 @@ export default function GalleryPage() {
         series={seriesFilter}
         onSeriesChange={applySeriesFilter}
         seriesOptions={seriesOptions}
+        model={modelFilter}
+        onModelChange={applyModelFilter}
+        modelOptions={modelOptions}
         sort={query.sort}
         onSortChange={query.setSort}
         density={prefs.density}
