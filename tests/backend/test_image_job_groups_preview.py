@@ -1,19 +1,24 @@
 """Job 分组预览图：每组返回最新四张图片，且不改变分页语义。"""
 from __future__ import annotations
 
+import json
+
 from sqlalchemy import event
 
 from app.core.ids import IMAGE, JOB, new_id
 from app.models import Image, Job
 
 
-def _make_completed_job(session, *, created_at: str, image_times: list[str]):
+def _make_completed_job(
+    session, *, created_at: str, image_times: list[str], workflow_snapshot_json: str = "{}",
+):
     job = Job(
         id=new_id(JOB),
         source="web",
         prompt_mode="full",
         workbench_snapshot_json="{}",
         generation_settings_json="{}",
+        workflow_snapshot_json=workflow_snapshot_json,
         requested_count=len(image_times),
         status="COMPLETED",
         job_kind="generate",
@@ -92,6 +97,38 @@ def test_job_group_preview_does_not_mix_images_between_jobs(session):
     assert total == 2
     assert by_job_id[job_a.id]["preview_image_ids"] == list(reversed(ids_a))[:4]
     assert by_job_id[job_b.id]["preview_image_ids"] == list(reversed(ids_b))[:4]
+
+
+def test_job_group_includes_snapshot_model(session):
+    """分组卡片带出底模；旧任务/异常快照为 None，不让接口报错。"""
+    from app.services import image_service
+
+    job_a, _ids_a = _make_completed_job(
+        session,
+        created_at="2026-10-21T01:00:00+00:00",
+        image_times=["2026-10-21T01:00:00+00:00"],
+        workflow_snapshot_json=json.dumps({"modules": [
+            {"module_id": "anime_generate", "config": {"model": " miaomiaoHarem_v14.safetensors "}},
+        ]}),
+    )
+    job_b, _ids_b = _make_completed_job(
+        session,
+        created_at="2026-10-21T02:00:00+00:00",
+        image_times=["2026-10-21T02:00:00+00:00"],
+    )
+    job_c, _ids_c = _make_completed_job(
+        session,
+        created_at="2026-10-21T03:00:00+00:00",
+        image_times=["2026-10-21T03:00:00+00:00"],
+        workflow_snapshot_json="not-json",
+    )
+
+    groups, _total = image_service.list_job_groups(session, page=1, page_size=20)
+    by_job_id = {group["job_id"]: group for group in groups}
+
+    assert by_job_id[job_a.id]["model"] == "miaomiaoHarem_v14.safetensors"
+    assert by_job_id[job_b.id]["model"] is None
+    assert by_job_id[job_c.id]["model"] is None
 
 
 def test_job_group_preview_keeps_api_pagination_and_total(client):

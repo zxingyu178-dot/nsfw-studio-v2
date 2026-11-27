@@ -526,6 +526,8 @@ export interface ImageJobGroupDTO {
   /** 0024 系列维度 */
   series?: string | null
   series_ref?: string | null
+  /** 任务快照底模文件名（旧任务/异常快照为 null/缺失） */
+  model?: string | null
 }
 
 /** Phase 0.11.1 缩略图后台回填进度 */

@@ -247,10 +247,10 @@ def job_stage_response(stage: JobStage) -> JobStageResponse:
     )
 
 
-def _queue_model(job: Job) -> str | None:
-    """从 workflow 快照读取底模：与执行快照同源，旧 Job/异常快照一律返回 None。"""
+def snapshot_model(raw: str | None) -> str | None:
+    """从 workflow 快照 JSON 读取底模：与执行快照同源，旧 Job/异常快照一律返回 None。"""
     try:
-        snapshot = json.loads(job.workflow_snapshot_json or "{}")
+        snapshot = json.loads(raw or "{}")
     except (TypeError, ValueError):
         return None
     modules = snapshot.get("modules") if isinstance(snapshot, dict) else None
@@ -259,6 +259,10 @@ def _queue_model(job: Job) -> str | None:
     config = modules[0].get("config")
     model = config.get("model") if isinstance(config, dict) else None
     return model.strip() if isinstance(model, str) and model.strip() else None
+
+
+def _queue_model(job: Job) -> str | None:
+    return snapshot_model(job.workflow_snapshot_json)
 
 
 def queue_job_summary(job: Job) -> QueueJobSummary:

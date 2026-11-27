@@ -36,6 +36,7 @@ from app.core.ids import IMAGE, new_id
 from app.core.timeutil import utc_now_iso
 from app.engine.base import EngineError, EngineOutputFile
 from app.models import IMAGE_STATUSES, Image, Job, JobItem, JobStage, JobStageItem
+from app.schemas.job import snapshot_model
 from app.services import image_event_service
 from app.storage.manager import StorageManager
 from app.workflows.base import InputImageRef
@@ -1106,6 +1107,7 @@ def list_job_groups(
             agg.c.favorites,
             Job.series.label("series"),
             Job.series_ref.label("series_ref"),
+            Job.workflow_snapshot_json.label("workflow_snapshot_json"),
         )
         .join(Job, Job.id == agg.c.job_id)
         .where(Job.status == "COMPLETED")
@@ -1156,6 +1158,7 @@ def list_job_groups(
             "preview_image_ids": preview_image_ids[row.job_id],
             "series": row.series,
             "series_ref": row.series_ref,
+            "model": snapshot_model(row.workflow_snapshot_json),
         }
         for row in rows
     ]

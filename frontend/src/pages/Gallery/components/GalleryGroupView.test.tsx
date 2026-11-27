@@ -7,7 +7,7 @@ import { GalleryGroupView } from './GalleryGroupView'
 
 const group = {
   job_id: 'job_12345678abcdef',
-  module_id: 'basic_generate',
+  module_id: 'anime_generate',
   created_at: '2026-10-20T02:30:00Z',
   total: 9,
   unreviewed: 3,
@@ -15,6 +15,7 @@ const group = {
   rejected: 1,
   favorites: 4,
   preview_image_ids: ['img_1', 'img_2', 'img_3', 'img_4', 'img_5'],
+  model: 'NoobAI-XL-v1.1.safetensors',
 } as ImageJobGroupDTO
 
 function renderView(overrides: Partial<React.ComponentProps<typeof GalleryGroupView>> = {}) {
@@ -37,7 +38,8 @@ describe('GalleryGroupView', () => {
 
     expect(screen.getByText(shortJobId(group.job_id))).toBeInTheDocument()
     expect(container).toHaveTextContent(formatDateTime(group.created_at))
-    expect(screen.getByText(group.module_id!)).toBeInTheDocument()
+    expect(screen.getByText('动漫生成')).toBeInTheDocument()
+    expect(screen.getByText('NoobAI-XL-v1.1')).toHaveAttribute('title', 'NoobAI-XL-v1.1.safetensors')
     expect(screen.getByText(/未审核\s*3/)).toBeInTheDocument()
     expect(screen.getByText(/保留\s*2/)).toBeInTheDocument()
     expect(screen.getByText(/收藏\s*4/)).toBeInTheDocument()
@@ -50,6 +52,13 @@ describe('GalleryGroupView', () => {
     )
     expect([...thumbnails].every((image) => image.getAttribute('loading') === 'lazy')).toBe(true)
     expect(screen.getByText('+5')).toBeInTheDocument()
+  })
+
+  it('旧任务没有底模/未知模块时回退原始 ID 且不占位', () => {
+    renderView({ groups: [{ ...group, module_id: 'legacy_module', model: null }] })
+
+    expect(screen.getByText('legacy_module')).toBeInTheDocument()
+    expect(screen.queryByText('NoobAI-XL-v1.1')).not.toBeInTheDocument()
   })
 
   it('点击卡片时应用任务筛选', () => {

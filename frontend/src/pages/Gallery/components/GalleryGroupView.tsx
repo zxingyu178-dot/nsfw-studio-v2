@@ -1,6 +1,12 @@
 import { Button } from '../../../components/ui'
 import { formatDateTime } from '../../../utils/format'
-import { imageThumbUrl, shortJobId, type ImageJobGroupDTO } from '../../../types/workbench'
+import {
+  MODULE_LABEL,
+  imageThumbUrl,
+  modelLabel,
+  shortJobId,
+  type ImageJobGroupDTO,
+} from '../../../types/workbench'
 
 /**
  * Phase 0.12 Task9：按任务分组视图（从 GalleryPage 抽取，行为不变）。
@@ -28,6 +34,7 @@ export function GalleryGroupView({
       {groups.map((g) => {
         const previews = (g.preview_image_ids ?? []).slice(0, 4)
         const remaining = Math.max(0, g.total - previews.length)
+        const model = modelLabel(g.model)
         return (
           <article
             key={g.job_id}
@@ -39,7 +46,14 @@ export function GalleryGroupView({
                 <span className="gal-group__identity">
                   <span className="gal-group__id">{shortJobId(g.job_id)}</span>
                   {g.series_ref && <span className="gal-group__module">{g.series_ref}</span>}
-                  {g.module_id && <span className="gal-group__module">{g.module_id}</span>}
+                  {g.module_id && (
+                    <span className="gal-group__module">{MODULE_LABEL[g.module_id] ?? g.module_id}</span>
+                  )}
+                  {model && (
+                    <span className="gal-group__module gal-group__model" title={g.model ?? undefined}>
+                      {model}
+                    </span>
+                  )}
                 </span>
                 <span className="gal-group__time">{formatDateTime(g.created_at)}</span>
               </div>
