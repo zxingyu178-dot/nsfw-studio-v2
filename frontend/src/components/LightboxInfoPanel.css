@@ -23,6 +23,11 @@
   word-break: break-word;
 }
 
+.lb-model-filter-btn {
+  margin-left: var(--space-2);
+  font-family: var(--font-family-base);
+}
+
 .lb-side__fields pre {
   margin: 0;
   max-height: 120px;

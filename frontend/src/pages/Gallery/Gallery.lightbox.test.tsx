@@ -91,6 +91,35 @@ describe('Gallery 单击抽屉 / 双击 Lightbox 区分', () => {
     expect(screen.getByRole('dialog', { name: '图片预览' })).toBeInTheDocument()
   })
 
+  it('Lightbox 信息栏显示底模，并可一键只看此底模', async () => {
+    vi.mocked(jobApi.get).mockResolvedValue({
+      id: 'job_1',
+      positive_prompt_snapshot: 'lightbox prompt',
+      negative_prompt_snapshot: '',
+      workflow_snapshot: {
+        modules: [{ module_id: 'anime_generate', config: { model: 'NoobAI-XL-v1.1.safetensors' } }],
+      },
+    } as never)
+    const { container } = renderPage()
+    await screen.findByText('共 3 张')
+    const cards = container.querySelectorAll('.gal-card')
+    fireEvent.click(cards[0])
+    fireEvent.doubleClick(cards[0])
+
+    await screen.findByRole('dialog', { name: '图片预览' })
+    expect(await screen.findByText('底模')).toBeInTheDocument()
+    expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: '只看此底模' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '图片预览' })).not.toBeInTheDocument()
+    })
+    expect(await screen.findByLabelText('底模')).toHaveValue('NoobAI-XL-v1.1.safetensors')
+    expect(vi.mocked(imageApi.list).mock.calls.some(
+      ([params]) => (params as { model?: string }).model === 'NoobAI-XL-v1.1.safetensors',
+    )).toBe(true)
+  })
+
   it('Lightbox 打开期间按 ESC 关闭，且只加载当前图', async () => {
     const { container } = renderPage()
     await screen.findByText('共 3 张')

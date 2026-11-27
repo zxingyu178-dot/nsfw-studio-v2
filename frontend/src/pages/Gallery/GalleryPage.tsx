@@ -786,6 +786,7 @@ export default function GalleryPage() {
             <LightboxInfoPanel
               image={img}
               onUpdated={(u) => query.applyItemUpdated(u)}
+              onFilterModel={(model) => { setLightboxIndex(null); applyModelFilter(model) }}
               onDeleted={(deletedId) => {
                 query.removeItem(deletedId)
                 setLightboxIndex(null)

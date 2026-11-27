@@ -9,6 +9,8 @@ import {
   imageContentUrl,
   normalizeImageStatus,
   shortJobId,
+  snapshotModelName,
+  snapshotModelValue,
   type AssetType,
   type ImageDTO,
   type ImageProvenanceDTO,
@@ -28,9 +30,11 @@ export interface LightboxInfoPanelProps {
   image: ImageDTO
   onUpdated: (image: ImageDTO) => void
   onDeleted: (imageId: string) => void
+  /** 按当前图片的实际底模筛选图库（原始文件名；缺省时不显示入口）。 */
+  onFilterModel?: (model: string) => void
 }
 
-export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoPanelProps) {
+export function LightboxInfoPanel({ image, onUpdated, onDeleted, onFilterModel }: LightboxInfoPanelProps) {
   const navigate = useNavigate()
   const [job, setJob] = useState<JobDTO | null>(null)
   const [provenance, setProvenance] = useState<ImageProvenanceDTO | null>(null)
@@ -181,6 +185,8 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
   const moduleLabel = provenance?.module_id
     ? (MODULE_LABEL[provenance.module_id ?? ''] ?? provenance.module_id)
     : '—'
+  const modelValue = job ? snapshotModelValue(job) : null
+  const model = job ? snapshotModelName(job) : null
 
   return (
     <aside className="lb-side" aria-label="图片信息">
@@ -198,6 +204,20 @@ export function LightboxInfoPanel({ image, onUpdated, onDeleted }: LightboxInfoP
           <dd>{image.job_id ? shortJobId(image.job_id) : '—（导入图片）'}</dd>
           <dt>模块</dt>
           <dd>{moduleLabel}</dd>
+          <dt>底模</dt>
+          <dd>
+            {model ?? '—'}
+            {modelValue && onFilterModel && (
+              <Button
+                size="xs"
+                variant="ghost"
+                className="lb-model-filter-btn"
+                onClick={() => onFilterModel(modelValue)}
+              >
+                只看此底模
+              </Button>
+            )}
+          </dd>
           {/* Phase 0.12：仅当 provenance.source_recipe_id 存在才显示 Recipe 行；
               为 null 时整行隐藏，禁止展示无法提供的数据。 */}
           {provenance?.source_recipe_id ? (
