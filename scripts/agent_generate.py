@@ -57,6 +57,10 @@ REQUEST_SEMANTIC_OPTIONS = {
     "--negative", "--width", "--height", "--count", "--seed", "--next",
 }
 SAMPLE_PARAM_KEYS = {"steps", "cfg", "sampler_name", "scheduler", "denoise", "face_detailer"}
+# 与后端 AGENT_DEFAULT_NEGATIVE_PROMPT 保持一致（合同测试守护，禁止分叉）。
+DEFAULT_NEGATIVE_PROMPT = (
+    "worst quality, low quality, blurry, jpeg artifacts, watermark, text"
+)
 ADVANCED_FIELDS = (
     "module_version", "binding_version", "model", "loras", "params",
     "use_recommended_sampling",
@@ -207,14 +211,15 @@ def validate_request(payload: object, *, require_client_request_id: bool = False
         raise RequestValidationError("prompt 最多 10000 个字符")
     _require_utf8_text(prompt, "prompt")
 
-    negative = payload.get("negative_prompt", "")
-    if not isinstance(negative, str):
-        raise RequestValidationError("negative_prompt 必须是字符串")
-    if negative and not negative.strip():
-        raise RequestValidationError("negative_prompt 显式提供时不能是纯空白")
-    if len(negative) > 8000:
-        raise RequestValidationError("negative_prompt 最多 8000 个字符")
-    _require_utf8_text(negative, "negative_prompt")
+    negative = payload.get("negative_prompt")
+    if negative is not None:
+        if not isinstance(negative, str):
+            raise RequestValidationError("negative_prompt 必须是字符串或 null")
+        if negative and not negative.strip():
+            raise RequestValidationError("negative_prompt 显式提供时不能是纯空白")
+        if len(negative) > 8000:
+            raise RequestValidationError("negative_prompt 最多 8000 个字符")
+        _require_utf8_text(negative, "negative_prompt")
 
     module_id = payload.get("module_id")
     if module_id is not None:
@@ -523,7 +528,8 @@ def main() -> int:
                         help="列出已安装底模、注册中心元数据与推荐采样参数（需 Agent token）")
     parser.add_argument("--list-loras", action="store_true",
                         help="列出已安装 LoRA、显示名、family、适用工作流与依赖（需 Agent token）")
-    parser.add_argument("--negative", default="worst quality, low quality, blurry, jpeg artifacts, watermark, text")
+    parser.add_argument("--negative", default=DEFAULT_NEGATIVE_PROMPT,
+                        help="负向提示词；不传使用统一默认，传空字符串表示不使用负向提示词")
     parser.add_argument("--width", type=int, default=768)
     parser.add_argument("--height", type=int, default=1024)
     parser.add_argument("--count", type=int, default=1)
@@ -672,7 +678,8 @@ def main() -> int:
             "snapshot": {
                 "prompt_mode": "full",
                 "full_prompt": request_payload["prompt"],
-                "negative_prompt": request_payload["negative_prompt"],
+                "negative_prompt": request_payload["negative_prompt"]
+                if request_payload["negative_prompt"] is not None else DEFAULT_NEGATIVE_PROMPT,
                 "count": request_payload["count"],
                 "width": request_payload["width"],
                 "height": request_payload["height"],

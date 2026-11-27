@@ -12,6 +12,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# AI 直提未显式给出负向提示词时的统一默认；与 CLI --negative 默认保持一致。
+AGENT_DEFAULT_NEGATIVE_PROMPT = (
+    "worst quality, low quality, blurry, jpeg artifacts, watermark, text"
+)
+
 
 class AgentLoraSpec(BaseModel):
     """单条任务级 LoRA；名称必须是 ComfyUI /models/loras 中的文件名。"""
@@ -62,7 +67,10 @@ class AgentJobRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     prompt: str = Field(min_length=1, max_length=10000, description="正向 Prompt（最终文本）")
-    negative_prompt: str = Field(default="", max_length=8000, description="负向 Prompt")
+    negative_prompt: str | None = Field(
+        default=None, max_length=8000,
+        description="负向 Prompt；不传=服务器统一默认，传空字符串=显式不使用负向提示词",
+    )
     module_id: str | None = Field(
         default=None,
         max_length=64,

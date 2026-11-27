@@ -119,8 +119,12 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
 ```
 
 - `model` 必须是 ComfyUI `/models/checkpoints` 中的文件名（不含路径）；
+- `negative_prompt` 省略或传 null 时使用服务器统一默认（与 CLI `--negative` 默认一致，
+  可从 `capabilities.default_negative_prompt` 获取）；显式传空字符串表示不使用负向提示词；
 - `loras` 最多 2 条，强度 -2..2；省略 `strength_model` / `strength_clip` 时按该 LoRA 的
   注册中心 `recommended_strength` 补齐（无登记回退 0.8），显式强度优先；
+  所选 binding 未声明 `inputs.loras` 或超过其 `max_items` 时，在创建 Job 前返回
+  422 `BINDING_PARAM_UNSUPPORTED`；
 - `sampler_name` / `scheduler` 必须来自模块枚举；
 - `params.face_detailer=false` 关闭人脸修复以显著提速（默认开启；仅 v15 等工作流含 FaceDetailer 节点时可用）；
 - `use_recommended_sampling=true`：自动套用注册中心推荐采样参数；`model` 可省略（使用当前
@@ -133,6 +137,7 @@ Agent 只开放**单个无输入图片的生成型模块**，不开放任意 Pip
   桌面前端“底模”选择下方的“应用推荐”与之同源。
 - `capabilities.default_model` / `default_sampling_profile`：当前默认工作流的默认底模及其推荐参数
   （底模未安装时推荐值为 null）；省略 `model` 时可据此确认实际使用的底模。
+- `capabilities.default_negative_prompt`：省略 `negative_prompt` 时服务端实际使用的统一默认。
 - `capabilities.model_catalog`：按底模文件名返回注册中心元数据（`display_name / family /
   compatible_workflows / notes / recommended_sampling`），仅包含当前已安装的 checkpoint。
 - `capabilities.lora_catalog`：按 LoRA 文件名返回注册中心元数据（`display_name / family /

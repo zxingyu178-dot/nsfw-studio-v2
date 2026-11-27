@@ -428,6 +428,22 @@ def test_parse_lora_option(cli):
     })["loras"] == [{"name": "a.safetensors", "strength_model": 0.55}]
 
 
+def test_negative_prompt_default_and_omission(cli, tmp_path):
+    """CLI 默认负向提示词与后端同源；请求文件省略时交给服务端默认。"""
+    from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT
+
+    assert cli.DEFAULT_NEGATIVE_PROMPT == AGENT_DEFAULT_NEGATIVE_PROMPT
+    omitted = cli.load_request_file(write_request(tmp_path, {
+        "prompt": "1girl, shrine", "client_request_id": "negative-omitted",
+    }))
+    assert omitted["negative_prompt"] is None
+    explicit = cli.load_request_file(write_request(tmp_path, {
+        "prompt": "1girl, shrine", "client_request_id": "negative-empty",
+        "negative_prompt": "",
+    }))
+    assert explicit["negative_prompt"] == ""
+
+
 def test_validate_only_has_no_credentials_network_or_directory_side_effects(
     cli, tmp_path, monkeypatch, capsys,
 ):

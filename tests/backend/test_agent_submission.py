@@ -12,6 +12,7 @@ from app.core.config import ENV_AGENT_RATE_LIMIT, ENV_AGENT_TOKEN, Settings, Wor
 from app.engine import release
 from app.main import create_app
 from app.models import Job, JobStage, Prompt
+from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT
 from app.services import job_service
 from app.services.model_registry_service import ModelRegistryService
 
@@ -325,6 +326,66 @@ def test_agent_omitted_lora_strength_uses_registry_recommendation(agent_client, 
     config = unregistered.json()["workbench_snapshot"]["workflow_modules"][0]["config"]
     assert config["loras"][0]["strength_model"] == 0.8
     assert config["loras"][0]["strength_clip"] == 0.8
+
+
+def test_agent_negative_prompt_defaults_and_explicit_empty(agent_client, monkeypatch):
+    """不传 negative_prompt 用统一默认；显式空字符串表示确实不要负向提示词。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-negative")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-negative"}
+    omitted_body = payload(module_version="v1", binding_version="v15")
+    omitted_body.pop("negative_prompt")
+    omitted = agent_client.post("/api/v1/agent/jobs", json=omitted_body, headers=headers)
+    assert omitted.status_code == 201, omitted.text
+    assert omitted.json()["workbench_snapshot"]["negative_prompt"] == AGENT_DEFAULT_NEGATIVE_PROMPT
+
+    explicit_empty = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15", negative_prompt="",
+    ), headers=headers)
+    assert explicit_empty.status_code == 201, explicit_empty.text
+    assert explicit_empty.json()["workbench_snapshot"]["negative_prompt"] == ""
+
+
+def test_agent_rejects_loras_for_binding_without_lora_support(agent_client, session, monkeypatch):
+    """binding 未声明 loras 时在创建 Job 前拒绝，避免任务创建后才在引擎侧失败。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-lora-unsupported")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-lora-unsupported"}
+    adapter = agent_client.app.state.adapter
+    monkeypatch.setattr(
+        adapter, "load_binding", lambda ref: ({}, {"inputs": {}}, "w", "b"), raising=False,
+    )
+    before = db_counts(session)
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+        loras=[{"name": "a.safetensors"}],
+    ), headers=headers)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "BINDING_PARAM_UNSUPPORTED"
+    assert response.json()["error"]["details"]["parameter"] == "loras"
+    assert db_counts(session) == before
+
+
+def test_agent_rejects_lora_count_over_binding_max_items(agent_client, session, monkeypatch):
+    """binding 声明 max_items=1 时，两条 LoRA 必须在创建 Job 前拒绝。"""
+    monkeypatch.setenv(ENV_AGENT_TOKEN, "test-token-lora-max")
+    monkeypatch.setenv(ENV_AGENT_RATE_LIMIT, "0")
+    headers = {"Authorization": "Bearer test-token-lora-max"}
+    adapter = agent_client.app.state.adapter
+    monkeypatch.setattr(
+        adapter, "load_binding",
+        lambda ref: ({}, {"inputs": {"loras": {"apply": "lora_stack", "max_items": 1}}}, "w", "b"),
+        raising=False,
+    )
+    before = db_counts(session)
+    response = agent_client.post("/api/v1/agent/jobs", json=payload(
+        module_version="v1", binding_version="v15",
+        loras=[{"name": "a.safetensors"}, {"name": "b.safetensors"}],
+    ), headers=headers)
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "BINDING_PARAM_UNSUPPORTED"
+    assert response.json()["error"]["details"]["max_items"] == 1
+    assert db_counts(session) == before
 
 
 def test_agent_use_recommended_sampling_fills_registry_profile(agent_client, monkeypatch):

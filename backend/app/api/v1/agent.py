@@ -35,7 +35,7 @@ from app.core.errors import (
 )
 from app.engine.base import EngineBindingRef
 from app.engine.release import ensure_modules_released
-from app.schemas.agent import AgentJobRequest
+from app.schemas.agent import AGENT_DEFAULT_NEGATIVE_PROMPT, AgentJobRequest
 from app.schemas.job import JobResponse, job_response
 from app.schemas.workbench import WorkbenchSnapshotModel
 from app.services import agent_service, job_service, prompt_service
@@ -147,6 +147,7 @@ def agent_capabilities(request: Request) -> dict:
         "default_module_id": engine_cfg.get("module_id"),
         "default_model": default_model,
         "default_sampling_profile": default_profile,
+        "default_negative_prompt": AGENT_DEFAULT_NEGATIVE_PROMPT,
         "modules": modules,
         "models": models,
         "model_catalog": installed_catalog,
@@ -257,12 +258,25 @@ def submit_agent_job(
                 )
             )
             inputs = binding.get("inputs") or {}
-            for key in ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise"):
+            for key in ("model", "steps", "cfg", "sampler_name", "scheduler", "denoise", "loras"):
                 if key in config and key not in inputs:
                     raise UnprocessableError(
                         f"当前 binding {primary.get('binding_version')} 不支持任务级参数 {key}",
                         code="BINDING_PARAM_UNSUPPORTED",
                         details={"binding_version": primary.get("binding_version"), "parameter": key},
+                    )
+            # loras 是列表参数：按 binding 声明的 max_items 在创建 Job 前拒绝超量提交。
+            lora_input = inputs.get("loras")
+            if "loras" in config and isinstance(lora_input, dict):
+                max_items = lora_input.get("max_items")
+                if isinstance(max_items, int) and len(config["loras"]) > max_items:
+                    raise UnprocessableError(
+                        f"当前 binding {primary.get('binding_version')} 最多支持 {max_items} 条 LoRA",
+                        code="BINDING_PARAM_UNSUPPORTED",
+                        details={
+                            "binding_version": primary.get("binding_version"),
+                            "parameter": "loras", "max_items": max_items,
+                        },
                     )
             # face_detailer 由 adapter 按节点类型应用（v15 binding Hash 保持冻结），
             # 这里只校验目标工作流确实包含 FaceDetailer。
@@ -298,6 +312,11 @@ def submit_agent_job(
     preflight = run_preflight(settings, request.app.state.adapter, workflow_modules)
 
     # 快照必须记录最终实际使用的模块身份（不能记录空的默认选择）。
+    negative_prompt = (
+        body.negative_prompt
+        if body.negative_prompt is not None
+        else AGENT_DEFAULT_NEGATIVE_PROMPT
+    )
     snapshot_modules = [
         {
             "module_id": module.get("module_id"),
@@ -313,7 +332,7 @@ def submit_agent_job(
     snapshot_model = WorkbenchSnapshotModel(
         prompt_mode="full",
         full_prompt=body.prompt,
-        negative_prompt=body.negative_prompt,
+        negative_prompt=negative_prompt,
         generation_mode="text",
         width=body.width,
         height=body.height,
