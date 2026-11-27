@@ -204,6 +204,24 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
     expect(option?.textContent).toContain('cunnyfunky_v5.0_000008.safetensors')
   })
 
+  it('已选 LoRA 与当前底模的登记依赖不一致时给出提示', async () => {
+    renderPanel({
+      model: 'waiNSFWIllustrious_v150.safetensors',
+      loras: [{ name: 'cunnyfunky_v5.0_000008.safetensors', strength_model: 0.6, strength_clip: 0.6 }],
+    })
+    expect(await screen.findByText(/登记依赖 NoobAI XL v1\.1 \(eps\)/)).toBeTruthy()
+    expect(screen.getByText(/仍可提交，但效果可能异常/)).toBeTruthy()
+  })
+
+  it('LoRA 依赖与当前底模一致时不显示提示', async () => {
+    renderPanel({
+      model: 'NoobAI-XL-v1.1.safetensors',
+      loras: [{ name: 'cunnyfunky_v5.0_000008.safetensors', strength_model: 0.6, strength_clip: 0.6 }],
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'LoRA 1' })).toBeTruthy())
+    expect(screen.queryByText(/仍可提交，但效果可能异常/)).toBeNull()
+  })
+
   it('已有一条 LoRA 时出现第二行与强度输入', async () => {
     renderPanel({
       loras: [{ name: 'cunnyfunky_v5.0_000008.safetensors', strength_model: 0.6, strength_clip: 0.6 }],

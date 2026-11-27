@@ -121,6 +121,18 @@ export function InspectorPanel({
   const modelDisplayName = (name: string) =>
     engineModels.model_catalog?.[name]?.display_name || name
 
+  // 已选 LoRA 与当前底模的登记依赖不一致时提示；服务端仍按真实文件校验，不在这里阻断提交。
+  const loraWarnings = selectedLoras.flatMap((lora) => {
+    const meta = engineModels.lora_catalog?.[lora.name]
+    const bases = meta?.base_models ?? []
+    if (!meta || bases.length === 0 || !effectiveModel || bases.includes(effectiveModel)) return []
+    const baseNames = bases.map(modelDisplayName).join(' / ')
+    return [
+      `LoRA「${meta.display_name || lora.name}」登记依赖 ${baseNames}，当前底模为 ` +
+      `${modelDisplayName(effectiveModel)}；仍可提交，但效果可能异常。`,
+    ]
+  })
+
   // W2.0：最小运行环境检测入口（不轮询；工作流变化即清除旧结果）
   const preflightModuleIds = state.workflowModules.map((module) => module.module_id)
   const preflightKey = preflightModuleIds.join('|')
@@ -331,21 +343,26 @@ export function InspectorPanel({
 
       {/* ===== LoRA（最多 2 条） ===== */}
       {supportsLora && engineModels.loras.length > 0 && (
-        <LoraStackEditor
-          loras={selectedLoras}
-          options={engineModels.loras.map((name) => {
-            const meta = engineModels.lora_catalog?.[name]
-            const label = meta?.display_name?.trim() || name
-            const strength = meta?.recommended_strength
-            return {
-              value: name,
-              label,
-              ...(label === name ? {} : { description: name }),
-              ...(typeof strength === 'number' ? { strength } : {}),
-            }
-          })}
-          onChange={(next) => setPrimaryModuleConfig({ loras: next.length > 0 ? next : undefined })}
-        />
+        <>
+          <LoraStackEditor
+            loras={selectedLoras}
+            options={engineModels.loras.map((name) => {
+              const meta = engineModels.lora_catalog?.[name]
+              const label = meta?.display_name?.trim() || name
+              const strength = meta?.recommended_strength
+              return {
+                value: name,
+                label,
+                ...(label === name ? {} : { description: name }),
+                ...(typeof strength === 'number' ? { strength } : {}),
+              }
+            })}
+            onChange={(next) => setPrimaryModuleConfig({ loras: next.length > 0 ? next : undefined })}
+          />
+          {loraWarnings.map((warning) => (
+            <span key={warning} className="wb-lora-warning">{warning}</span>
+          ))}
+        </>
       )}
 
       {/* ===== 人脸修复（FaceDetailer，性能开关） ===== */}

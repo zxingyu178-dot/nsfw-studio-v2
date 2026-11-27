@@ -42,6 +42,8 @@
   桌面 LoRA 下拉显示友好名称，第二行保留文件名。
 - LoRA Manifest 新增可选 `recommended_strength`（0–2）：`lora_catalog` 同步暴露；
   桌面选择 LoRA 时默认使用推荐强度（未登记回退 0.8），CLI `--list-loras` 打印推荐强度。
+- 桌面工作台：已选 LoRA 与当前底模的登记依赖不一致时显示提示（例如 Pony LoRA 搭配其它底模），
+  仍允许提交，避免静默产生异常效果。
 - CLI 新增 `--list-loras`：列出已安装 LoRA、显示名、family、适用工作流与依赖底模。
 - CLI 新增 `--list-models`：列出已安装底模、显示名、family 与推荐采样参数，并给出默认底模。
 - Agent `use_recommended_sampling` / CLI `--use-recommended`：自动套用注册中心推荐采样参数；
@@ -87,7 +89,7 @@
   COMPLETED 1/1，832×1216 / 30 步 / cfg4.0 / er_sde simple / `face_detailer=false`，
   **69.3s**；history `06c413c7-ab33-4266-bee7-2ce5ca70c440` 实测
   `ckpt=miaomiaoHarem_v14.safetensors`、FaceDetailer 节点 0；手机端显示“新图 2”。
-- 前端全量 `npm run test:ci` 104 个文件 532 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 534 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
   （首轮 AssetPickerDrawer 分页用例在满载下偶发超时，单独运行与整轮复跑均通过。）
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
