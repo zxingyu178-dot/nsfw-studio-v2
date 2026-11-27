@@ -899,3 +899,11 @@ AI 提交后只能轮询完整 `GET /jobs/{id}`（含 items/快照，几秒一�
 前端工具栏新增“底模”下拉（全部 / 各底模含数量 / 未记录），筛选写入 URL `?model=`，刷新与分享后仍然有效；切换后列表、侧栏计数、按任务分组同步收敛，当前值不在候选时回退到“全部”。新增前端 3 项用例（下拉候选与选择、URL 首屏过滤、`__none__` 透传），图库相关 85 项通过；后端新增 1 项回归测试（列表/统计/ID/候选/未记录/任务分组同口径），后端全量 880 项通过，typecheck 与生产构建通过。
 
 生产部署 3f7957b：前端 `index-Dha2deu2.js`（SHA256/12 `bbf4cdcd363b`），`index-BEt3hdqR.css` 未变；协作停止后由计划任务重启，健康 0.39.0，ComfyUI PID 11432 全程未变。接口实测：`/images/models` 返回 NoobAI 5 / miaomiao 2 / waiNSFW 1；`/images?model=NoobAI-XL-v1.1.safetensors` 与 `/images/stats` 均 total=5；`/images/ids?model=__none__` total=21730；`/images/job-groups?model=NoobAI…` total=4 且卡片全为 NoobAI 任务。隔离浏览器打开 `/gallery`：底模下拉为“底模：全部 / NoobAI-XL-v1.1（5）/ miaomiaoHarem_v14（2）/ waiNSFWIllustrious_v150（1）/ 底模：未记录”，选择 NoobAI 后 URL 带 `?model=`、网格恰好 5 张，切“底模：未记录”恢复 40+ 张旧图/导入图。
+
+## 2026-11-27 — 手机桥图库按底模筛选（Alpha80）
+
+手机图库此前只能按日期、状态、分类、收藏、搜索与标签筛选，无法像桌面一样只看某款底模；图片详情虽已返回 `model`，但列表层没有筛选能力。现在 Bridge `GET /mobile/images/gallery` 增加可选 `model`（≤200 字，trim 后精确匹配任务快照 `modules[0].config.model`；`__none__` = 无 Job / 导入图 / 旧快照），并新增 `GET /mobile/images/models` 返回 `{"items":[{"model","count"}]}`（按数量降序、名称升序），能力名 `mobile_gallery_model_filter_v1`。筛选条件写入游标 `q`，换底模后沿用旧 `page_cursor`/`scope_cursor` 返回 422；响应 `filters` 回显 `model`，与桌面 `image_service._apply_image_filters` 完全同口径，不新增第二套 SQL。
+
+MediaReview Alpha80（versionCode 87）在筛选面板新增“底模”菜单（候选带张数 + “未记录底模”），顶部摘要显示“底模 X / 未记录底模”，清除筛选一并清空；旧桥未声明能力时入口隐藏，直接带 model 的查询会在发网前被拒绝并提示升级。新增手机数据测试 1 项（摘要/校验/服务端判定）、Bridge 合同测试 2 项（参数与回显、候选过滤）、ViewModel 测试 2 项（能力门禁、候选排序与查询绑定）；Android 全量 847 项通过，后端全量 881 项通过。
+
+生产部署 b355d04（仅后端）：协作停止后由计划任务重启，健康 0.39.0，桥 `0.14.0` 能力集含 `mobile_gallery_model_filter_v1`，ComfyUI PID 11432 未变。模拟器覆盖安装 Alpha80：更新说明正常；图库 21738 张，底模菜单为“全部底模 / NoobAI-XL-v1.1（5）/ miaomiaoHarem_v14（2）/ waiNSFWIllustrious_v150（1）/ 未记录底模”；选 NoobAI 后标题 5 张、摘要“底模 NoobAI-XL-v1.1”、网格恰好 5 张；切“未记录底模”后 21730 张；点“清除”恢复 21738 张且摘要消失。证据：`docs/evidence/alpha80-*`（更新说明、筛选面板、底模菜单、NoobAI/未记录/清除结果）。
