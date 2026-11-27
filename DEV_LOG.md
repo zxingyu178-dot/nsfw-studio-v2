@@ -803,3 +803,9 @@ AI 直提与桌面选择器统一 LoRA 默认强度：`POST /agent/jobs` 的 `lo
 
 后端定向（Agent/CLI）172 项与全量 865 项通过；生产部署 ded6a5e 后实测：缺省强度的已登记 LoRA 快照为 0.6，未登记 LoRA 回退 0.8，显式 0.35/0.5 保持不变；三个验证 Job 均已取消，队列空闲。
 
+
+## 2026-11-27 — AI 提交契约：负向默认与 LoRA binding 门禁
+
+POST /agent/jobs 的 negative_prompt 改为可省略：省略/null 使用统一默认（与 CLI --negative 一致，capabilities.default_negative_prompt 暴露），显式空字符串才表示不使用负向提示词；CLI 请求文件同样保留省略语义，旧 /jobs 路径仍回退默认。LoRA 增加 binding 前置门禁：未声明 inputs.loras 或超过 max_items 时在创建 Job 前返回 422 BINDING_PARAM_UNSUPPORTED，不再等引擎执行阶段才失败。
+
+后端定向 83 项与全量 869 项通过；生产部署 4aa82e5 后实测：capabilities 默认负向正确，省略时快照为默认、显式空字符串为空，验证 Job 已取消、队列空闲。
