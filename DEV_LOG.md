@@ -912,4 +912,4 @@ MediaReview Alpha80（versionCode 87）在筛选面板新增“底模”菜单�
 
 底模筛选上线后，从某张图反查同底模作品仍需手动打开下拉再找模型名；快照里的文件名带扩展名，手工选择容易选错。现在图片详情「底模」旁新增“只看此底模”：用任务快照原始文件名（新增 `snapshotModelValue`，短名展示仍走 `snapshotModelName`）直接写 URL `?model=`，同时关闭抽屉、列表/侧栏计数/按任务分组随之收敛；无 Job、旧快照或外部导入不显示入口，也不改变原底模展示。
 
-新增 1 项抽屉测试（原始文件名含空格时传递 trim 后值），图库 21 个文件 / 86 项通过，typecheck 与生产构建通过。生产部署 bba06a8（仅静态资源）：`index-CpOZcjBk.js`（SHA256/12 `1e176e8363b8`）/ `index-Cd0dCDZ_.css`（`d20de5795131`），生产 `/` 已引用。隔离浏览器实测：首图详情显示“底模 NoobAI-XL-v1.1”与“只看此底模”；点击后抽屉从 DOM 消失、URL 变为 `/gallery?model=NoobAI-XL-v1.1.safetensors`、底模下拉自动选中 `NoobAI-XL-v1.1（5）`、`.gal-card` 恰好 5 个。
+新增 1 项抽屉测试（原始文件名含空格时传递 trim 后值），图库 21 个文件 / 86 项通过，typecheck 与生产构建通过。生产部署 dd69277（仅静态资源，含按钮字体修正）：`index-BoXqTmZB.js`（SHA256/12 `1e176e8363b8`）/ `index-DF3SKZeP.css`（`300904a8b1e3`），生产 `/` 已引用。隔离浏览器实测：首图详情显示“底模 NoobAI-XL-v1.1”与“只看此底模”；点击后抽屉从 DOM 消失、URL 变为 `/gallery?model=NoobAI-XL-v1.1.safetensors`、底模下拉自动选中 `NoobAI-XL-v1.1（5）`、`.gal-card` 恰好 5 个。
