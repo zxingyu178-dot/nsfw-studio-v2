@@ -16,6 +16,6 @@ def generation_progress(
     response: Response,
     session: Session = Depends(get_session),
     _device: MobileReviewDevice = Depends(get_current_device),
-) -> dict[str, int | str | None]:
+) -> dict[str, int | float | str | None]:
     response.headers["Cache-Control"] = "no-store"
     return mobile_generation_service.read_progress(session)

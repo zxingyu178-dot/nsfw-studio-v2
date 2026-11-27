@@ -1,7 +1,7 @@
-"""移动审核页的只读生图队列快照（mobile_generation_progress_v1 + queue status）。
+"""移动审核页的只读生图队列快照（mobile_generation_progress_v1 + 队列状态）。
 
-只回答“现在跑到第几张、本段共几张、还剩几个生成段、当前是排队/生成/暂停”，
-不暴露 Prompt、Job 控制或任何可写操作；控制面仍只在桌面 8000。
+只回答“现在跑到第几张、本段共几张、还剩几个生成段、当前是排队/生成/暂停、
+当前张完成到多少”，不暴露 Prompt、Job 控制或任何可写操作；控制面仍只在桌面 8000。
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.models.job import Job, JobItem, JobStageItem
 ACTIVE_JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED")
 
 
-def read_progress(session: Session) -> dict[str, int | str | None]:
+def read_progress(session: Session) -> dict[str, int | float | str | None]:
     active = (Job.job_kind == "generate") & Job.status.in_(ACTIVE_JOB_STATUSES)
     counts = (
         select(
@@ -28,6 +28,7 @@ def read_progress(session: Session) -> dict[str, int | str | None]:
         select(
             (JobItem.item_index + 1).label("current_image"),
             Job.requested_count.label("images_in_segment"),
+            JobStageItem.progress.label("current_progress"),
         )
         .select_from(Job)
         .join(JobItem, JobItem.job_id == Job.id)
@@ -48,6 +49,7 @@ def read_progress(session: Session) -> dict[str, int | str | None]:
     snapshot = select(
         current.c.current_image,
         current.c.images_in_segment,
+        current.c.current_progress,
         counts.c.queued_jobs,
         counts.c.paused_jobs,
         counts.c.running_jobs,
@@ -56,6 +58,7 @@ def read_progress(session: Session) -> dict[str, int | str | None]:
     queued = int(row["queued_jobs"] or 0)
     paused = int(row["paused_jobs"] or 0)
     running = int(row["running_jobs"] or 0)
+    item_progress = row["current_progress"]
     if running:
         # 生成中优先：即使正处于两张图之间的阶段间隙，也仍是“生成中”。
         active_status = "running"
@@ -72,4 +75,9 @@ def read_progress(session: Session) -> dict[str, int | str | None]:
         "active_status": active_status,
         "queued_jobs": queued,
         "paused_jobs": paused,
+        # 当前张的采样进度（0..1）；阶段间隙或旧任务没有值时返回 null。
+        "current_progress": (
+            max(0.0, min(1.0, float(item_progress)))
+            if item_progress is not None else None
+        ),
     }

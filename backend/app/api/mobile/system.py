@@ -41,6 +41,8 @@ CAPABILITIES = [
     "mobile_generation_progress_v1",
     # 进度快照新增只读队列状态：active_status / queued_jobs / paused_jobs
     "mobile_generation_queue_status_v1",
+    # 进度快照新增当前张完成度：current_progress（0..1，只读）
+    "mobile_generation_item_progress_v1",
 ]
 
 

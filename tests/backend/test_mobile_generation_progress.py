@@ -73,7 +73,7 @@ def _start_slot(session, job: Job, index: int) -> JobStageItem:
 
 def _assert_progress(
     mobile_client, headers, current, total, remaining,
-    status="none", queued=0, paused=0,
+    status="none", queued=0, paused=0, item_progress=None,
 ):
     response = mobile_client.get(PROGRESS_PATH, headers=headers)
     assert response.status_code == 200
@@ -87,6 +87,7 @@ def _assert_progress(
         "active_status": status,
         "queued_jobs": queued,
         "paused_jobs": paused,
+        "current_progress": item_progress,
     }
 
 
@@ -98,6 +99,7 @@ def test_bridge_advertises_progress_and_keeps_desktop_queue_private(
     capabilities = response.json()["data"]["capabilities"]
     assert "mobile_generation_progress_v1" in capabilities
     assert "mobile_generation_queue_status_v1" in capabilities
+    assert "mobile_generation_item_progress_v1" in capabilities
     headers, _ = auth(mobile_client, session_factory)
     assert mobile_client.get("/api/v1/queue", headers=headers).status_code == 404
 
@@ -119,10 +121,11 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
         ]
         session.add_all([current, *queued, paused, *excluded])
         third = _start_slot(session, current, 2)
+        third.progress = 0.42
         assert current.completed_count == 0
         session.commit()
 
-        _assert_progress(mobile_client, headers, 3, 6, 20, "running", 18, 1)
+        _assert_progress(mobile_client, headers, 3, 6, 20, "running", 18, 1, 0.42)
 
         third.status = "COMPLETED"
         session.commit()
@@ -131,8 +134,9 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
         _assert_progress(mobile_client, headers, None, None, 20, "running", 18, 1)
 
         fourth = _start_slot(session, current, 3)
+        fourth.progress = 0.75
         session.commit()
-        _assert_progress(mobile_client, headers, 4, 6, 20, "running", 18, 1)
+        _assert_progress(mobile_client, headers, 4, 6, 20, "running", 18, 1, 0.75)
 
         fourth.status = "COMPLETED"
         current.status = "COMPLETED"
