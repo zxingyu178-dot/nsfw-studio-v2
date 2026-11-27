@@ -107,4 +107,18 @@ describe('GalleryDetailDrawer 布局契约', () => {
     expect(rejectButton).toBeInTheDocument()
     expect(rejectButton).toHaveClass('ds-btn--danger')
   })
+
+  it('概览显示原任务底模短名，缺少快照时显示占位', async () => {
+    vi.mocked(jobApi.get).mockResolvedValue({
+      id: 'job_layout',
+      positive_prompt_snapshot: 'layout prompt',
+      negative_prompt_snapshot: '',
+      workflow_snapshot: {
+        modules: [{ module_id: 'anime_generate', config: { model: 'NoobAI-XL-v1.1.safetensors' } }],
+      },
+    } as never)
+    renderDrawer()
+    expect(await screen.findByText('底模')).toBeInTheDocument()
+    expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+  })
 })

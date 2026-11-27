@@ -18,6 +18,7 @@ import {
   imageContentUrl,
   normalizeImageStatus,
   shortJobId,
+  snapshotModelName,
   type AssetType,
   type ImageDTO,
   type ImageProvenanceDTO,
@@ -264,6 +265,8 @@ export function GalleryDetailDrawer({
 
   const displayStatus = normalizeImageStatus(image)
   const sourceModule = provenance?.module_id ?? job?.module_id ?? null
+  // 底模来自原任务快照：同一张图在换模型后仍能追溯实际使用的 checkpoint。
+  const model = job ? snapshotModelName(job) : null
 
   return (
     <Drawer
@@ -303,6 +306,8 @@ export function GalleryDetailDrawer({
             </dd>
             <dt>类型</dt>
             <dd>{IMAGE_KIND_LABEL[image.kind] ?? image.kind}</dd>
+            <dt>底模</dt>
+            <dd className="gal-field-value--mono">{model ?? '—'}</dd>
             <dt>Prompt</dt>
             <dd><pre>{job?.positive_prompt_snapshot || '（不可用）'}</pre></dd>
             <dt>Negative</dt>
