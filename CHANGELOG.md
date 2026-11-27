@@ -13,6 +13,11 @@
   统一支持 `model`（任务快照精确匹配；`__none__` = 未记录底模，含导入图），新增
   `GET /images/models` 返回底模及图片数供下拉；桌面工具栏显示底模短名与张数，选择后
   列表 / 统计 / 分组 / 按任务视图同口径，URL `?model=` 可刷新与分享。
+- 手机桥图库新增「底模」筛选（能力 `mobile_gallery_model_filter_v1`）：
+  `GET /mobile/images/gallery?model=` 与桌面同口径（任务快照 `modules[0].config.model`，
+  `__none__` = 未记录），新增 `GET /mobile/images/models` 返回底模与图片数；筛选写入游标
+  查询清单，换底模沿旧游标返回 422。MediaReview Alpha80 在筛选面板显示带张数的底模菜单，
+  顶部摘要同步显示，旧桥未声明能力时自动隐藏。
 - Agent 新增轻量进度接口 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：返回
   `status / model / requested_count / completed_count / failed_count / progress / current /
   queue_position / images`，AI 轮询无需拉完整 JobResponse；省略 `model` 的任务同样返回

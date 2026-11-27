@@ -219,14 +219,25 @@ def image_gallery(
     favorite: bool | None = None,
     search: str | None = Query(default=None, max_length=200),
     tag: str | None = Query(default=None, max_length=100),
+    model: str | None = Query(default=None, max_length=200),
     session: Session = Depends(get_session),
     _device: MobileReviewDevice = Depends(get_current_device),
 ) -> dict:
     return mobile_gallery_service.gallery(
         session, sort=sort, from_utc=from_utc, before_utc=before_utc,
         page_cursor=page_cursor, scope_cursor=scope_cursor, anchor_id=anchor_id, limit=limit,
-        prompt_id=prompt_id, version_id=version_id, status=status, category=category, favorite=favorite, search=search, tag=tag,
+        prompt_id=prompt_id, version_id=version_id, status=status, category=category,
+        favorite=favorite, search=search, tag=tag, model=model,
     )
+
+
+@router.get("/models", summary="底模候选：按任务快照统计图片数（手机图库筛选）")
+def image_models(
+    session: Session = Depends(get_session),
+    _device: MobileReviewDevice = Depends(get_current_device),
+) -> dict:
+    """与桌面 `GET /api/v1/images/models` 同源；只读，不暴露路径。"""
+    return {"items": image_service.list_models(session)}
 
 
 @router.get("/{image_id}/details", summary="V2 图片详情（生成快照 / 可靠 Prompt 关联）")

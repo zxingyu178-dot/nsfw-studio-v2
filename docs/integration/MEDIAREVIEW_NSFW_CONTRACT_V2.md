@@ -249,6 +249,18 @@ fixture：`fixtures/health_v2.json`。
   `mobile_generation_item_progress_v1` 表示 `current_progress` 可用，
   `mobile_generation_model_v1` 表示 `model` 可用（字段本身向后兼容）。
 
+### 9.2 可选能力 `mobile_gallery_model_filter_v1`
+
+图库按底模筛选（与桌面 `GET /api/v1/images` 的 `model` 同口径）：
+
+- `GET /mobile/images/gallery` 增加可选 `model`（≤200 字，trim 后精确匹配任务快照
+  `modules[0].config.model`）；`model=__none__` 表示未记录底模（无 Job / 导入图 / 旧快照）；
+- 成功响应 `filters` 回显 `model`（仅在有值时出现），游标 `q` 包含该条件：换底模后
+  继续使用旧 `page_cursor` / `scope_cursor` 返回 422；
+- `GET /mobile/images/models`（Bearer）返回 `{"items":[{"model":"...","count":N}]}`，
+  仅统计快照记录过底模的图片，按数量降序、名称升序；
+- 未声明该能力的旧桥：客户端不显示底模筛选，也不采集 `/mobile/images/models`。
+
 ## 10. 数据与迁移
 
 - `0021_mobile_event_log_mutations`：主干事件表 `mobile_image_events(seq,event_id,...)` +

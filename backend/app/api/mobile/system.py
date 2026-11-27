@@ -32,6 +32,8 @@ CAPABILITIES = [
     "mobile_gallery_filters_v1",
     "mobile_gallery_review_filter_v1",
     "mobile_gallery_search_v1",
+    # 图库按底模筛选：GET /mobile/images/gallery?model= + GET /mobile/images/models
+    "mobile_gallery_model_filter_v1",
     "mobile_image_batch_review_v1",
     "mobile_image_details_v2",
     "mobile_image_decision_v2",

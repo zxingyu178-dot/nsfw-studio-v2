@@ -43,6 +43,43 @@ def test_mobile_image_categories_match_existing_library_filters(
     assert {row['image_id']: row['categories'] for row in rows} == expected
 
 
+def test_gallery_filters_model_and_lists_candidates(mobile_client, session_factory, make_mobile_image):
+    from app.models import Job
+    images = make_mobile_image(3)
+    snapshot = lambda model: json.dumps({'modules': [{'config': {'model': model}}]})
+    with session_factory() as session:
+        for job_id, model in (('job_model_a', ' ModelA.safetensors '), ('job_model_b', 'ModelB.safetensors')):
+            session.add(Job(id=job_id, source='agent', prompt_mode='full',
+                workbench_snapshot_json='{}', workflow_snapshot_json=snapshot(model),
+                generation_settings_json='{}', requested_count=1, module_id='anime_generate'))
+        session.flush()
+        session.get(Image, images[0].id).job_id = 'job_model_a'
+        session.get(Image, images[1].id).job_id = 'job_model_b'
+        session.get(Image, images[2].id).source = 'import'
+        session.commit()
+    headers, _ = auth(mobile_client, session_factory)
+    first = gallery(mobile_client, headers, model='ModelA.safetensors')
+    assert first['filters'] == {'model': 'ModelA.safetensors'}
+    assert first['total'] == 1 and [row['image_id'] for row in first['items']] == [images[0].id]
+    second = gallery(mobile_client, headers, model=' ModelB.safetensors ')
+    assert second['filters'] == {'model': 'ModelB.safetensors'}
+    assert [row['image_id'] for row in second['items']] == [images[1].id]
+    none = gallery(mobile_client, headers, model='__none__')
+    assert none['total'] == 1 and [row['image_id'] for row in none['items']] == [images[2].id]
+    # 游标携带筛选清单：换底模必须重新查询，不能沿用旧 scope。
+    changed = mobile_client.get('/mobile/images/gallery', headers=headers,
+        params={'model': 'ModelB.safetensors', 'scope_cursor': first['scope_cursor']})
+    assert changed.status_code == 422
+    models = mobile_client.get('/mobile/images/models', headers=headers)
+    assert models.status_code == 200
+    assert models.json()['data']['items'] == [
+        {'model': 'ModelA.safetensors', 'count': 1},
+        {'model': 'ModelB.safetensors', 'count': 1},
+    ]
+    assert 'mobile_gallery_model_filter_v1' in mobile_client.get(
+        '/mobile/system/health').json()['data']['capabilities']
+
+
 def test_gallery_filters_prompt_versions_and_new_status(mobile_client, session_factory, make_mobile_image):
     from app.services import prompt_service
     images = make_mobile_image(4)
