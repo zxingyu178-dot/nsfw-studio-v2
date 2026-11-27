@@ -656,6 +656,8 @@ export interface QueueJobSummaryDTO {
   error_type: string | null
   error_message: string | null
   module_id: string | null
+  /** 底模文件名（来自 Job workflow 快照；旧后端/旧任务缺省）。 */
+  model?: string | null
   created_at: string
   started_at: string | null
   updated_at: string
@@ -862,6 +864,7 @@ export const IMAGE_SOURCE_LABEL: Record<string, string> = {
 
 export const MODULE_LABEL: Record<string, string> = {
   basic_generate: '基础生成',
+  anime_generate: '动漫生成',
   img2img: '图生图',
 }
 
@@ -899,4 +902,17 @@ export const STAGE_LABEL: Record<string, string> = {
 /** job_<uuid> → JOB-<短 ID>（规范 §四十九） */
 export function shortJobId(id: string): string {
   return `JOB-${id.replace(/^job_/, '').slice(0, 8)}`
+}
+
+/** 底模文件名 → 短显示名（去掉权重扩展名）；空值返回 null，UI 不渲染占位。 */
+export function modelLabel(model?: string | null): string | null {
+  const name = (model ?? '').trim()
+  if (!name) return null
+  return name.replace(/\.(safetensors|ckpt|pt|pth)$/i, '')
+}
+
+/** 从任务快照取底模短名：与 AI 直提 / 页面提交共用的 config.model 同源。 */
+export function snapshotModelName(job: Pick<JobDTO, 'workflow_snapshot'>): string | null {
+  const value = job.workflow_snapshot?.modules?.[0]?.config?.model
+  return modelLabel(typeof value === 'string' ? value : null)
 }

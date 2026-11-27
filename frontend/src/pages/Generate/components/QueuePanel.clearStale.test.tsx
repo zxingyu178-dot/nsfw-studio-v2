@@ -43,7 +43,7 @@ beforeEach(() => {
 
 describe('QueuePanel AI 来源标识', () => {
   it('Agent 提交显示“AI 提交”，Web 任务不显示', () => {
-    const queueJob = (id: string, source: string) => ({
+    const queueJob = (id: string, source: string, model: string | null = null) => ({
       id,
       status: 'QUEUED',
       job_kind: 'generate',
@@ -57,6 +57,7 @@ describe('QueuePanel AI 来源标识', () => {
       error_type: null,
       error_message: null,
       module_id: 'anime_generate',
+      model,
       created_at: '',
       started_at: null,
       updated_at: '',
@@ -67,7 +68,7 @@ describe('QueuePanel AI 来源标识', () => {
       queue: {
         worker: { running: false, queue_paused: false, queue_paused_reason: null },
         running: null,
-        queued: [queueJob('job_agent', 'agent'), queueJob('job_web', 'web')],
+        queued: [queueJob('job_agent', 'agent', 'NoobAI-XL-v1.1.safetensors'), queueJob('job_web', 'web')],
         paused: [],
       },
     })
@@ -75,6 +76,10 @@ describe('QueuePanel AI 来源标识', () => {
     expect(screen.getAllByText('AI 提交')).toHaveLength(1)
     expect(screen.getByText('prompt-job_agent')).toBeInTheDocument()
     expect(screen.getByText('prompt-job_web')).toBeInTheDocument()
+    // 队列行显示底模短名与中文工作流名；没有模型的任务不出现 null / undefined。
+    expect(screen.getByText(/NoobAI-XL-v1\.1 · 1 张/)).toBeInTheDocument()
+    expect(screen.getAllByText(/动漫生成/)).toHaveLength(2)
+    expect(screen.queryByText(/undefined|null/)).toBeNull()
   })
 })
 

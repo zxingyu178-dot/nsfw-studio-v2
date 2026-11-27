@@ -12,7 +12,7 @@ import {
   resumeQueue,
   useJobStore,
 } from '../../../stores/jobStore'
-import { MODULE_LABEL, shortJobId, type QueueJobSummaryDTO } from '../../../types/workbench'
+import { MODULE_LABEL, modelLabel, shortJobId, type QueueJobSummaryDTO } from '../../../types/workbench'
 
 /** 队列自动暂停原因 → 中文说明（reason 形如 CODE 或 CODE: detail）。 */
 const PAUSE_REASON_LABEL: Record<string, string> = {
@@ -191,6 +191,7 @@ interface QueueRowProps {
 
 function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, onDrop, onDragEnd }: QueueRowProps) {
   const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
+  const model = modelLabel(job.model)
   return (
     <li
       className={`wb-queue-item${dragging ? ' wb-queue-item--dragging' : ''}`}
@@ -209,7 +210,7 @@ function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, 
           <span title={excerpt}>{excerpt.length > 18 ? `${excerpt.slice(0, 18)}…` : excerpt}</span>
         </div>
         <div className="wb-queue-item__meta muted">
-          {shortJobId(job.id)} · {job.requested_count} 张 ·{' '}
+          {shortJobId(job.id)} · {model ? `${model} · ` : ''}{job.requested_count} 张 ·{' '}
           {job.stages && job.stages.length > 1
             ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' + ')
             : MODULE_LABEL[job.module_id ?? ''] ?? '基础生成'}

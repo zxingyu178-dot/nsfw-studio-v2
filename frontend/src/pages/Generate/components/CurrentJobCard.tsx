@@ -1,9 +1,10 @@
-import { Button, ElapsedTimer, ProgressBar, StatusBadge } from '../../../components/ui'
+import { Badge, Button, ElapsedTimer, ProgressBar, StatusBadge } from '../../../components/ui'
 import { pauseJob, resumeJob, cancelJob, resumeRemaining } from '../../../stores/jobStore'
 import {
   MODULE_LABEL,
   STAGE_LABEL,
   shortJobId,
+  snapshotModelName,
   type JobDTO,
 } from '../../../types/workbench'
 import { overallProgress, stageProgressLines, jobErrorText } from '../../../utils/jobProgress'
@@ -25,6 +26,7 @@ export function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
       ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' → ')
       : MODULE_LABEL[job.module_id ?? ''] ?? job.module_id ?? '基础生成'
   const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
+  const model = snapshotModelName(job)
   const canResumeRemaining =
     ['FAILED', 'CANCELLED', 'INTERRUPTED'].includes(job.status) &&
     job.completed_count < job.requested_count
@@ -33,6 +35,7 @@ export function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
     <section className="wb-job">
       <div className="wb-job__head">
         <StatusBadge status={job.status} />
+        {job.source === 'agent' && <Badge tone="info">AI 提交</Badge>}
         <span className="muted">{shortJobId(job.id)}</span>
       </div>
       <p className="wb-job__title" title={excerpt}>
@@ -54,6 +57,7 @@ export function CurrentJobCard({ job, busy }: { job: JobDTO; busy: boolean }) {
         </p>
       )}
       <p className="wb-job__meta">{moduleLabel}</p>
+      {model && <p className="wb-job__meta">底模 {model}</p>}
       {job.started_at && (
         <p className="wb-job__meta">
           <ElapsedTimer startedAt={job.started_at} finishedAt={job.finished_at} />

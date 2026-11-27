@@ -170,6 +170,8 @@ class QueueJobSummary(BaseModel):
     error_type: str | None
     error_message: str | None
     module_id: str | None
+    # 队列轻量展示用的底模文件名（来自 workflow 快照 config.model；旧任务/无快照为 null）。
+    model: str | None = None
     created_at: str
     started_at: str | None
     updated_at: str
@@ -245,6 +247,20 @@ def job_stage_response(stage: JobStage) -> JobStageResponse:
     )
 
 
+def _queue_model(job: Job) -> str | None:
+    """从 workflow 快照读取底模：与执行快照同源，旧 Job/异常快照一律返回 None。"""
+    try:
+        snapshot = json.loads(job.workflow_snapshot_json or "{}")
+    except (TypeError, ValueError):
+        return None
+    modules = snapshot.get("modules") if isinstance(snapshot, dict) else None
+    if not isinstance(modules, list) or not modules or not isinstance(modules[0], dict):
+        return None
+    config = modules[0].get("config")
+    model = config.get("model") if isinstance(config, dict) else None
+    return model.strip() if isinstance(model, str) and model.strip() else None
+
+
 def queue_job_summary(job: Job) -> QueueJobSummary:
     return QueueJobSummary(
         id=job.id, status=job.status, job_kind=job.job_kind, source=job.source,
@@ -253,7 +269,8 @@ def queue_job_summary(job: Job) -> QueueJobSummary:
         queue_position=job.queue_position,
         pause_requested=job.pause_requested, cancel_requested=job.cancel_requested,
         error_type=job.error_type, error_message=job.error_message,
-        module_id=job.module_id, created_at=job.created_at, started_at=job.started_at,
+        module_id=job.module_id, model=_queue_model(job),
+        created_at=job.created_at, started_at=job.started_at,
         updated_at=job.updated_at,
         stages=[
             QueueStageSummary(

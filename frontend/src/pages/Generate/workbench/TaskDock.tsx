@@ -3,10 +3,10 @@
  * 收起态（36–40px）：●状态 · 第N/M · 总进度 · 队列数 · 展开 · 暂停后续（tooltip 明确只暂停调度）。
  * 展开态：Current Job（去掉进度条/Stage/elapsed/第N张——这些已在 Canvas HUD）+ 队列全部能力（QueuePanel 原样复用）。
  */
-import { Button, StatusBadge, Tooltip } from '../../../components/ui'
+import { Badge, Button, StatusBadge, Tooltip } from '../../../components/ui'
 import { IconButton, IconCancel, IconChevronDown, IconPause, IconResume } from '../../../components/ui/ui3'
 import { cancelJob, pauseJob, pauseQueue, resumeJob, resumeQueue, useJobStore } from '../../../stores/jobStore'
-import { MODULE_LABEL, shortJobId, type JobDTO } from '../../../types/workbench'
+import { MODULE_LABEL, shortJobId, snapshotModelName, type JobDTO } from '../../../types/workbench'
 import { QueuePanel } from '../components/QueuePanel'
 import { hudSnapshot } from './workbenchProgress'
 import { toggleDock, useWorkbenchLayout } from './workbenchLayout'
@@ -126,6 +126,7 @@ function CompactCurrentJob({
   busyAction: 'pause' | 'resume' | 'cancel' | null
 }) {
   const excerpt = (job.positive_prompt_snapshot ?? '').trim() || '（无 Prompt）'
+  const model = snapshotModelName(job)
   const moduleLabel =
     job.stages && job.stages.length > 1
       ? job.stages.map((stage) => MODULE_LABEL[stage.module_id] ?? stage.module_id).join(' → ')
@@ -134,12 +135,14 @@ function CompactCurrentJob({
     <section className="wb-job wb4-dock__job">
       <div className="wb-job__head">
         <StatusBadge status={job.status} />
+        {job.source === 'agent' && <Badge tone="info">AI 提交</Badge>}
         <span className="muted">{shortJobId(job.id)}</span>
         <span className="muted">{moduleLabel}</span>
       </div>
       <p className="wb-job__title" title={excerpt}>
         {excerpt.length > 32 ? `${excerpt.slice(0, 32)}…` : excerpt}
       </p>
+      {model && <p className="wb-job__meta">底模 {model}</p>}
       <div className="wb-job__actions">
         {job.status === 'RUNNING' && !job.pause_requested && (
           <Button size="sm" disabled={busy} aria-busy={busyAction === 'pause'}

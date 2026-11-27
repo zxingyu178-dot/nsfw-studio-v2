@@ -75,6 +75,35 @@ def slow_mock_client(settings):
         yield test_client
 
 
+def test_queue_summary_includes_snapshot_model():
+    """队列摘要带出快照底模：AI 多模型提交后仍能从队列分辨每个任务用哪款模型。"""
+    from app.models.job import Job
+    from app.schemas.job import queue_job_summary
+
+    def make_job(job_id: str, snapshot: dict) -> Job:
+        return Job(
+            id=job_id, source="agent", status="QUEUED", job_kind="generate",
+            prompt_mode="text", positive_prompt_snapshot="cat",
+            negative_prompt_snapshot="", structured_prompt_snapshot="{}",
+            workbench_snapshot_json="{}", generation_settings_json="{}",
+            workflow_snapshot_json=json.dumps(snapshot),
+            requested_count=1, completed_count=0, queue_position=1, priority=0,
+            pause_requested=False, cancel_requested=False,
+            created_at="2026-11-27T00:00:00.000Z", updated_at="2026-11-27T00:00:00.000Z",
+        )
+
+    job = make_job("job_model", {"modules": [{"module_id": "anime_generate",
+                                              "config": {"model": " NoobAI-XL-v1.1.safetensors "}}]})
+    assert queue_job_summary(job).model == "NoobAI-XL-v1.1.safetensors"
+
+    # 旧任务 / 无模型配置 / 损坏快照都不能让队列接口报错。
+    assert queue_job_summary(make_job("job_legacy", {"modules": [{"module_id": "anime_generate"}]})).model is None
+    assert queue_job_summary(make_job("job_empty", {})).model is None
+    broken = make_job("job_broken", {})
+    broken.workflow_snapshot_json = "not-json"
+    assert queue_job_summary(broken).model is None
+
+
 def test_job_lifecycle_serial_completion(mock_client):
     """8 张任务正常串行：逐张完成、completed_count 递增、每张 Seed 独立。"""
     response = mock_client.post("/api/v1/jobs", json={"snapshot": make_snapshot(count=8)})
