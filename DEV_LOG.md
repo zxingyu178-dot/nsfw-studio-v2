@@ -925,3 +925,9 @@ MediaReview Alpha80（versionCode 87）在筛选面板新增“底模”菜单�
 AI 直提只能记住提交时拿到的 Job ID，进程重启或本地状态丢失后无法对账；`--status` 也必须先知道 ID。现在新增 `GET /api/v1/agent/jobs?status=&limit=`（Bearer，只读）：只列 `source=agent` 的任务，按 `created_at desc, id desc` 排序，默认 20 / 最多 50，`selectinload(Job.items)` 避免逐任务查询；每项与轻量进度接口完全同构，附 `count / limit / status / has_more`。非法状态 422 `AGENT_JOB_STATUS_INVALID`，无 token 401。`GET /agent/capabilities` 新增 `job_queries`（status/list 路径与 20/50 上下限），AI 不需硬编码。CLI 新增 `--list-jobs [--job-status] [--limit]`，直接打印 JSON，不提交、不下载。
 
 新增后端 1 项列表测试（只含 agent、排序、limit/has_more、状态过滤、非法状态、401）、CLI 3 项（token 门禁、查询参数与输出、互斥），全量后端 885 项通过。生产部署 aaa5c5f：协作停止后由计划任务重启，健康 0.39.0，ComfyUI PID 11432 未变。真实调用 `--list-jobs --limit 5` 返回 5 个 Agent 任务（含 NoobAI / miaomiao / 无快照旧任务，状态 COMPLETED/CANCELLED，`has_more=true`）；`--job-status COMPLETED --limit 2` 返回 2 条且 `has_more=true`；`--job-status BOGUS` 在本机即被 argparse 拒绝（exit 2）。生产 `/agent/capabilities` 实测返回 `job_queries`（status/list 与 20/50 上下限）、`default_module_id=anime_generate`、`default_model=miaomiaoHarem_v14.safetensors`，模块 1 / 底模 3。
+
+## 2026-11-27 — 手机桥图片详情返回任务提交来源
+
+手机审图此前只能看到底模，无法区分图片来自 Agent/豆包直提还是网页提交。现在 Bridge V2 图片详情（`mobile_v2_service.details`）与 W3.0 详情（`_mobile_image_detail`）都新增 `job_source`：原 Job 的 `source`（`web / resume / agent / doubao`），无 Job / 外部导入为 null；字段为追加，旧客户端忽略即可。MediaReview Alpha83 据此在审图顶栏对 agent/doubao 显示“AI”徽标，图片信息显示“提交来源”（AI 提交 / 网页提交 / 续跑），未知来源回退原值、缺失显示“未知”。契约 §5 已同步。
+
+后端新增 3 处契约断言（无 Job → null、agent 任务 → agent、web 任务 → web），移动端新增 1 项来源映射测试；后端全量 885 项、Android 全量 848 项通过。生产部署 da2d76d（仅后端）：协作停止后由计划任务重启，健康 0.39.0，ComfyUI PID 11432 未变。模拟器 Alpha83 实测：审图首图（Agent 任务）顶栏出现“AI”徽标，图片信息“提交来源 AI 提交”。
