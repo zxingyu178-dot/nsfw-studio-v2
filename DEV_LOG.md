@@ -841,3 +841,9 @@ Agent / AI 直接提交的任务进入 Generate 队列后与页面提交无法�
 Mobile Review Bridge 的只读生图进度此前只有张数 / 段数 / 百分比，手机端无法知道电脑端正在用哪款底模。`GET /mobile/generation/progress` 现在从运行中生成 Job 的 workflow 快照 `modules[0].config.model` 读取 `model`，阶段间隙继续沿用同一 Job，排队 / 空闲 / 旧任务为 null；新增能力 `mobile_generation_model_v1`，字段本身向后兼容，旧客户端忽略。后端新增测试覆盖运行中底模、阶段间隙、切换无模型任务与能力声明，全量 870 项通过。
 
 生产部署 bf4c173（仅后端）：协作停止事件停 Studio 后由计划任务重启，健康 0.39.0，8877 契约 2 与 `mobile_generation_model_v1` 均就绪，ComfyUI PID 11432 全程未变。MediaReview Alpha78 连接生产桥提交真实 20 步 NoobAI 任务 `job_a82176c7-abe1-4e4f-9fee-4636d39e22e8`（83.9s COMPLETED / `img_f670bec2-ac65-4277-b2bb-f2c2a1800743`）：图库顶部 0% → 40%、单图 70%、沉浸胶囊 95% 均显示“底模 NoobAI-XL-v1.1”，完成后进度与底模行消失，图库“新图 1”点按后 21732 → 21733。接口合同已同步 `MEDIAREVIEW_NSFW_CONTRACT_V2.md`。
+
+## 2026-11-27 — 图库详情显示原任务底模
+
+图片详情抽屉原本已加载原任务，但概览只显示来源、尺寸、Seed 与 Prompt，无法确认这张图由哪款底模生成。现在概览新增“底模”，复用 `snapshotModelName` 从原任务快照读取并去掉 `.safetensors` 等扩展名；外部导入/旧快照显示“—”。新增 1 项组件测试（抽屉 2 项用例通过），typecheck 与 Vite 生产构建通过。
+
+生产部署 0e32259：`index-Ba57jRUC.js`（SHA256/12 `0cc70efa92b9`）已由 `deploy_app_dist.ps1` 同步。隔离浏览器打开最新图 `img_f670bec2…` 详情，概览显示“底模 NoobAI-XL-v1.1”，来源“动漫生成 / JOB-a82176c7”，尺寸 832×1216、Seed 20261128 与任务一致。
