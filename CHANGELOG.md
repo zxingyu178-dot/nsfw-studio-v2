@@ -65,6 +65,9 @@
 - 生产部署（app worktree `deploy/app-instance` FF 到 `c3a2f03`，重启任务 `\AIHome\NSFWStudioV2`）：
   `/engine/models` 的 `lora_catalog` 仅返回已登记 LoRA，未登记文件不编造元数据；
   CLI `--list-loras` 实际列出 4 个已安装 LoRA；生产首页已加载新构建 `index-CGEbUoA_.js`。
+- 生产部署（推荐 LoRA 强度，app worktree FF 到 `2e92ff9` 并重启）：`lora_catalog` 返回
+  `recommended_strength=0.6`，CLI `--list-loras` 打印“推荐强度 0.6”；生产首页加载
+  `index-BA_fkYJJ.js`；后端全量 864 项（863 过 / 1 跳过）、前端 532 项全绿。
 - LoRA 真实出图（生产 8000，Agent 直提）：`job_71398f1b-b5b9-4f99-a74d-b3033255653b`
   COMPLETED 1/1，768×1024 / 20 步 / LoRA `Hentai Pussy inspection_Pony_V1` 强度 0.6 /
   `face_detailer=false`，**94.2s**；binding v15 Hash `99ef6d5af1d51e2c / 6bde04bd7f04fb2f`
@@ -84,7 +87,7 @@
   COMPLETED 1/1，832×1216 / 30 步 / cfg4.0 / er_sde simple / `face_detailer=false`，
   **69.3s**；history `06c413c7-ab33-4266-bee7-2ce5ca70c440` 实测
   `ckpt=miaomiaoHarem_v14.safetensors`、FaceDetailer 节点 0；手机端显示“新图 2”。
-- 前端全量 `npm run test:ci` 104 个文件 531 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
+- 前端全量 `npm run test:ci` 104 个文件 532 项全部通过；`tsc`、`tsc -b` 与生产构建通过。
   （首轮 AssetPickerDrawer 分页用例在满载下偶发超时，单独运行与整轮复跑均通过。）
 - Android Alpha51（versionCode 58）：保留 / 淘汰 / 收藏增加触感反馈，收藏图标切换弹跳，
   新图提醒与主页面切换加入淡入缩放动画；单测全绿，模拟器完成冷启动、导航、审图与保留操作验收。
