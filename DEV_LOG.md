@@ -817,3 +817,5 @@ POST /agent/jobs 的 negative_prompt 改为可省略：省略/null 使用统一�
 ## 2026-11-27 — NoobAI 多底模实跑验证
 
 Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `face_detailer=false` 提交 832×1216 1 张任务：快照套用注册中心推荐采样（30 步 / cfg5.0 / dpmpp_2m / karras / denoise1.0），缺省负向使用统一默认；Job job_bc9adf49-9ab7-4397-a0e3-747b95f5352a 完成（90.9s），产出 img_a8f9bf4b-36b9-4cc9-87b9-ef0240319e21，验证默认底模之外的模型可直接由 AI 提交并完成。该次实跑已登记进 workflows/release_manifest.yaml 的 v15 evidence（reference_jobs / output_image_ids / sampling_profiles / stage_seconds），发布清单与真实任务保持同源；发布清单相关测试 36 项通过。
+
+同日补充第三款底模：Agent `use_recommended_sampling=true` + `model=waiNSFWIllustrious_v150.safetensors`，快照套用 30 步 / cfg5.0 / er_sde / simple / FaceDetailer 默认开，Job job_46712196-25bb-41bb-aa7d-15b4727c06c3 完成（179.3s），产出 img_4dd74b94-6be7-459f-ba32-840cf59766bc。至此 miaomiaoHarem / NoobAI-XL / WAI-NSFW 三款已安装底模均在生产 8000 由 Agent 直接提交并 COMPLETED，证据同步登记到 release_manifest v15。
