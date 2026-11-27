@@ -813,3 +813,7 @@ POST /agent/jobs 的 negative_prompt 改为可省略：省略/null 使用统一�
 ## 2026-11-27 — 桌面 LoRA 推荐强度提示
 
 已选 LoRA 下方显示注册中心 recommended_strength；手动调整后显示“当前 X”与“恢复推荐”，一键恢复为推荐值，与 AI 直提的默认强度同源。新增组件测试 3 项；前端全量 539 项与 typecheck 通过；生产构建 index-TlfBcdu8.js（hash 7b152e8b9edb）已部署，服务端资源与本地产物字节一致且包含新文案。
+
+## 2026-11-27 — NoobAI 多底模实跑验证
+
+Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `face_detailer=false` 提交 832×1216 1 张任务：快照套用注册中心推荐采样（30 步 / cfg5.0 / dpmpp_2m / karras / denoise1.0），缺省负向使用统一默认；Job job_bc9adf49-9ab7-4397-a0e3-747b95f5352a 完成，产出 img_a8f9bf4b-36b9-4cc9-87b9-ef0240319e21，验证默认底模之外的模型可直接由 AI 提交并完成。
