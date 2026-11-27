@@ -919,3 +919,9 @@ MediaReview Alpha80（versionCode 87）在筛选面板新增“底模”菜单�
 双击看图（Lightbox）右侧信息栏此前没有底模，且与详情抽屉能力不对齐：放大查看时无法确认模型，也无法顺手筛选同底模作品。现在信息栏在“模块”后新增“底模”（快照短名，旧图显示占位），并在有原始文件名时提供“只看此底模”：点击关闭灯箱、写 `?model=` 并刷新列表/统计/分组，复用与抽屉相同的 `snapshotModelValue` / `snapshotModelName`，不新增接口。
 
 新增 1 项 Lightbox 集成测试（底模展示 + 点击后灯箱关闭 + URL/列表参数带原始文件名），图库 21 个文件 / 87 项通过，typecheck 与生产构建通过。生产部署 afd7108（仅静态资源）：`index-BNDsNG8n.js`（SHA256/12 `c06c1452750f`）/ `index-Dl322aXv.css`（`744fdcd409d3`），生产 `/` 已引用。隔离浏览器实测：双击首图灯箱信息栏显示“NoobAI-XL-v1.1 只看此底模”；点击后灯箱关闭、URL 为 `/gallery?model=NoobAI-XL-v1.1.safetensors`、底模下拉选中 `NoobAI-XL-v1.1（5）`、网格恰好 5 张。
+
+## 2026-11-27 — Agent 最近任务列表与 CLI --list-jobs
+
+AI 直提只能记住提交时拿到的 Job ID，进程重启或本地状态丢失后无法对账；`--status` 也必须先知道 ID。现在新增 `GET /api/v1/agent/jobs?status=&limit=`（Bearer，只读）：只列 `source=agent` 的任务，按 `created_at desc, id desc` 排序，默认 20 / 最多 50，`selectinload(Job.items)` 避免逐任务查询；每项与轻量进度接口完全同构，附 `count / limit / status / has_more`。非法状态 422 `AGENT_JOB_STATUS_INVALID`，无 token 401。`GET /agent/capabilities` 新增 `job_queries`（status/list 路径与 20/50 上下限），AI 不需硬编码。CLI 新增 `--list-jobs [--job-status] [--limit]`，直接打印 JSON，不提交、不下载。
+
+新增后端 1 项列表测试（只含 agent、排序、limit/has_more、状态过滤、非法状态、401）、CLI 3 项（token 门禁、查询参数与输出、互斥），全量后端 885 项通过。生产部署 aaa5c5f：协作停止后由计划任务重启，健康 0.39.0，ComfyUI PID 11432 未变。真实调用 `--list-jobs --limit 5` 返回 5 个 Agent 任务（含 NoobAI / miaomiao / 无快照旧任务，状态 COMPLETED/CANCELLED，`has_more=true`）；`--job-status COMPLETED --limit 2` 返回 2 条且 `has_more=true`；`--job-status BOGUS` 在本机即被 argparse 拒绝（exit 2）。
