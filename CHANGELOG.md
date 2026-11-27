@@ -26,6 +26,9 @@
 - 手机桥生图进度新增只读 `model`（能力 `mobile_generation_model_v1`）：运行中 Job 的底模
   文件名，阶段间隙沿用同一 Job，排队 / 空闲 / 旧任务为 null；MediaReview Alpha78 在进度条与
   沉浸胶囊中显示“底模 …”，旧桥 / 旧客户端自动隐藏。
+- 手机桥图片详情 `model` 不再恒为 null：读取原任务工作流快照（无 Job / 外部导入 / 旧快照
+  为 null）；MediaReview Alpha79 在审图顶栏显示当前图片底模，详情模型名去掉权重扩展名，
+  旧图自动隐藏底模行并显示“未知”。
 - 队列摘要新增 `model`（来自 Job workflow 快照 `config.model`，旧任务/异常快照为 null）：
   桌面队列行显示底模短名，当前任务卡片与任务坞显示“底模 …”，Agent 任务同时带“AI 提交”
   徽标；`MODULE_LABEL` 补齐 `anime_generate → 动漫生成`，不再显示原始模块 ID。

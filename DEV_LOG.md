@@ -879,3 +879,9 @@ AI 直提若省略 `model`（`use_recommended_sampling` 或普通提交），执
 任务历史列表此前只有来源、短 ID、时间与张数，分辨不同底模的任务必须逐个打开详情。现在卡片 meta 追加“· 底模 xxx”（`snapshotModelName`，去掉权重扩展名；旧任务/无快照不占位）。新增 1 项卡片断言（两条任务仅一条出现底模），详情用例因卡片与抽屉同时出现底模名改为 `findAllByText`，4 项用例通过，typecheck 与生产构建通过。
 
 生产部署 e5ab69e：`index-CbrJElj6.js`（SHA256/12 `710717c6ff2e`），生产 `/` 已引用。隔离浏览器打开 `/prompts` → 历史：任务 `JOB-a82176c7` 卡片 meta 直接显示“生成 · 完成 1 / 1 张 · 动漫生成 · 底模 NoobAI-XL-v1.1”，无需展开详情。
+
+## 2026-11-27 — 手机桥图片详情返回底模
+
+`GET /mobile/images/{id}/details` 的 `model` 一直硬编码为 null，手机“图片信息”永远显示“未知”，审图时无法确认单张图用的底模。现在改为读取原任务工作流快照（复用 `snapshot_model`，与队列/桌面图库/历史同源；无 Job、外部导入、旧快照仍为 null）。新增 1 项契约测试（无 Job → null；绑定 Job 快照 → 文件名），手机 V2 契约 27 项通过。
+
+生产部署 780d317（仅后端）：协作停止后由计划任务重启，健康 0.39.0、桥 build `780d317`，ComfyUI PID 11432 未变。MediaReview Alpha79（versionCode 86）在模拟器覆盖安装：最新图 `img_b90242ce…`（`job_eb70e06b`，AI 省略 model 的默认底模任务）审图顶栏显示“底模 miaomiaoHarem_v14”，图片信息“模型 miaomiaoHarem_v14”；切到第 3 张旧任务图时顶栏无底模行、详情显示“未知”。接口合同已同步 `MEDIAREVIEW_NSFW_CONTRACT_V2.md`（§5）。
