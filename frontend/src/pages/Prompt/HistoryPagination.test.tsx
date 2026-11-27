@@ -120,6 +120,34 @@ describe('HistoryTab offset 分页（移除 limit=100 假全集，按 root famil
     fireEvent.click(await screen.findByText('prompt job_model'))
     expect(await screen.findByText('任务详情 JOB-model')).toBeInTheDocument()
     expect(await screen.findByText('底模')).toBeInTheDocument()
-    expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+    expect((await screen.findAllByText('NoobAI-XL-v1.1')).length).toBeGreaterThan(0)
+  })
+
+  it('历史卡片直接显示底模，旧任务不占位', async () => {
+    const { historyApi } = await import('../../api/client')
+    const withModel = makeJob('job_card_model')
+    withModel.workflow_snapshot = {
+      modules: [{ module_id: 'anime_generate', config: { model: 'NoobAI-XL-v1.1.safetensors' } }],
+    } as never
+    const legacy = makeJob('job_card_legacy')
+    vi.mocked(historyApi.list).mockResolvedValue({
+      items: [
+        { root_job_id: withModel.id, root: withModel, resumes: [] },
+        { root_job_id: legacy.id, root: legacy, resumes: [] },
+      ],
+      total: 2, limit: 30, offset: 0,
+    } as never)
+
+    const { container } = render(
+      <MemoryRouter>
+        <HistoryTab />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('prompt job_card_model')
+    expect(container.querySelectorAll('.pp-hist-card')).toHaveLength(2)
+    const metas = [...container.querySelectorAll('.pp-hist-card__meta')].map((node) => node.textContent ?? '')
+    expect(metas.filter((text) => text.includes('底模')).length).toBe(1)
+    expect(metas.some((text) => text.includes('底模 NoobAI-XL-v1.1'))).toBe(true)
   })
 })

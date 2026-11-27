@@ -218,6 +218,7 @@ function HistoryJobCard({ job, isResume, onOpen }: {
   onOpen: (job: JobDTO) => void
 }) {
   const excerpt = job.positive_prompt_snapshot.trim() || '（无 Prompt）'
+  const model = snapshotModelName(job)
   return (
     <button
       type="button"
@@ -237,6 +238,7 @@ function HistoryJobCard({ job, isResume, onOpen }: {
       <p className="pp-hist-card__meta muted">
         {job.job_kind === 'process' ? '处理型' : '生成'} · 完成 {job.completed_count} / {job.requested_count} 张 ·{' '}
         {pipelineText(job)}
+        {model ? ` · 底模 ${model}` : ''}
         {canResumeRemaining(job) ? ' · 有剩余可续跑' : ''}
       </p>
     </button>
