@@ -43,6 +43,8 @@ CAPABILITIES = [
     "mobile_generation_queue_status_v1",
     # 进度快照新增当前张完成度：current_progress（0..1，只读）
     "mobile_generation_item_progress_v1",
+    # 进度快照新增运行中任务底模：model（只读；排队/旧任务为 null）
+    "mobile_generation_model_v1",
 ]
 
 

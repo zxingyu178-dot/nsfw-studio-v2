@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import time
 
 from fastapi.testclient import TestClient
@@ -28,7 +29,9 @@ def auth(mobile_client, session_factory) -> tuple[dict, str]:
     return {"Authorization": f"Bearer {data['token']}"}, data["device_id"]
 
 
-def _job(name: str, status: str, kind: str = "generate") -> Job:
+def _job(name: str, status: str, kind: str = "generate", model: str | None = None) -> Job:
+    snapshot = ({"modules": [{"module_id": "anime_generate", "config": {"model": model}}]}
+                if model else {"modules": []})
     return Job(
         id=f"job_{name}",
         source="web",
@@ -38,6 +41,7 @@ def _job(name: str, status: str, kind: str = "generate") -> Job:
         positive_prompt_snapshot="fixture prompt",
         workbench_snapshot_json="{}",
         generation_settings_json="{}",
+        workflow_snapshot_json=json.dumps(snapshot),
         requested_count=6,
     )
 
@@ -73,7 +77,7 @@ def _start_slot(session, job: Job, index: int) -> JobStageItem:
 
 def _assert_progress(
     mobile_client, headers, current, total, remaining,
-    status="none", queued=0, paused=0, item_progress=None,
+    status="none", queued=0, paused=0, item_progress=None, model=None,
 ):
     response = mobile_client.get(PROGRESS_PATH, headers=headers)
     assert response.status_code == 200
@@ -88,6 +92,7 @@ def _assert_progress(
         "queued_jobs": queued,
         "paused_jobs": paused,
         "current_progress": item_progress,
+        "model": model,
     }
 
 
@@ -100,6 +105,7 @@ def test_bridge_advertises_progress_and_keeps_desktop_queue_private(
     assert "mobile_generation_progress_v1" in capabilities
     assert "mobile_generation_queue_status_v1" in capabilities
     assert "mobile_generation_item_progress_v1" in capabilities
+    assert "mobile_generation_model_v1" in capabilities
     headers, _ = auth(mobile_client, session_factory)
     assert mobile_client.get("/api/v1/queue", headers=headers).status_code == 404
 
@@ -109,7 +115,7 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
 ):
     headers, _ = auth(mobile_client, session_factory)
     with session_factory() as session:
-        current = _job("current", "RUNNING")
+        current = _job("current", "RUNNING", model="NoobAI-XL-v1.1.safetensors")
         queued = [_job(f"waiting_{index}", "QUEUED") for index in range(18)]
         paused = _job("paused", "PAUSED")
         excluded = [
@@ -125,24 +131,29 @@ def test_progress_uses_committed_active_slot_and_remaining_generation_segments(
         assert current.completed_count == 0
         session.commit()
 
-        _assert_progress(mobile_client, headers, 3, 6, 20, "running", 18, 1, 0.42)
+        _assert_progress(mobile_client, headers, 3, 6, 20, "running", 18, 1, 0.42,
+                         "NoobAI-XL-v1.1.safetensors")
 
         third.status = "COMPLETED"
         session.commit()
         # 已完成的 StageItem 不再代表当前执行槽位；Job 仍 RUNNING（阶段间隙）
         assert third.job_item.status == "RUNNING"
-        _assert_progress(mobile_client, headers, None, None, 20, "running", 18, 1)
+        # 阶段间隙仍属于同一个运行中 Job，底模继续可用。
+        _assert_progress(mobile_client, headers, None, None, 20, "running", 18, 1,
+                         model="NoobAI-XL-v1.1.safetensors")
 
         fourth = _start_slot(session, current, 3)
         fourth.progress = 0.75
         session.commit()
-        _assert_progress(mobile_client, headers, 4, 6, 20, "running", 18, 1, 0.75)
+        _assert_progress(mobile_client, headers, 4, 6, 20, "running", 18, 1, 0.75,
+                         "NoobAI-XL-v1.1.safetensors")
 
         fourth.status = "COMPLETED"
         current.status = "COMPLETED"
         queued[0].status = "RUNNING"
         first = _start_slot(session, queued[0], 0)
         session.commit()
+        # 旧任务/无快照模型时返回 null，移动端自动隐藏底模行。
         _assert_progress(mobile_client, headers, 1, 6, 19, "running", 17, 1)
 
         first.status = "COMPLETED"

@@ -1,9 +1,11 @@
 """移动审核页的只读生图队列快照（mobile_generation_progress_v1 + 队列状态）。
 
 只回答“现在跑到第几张、本段共几张、还剩几个生成段、当前是排队/生成/暂停、
-当前张完成到多少”，不暴露 Prompt、Job 控制或任何可写操作；控制面仍只在桌面 8000。
+当前张完成到多少、用的是哪款底模”，不暴露 Prompt、Job 控制或任何可写操作；控制面仍只在桌面 8000。
 """
 from __future__ import annotations
+
+import json
 
 from sqlalchemy import case, func, select, true
 from sqlalchemy.orm import Session
@@ -11,6 +13,20 @@ from sqlalchemy.orm import Session
 from app.models.job import Job, JobItem, JobStageItem
 
 ACTIVE_JOB_STATUSES = ("QUEUED", "RUNNING", "PAUSED")
+
+
+def _snapshot_model(raw: str | None) -> str | None:
+    """从运行中 Job 的 workflow 快照读取底模；旧任务/异常快照返回 None。"""
+    try:
+        snapshot = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return None
+    modules = snapshot.get("modules") if isinstance(snapshot, dict) else None
+    if not isinstance(modules, list) or not modules or not isinstance(modules[0], dict):
+        return None
+    config = modules[0].get("config")
+    model = config.get("model") if isinstance(config, dict) else None
+    return model.strip() if isinstance(model, str) and model.strip() else None
 
 
 def read_progress(session: Session) -> dict[str, int | float | str | None]:
@@ -44,6 +60,14 @@ def read_progress(session: Session) -> dict[str, int | float | str | None]:
         .limit(1)
         .subquery()
     )
+    # 运行中 Job 的底模：阶段间隙没有 RUNNING StageItem 时仍能继续显示，模型在 Job 内不变。
+    running_job = (
+        select(Job.workflow_snapshot_json.label("workflow_snapshot"))
+        .where(Job.job_kind == "generate", Job.status == "RUNNING")
+        .order_by(Job.started_at.desc(), Job.id)
+        .limit(1)
+        .subquery()
+    )
     # 父 JobItem 在 Stage 之间可能保持 RUNNING；只有 RUNNING 的 StageItem
     # 才代表当前执行槽位。队列计数与当前槽位在同一条只读查询里取回。
     snapshot = select(
@@ -53,7 +77,8 @@ def read_progress(session: Session) -> dict[str, int | float | str | None]:
         counts.c.queued_jobs,
         counts.c.paused_jobs,
         counts.c.running_jobs,
-    ).select_from(counts.outerjoin(current, true()))
+        running_job.c.workflow_snapshot,
+    ).select_from(counts.outerjoin(current, true()).outerjoin(running_job, true()))
     row = dict(session.execute(snapshot).mappings().one())
     queued = int(row["queued_jobs"] or 0)
     paused = int(row["paused_jobs"] or 0)
@@ -80,4 +105,6 @@ def read_progress(session: Session) -> dict[str, int | float | str | None]:
             max(0.0, min(1.0, float(item_progress)))
             if item_progress is not None else None
         ),
+        # 运行中任务的底模；排队/空闲/旧任务为 null，移动端据此隐藏底模行。
+        "model": _snapshot_model(row["workflow_snapshot"]),
     }
