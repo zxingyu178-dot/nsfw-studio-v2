@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import { ConfirmModal, StatusBadge } from '../../../components/ui'
+import { Badge, ConfirmModal, StatusBadge } from '../../../components/ui'
 import { ActionButton, IconButton, IconCancel, IconPause, IconPrev, IconResume } from '../../../components/ui/ui3'
 import {
   cancelJob,
@@ -204,6 +204,8 @@ function QueueRow({ job, actions, draggable, dragging, onDragStart, onDragOver, 
         <div className="wb-queue-item__title">
           {draggable && <span className="wb-queue-item__handle" title="拖拽排序" aria-hidden="true">⋮⋮</span>}
           {job.status === 'PAUSED' && <StatusBadge status="PAUSED" />}
+          {/* AI/Agent 直接提交的任务在队列里单独标识，避免与页面提交混淆。 */}
+          {job.source === 'agent' && <Badge tone="info">AI 提交</Badge>}
           <span title={excerpt}>{excerpt.length > 18 ? `${excerpt.slice(0, 18)}…` : excerpt}</span>
         </div>
         <div className="wb-queue-item__meta muted">

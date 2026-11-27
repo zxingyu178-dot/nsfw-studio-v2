@@ -821,3 +821,9 @@ Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `fa
 同日补充第三款底模：Agent `use_recommended_sampling=true` + `model=waiNSFWIllustrious_v150.safetensors`，快照套用 30 步 / cfg5.0 / er_sde / simple / FaceDetailer 默认开，Job job_46712196-25bb-41bb-aa7d-15b4727c06c3 完成（179.3s），产出 img_4dd74b94-6be7-459f-ba32-840cf59766bc。至此 miaomiaoHarem / NoobAI-XL / WAI-NSFW 三款已安装底模均在生产 8000 由 Agent 直接提交并 COMPLETED，证据同步登记到 release_manifest v15。
 
 重启生产实例后复核：`/api/v1/modules` 的 v15 notes 已包含 WAI 推荐采样记录，workflow/binding Hash 仍为 `99ef6d5af1d51e2c / 6bde04bd7f04fb2f`；`/mobile/system/health` 返回 contract 2 且 generation progress 三项能力齐全；手机端增量刷新出现“新图 1”，点按后图库从 21730 增至 21731。
+
+## 2026-11-27 — 队列 AI 来源标识
+
+Agent / AI 直接提交的任务进入 Generate 队列后与页面提交无法区分。`QueuePanel` 队列行在 PAUSED 徽标旁新增“AI 提交”徽标（仅 `job.source === 'agent'`），排队与暂停列表共用同一行组件，因此两处同时生效。
+
+新增组件测试断言：agent 任务恰好一个“AI 提交”徽标，web 任务不显示；前端 typecheck 通过，全量 Vitest 540 项通过。

@@ -41,6 +41,43 @@ beforeEach(() => {
   mockUseJobStore.mockReturnValue(emptyStore())
 })
 
+describe('QueuePanel AI 来源标识', () => {
+  it('Agent 提交显示“AI 提交”，Web 任务不显示', () => {
+    const queueJob = (id: string, source: string) => ({
+      id,
+      status: 'QUEUED',
+      job_kind: 'generate',
+      source,
+      positive_prompt_snapshot: `prompt-${id}`,
+      requested_count: 1,
+      completed_count: 0,
+      queue_position: 1,
+      pause_requested: false,
+      cancel_requested: false,
+      error_type: null,
+      error_message: null,
+      module_id: 'anime_generate',
+      created_at: '',
+      started_at: null,
+      updated_at: '',
+      stages: [],
+    })
+    mockUseJobStore.mockReturnValue({
+      ...emptyStore(),
+      queue: {
+        worker: { running: false, queue_paused: false, queue_paused_reason: null },
+        running: null,
+        queued: [queueJob('job_agent', 'agent'), queueJob('job_web', 'web')],
+        paused: [],
+      },
+    })
+    render(<QueuePanel />)
+    expect(screen.getAllByText('AI 提交')).toHaveLength(1)
+    expect(screen.getByText('prompt-job_agent')).toBeInTheDocument()
+    expect(screen.getByText('prompt-job_web')).toBeInTheDocument()
+  })
+})
+
 describe('QueuePanel 清理陈旧任务（v0.13.2）', () => {
   it('点击按钮先弹二次确认（说明不删图），确认前不调 clearStaleJobs', () => {
     render(<QueuePanel />)
