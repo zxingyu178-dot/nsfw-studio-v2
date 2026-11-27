@@ -181,6 +181,36 @@ def test_details_projects_w41_asset_metadata(
     assert "storage_key" not in result and "file_path" not in result
 
 
+def test_details_returns_job_snapshot_model(
+    mobile_client, session_factory, make_mobile_image,
+):
+    """详情 model 来自原任务工作流快照；无 Job / 旧快照为 null（客户端显示“未知”）。"""
+    image = make_mobile_image(1)[0]
+    headers, _ = auth(mobile_client, session_factory)
+    legacy = mobile_client.get(f"/mobile/images/{image.id}/details", headers=headers).json()["data"]
+    assert legacy["model"] is None
+
+    now = utc_now_iso()
+    with session_factory() as session:
+        job = Job(
+            id="job_v2_model", source="agent", status="COMPLETED", prompt_mode="full",
+            positive_prompt_snapshot="sunflower", negative_prompt_snapshot="",
+            workbench_snapshot_json="{}",
+            workflow_snapshot_json=json.dumps({"modules": [
+                {"module_id": "anime_generate", "config": {"model": "miaomiaoHarem_v14.safetensors"}},
+            ]}),
+            generation_settings_json="{}", requested_count=1, completed_count=1,
+            created_at=now, updated_at=now,
+        )
+        session.add(job)
+        row = session.get(Image, image.id)
+        row.job_id = job.id
+        session.commit()
+
+    result = mobile_client.get(f"/mobile/images/{image.id}/details", headers=headers).json()["data"]
+    assert result["model"] == "miaomiaoHarem_v14.safetensors"
+
+
 def test_feed_first_sync_paginates_without_gap_or_duplicate(
     mobile_client, session_factory, make_mobile_image,
 ):

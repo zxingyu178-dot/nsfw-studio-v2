@@ -19,6 +19,7 @@ from app.core.errors import ConflictError, ValidationError
 from app.models import Image, Job, Prompt, PromptEvaluation, PromptVersion
 from app.models.mobile_review import ImageReviewSessionItem, MobileImageEvent, MobileImageSeen
 from app.schemas.prompt import PromptEvaluationCreateRequest
+from app.schemas.job import snapshot_model
 from app.services import (
     image_event_service,
     image_review_session_service,
@@ -188,7 +189,7 @@ def details(session: Session, image: Image) -> dict[str, Any]:
         "job_id": image.job_id,
         "module_id": job.module_id if job is not None else metadata.get("module_id"),
         "seed": image.seed,
-        "model": None,
+        "model": snapshot_model(job.workflow_snapshot_json) if job is not None else None,
         "size_bytes": size_bytes if type(size_bytes) is int and size_bytes >= 0 else None,
         "mime": mime.strip() or None if isinstance(mime, str) else None,
         "updated_at": image.updated_at,
