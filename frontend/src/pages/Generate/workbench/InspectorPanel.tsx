@@ -350,10 +350,16 @@ export function InspectorPanel({
               const meta = engineModels.lora_catalog?.[name]
               const label = meta?.display_name?.trim() || name
               const strength = meta?.recommended_strength
+              const bases = meta?.base_models ?? []
+              const incompatible = Boolean(effectiveModel) && bases.length > 0 && !bases.includes(effectiveModel)
+              const description = [
+                label === name ? '' : name,
+                incompatible ? `需 ${bases.map(modelDisplayName).join(' / ')}` : '',
+              ].filter(Boolean).join(' · ')
               return {
                 value: name,
                 label,
-                ...(label === name ? {} : { description: name }),
+                ...(description ? { description } : {}),
                 ...(typeof strength === 'number' ? { strength } : {}),
               }
             })}

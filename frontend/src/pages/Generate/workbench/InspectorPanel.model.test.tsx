@@ -213,6 +213,22 @@ describe('InspectorPanel v15 模型与 LoRA', () => {
     expect(screen.getByText(/仍可提交，但效果可能异常/)).toBeTruthy()
   })
 
+  it('LoRA 下拉在底模不匹配时标注所需底模', async () => {
+    renderPanel({ model: 'waiNSFWIllustrious_v150.safetensors' })
+    fireEvent.click(await screen.findByRole('button', { name: 'LoRA 1' }))
+    const option = screen.getAllByRole('option')
+      .find((item) => item.textContent?.includes('CunnyFunky Style v5'))
+    expect(option?.textContent).toContain('需 NoobAI XL v1.1 (eps)')
+  })
+
+  it('底模匹配时 LoRA 下拉不显示所需底模', async () => {
+    renderPanel({ model: 'NoobAI-XL-v1.1.safetensors' })
+    fireEvent.click(await screen.findByRole('button', { name: 'LoRA 1' }))
+    const option = screen.getAllByRole('option')
+      .find((item) => item.textContent?.includes('CunnyFunky Style v5'))
+    expect(option?.textContent).not.toContain('需 ')
+  })
+
   it('LoRA 依赖与当前底模一致时不显示提示', async () => {
     renderPanel({
       model: 'NoobAI-XL-v1.1.safetensors',
