@@ -19,6 +19,8 @@ function makeJob(id: string): JobDTO {
     status: 'COMPLETED',
     job_kind: 'generate',
     positive_prompt_snapshot: `prompt ${id}`,
+    structured_prompt: {},
+    generation_settings: { width: 832, height: 1216 },
     completed_count: 1,
     requested_count: 1,
     workflow_snapshot: { modules: [] },
@@ -96,5 +98,28 @@ describe('HistoryTab offset 分页（移除 limit=100 假全集，按 root famil
     expect(await screen.findByText('已恢复 0 个任务，剩余 0 张')).toBeInTheDocument()
     expect(container.querySelector('.ds-notice--error')).not.toBeInTheDocument()
     await waitFor(() => expect(historyApi.list).toHaveBeenCalledTimes(2))
+  })
+
+  it('历史详情显示原任务底模，旧任务显示占位', async () => {
+    const { historyApi, imageApi } = await import('../../api/client')
+    const job = makeJob('job_model')
+    job.workflow_snapshot = {
+      modules: [{ module_id: 'anime_generate', config: { model: 'NoobAI-XL-v1.1.safetensors' } }],
+    } as never
+    vi.mocked(historyApi.list).mockResolvedValue({
+      items: [{ root_job_id: job.id, root: job, resumes: [] }], total: 1, limit: 30, offset: 0,
+    } as never)
+    vi.mocked(imageApi.list).mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 } as never)
+
+    render(
+      <MemoryRouter>
+        <HistoryTab />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('prompt job_model'))
+    expect(await screen.findByText('任务详情 JOB-model')).toBeInTheDocument()
+    expect(await screen.findByText('底模')).toBeInTheDocument()
+    expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
   })
 })

@@ -22,6 +22,7 @@ import {
   STRUCTURED_FIELDS,
   imageContentUrl,
   shortJobId,
+  snapshotModelName,
   type HistoryBucket,
   type HistoryEntryDTO,
   type ImageDTO,
@@ -297,6 +298,8 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
   const seeds = job.items.map((item) => item.seed).filter((seed): seed is number => seed !== null)
   const structuredFields = STRUCTURED_FIELDS.filter(({ key }) => job.structured_prompt[key]?.trim())
   const resumable = canResumeRemaining(job)
+  // 原任务底模：与队列/图库详情同源，换模型后仍可追溯。
+  const model = snapshotModelName(job)
 
   function openInWorkbench(): void {
     onClose()
@@ -371,6 +374,8 @@ function HistoryDetailDrawer({ job, onClose, onResumed }: {
         )}
         <dt>尺寸</dt>
         <dd>{sizeText}</dd>
+        <dt>底模</dt>
+        <dd>{model ?? '—'}</dd>
         <dt>Seed</dt>
         <dd>{seeds.length > 0 ? seeds.join(', ') : '—（不使用 Seed）'}</dd>
         <dt>数量</dt>
