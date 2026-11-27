@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiRequestError, imageApi, jobApi } from '../../../api/client'
 import { CanvasViewport } from '../../../components/CanvasViewport/CanvasViewport'
-import { EmptyState, Spinner, StatusBadge } from '../../../components/ui'
+import { EmptyState, Spinner, StatusBadge, Badge } from '../../../components/ui'
 import { ActionDock, IconButton, IconFavorite, IconKeep, IconReject, IconZoomIn } from '../../../components/ui/ui3'
 import { ImageLightbox } from '../../../components/ImageLightbox'
 import { activeJob, trackJob, useJobStore } from '../../../stores/jobStore'
@@ -17,6 +17,7 @@ import {
   imagePreviewUrl,
   imageThumbUrl,
   shortJobId,
+  snapshotModelName,
   type ImageDTO,
   type JobDTO,
 } from '../../../types/workbench'
@@ -92,6 +93,8 @@ export function CanvasStage({ job: currentJob }: { job?: JobDTO } = {}) {
   }, [])
 
   const jobId = job?.id ?? null
+  // 画布顶栏显示实际底模：与队列 / 图库 / 历史详情同源，空快照时隐藏。
+  const model = job ? snapshotModelName(job) : null
   const completedCount = job?.completed_count ?? 0
   const completedStageItems = job?.stages?.reduce((total, stage) => total + stage.completed_count, 0) ?? 0
 
@@ -203,6 +206,8 @@ export function CanvasStage({ job: currentJob }: { job?: JobDTO } = {}) {
           <>
             <Link className="wb-gallery-link" to={`/gallery?job=${job.id}`}>去图库</Link>
             <span className="muted">{shortJobId(job.id)}</span>
+            {model && <span className="muted wb4-stage__model" title={model}>{model}</span>}
+            {job.source === 'agent' && <Badge tone="info">AI 提交</Badge>}
             <StatusBadge status={job.status} />
           </>
         ) : (

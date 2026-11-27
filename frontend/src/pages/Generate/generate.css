@@ -724,6 +724,7 @@
   color: var(--canvas-stage-fg);
 }
 .wb4-stage .ds-empty__icon { color: var(--canvas-stage-fg-muted); }
+.wb4-stage__model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb4-stage__topbar {
   flex-shrink: 0;
   display: flex;

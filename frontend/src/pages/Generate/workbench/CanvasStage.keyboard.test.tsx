@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { fireEvent, render, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const mockUseJobStore = vi.fn()
@@ -101,5 +101,22 @@ describe('CanvasStage 键盘切换', () => {
     fireEvent.keyDown(container.querySelector('[data-testid="probe"]')!, { key: 'ArrowLeft' })
     await new Promise((resolve) => setTimeout(resolve, 50))
     await expectMainSrc(container, imagePreviewUrl('img_b'))
+  })
+
+  it('顶栏显示实际底模与 AI 来源', async () => {
+    mockUseJobStore.mockReturnValue({
+      trackedJob: {
+        ...completedJob(),
+        source: 'agent',
+        workflow_snapshot: {
+          modules: [{ module_id: 'anime_generate', config: { model: 'NoobAI-XL-v1.1.safetensors' } }],
+        },
+      },
+      queue: { running: null, queued: [], paused: [] },
+      liveProgressByStageItem: {},
+    })
+    renderStage()
+    expect(await screen.findByText('NoobAI-XL-v1.1')).toBeInTheDocument()
+    expect(screen.getByText('AI 提交')).toBeInTheDocument()
   })
 })
