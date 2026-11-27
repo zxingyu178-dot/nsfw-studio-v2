@@ -847,3 +847,9 @@ Mobile Review Bridge 的只读生图进度此前只有张数 / 段数 / 百分�
 图片详情抽屉原本已加载原任务，但概览只显示来源、尺寸、Seed 与 Prompt，无法确认这张图由哪款底模生成。现在概览新增“底模”，复用 `snapshotModelName` 从原任务快照读取并去掉 `.safetensors` 等扩展名；外部导入/旧快照显示“—”。新增 1 项组件测试（抽屉 2 项用例通过），typecheck 与 Vite 生产构建通过。
 
 生产部署 0e32259：`index-Ba57jRUC.js`（SHA256/12 `0cc70efa92b9`）已由 `deploy_app_dist.ps1` 同步。隔离浏览器打开最新图 `img_f670bec2…` 详情，概览显示“底模 NoobAI-XL-v1.1”，来源“动漫生成 / JOB-a82176c7”，尺寸 832×1216、Seed 20261128 与任务一致。
+
+## 2026-11-27 — 任务历史详情显示底模
+
+任务历史详情抽屉同样加载原任务，但字段只有尺寸、Seed、Prompt 与 Workflow。现在“底模”与图库详情同源（`snapshotModelName`，去掉权重扩展名；旧任务/外部导入显示“—”）。为让历史详情用例可渲染，补齐测试 Job 的 `structured_prompt / generation_settings` 字段；历史分页与详情共 3 项用例通过，typecheck 与 Vite 生产构建通过。
+
+生产部署 6eb73b1：`index-BOuGJLK8.js`（SHA256/12 `a70c213c09c1`）。隔离浏览器打开 `/prompts` → 历史 → 最新任务 `JOB-a82176c7`，任务详情抽屉显示“底模 NoobAI-XL-v1.1”；首次用 `/prompt` 路径被通配路由重定向到 `/generate`，改用正确路径 `/prompts` 后验证通过。
