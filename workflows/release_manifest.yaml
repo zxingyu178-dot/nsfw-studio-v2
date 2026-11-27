@@ -270,7 +270,7 @@ modules:
         real_gate_passed: true
         hardware_status: experimental
         default_profile_verified: false
-        notes: "v5 基础 + 任务级 model / steps / cfg / sampler_name / scheduler / denoise；默认 miaomiaoHarem_v14，可切换 ComfyUI 已安装底模；LoRA 0–2 条；FaceDetailer 默认开启、可任务级关闭。2026-11-27 首轮真实出图：NoobAI-XL v1.1 + cunnyfunky_noobai 0.6 + dpmpp_2m/karras/30 步/cfg5.0，832×1216，1 张 COMPLETED（冷启 266s）"
+        notes: "v5 基础 + 任务级 model / steps / cfg / sampler_name / scheduler / denoise；默认 miaomiaoHarem_v14，可切换 ComfyUI 已安装底模（miaomiaoHarem / WAI-NSFW / NoobAI-XL，均有注册中心推荐采样）；LoRA 0–2 条；FaceDetailer 默认开启、可任务级关闭。2026-11-27 首轮真实出图：NoobAI-XL v1.1 + cunnyfunky_noobai 0.6 + dpmpp_2m/karras/30 步/cfg5.0，832×1216，1 张 COMPLETED（冷启 266s）"
         evidence:
           comfyui_node_chain:
             status: passed
@@ -282,13 +282,16 @@ modules:
             reference_jobs:
               - "job_dea41fb7-e650-4a6e-9861-12f2cfc2dd35"
               - "job_6e35f220-9d60-469a-80c6-2e3713ec0073"
+              - "job_bc9adf49-9ab7-4397-a0e3-747b95f5352a"
             output_image_ids:
               - "img_86ef9447-df23-4b83-9ccd-64d8788e212b"
               - "img_d5b6c349-4499-4221-83fe-ff7cbd90d88c"
+              - "img_a8f9bf4b-36b9-4cc9-87b9-ef0240319e21"
             sampling_profiles:
               - "生产 8000：832×1216 / 28 步 / cfg4.5 / er_sde simple / 默认 miaomiaoHarem / seed 20261128 / 无 LoRA"
               - "临时 8010：832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / NoobAI-XL + cunnyfunky_noobai 0.6 / seed 20261127"
-            stage_seconds: "186.96（生产默认档）/ 266.5（NoobAI + LoRA 冷启）"
+              - "生产 8000：Agent use_recommended_sampling / NoobAI-XL v1.1 / 832×1216 / 30 步 / cfg5.0 / dpmpp_2m karras / face_detailer=false / 无 LoRA / 90.9s"
+            stage_seconds: "186.96（生产默认档）/ 266.5（NoobAI + LoRA 冷启）/ 90.9（NoobAI 推荐采样热跑，face_detailer=false）"
             method: "2026-11-27 生产实例 8000 Agent CLI（binding v15）+ 临时实例 8010 独立 DataRoot；两张均 COMPLETED 并入库"
           default_profile_performance:
             status: unverified
