@@ -891,3 +891,11 @@ AI 直提若省略 `model`（`use_recommended_sampling` 或普通提交），执
 AI 提交后只能轮询完整 `GET /jobs/{id}`（含 items/快照，几秒一次成本高）。新增 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：`status / source / module_id / model / requested_count / completed_count / failed_count / progress / current / queue_position / created_at / started_at / finished_at / error_* / images`，progress 含当前张完成度（3 位小数），`images` 只列已完成产出；无 token 401、未知任务 404 `JOB_NOT_FOUND`。CLI 新增 `--status <job_id>` 直接打印该 JSON，不提交、不下载。后端补 2 项接口测试、CLI 补 3 项（token 门禁 / 路径与输出 / 与其它操作互斥）。
 
 生产部署 4748bd8（仅后端）：协作停止后重启，健康 0.39.0，ComfyUI PID 11432 未变。真实任务 `job_fd8d4533-06e3-49f2-a406-f0e87ca5de06`（NoobAI / 2 张 / 24 步）轮询记录：progress 0.0（item 0.0）→ 0.062（12.5%）→ 0.146（29.2%）→ 0.709（第 2 张 41.7%，已完成 1 张）→ 0.979（95.8%）→ COMPLETED 1.0，`images` 两张 `img_eeccc3e1…` / `img_de50a291…`；CLI `--status` 输出同一字段，`finished_at` 完成时补齐。
+
+## 2026-11-27 — 图库按底模筛选
+
+图库此前只能按来源/分类/系列/状态筛选，同一任务列表混着多款底模，想回看某款底模的出图只能翻分组或逐个看详情。现在把底模做成一等筛选：后端 `GET /images`、`/images/ids`、`/images/stats`、`/images/job-groups` 统一接受 `model` 参数，`GET /images/models` 按任务快照 `modules[0].config.model` 统计候选（trim 后分组、数量降序）；`__none__` 表示未记录底模（无 Job、导入图、旧快照），与前后端 `snapshot_model` 同源。该筛选不做迁移、不扫描文件，纯 SQLite JSON1 表达式过滤。
+
+前端工具栏新增“底模”下拉（全部 / 各底模含数量 / 未记录），筛选写入 URL `?model=`，刷新与分享后仍然有效；切换后列表、侧栏计数、按任务分组同步收敛，当前值不在候选时回退到“全部”。新增前端 3 项用例（下拉候选与选择、URL 首屏过滤、`__none__` 透传），图库相关 85 项通过；后端新增 1 项回归测试（列表/统计/ID/候选/未记录/任务分组同口径），后端全量 880 项通过，typecheck 与生产构建通过。
+
+生产部署 3f7957b：前端 `index-Dha2deu2.js`（SHA256/12 `bbf4cdcd363b`），`index-BEt3hdqR.css` 未变；协作停止后由计划任务重启，健康 0.39.0，ComfyUI PID 11432 全程未变。接口实测：`/images/models` 返回 NoobAI 5 / miaomiao 2 / waiNSFW 1；`/images?model=NoobAI-XL-v1.1.safetensors` 与 `/images/stats` 均 total=5；`/images/ids?model=__none__` total=21730；`/images/job-groups?model=NoobAI…` total=4 且卡片全为 NoobAI 任务。隔离浏览器打开 `/gallery`：底模下拉为“底模：全部 / NoobAI-XL-v1.1（5）/ miaomiaoHarem_v14（2）/ waiNSFWIllustrious_v150（1）/ 底模：未记录”，选择 NoobAI 后 URL 带 `?model=`、网格恰好 5 张，切“底模：未记录”恢复 40+ 张旧图/导入图。
