@@ -827,3 +827,11 @@ Agent `use_recommended_sampling=true` + `model=NoobAI-XL-v1.1.safetensors` + `fa
 Agent / AI 直接提交的任务进入 Generate 队列后与页面提交无法区分。`QueuePanel` 队列行在 PAUSED 徽标旁新增“AI 提交”徽标（仅 `job.source === 'agent'`），排队与暂停列表共用同一行组件，因此两处同时生效。
 
 新增组件测试断言：agent 任务恰好一个“AI 提交”徽标，web 任务不显示；前端 typecheck 通过，全量 Vitest 540 项通过。已用 `scripts/deploy_app_dist.ps1` 部署到生产（dev/app HEAD 均为 c334207），生产 `/` 引用 `index-BE9ih8-r.js`，该资源包含“AI 提交”，旧 `index-TlfBcdu8.js` 不再被引用。
+
+## 2026-11-27 — 队列与当前任务显示底模
+
+队列摘要此前只有提示词、张数与工作流 ID：AI 用不同底模提交后（miaomiaoHarem / NoobAI-XL / WAI），排队与暂停行无法分辨模型，运行卡片也不显示底模。现在 `QueueJobSummary.model` 从 Job workflow 快照 `modules[0].config.model` 读取（旧任务、空快照、损坏 JSON 均返回 null，不影响队列接口），`QueuePanel` 队列行显示去掉权重扩展名的短名；`CurrentJobCard` 与任务坞的当前任务显示“底模 …”，Agent 任务额外显示“AI 提交”徽标。顺带补齐 `MODULE_LABEL.anime_generate = 动漫生成`，队列与当前任务不再显示原始模块 ID。
+
+后端新增队列摘要单测（有模型 / 旧任务 / 空快照 / 损坏 JSON），全量 870 项通过。前端新增 CurrentJobCard 底模与来源测试、扩展队列行断言（agent + model、web 无模型）；typecheck 与 Vite 生产构建通过，新增用例单独复跑通过。全量 Vitest 542 项中 540 通过，2 项本机计时敏感用例（PromptLibraryDrawer 200 条分页、CanvasStage 键盘循环）在单文件复跑时 6 + 3 项全绿，属已知环境波动。
+
+生产部署 b856a5d：`deploy_app_dist.ps1` 同步 `index-DIKLKgQj.js`（SHA256/12 `a0374bebede3`）与 `index-E90DHUQi.css`；经协作停止事件停 Studio（任务状态 Ready）后由计划任务重启，健康检查 0.39.0，8877 契约 2 且能力齐全，8188 PID 11432 全程未变。暂停队列后提交 Agent 任务 `job_16bd52b0-ba0e-40fa-ad57-90167c149ce0`，`/api/v1/queue` 返回 `model=NoobAI-XL-v1.1.safetensors`、`module=anime_generate`、`source=agent`、`status=QUEUED`；随后取消并恢复队列，任务 CANCELLED、无图片产出、队列空闲。生产 JS 字节包含“底模”“动漫生成”“AI 提交”文案。

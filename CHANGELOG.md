@@ -9,6 +9,9 @@
 
 ### Added
 
+- 队列摘要新增 `model`（来自 Job workflow 快照 `config.model`，旧任务/异常快照为 null）：
+  桌面队列行显示底模短名，当前任务卡片与任务坞显示“底模 …”，Agent 任务同时带“AI 提交”
+  徽标；`MODULE_LABEL` 补齐 `anime_generate → 动漫生成`，不再显示原始模块 ID。
 - 任务级 `face_detailer` 开关（模块 / 引擎 / Agent / CLI / 前端）：默认开启；`false` 时由
   ComfyUI adapter 移除 FaceDetailer 与检测器节点、SaveImage 直连 VAEDecode，
   binding v15 文件与 Hash 保持不变。
