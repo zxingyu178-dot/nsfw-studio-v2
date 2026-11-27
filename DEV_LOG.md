@@ -885,3 +885,9 @@ AI 直提若省略 `model`（`use_recommended_sampling` 或普通提交），执
 `GET /mobile/images/{id}/details` 的 `model` 一直硬编码为 null，手机“图片信息”永远显示“未知”，审图时无法确认单张图用的底模。现在改为读取原任务工作流快照（复用 `snapshot_model`，与队列/桌面图库/历史同源；无 Job、外部导入、旧快照仍为 null）。新增 1 项契约测试（无 Job → null；绑定 Job 快照 → 文件名），手机 V2 契约 27 项通过。
 
 生产部署 780d317（仅后端）：协作停止后由计划任务重启，健康 0.39.0、桥 build `780d317`，ComfyUI PID 11432 未变。MediaReview Alpha79（versionCode 86）在模拟器覆盖安装：最新图 `img_b90242ce…`（`job_eb70e06b`，AI 省略 model 的默认底模任务）审图顶栏显示“底模 miaomiaoHarem_v14”，图片信息“模型 miaomiaoHarem_v14”；切到第 3 张旧任务图时顶栏无底模行、详情显示“未知”。接口合同已同步 `MEDIAREVIEW_NSFW_CONTRACT_V2.md`（§5）。
+
+## 2026-11-27 — Agent 轻量进度接口与 CLI --status
+
+AI 提交后只能轮询完整 `GET /jobs/{id}`（含 items/快照，几秒一次成本高）。新增 `GET /api/v1/agent/jobs/{job_id}`（Bearer，只读）：`status / source / module_id / model / requested_count / completed_count / failed_count / progress / current / queue_position / created_at / started_at / finished_at / error_* / images`，progress 含当前张完成度（3 位小数），`images` 只列已完成产出；无 token 401、未知任务 404 `JOB_NOT_FOUND`。CLI 新增 `--status <job_id>` 直接打印该 JSON，不提交、不下载。后端补 2 项接口测试、CLI 补 3 项（token 门禁 / 路径与输出 / 与其它操作互斥）。
+
+生产部署 4748bd8（仅后端）：协作停止后重启，健康 0.39.0，ComfyUI PID 11432 未变。真实任务 `job_fd8d4533-06e3-49f2-a406-f0e87ca5de06`（NoobAI / 2 张 / 24 步）轮询记录：progress 0.0（item 0.0）→ 0.062（12.5%）→ 0.146（29.2%）→ 0.709（第 2 张 41.7%，已完成 1 张）→ 0.979（95.8%）→ COMPLETED 1.0，`images` 两张 `img_eeccc3e1…` / `img_de50a291…`；CLI `--status` 输出同一字段，`finished_at` 完成时补齐。
